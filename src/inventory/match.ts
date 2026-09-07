@@ -53,13 +53,17 @@ function onMarket(u: Unit): boolean {
 }
 
 /**
- * Whether the unit frees up in time for the caller. Six weeks of flex rather than three:
- * someone who said "two months" is not going to walk over three and a half weeks, and a
- * unit hidden for that reason reads as a lie when the website shows it.
+ * Whether the unit frees up in time for the caller. Measured from the END of what they
+ * said, with six weeks of flex: "within the next two months" is a window that runs to
+ * early November, and a residence free on October 22 is inside it. Measuring from the
+ * start of the window pushed that residence to "later" and named a dearer one as the
+ * closest match, on a real call. Six weeks rather than three because someone who said
+ * "two months" is not going to walk over three and a half weeks, and a unit hidden for
+ * that reason reads as a lie when the website shows it.
  */
-function inTime(u: Unit, moveIn: Date | null): boolean {
-  if (moveIn === null) return true
-  return Date.parse(u.availableFrom) <= moveIn.getTime() + 42 * DAY
+function inTime(u: Unit, until: Date | null): boolean {
+  if (until === null) return true
+  return Date.parse(u.availableFrom) <= until.getTime() + 42 * DAY
 }
 
 /**
@@ -67,9 +71,9 @@ function inTime(u: Unit, moveIn: Date | null): boolean {
  * a sentence; one six months out is a different search, and listing it makes the agent
  * sound like it is reading the whole building.
  */
-function withinLaterHorizon(u: Unit, moveIn: Date | null): boolean {
-  if (moveIn === null) return false
-  return Date.parse(u.availableFrom) <= moveIn.getTime() + 120 * DAY
+function withinLaterHorizon(u: Unit, until: Date | null): boolean {
+  if (until === null) return false
+  return Date.parse(u.availableFrom) <= until.getTime() + 120 * DAY
 }
 
 /**
@@ -88,7 +92,10 @@ export function findMatches(
   const age = opts.now.getTime() - snapshot.readAt.getTime()
   if (age > maxAge) return { kind: 'stale', readAt: snapshot.readAt, ageMs: age }
 
-  const moveIn = qual.moveInTiming?.value.earliest ?? null
+  const window = qual.moveInTiming?.value ?? null
+  const from = window?.earliest ?? null
+  // The far edge of what they said, or the one date they gave.
+  const moveIn = window ? (window.latest ?? window.earliest) : null
   const beds = qual.bedrooms?.value
   const budgetMax = qual.budget?.value.maxMonthly ?? null
 
@@ -117,9 +124,11 @@ export function findMatches(
     if (u.concession) { s += 15; reasons.push(u.concession) }
     if (u.view) { s += 5; reasons.push(u.view) }
     if (u.floor >= 20) { s += 5; reasons.push(`high floor — ${u.floor}`) }
-    if (moveIn) {
-      const diff = Math.abs(Date.parse(u.availableFrom) - moveIn.getTime())
-      if (diff < 14 * DAY) { s += 15; reasons.push('available right when they need it') }
+    if (from && moveIn) {
+      const t = Date.parse(u.availableFrom)
+      if (t >= from.getTime() - 14 * DAY && t <= moveIn.getTime() + 14 * DAY) {
+        s += 15; reasons.push('available right when they need it')
+      }
     }
     return { unit: u, score: s, reasons }
   }

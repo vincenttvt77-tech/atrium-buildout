@@ -224,3 +224,20 @@ describe('priced out still says what the money buys', () => {
     }
   })
 })
+
+describe('a window is measured from its far edge', () => {
+  test('"within the next two months" includes a residence free seven weeks out', () => {
+    const s = snap([
+      unit({ unitId: '21B', floorPlanId: 'B1', bedrooms: 2, monthlyRent: 6925, availableFrom: '2026-09-26' }),
+      unit({ unitId: '13L', floorPlanId: 'B1', bedrooms: 2, monthlyRent: 5875, availableFrom: '2026-10-22' }),
+    ], [plan('B1', 2, 1000)])
+    const q = captureCore(withBeds(2, 2)(withBudget(4000)), 'moveInTiming',
+      extracted({ earliest: NOW, latest: new Date('2026-11-07T12:00:00Z') }, 0.9, CALL, 'within the next 2 months', NOW))
+    const out = findMatches(s, q, { now: NOW })
+    assert.equal(out.kind, 'priced_out')
+    if (out.kind !== 'priced_out') return
+    assert.equal(out.nearest[0]?.unit.unitId, '13L', 'the cheaper residence inside the window is the closest match')
+    assert.equal(out.cheapestAvailable, 5875)
+    assert.equal(out.gap, 1875)
+  })
+})
