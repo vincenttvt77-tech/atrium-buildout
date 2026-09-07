@@ -1,0 +1,65 @@
+/**
+ * Assembles the deployment file tree and writes it to .vercel-build/deploy-files.json.
+ *
+ * Static files go at the root rather than under public/, and vercel.json ships with
+ * framework: null. Both matter: the target project auto-detects a framework it does not
+ * have, and a stored project setting overrides deployment-time projectSettings — only a
+ * vercel.json in the payload wins.
+ */
+import { readFile, readdir, writeFile, mkdir, stat } from 'node:fs/promises'
+import { join, relative } from 'node:path'
+
+const files = []
+const TEXT = /\.(html|css|js|mjs|json|svg|txt|xml|webmanifest)$/i
+
+async function addFile(diskPath, deployPath) {
+  files.push({ file: deployPath, data: await readFile(diskPath, 'utf8') })
+}
+
+async function addTree(dir, prefix = '') {
+  let entries
+  try { entries = await readdir(dir, { withFileTypes: true }) } catch { return }
+  for (const e of entries) {
+    const full = join(dir, e.name)
+    const deployPath = prefix ? `${prefix}/${e.name}` : e.name
+    if (e.isDirectory()) { await addTree(full, deployPath); continue }
+    if (!TEXT.test(e.name)) {
+      console.warn(`  skipped (binary): ${deployPath}`)
+      continue
+    }
+    await addFile(full, deployPath)
+  }
+}
+
+await mkdir('.vercel-build', { recursive: true })
+
+// The bundled function.
+await addFile('.vercel-build/api/vapi.mjs', 'api/vapi.mjs')
+
+// The website, flattened to the deployment root.
+await addTree('public')
+
+files.push({
+  file: 'vercel.json',
+  data: JSON.stringify({
+    $schema: 'https://openapi.vercel.sh/vercel.json',
+    framework: null,
+    buildCommand: null,
+    installCommand: null,
+    outputDirectory: null,
+    headers: [{ source: '/api/(.*)', headers: [{ key: 'cache-control', value: 'no-store' }] }],
+  }, null, 2),
+})
+
+files.push({
+  file: 'package.json',
+  data: JSON.stringify({ name: 'ghost-building', private: true, type: 'module', engines: { node: '>=22' } }, null, 2),
+})
+
+await writeFile('.vercel-build/deploy-files.json', JSON.stringify(files))
+
+const kb = (n) => `${(n / 1024).toFixed(1)} kB`
+console.log(`\n${files.length} files, ${kb(files.reduce((s, f) => s + f.data.length, 0))} total`)
+for (const f of files.sort((a, b) => b.data.length - a.data.length).slice(0, 15)) {
+  console.log(`  ${f.file.padEnd(38)} ${kb(f.data.length)}`)
+}

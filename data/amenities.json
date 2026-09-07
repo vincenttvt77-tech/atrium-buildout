@@ -1,0 +1,225 @@
+[
+  {
+    "id": "the-works",
+    "name": "The Works",
+    "category": "fitness",
+    "description": "Four thousand two hundred square feet of fitness on three, with Technogym strength and cardio, three Peloton bikes, and a 40-foot turf sprint lane along the west wall. It is open from five in the morning until midnight, and your fob is the only key you need. Outside trainers are welcome once they file a certificate of insurance with the resident manager.",
+    "floor": "3",
+    "hours": "Daily, 5:00am - 12:00am. Fob access, no staffed hours. Towels are stocked; the floor is wiped down nightly at 12:00am.",
+    "bookable": false,
+    "imageSlug": "fitness"
+  },
+  {
+    "id": "the-studio",
+    "name": "The Studio",
+    "category": "fitness",
+    "description": "A mirrored room off The Works for yoga, mat pilates, and whatever your neighbors decide to teach. Mats, blocks, straps, a ballet barre, and eight sets of light dumbbells stay in the room. Class times post every Monday in the resident app, and the rest of the week you can hold the room for yourself.",
+    "floor": "3",
+    "hours": "Daily, 6:00am - 10:00pm.",
+    "bookable": true,
+    "bookingRules": {
+      "maxDurationMinutes": 90,
+      "maxAdvanceDays": 14,
+      "guestLimit": 0,
+      "simultaneousBookings": 1,
+      "blackoutNote": "Residents only, no guests. Scheduled classes take the room first: Monday, Wednesday, and Friday 7:00-8:00am, Tuesday and Thursday 6:30-7:30pm, and Saturday 9:00-10:00am are blocked every week. Reserve in the resident app or at the front desk."
+    },
+    "imageSlug": "yoga-studio"
+  },
+  {
+    "id": "the-recovery-suite",
+    "name": "The Recovery Suite",
+    "category": "fitness",
+    "description": "An infrared sauna, a cold plunge held at 50 degrees, and two treatment rooms you can book for your own massage therapist. The sauna runs in 30-minute sessions and seats four; the plunge is a single tub and works on a first-come basis when nobody has the room. Reserve a treatment room in the resident app up to a week out.",
+    "floor": "3",
+    "hours": "Daily, 7:00am - 10:00pm. Sauna and plunge shut down 30 minutes before the suite closes.",
+    "bookable": true,
+    "bookingRules": {
+      "maxDurationMinutes": 60,
+      "maxAdvanceDays": 7,
+      "guestLimit": 1,
+      "simultaneousBookings": 2,
+      "blackoutNote": "One guest per booking, and an outside practitioner counts as the guest and must be licensed in New York. Closed Tuesdays 6:00-9:00am for maintenance; the plunge is drained and refilled the first Monday of each month and is out of service that day."
+    },
+    "imageSlug": "recovery-suite"
+  },
+  {
+    "id": "the-larder",
+    "name": "The Larder",
+    "category": "social",
+    "description": "A demonstration kitchen and a 12-seat dining room on three, for the nights your own table is not big enough. There is a six-burner range, two ovens, a dishwasher, and glassware and flatware for twelve. Book it up to sixty days out; the $150 cleaning deposit comes back within five business days if you leave the room the way you found it.",
+    "floor": "3",
+    "hours": "Daily, 8:00am - 11:00pm. Reservations seat between 10:00am and 10:00pm so the room is clear by close.",
+    "bookable": true,
+    "bookingRules": {
+      "maxDurationMinutes": 240,
+      "maxAdvanceDays": 60,
+      "guestLimit": 11,
+      "simultaneousBookings": 1,
+      "blackoutNote": "The room seats twelve including you. A $150 refundable cleaning deposit is charged to your ledger at booking. Outside caterers need a certificate of insurance on file 48 hours ahead. Closed Thanksgiving Day, Christmas Day, and New Year's Day."
+    },
+    "imageSlug": "private-dining"
+  },
+  {
+    "id": "the-study",
+    "name": "The Study",
+    "category": "work",
+    "description": "The co-working lounge on three: sixteen seats, a long shared table, hardwired ethernet at eight of them, and four phone rooms and two conference rooms behind glass. The lounge is open around the clock and never needs a reservation. The rooms do — phone rooms in one-hour blocks, conference rooms in three.",
+    "floor": "3",
+    "hours": "Lounge open 24 hours with your fob. Phone rooms and conference rooms are bookable 7:00am - 10:00pm daily.",
+    "bookable": true,
+    "bookingRules": {
+      "maxDurationMinutes": 180,
+      "maxAdvanceDays": 14,
+      "guestLimit": 6,
+      "simultaneousBookings": 2,
+      "blackoutNote": "Three hours is the conference room limit; phone rooms cap at 60 minutes and cannot be reserved more than 48 hours out. Both conference rooms are held for the building meeting the first Tuesday of each month, 6:00-8:00pm. Fifteen minutes late releases the room to the next resident."
+    },
+    "imageSlug": "coworking"
+  },
+  {
+    "id": "the-pet-spa",
+    "name": "The Pet Spa",
+    "category": "pet",
+    "description": "A raised stainless wash basin with a hand sprayer, a forced-air dryer, and a hook for the leash while you work. Shampoo, towels, and a rubber apron are stocked, and the floor drain and hose are there for the cleanup on your way out. Book a 45-minute slot in the resident app, one dog at a time.",
+    "floor": "3",
+    "hours": "Daily, 7:00am - 9:00pm.",
+    "bookable": true,
+    "bookingRules": {
+      "maxDurationMinutes": 45,
+      "maxAdvanceDays": 7,
+      "guestLimit": 0,
+      "simultaneousBookings": 1,
+      "blackoutNote": "One dog per session, and the dog has to be registered with the front desk. Closed Wednesdays 9:00-11:00am for deep cleaning. Groomers from outside the building are not permitted in the room."
+    },
+    "imageSlug": "pet-spa"
+  },
+  {
+    "id": "the-bike-room",
+    "name": "The Bike Room",
+    "category": "service",
+    "description": "Two hundred twenty tagged spaces on three, reached from the service elevator, at no charge. Every residence gets one space, and a second goes on a waitlist that runs about a month right now. There is a repair stand on the north wall with a floor pump and a hex set.",
+    "floor": "3",
+    "hours": "24 hours, fob access. Tags are issued by the resident manager during office hours, Monday through Friday 9:00am - 5:00pm.",
+    "bookable": false,
+    "imageSlug": "bike-room"
+  },
+  {
+    "id": "the-terrace",
+    "name": "The Terrace",
+    "category": "outdoor",
+    "description": "The 62-foot pool on four, six cabanas, and a landscaped deck that faces the skyline. The pool runs from mid-May through the end of September and only opens when the lifeguard is on the chair — that is city code, not house policy. Cabanas are first come and cannot be held; the deck itself stays open year-round.",
+    "floor": "4",
+    "hours": "Pool open May 15 - September 30, daily 9:00am - 8:00pm, lifeguard on duty. Deck open year-round, 7:00am - 11:00pm, with quiet hours from 10:00pm. Two guests per residence at the pool, signed in at the front desk.",
+    "bookable": false,
+    "imageSlug": "rooftop-pool"
+  },
+  {
+    "id": "the-grills",
+    "name": "The Grills and Pergola",
+    "category": "outdoor",
+    "description": "Four gas grills, two firepits, and a pergola that seats twenty, at the north end of The Terrace. Tools, a cover, and a wire brush live in the cabinet under each grill. Reserve the pergola and grills three and four in two-hour blocks from April through November; grills one and two and both firepits stay first come.",
+    "floor": "4",
+    "hours": "April 1 - November 1, daily 10:00am - 10:00pm. Gas shuts off at 9:30pm. Firepits run on a timer and stop at 10:00pm.",
+    "bookable": true,
+    "bookingRules": {
+      "maxDurationMinutes": 120,
+      "maxAdvanceDays": 21,
+      "guestLimit": 19,
+      "simultaneousBookings": 1,
+      "blackoutNote": "Twenty at the pergola including you. Grills one and two and the firepits are never reservable. Closed November 2 through March 31, and closed on any day the deck is iced or under 35 degrees. Amplified music is not permitted at any hour."
+    },
+    "imageSlug": "grilling-terrace"
+  },
+  {
+    "id": "the-green",
+    "name": "The Green",
+    "category": "pet",
+    "description": "A 1,400-square-foot dog run on four with artificial turf, a water bowl fed off the hose bib, and a bag station at the gate. It is hosed down every morning at seven and closed for the half hour that takes. No reservation, ever.",
+    "floor": "4",
+    "hours": "Daily, 6:00am - 11:00pm. Closed 7:00am - 7:30am for cleaning.",
+    "bookable": false,
+    "imageSlug": "dog-run"
+  },
+  {
+    "id": "the-playroom",
+    "name": "The Playroom",
+    "category": "social",
+    "description": "A playroom on four with a climbing structure, a reading nook, a sink, and a gated toddler yard that opens onto the deck. Children under twelve need an adult in the room with them. It is open to everyone from eight to eight, and you can close it for a birthday on Saturday or Sunday afternoons.",
+    "floor": "4",
+    "hours": "Daily, 8:00am - 8:00pm. The toddler yard closes at dusk or 8:00pm, whichever comes first.",
+    "bookable": true,
+    "bookingRules": {
+      "maxDurationMinutes": 180,
+      "maxAdvanceDays": 30,
+      "guestLimit": 20,
+      "simultaneousBookings": 1,
+      "blackoutNote": "Private use is Saturday and Sunday 12:00-5:00pm only, one booking per residence per quarter, and the room stays open to all residents at every other hour. Twenty-five people in the room at once, counting adults. Entertainers and outside vendors need a certificate of insurance 48 hours ahead."
+    },
+    "imageSlug": "playroom"
+  },
+  {
+    "id": "the-overlook",
+    "name": "The Overlook",
+    "category": "social",
+    "description": "Three thousand one hundred square feet on the thirty-fourth floor, floor-to-ceiling glass on the west wall, and a sky terrace at 372 feet. A chef's kitchen and a 14-seat table sit at one end and sofas at the other, and most nights it belongs to the whole building. Friday through Sunday evenings you can take the room for a private event, and the terrace stays open to everyone either way.",
+    "floor": "34",
+    "hours": "Sunday - Thursday 7:00am - 11:00pm; Friday and Saturday 7:00am - 1:00am. Sky terrace closes at 11:00pm nightly, year-round.",
+    "bookable": true,
+    "bookingRules": {
+      "maxDurationMinutes": 300,
+      "maxAdvanceDays": 90,
+      "guestLimit": 60,
+      "simultaneousBookings": 1,
+      "blackoutNote": "Private events are Friday, Saturday, and Sunday 6:00-11:00pm only; the room is open to all residents at every other hour. Sixty-five people including residents, per the fire occupancy posted at the door. A $500 refundable deposit, and a certificate of insurance for any event with catering or bar service. One weekend evening a month is held for building programming, and the sky terrace cannot be closed to other residents."
+    },
+    "imageSlug": "lounge"
+  },
+  {
+    "id": "the-screening-room",
+    "name": "The Screening Room",
+    "category": "social",
+    "description": "Eighteen seats in three tiers, a 4K laser projector, and a 12-foot screen, off the lounge on thirty-four. Bring your own account — the room signs into whatever you stream, and there is an HDMI input at the front row. Book it in three-hour blocks, up to three weeks out.",
+    "floor": "34",
+    "hours": "Daily, 10:00am - 11:00pm.",
+    "bookable": true,
+    "bookingRules": {
+      "maxDurationMinutes": 180,
+      "maxAdvanceDays": 21,
+      "guestLimit": 17,
+      "simultaneousBookings": 1,
+      "blackoutNote": "Eighteen seats, so seventeen guests plus you. Held for the resident film series the second Thursday of each month, 7:00-10:00pm. Food is fine, open flame and outside alcohol service are not. Fifteen minutes late releases the room."
+    },
+    "imageSlug": "screening-room"
+  },
+  {
+    "id": "the-reading-room",
+    "name": "The Reading Room",
+    "category": "social",
+    "description": "A quiet room on thirty-four with eight chairs, four lamps, and the same west window as the lounge next door. No calls, no meetings, no laptop on speaker. It is open all day and all night and cannot be reserved by anyone, which is the point.",
+    "floor": "34",
+    "hours": "24 hours, fob access.",
+    "bookable": false,
+    "imageSlug": "reading-room"
+  },
+  {
+    "id": "the-package-room",
+    "name": "The Package Room",
+    "category": "service",
+    "description": "Luxer lockers and refrigerated storage behind the lobby, open twenty-four hours with your fob. You get a text and an email the minute something lands, and anything too big for a locker waits with the front desk. Packages are held ten days, then go back to the carrier.",
+    "floor": "Lobby level",
+    "hours": "Lockers 24 hours. The desk handles oversized items, cold storage, and dry cleaning drop-off 8:00am - 10:00pm daily. Attended lobby 24 hours, live-in resident manager on site.",
+    "bookable": false,
+    "imageSlug": "package-room"
+  },
+  {
+    "id": "the-garage",
+    "name": "The Garage",
+    "category": "parking",
+    "description": "Eighty-four attended spaces below the building, entered from 5th Street, staffed around the clock. A space is $425 a month on a license that runs month to month with thirty days' notice, and twelve spaces have Level 2 EV charging at no added cost. There is a waitlist of about two months right now, and guest parking runs $45 a day when there is room.",
+    "floor": "Cellar level, entrance on 5th Street",
+    "hours": "24 hours, attended. Guest vehicles accepted 6:00am - 11:00pm, subject to space. Call the booth 20 minutes ahead for retrieval between midnight and 6:00am.",
+    "bookable": false,
+    "imageSlug": "parking-garage"
+  }
+]
