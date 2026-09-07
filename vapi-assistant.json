@@ -220,9 +220,10 @@
   },
   "startSpeakingPlan": {
     "waitSeconds": 0.6,
-    "smartEndpointingPlan": {
-      "provider": "livekit",
-      "waitFunction": "(20 + 500 * sqrt(x) + 2500 * x^3 + 700 + 4000 * max(0, x-0.5)) / 2"
+    "transcriptionEndpointingPlan": {
+      "onPunctuationSeconds": 0.5,
+      "onNoPunctuationSeconds": 1.8,
+      "onNumberSeconds": 1.5
     },
     "customEndpointingRules": [
       {

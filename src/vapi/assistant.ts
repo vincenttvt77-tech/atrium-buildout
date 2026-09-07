@@ -191,10 +191,23 @@ export function assistantConfig(opts: AssistantConfigOptions) {
      */
     startSpeakingPlan: {
       waitSeconds: 0.6,
-      smartEndpointingPlan: {
-        provider: 'livekit',
-        waitFunction: '(20 + 500 * sqrt(x) + 2500 * x^3 + 700 + 4000 * max(0, x-0.5)) / 2',
+      /*
+       * Smart endpointing is deliberately NOT set. Setting it makes the three
+       * transcriptionEndpointing values below inert, and the wait function that replaces
+       * them is not exposed in the dashboard — so the one control that matches this
+       * failure would become untunable.
+       *
+       * The failure: a caller answers "I don't know, 2 months" and the agent talks over
+       * the number. onNumberSeconds is exactly that case, and its default is about half a
+       * second. Leasing answers are mostly bare numbers — bedroom counts, budgets, phone
+       * numbers, unit numbers — so this is the single most valuable value on the page.
+       */
+      transcriptionEndpointingPlan: {
+        onPunctuationSeconds: 0.5,
+        onNoPunctuationSeconds: 1.8,
+        onNumberSeconds: 1.5,
       },
+
       /*
        * Callers answer leasing questions with bare numbers — "two months", "one bedroom",
        * "thirty-eight hundred", a phone number. Those are exactly where a short endpoint
