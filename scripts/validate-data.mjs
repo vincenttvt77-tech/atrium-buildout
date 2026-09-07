@@ -144,20 +144,74 @@ for (const a of articles ?? []) {
     [/emotional support|service animal|accommodat/, 'reasonable accommodation'],
     [/\bdenied\b|\bdenial\b|credit score requirement/, 'eligibility or denial'],
   ]) if (pat.test(q)) fail(w, `question concerns ${why} — must escalate, not be answered by an article`)
+
+  /*
+   * The same subjects, checked in the ANSWER.
+   *
+   * Checking only the question is what let this through: an article titled "What do I need
+   * to apply?" is filed under a PolicyTopic and looks harmless, and its body answered source
+   * of income, criminal history, and housing court history anyway. tools.ts hands
+   * decideAnswer() every article filed under the classified topic, so a caller asking "do you
+   * take Section 8?" that classifies as application_requirements is answered from the KB with
+   * escalation bypassed entirely — and those terms are near-hapax in the corpus, so IDF
+   * weighting pins the article at ceiling confidence. The restricted subject has to be absent
+   * from the body, not just off the title.
+   *
+   * Checked at every status, published or not. tools.ts runs retrieve() over every article
+   * filed under the topic and only then filters to the servable ones, so an in_review or
+   * retired article still sets the confidence the servable winner is judged at. Unpublishing
+   * the text is not the same as removing it: leave "vouchers" in a held draft and
+   * "do you take Section 8?" still scores at the ceiling, then answers from whatever
+   * servable article ranked next. So a derived article held by derive-knowledge.mjs fails
+   * this check until a human actually redacts it, which is the point.
+   */
+  const body = (a.answer ?? '').toLowerCase()
+  for (const [pat, why] of [
+    [/section 8|voucher|cityfheps|housing choice|source of income/, 'housing vouchers and source of income'],
+    [/emotional support|service animal|assistance animal|reasonable accommodation/, 'reasonable accommodation'],
+    [/criminal history|criminal record|conviction|housing court|tenant blacklist/, 'criminal or housing court history'],
+    [/\b(40|80)\s*(times|x)\b|times the monthly rent/, 'the income eligibility test'],
+  ]) if (pat.test(body)) fail(w, `answer states ${why} — a RestrictedTopic decideAnswer() must escalate. Remove it so no article can serve the question.`)
+
+  /*
+   * A fee answer that closes the list is the most authoritative-sounding way to be wrong.
+   *
+   * "The garage and private storage are the only two things billed separately" was published
+   * and approved over a schedule carrying roughly twenty more charges, and a caller has no
+   * reason to doubt it. Scoped by money context in the sentence rather than by article topic,
+   * because the offending article was filed under "amenities", not under a fee topic — and so
+   * "your fob is the only key you need" is left alone.
+   */
+  for (const sentence of (a.answer ?? '').split(/(?<=[.!?])\s+/)) {
+    const exhaustive = /\b(the only|only two things?|only thing|nothing else|that is (?:all|everything)|and that is it)\b/i
+    const money = /\$\d|\bfees?\b|\bcharges?\b|\bbill(?:ed|s)?\b|\bdeposits?\b|\bper month\b|\ba month\b/i
+    if (exhaustive.test(sentence) && money.test(sentence))
+      fail(w, `answer closes the fee list: "${sentence.trim().slice(0, 90)}…". Point at the full fee schedule instead of claiming it is exhaustive.`)
+  }
 }
 
 const servable = (articles ?? []).filter((a) => a.status === 'published' && a.approvedBy)
 if (servable.length < 10) warn('knowledge.json', `only ${servable.length} servable articles — the agent will refuse a lot`)
 
-// Two published articles answering the same question is not an error, but the agent will
-// silently pick one, so it is worth knowing about.
+// Two published articles answering the same question is an error, not a note.
+//
+// Retrieval scores them, the agent serves whichever wins, and nobody finds out which. That
+// was survivable while the duplicates agreed; it stopped being survivable when
+// "what utilities are included in the rent" had one article saying heat and cooling are
+// electric and on your Con Edison bill and another saying they come off the building's
+// central plant and are included. Both were published, both were approved, and the answer a
+// caller got depended on the scoring function. One question, one published answer — retire
+// the loser or merge them.
 const byQuestion = new Map()
 for (const a of servable) {
   const k = (a.question ?? '').toLowerCase().replace(/[^a-z0-9 ]/g, '').trim()
-  byQuestion.set(k, (byQuestion.get(k) ?? 0) + 1)
+  if (!byQuestion.has(k)) byQuestion.set(k, [])
+  byQuestion.get(k).push(a.id)
 }
-const dupes = [...byQuestion.entries()].filter(([, n]) => n > 1)
-if (dupes.length) warn('knowledge.json', `${dupes.length} questions have more than one published answer`)
+for (const [q, ids] of byQuestion) {
+  if (ids.length > 1)
+    fail('knowledge.json', `${ids.length} published answers to the same question "${q}": ${ids.join(', ')} — retire all but one`)
+}
 
 // ---- report
 const errors = problems.filter((p) => p.severity === 'error')

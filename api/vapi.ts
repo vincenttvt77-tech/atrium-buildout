@@ -10,6 +10,7 @@ import {
   checkEmergency, checkAvailability, answerQuestion, captureSignal, captureLossReason,
   type ToolContext,
 } from '../src/conversation/tools.ts'
+import { authorizeOps } from '../src/ops/session.ts'
 import { bookTour } from '../src/booking/book.ts'
 import type { CalendarPort, TourSlot } from '../src/booking/types.ts'
 import { sayableStatus } from '../src/booking/book.ts'
@@ -218,8 +219,27 @@ export default async function handler(req: any, res: any) {
   // function gets its own memory, so a separate endpoint would see an empty log. This is
   // warm-instance scoped and resets when the instance recycles — fine for a demo, and the
   // reason a KV-backed RecordStore is the first thing to add for anything real.
+  //
+  // It is also the most sensitive thing this service holds: prospect names, email
+  // addresses, budget ceilings and the caller's own words. So it is gated by the same
+  // operations session that serves the dashboard page, and there is no partial answer —
+  // an unauthenticated request gets a status code, never a redacted event, never a count.
+  // Redaction is where leaks come back: somebody adds a field to the "safe" shape later.
   if (req.method === 'GET') {
-    res.setHeader('cache-control', 'no-store')
+    res.setHeader('cache-control', 'no-store, no-cache, must-revalidate, private')
+    res.setHeader('x-robots-tag', 'noindex, nofollow, noarchive, nosnippet')
+    res.setHeader('referrer-policy', 'no-referrer')
+
+    const auth = authorizeOps(req.headers ?? {}, new Date())
+    if (!auth.ok) {
+      res.status(auth.reason === 'not_configured' ? 503 : 401).json({
+        error: auth.reason === 'not_configured'
+          ? 'The operations log is closed until OPS_DASHBOARD_PASSCODE is set.'
+          : 'unauthorized',
+      })
+      return
+    }
+
     res.status(200).json({
       events: eventLog,
       generatedAt: new Date().toISOString(),

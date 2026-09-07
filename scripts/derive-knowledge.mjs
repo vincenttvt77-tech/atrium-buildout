@@ -29,6 +29,7 @@ const existing = await read('knowledge.json') ?? []
 
 const articles = []
 const skipped = []
+const held = []
 let n = 0
 
 const SYNONYMS = {
@@ -41,13 +42,18 @@ const SYNONYMS = {
   service: ['package', 'delivery', 'storage', 'laundry'],
 }
 
-function add(topic, question, answer, source, keywords) {
+function add(topic, question, answer, source, keywords, hold) {
   if (!answer || String(answer).trim().length < 8) return
   const rent = findRentFigure(answer)
   if (rent) {
     skipped.push(`${topic} / "${question}" — $${rent.amount.toLocaleString()} in rent context`)
     return
   }
+
+  // `hold` outranks --approve. A held article is still written out, because a human needs
+  // to see the text to redact it, but it can never carry an approval.
+  const publish = approve && !hold
+  if (hold) held.push(`${topic} / "${question}" — ${hold.reason}`)
 
   articles.push({
     id: `art-derived-${String(++n).padStart(3, '0')}`,
@@ -56,14 +62,15 @@ function add(topic, question, answer, source, keywords) {
     answer: String(answer).trim(),
     propertyScope: ['prop-demo'],
     jurisdictionScope: ['NY'],
-    status: approve ? 'published' : 'in_review',
+    status: publish ? 'published' : 'in_review',
     version: 1,
     source,
     ownerId: OWNER,
     ...(keywords && keywords.length ? { keywords: [...new Set(keywords)] } : {}),
-    approvedBy: approve ? OWNER : null,
-    approvedAt: approve ? APPROVED_AT : null,
+    approvedBy: publish ? OWNER : null,
+    approvedAt: publish ? APPROVED_AT : null,
     reviewBy: REVIEW_BY,
+    ...(hold ? { reviewNote: hold.note } : {}),
   })
 }
 
@@ -134,12 +141,43 @@ const QUESTION = {
   leaseTerms: 'What lease terms do you offer?', renewal: 'How does renewal work?',
 }
 
+/*
+ * A policy block that carries `escalationTopic` can never emit a published article.
+ *
+ * The flag says the block mixes ordinary policy facts with content the agent must never
+ * state on its own: an accommodation ruling, an eligibility test, a legal characterisation.
+ * Flattening the block's residentSummary into an article dropped the flag silently, and
+ * because the article is then filed under a PolicyTopic, decideAnswer() never sees a
+ * restricted topic to escalate. That is how "housing vouchers are accepted" and "service
+ * animals pay no fee and the breed limits do not apply" became published, approved answers
+ * with escalation bypassed.
+ *
+ * A script cannot tell which half of a summary is safe, so it does not try. The article is
+ * still written out — a human needs the text in front of them to redact it — but it goes out
+ * in_review with approvedBy null, and --approve does not override that.
+ */
 for (const [key, value] of Object.entries(policies)) {
   const topic = POLICY_TOPIC[key]
   if (!topic || !value || typeof value !== 'object') continue
   const summary = value.residentSummary ?? value.summary
-  if (summary) add(topic, QUESTION[key] ?? `Tell me about ${key}`, summary, `House Rules: ${key}`,
-    SYNONYMS[key] ?? [key.replace(/([A-Z])/g, ' $1').toLowerCase()])
+  if (!summary) continue
+
+  const hold = value.escalationTopic
+    ? {
+        reason: `policies.json "${key}" carries escalationTopic "${value.escalationTopic}"`,
+        note: `Held out of the published set by derive-knowledge.mjs. The source block ` +
+          `policies.json "${key}" declares escalationTopic "${value.escalationTopic}"` +
+          (value.escalationNote ? `: ${value.escalationNote}` : '.') +
+          ` A derived summary cannot carry that flag, so this article is never auto-approved. ` +
+          `Redact every sentence covering the escalation subject before publishing, and leave ` +
+          `those subjects with no article at all so decideAnswer() falls through to escalate. ` +
+          `To publish the redacted remainder, set status to published, approvedBy to ${OWNER}, ` +
+          `and approvedAt to a timestamp.`,
+      }
+    : null
+
+  add(topic, QUESTION[key] ?? `Tell me about ${key}`, summary, `House Rules: ${key}`,
+    SYNONYMS[key] ?? [key.replace(/([A-Z])/g, ' $1').toLowerCase()], hold)
 }
 
 const kept = existing.filter((a) => !String(a.id).startsWith('art-derived-'))
@@ -151,6 +189,10 @@ console.log(`Kept ${kept.length} hand-written. Total ${out.length}.`)
 if (skipped.length) {
   console.log(`\nSkipped ${skipped.length} — rent-shaped figures must come from live inventory:`)
   for (const s of skipped) console.log(`  ${s}`)
+}
+if (held.length) {
+  console.log(`\nHeld ${held.length} in_review regardless of --approve — the source block escalates:`)
+  for (const h of held) console.log(`  ${h}`)
 }
 console.log(approve
   ? 'Stamped published/approved for the demo property.'

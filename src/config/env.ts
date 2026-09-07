@@ -14,6 +14,8 @@ export type SecretName =
   | 'VAPI_WEBHOOK_SECRET'
   /** Passcode staff type to open the operations dashboard and read the call log. */
   | 'OPS_DASHBOARD_PASSCODE'
+  /** Accepted alias for OPS_DASHBOARD_PASSCODE. */
+  | 'DASHBOARD_TOKEN'
   /** Model provider key for the conversation engine. */
   | 'ANTHROPIC_API_KEY'
 

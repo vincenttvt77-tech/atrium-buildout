@@ -1,0 +1,12 @@
+# The Larkin is a demonstration property. It does not exist.
+#
+# Indexing it would put a fictional building with fictional rents into search
+# results beside real listings, which is how a demo becomes a complaint.
+User-agent: *
+Disallow: /
+
+# Named explicitly as well as covered by the rule above: a later decision to
+# open the marketing pages to crawlers must not quietly open these too.
+Disallow: /api/
+Disallow: /dashboard
+Disallow: /ops/

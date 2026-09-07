@@ -14,13 +14,20 @@ const FIXTURES = join(import.meta.dirname, 'fixtures')
 let handler: (req: any, res: any) => Promise<void>
 let originalCwd: string
 
+/** The dashboard passcode these tests sign in with. Reading the log requires one. */
+const OPS_PASSCODE = 'test-operations-passcode'
+
 before(async () => {
   originalCwd = process.cwd()
   process.chdir(FIXTURES)
+  process.env.OPS_DASHBOARD_PASSCODE = OPS_PASSCODE
   handler = (await import('../vapi.ts')).default
 })
 
-after(() => { process.chdir(originalCwd) })
+after(() => {
+  process.chdir(originalCwd)
+  delete process.env.OPS_DASHBOARD_PASSCODE
+})
 
 function mockRes() {
   const r: any = {
@@ -30,6 +37,13 @@ function mockRes() {
     setHeader(k: string, v: string) { r.headers[k] = v; return r },
   }
   return r
+}
+
+/** Reads the operations log the way a signed-in operator does. */
+async function readLog(headers: Record<string, string> = { 'x-ops-passcode': OPS_PASSCODE }) {
+  const res = mockRes()
+  await handler({ method: 'GET', headers }, res)
+  return res
 }
 
 async function toolCall(name: string, args: Record<string, unknown>, callId: string, headers: Record<string, string> = {}) {
@@ -114,8 +128,7 @@ describe('the emergency path runs on caller transcripts, not just tool calls', (
     }, res)
     assert.equal(res.code, 200)
 
-    const g = mockRes()
-    await handler({ method: 'GET', headers: {} }, g)
+    const g = await readLog()
     const events = g.body.events.filter((e: any) => e.callId === 'emerg-1')
     assert.ok(events.some((e: any) => e.kind === 'emergency' && e.emergencyKind === 'gas'))
     assert.ok(events.some((e: any) => e.kind === 'escalated'))
@@ -127,19 +140,62 @@ describe('the emergency path runs on caller transcripts, not just tool calls', (
       method: 'POST', headers: {},
       body: { message: { type: 'transcript', role: 'assistant', transcript: 'we do not allow gas grills', call: { id: 'emerg-2' } } },
     }, res)
-    const g = mockRes()
-    await handler({ method: 'GET', headers: {} }, g)
+    const g = await readLog()
     assert.ok(!g.body.events.some((e: any) => e.callId === 'emerg-2' && e.kind === 'emergency'))
   })
 })
 
-describe('the dashboard endpoint', () => {
-  test('GET returns the event log and forbids caching', async () => {
-    const res = mockRes()
-    await handler({ method: 'GET', headers: {} }, res)
+/**
+ * The log holds prospect names, email addresses, budget ceilings and the caller's own
+ * words. It shipped readable by anyone who guessed the URL; these tests are the boundary
+ * that stops it going back.
+ */
+describe('the operations log is gated', () => {
+  test('a signed-in operator gets the log, uncacheable and unindexable', async () => {
+    const res = await readLog()
     assert.equal(res.code, 200)
     assert.ok(Array.isArray(res.body.events))
-    assert.equal(res.headers['cache-control'], 'no-store')
+    assert.match(res.headers['cache-control'], /no-store/)
+    assert.match(res.headers['x-robots-tag'], /noindex/)
+  })
+
+  test('an anonymous request gets 401 and no events at all', async () => {
+    const res = await readLog({})
+    assert.equal(res.code, 401)
+    assert.equal(res.body.events, undefined, 'not even a redacted copy')
+    assert.deepEqual(Object.keys(res.body), ['error'])
+  })
+
+  test('a wrong passcode is not close enough', async () => {
+    const res = await readLog({ 'x-ops-passcode': `${OPS_PASSCODE}x` })
+    assert.equal(res.code, 401)
+    assert.equal(res.body.events, undefined)
+  })
+
+  test('the Vapi webhook secret does not open the log', async () => {
+    process.env.VAPI_WEBHOOK_SECRET = 'machine-secret'
+    const res = await readLog({ 'x-vapi-secret': 'machine-secret' })
+    delete process.env.VAPI_WEBHOOK_SECRET
+    assert.equal(res.code, 401)
+  })
+
+  test('no passcode configured closes the log rather than opening it', async () => {
+    delete process.env.OPS_DASHBOARD_PASSCODE
+    const res = await readLog({})
+    process.env.OPS_DASHBOARD_PASSCODE = OPS_PASSCODE
+    assert.equal(res.code, 503)
+    assert.equal(res.body.events, undefined)
+    assert.match(res.body.error, /OPS_DASHBOARD_PASSCODE/)
+  })
+
+  test('the personal fields are still there for an authorised reader', async () => {
+    await toolCall('capture_signal',
+      { signal: 'budget', value: '4200', excerpt: 'up to about forty-two hundred' }, 'gate-1')
+    const res = await readLog()
+    const captured = res.body.events.find(
+      (e: any) => e.callId === 'gate-1' && e.kind === 'signal_captured')
+    assert.equal(captured.excerpt, 'up to about forty-two hundred',
+      'the gate protects the evidence trail, it does not delete it')
   })
 
   test('other methods are rejected', async () => {
