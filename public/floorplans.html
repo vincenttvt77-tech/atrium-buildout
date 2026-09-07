@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Floor Plans and Availability | Studio to Three Bedroom | The Larkin</title>
+<meta name="description" content="Ten floor plans at The Larkin in Hunters Point, Long Island City, with drawings, square footage, features and every available residence with its net effective rent.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#171A1C; --paper:#F4F1EA; --accent:#7F5E33; --muted:#6E6B64;
+  --rule:rgba(23,26,28,.14); --rule-soft:rgba(23,26,28,.08);
+  --card:#FAF8F3; --wash:rgba(23,26,28,.035);
+  --display:"Cormorant Garamond",Georgia,"Times New Roman",serif;
+  --body:"Jost","Helvetica Neue",Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--body);
+  font-weight:300;font-size:16px;line-height:1.62;
+  font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+img{max-width:100%;display:block}
+a{color:inherit}
+h1,h2,h3,h4{font-family:var(--display);font-weight:400;letter-spacing:.005em;margin:0}
+p{margin:0 0 1em}
+.wrap{max-width:1180px;margin:0 auto;padding:0 28px}
+.eyebrow{font-family:var(--body);font-size:11px;font-weight:500;letter-spacing:.22em;
+  text-transform:uppercase;color:var(--accent);margin:0 0 14px}
+.rule{height:1px;background:var(--rule);border:0;margin:0}
+
+/* ---- header ---- */
+.site-header{position:sticky;top:0;z-index:50;background:rgba(244,241,234,.94);
+  backdrop-filter:saturate(180%) blur(8px);border-bottom:1px solid var(--rule)}
+.hdr{display:flex;align-items:center;gap:26px;min-height:74px}
+.wordmark{font-family:var(--display);font-size:25px;letter-spacing:.16em;
+  text-transform:uppercase;text-decoration:none;white-space:nowrap;line-height:1}
+.wordmark small{display:block;font-family:var(--body);font-size:8.5px;letter-spacing:.3em;
+  color:var(--muted);margin-top:5px;font-weight:400}
+.nav{display:flex;gap:22px;margin-left:auto;flex-wrap:wrap}
+.nav a{font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;text-decoration:none;
+  color:var(--ink);padding:4px 0;border-bottom:1px solid transparent}
+.nav a:hover{border-bottom-color:var(--accent)}
+.nav a[aria-current]{border-bottom-color:var(--accent);color:var(--accent)}
+.hdr-cta{display:flex;align-items:center;gap:16px;margin-left:8px}
+.tel{font-size:14.5px;letter-spacing:.06em;text-decoration:none;white-space:nowrap;font-weight:400}
+.tel:hover{color:var(--accent)}
+.btn{display:inline-block;background:var(--accent);color:#FBF9F4;text-decoration:none;
+  font-size:11.5px;letter-spacing:.18em;text-transform:uppercase;padding:12px 20px;
+  border:1px solid var(--accent);white-space:nowrap}
+.btn:hover{background:transparent;color:var(--accent)}
+.btn.ghost{background:transparent;color:var(--accent)}
+.btn.ghost:hover{background:var(--accent);color:#FBF9F4}
+.offer{background:var(--ink);color:var(--paper)}
+.offer .wrap{display:flex;gap:8px 22px;flex-wrap:wrap;align-items:baseline;
+  padding-top:11px;padding-bottom:11px;font-size:13px;letter-spacing:.03em}
+.offer b{font-weight:500}
+.offer span{color:rgba(244,241,234,.62);font-size:12px}
+
+/* ---- page head ---- */
+.page-head{padding:64px 0 40px}
+.page-head h1{font-size:clamp(38px,5.4vw,62px);line-height:1.06;font-weight:300;max-width:15ch}
+.lede{font-size:19px;line-height:1.62;max-width:62ch;margin-top:22px;color:var(--ink)}
+.meta-row{display:flex;flex-wrap:wrap;gap:10px 30px;margin-top:30px;padding-top:18px;
+  border-top:1px solid var(--rule);font-size:12.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted)}
+.meta-row b{font-weight:500;color:var(--ink)}
+
+/* ---- index table ---- */
+.index-wrap{overflow-x:auto;margin:0 0 12px}
+table{border-collapse:collapse;width:100%;font-size:14.5px}
+th{font-family:var(--body);font-size:10.5px;font-weight:500;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--muted);text-align:left;
+  padding:0 16px 9px 0;border-bottom:1px solid var(--rule);white-space:nowrap}
+td{padding:11px 16px 11px 0;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+td:last-child,th:last-child{padding-right:0}
+tbody tr:hover{background:var(--wash)}
+.t-num{white-space:nowrap}
+.t-res{font-weight:500;letter-spacing:.06em}
+.t-res a{text-decoration:none;border-bottom:1px solid var(--rule)}
+.t-res a:hover{color:var(--accent);border-bottom-color:var(--accent)}
+.t-view{display:block;font-size:12.5px;color:var(--muted);line-height:1.45;margin-top:2px;
+  max-width:34ch}
+
+/* ---- filters ---- */
+.filters{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 34px}
+.chip{font:inherit;font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;
+  background:transparent;color:var(--ink);border:1px solid var(--rule);
+  padding:10px 17px;cursor:pointer}
+.chip:hover{border-color:var(--accent);color:var(--accent)}
+.chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+
+/* ---- plan card ---- */
+.plan{border-top:1px solid var(--rule);padding:46px 0 52px;
+  display:grid;grid-template-columns:minmax(0,46%) minmax(0,1fr);gap:48px;align-items:start}
+.plan-figure{position:sticky;top:104px}
+.plan-figure img{width:100%;border:1px solid var(--rule-soft);background:var(--paper)}
+.figure-note{display:flex;justify-content:space-between;gap:16px;margin-top:12px;
+  font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.figure-note a{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(127,94,51,.4)}
+.plan-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.plan-code{font-size:12px;font-weight:500;letter-spacing:.22em;color:var(--accent)}
+.plan h2{font-size:34px;line-height:1.1;font-weight:400}
+.pill{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);
+  border:1px solid rgba(127,94,51,.45);padding:4px 9px;white-space:nowrap}
+.spec-row{display:flex;flex-wrap:wrap;gap:6px 14px;margin:16px 0 4px;font-size:14.5px}
+.spec-row span:not(:last-child):after{content:"·";margin-left:14px;color:var(--muted)}
+.stack{font-size:13px;color:var(--muted);margin:0 0 20px}
+.rent{font-family:var(--display);font-size:27px;margin:0 0 6px}
+.rent small{font-family:var(--body);font-size:11.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted);margin-left:8px}
+.desc{margin:20px 0 24px;max-width:60ch}
+.feat{list-style:none;margin:0 0 30px;padding:0;columns:2;column-gap:34px;font-size:14px}
+.feat li{break-inside:avoid;padding:5px 0 5px 16px;position:relative;color:var(--ink)}
+.feat li:before{content:"";position:absolute;left:0;top:14px;width:6px;height:1px;
+  background:var(--accent)}
+.avail h3{font-size:12px;font-family:var(--body);font-weight:500;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--ink);margin:0 0 14px}
+.avail h3 em{font-style:normal;color:var(--muted);font-weight:400}
+.avail-wrap{overflow-x:auto}
+.badge{display:inline-block;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+  border:1px solid var(--rule);padding:2px 6px;margin-left:8px;color:var(--muted);
+  vertical-align:1px;white-space:nowrap}
+.badge.now{color:var(--accent);border-color:rgba(127,94,51,.45)}
+.tnote{font-size:12.5px;color:var(--muted);margin:12px 0 0;max-width:62ch}
+.none{font-size:14px;color:var(--muted);border:1px solid var(--rule-soft);
+  background:var(--wash);padding:16px 18px;margin:0}
+.none a{color:var(--accent)}
+
+/* ---- amenities ---- */
+.level-nav{display:flex;flex-wrap:wrap;gap:0;border-top:1px solid var(--rule);
+  border-bottom:1px solid var(--rule);margin-bottom:8px}
+.level-nav a{flex:1 1 220px;text-decoration:none;padding:22px 24px 22px 0;
+  border-right:1px solid var(--rule-soft)}
+.level-nav a:last-child{border-right:0}
+.level-nav b{display:block;font-family:var(--display);font-size:23px;font-weight:400}
+.level-nav span{display:block;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);margin-top:6px}
+.cat{padding:54px 0 10px;border-top:1px solid var(--rule);margin-top:44px}
+.cat:first-of-type{margin-top:0}
+.cat-head{display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr);gap:40px;
+  margin-bottom:36px}
+.cat-head h2{font-size:34px;line-height:1.1}
+.cat-head p{margin:0;color:var(--muted);font-size:15px;max-width:56ch}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:2px;
+  background:var(--rule-soft)}
+.card{background:var(--card);padding:30px 30px 32px}
+.card-head{display:flex;align-items:baseline;justify-content:space-between;gap:16px}
+.card h3{font-size:25px;line-height:1.15}
+.floor{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);
+  white-space:nowrap;padding-top:6px}
+.card p{font-size:14.5px;margin:14px 0 0}
+.dl{margin:20px 0 0;padding:18px 0 0;border-top:1px solid var(--rule-soft);
+  display:grid;grid-template-columns:104px minmax(0,1fr);gap:9px 18px;font-size:13.5px}
+.dl dt{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);
+  padding-top:3px}
+.dl dd{margin:0}
+.dl dd b{font-weight:500}
+.open-note{font-size:13.5px;color:var(--muted);margin-top:18px;padding-top:16px;
+  border-top:1px solid var(--rule-soft)}
+.two-col{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:40px;
+  margin-top:34px}
+.two-col h3{font-size:20px;margin-bottom:12px}
+.two-col ul{list-style:none;margin:0;padding:0;font-size:14.5px}
+.two-col li{padding:9px 0;border-bottom:1px solid var(--rule-soft);display:flex;gap:16px;
+  justify-content:space-between}
+.two-col li b{font-weight:500;white-space:nowrap}
+.two-col li span{color:var(--muted)}
+
+/* ---- legal / footer ---- */
+.legal{border-top:1px solid var(--rule);margin-top:60px;padding:34px 0 0;font-size:12px;
+  line-height:1.7;color:var(--muted);max-width:96ch}
+.legal p{margin:0 0 12px}
+.site-footer{background:var(--ink);color:rgba(244,241,234,.78);margin-top:78px;
+  padding:64px 0 40px;font-size:14px}
+.site-footer a{color:rgba(244,241,234,.78)}
+.foot-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:44px}
+.foot-grid h4{font-family:var(--body);font-size:10.5px;font-weight:500;letter-spacing:.2em;
+  text-transform:uppercase;color:rgba(244,241,234,.5);margin:0 0 16px}
+.foot-mark{font-family:var(--display);font-size:27px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--paper);line-height:1}
+.foot-grid p{margin:0 0 10px;line-height:1.65}
+.foot-grid ul{list-style:none;margin:0;padding:0}
+.foot-grid li{margin-bottom:9px}
+.foot-tel{font-family:var(--display);font-size:24px;color:var(--paper);text-decoration:none;
+  display:inline-block;margin-bottom:6px}
+.hours{display:grid;grid-template-columns:auto 1fr;gap:4px 18px;font-size:13.5px}
+.hours dt{color:rgba(244,241,234,.55)}
+.hours dd{margin:0;white-space:nowrap}
+.foot-bottom{border-top:1px solid rgba(244,241,234,.16);margin-top:52px;padding-top:26px;
+  display:flex;flex-wrap:wrap;gap:18px 32px;align-items:flex-start;
+  font-size:11.5px;color:rgba(244,241,234,.55);line-height:1.7}
+.foot-bottom p{margin:0;max-width:80ch}
+.eho{display:flex;align-items:center;gap:12px;margin-left:auto}
+.eho svg{display:block}
+.skip{position:absolute;left:-9999px}
+.skip:focus{left:8px;top:8px;position:fixed;background:var(--accent);color:#fff;
+  padding:10px 16px;z-index:99}
+
+@media (max-width:980px){
+  .plan{grid-template-columns:1fr;gap:30px}
+  .plan-figure{position:static}
+  .cat-head{grid-template-columns:1fr;gap:14px}
+  .feat{columns:1}
+  .nav{display:none}
+}
+@media (max-width:620px){
+  .wrap{padding:0 20px}
+  .hdr{min-height:64px;gap:14px}
+  .tel{display:none}
+  .page-head{padding:44px 0 30px}
+  .card{padding:24px 22px 26px}
+  .dl{grid-template-columns:1fr;gap:3px 0}
+  .dl dt{padding-top:10px}
+}
+@media print{
+  .site-header,.filters,.btn{display:none}
+  .plan{break-inside:avoid;page-break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap hdr">
+    <a class="wordmark" href="index.html">The Larkin<small>Long Island City</small></a>
+    <nav class="nav" aria-label="Primary"><a href="index.html">The building</a><a href="floorplans.html" aria-current="page">Floor plans</a><a href="amenities.html">Amenities</a><a href="index.html#neighborhood">Neighborhood</a><a href="floorplans.html#availability">Availability</a></nav>
+    <div class="hdr-cta">
+      <a class="tel" href="tel:+15169909252">+1 (516) 990-9252</a>
+      <a class="btn" href="index.html#tour">Schedule a tour</a>
+    </div>
+  </div>
+</header>
+<div class="offer">
+  <div class="wrap">
+    <b>One month free on a 14-month lease. No broker fee.</b>
+    <span>Offer expires October 31, 2026. Advertised rents are net effective.</span>
+  </div>
+</div>
+<main id="main">
+<div class="wrap page-head">
+  <p class="eyebrow">Floor plans</p>
+  <h1>Ten plans, twenty&#8209;nine floors.</h1>
+  <p class="lede">Every residence at The Larkin is named for its floor and its line &mdash;
+  Residence 27C is line C on the twenty-seventh floor. Ten plans repeat up the stack from 5
+  to 33, and the six floors above the setback are the West Collection. Drawings are shown
+  with north up, so the glass wall you see is the exposure you get.</p>
+  <p class="meta-row"><span><b>27</b> residences available</span>
+    <span><b>3</b> under application</span>
+    <span>Rents updated <b>September 7, 2026</b></span>
+    <span>318 residences &middot; 34 floors &middot; 94% leased</span></p>
+</div>
+<div class="wrap" id="availability">
+  <div class="index-wrap"><table>
+    <thead><tr><th>Plan</th><th>Name</th><th>Beds / baths</th><th>Square feet</th>
+      <th>From</th><th>Available</th></tr></thead>
+    <tbody><tr><td class="t-res"><a href="#plan-s1">S1</a></td><td>Studio</td><td class="t-num">Studio / 1 bath</td><td class="t-num">468 &ndash; 532</td><td class="t-num">$3,745</td><td class="t-num">3</td></tr><tr><td class="t-res"><a href="#plan-s2">S2</a></td><td>Alcove Studio</td><td class="t-num">Studio / 1 bath</td><td class="t-num">560 &ndash; 605</td><td class="t-num">$4,050</td><td class="t-num">3</td></tr><tr><td class="t-res"><a href="#plan-a1">A1</a></td><td>One Bedroom</td><td class="t-num">1 bedroom / 1 bath</td><td class="t-num">640 &ndash; 735</td><td class="t-num">$4,695</td><td class="t-num">4</td></tr><tr><td class="t-res"><a href="#plan-a2">A2</a></td><td>One Bedroom with Balcony</td><td class="t-num">1 bedroom / 1 bath</td><td class="t-num">690 &ndash; 760</td><td class="t-num">$5,185</td><td class="t-num">3</td></tr><tr><td class="t-res"><a href="#plan-a3">A3</a></td><td>One Bedroom and Den</td><td class="t-num">1 bedroom / 1.5 baths</td><td class="t-num">810 &ndash; 880</td><td class="t-num">$5,540</td><td class="t-num">3</td></tr><tr><td class="t-res"><a href="#plan-b1">B1</a></td><td>Two Bedroom</td><td class="t-num">2 bedroom / 2 baths</td><td class="t-num">940 &ndash; 1,085</td><td class="t-num">$6,825</td><td class="t-num">3</td></tr><tr><td class="t-res"><a href="#plan-b2">B2</a></td><td>Two Bedroom with Balcony</td><td class="t-num">2 bedroom / 2 baths</td><td class="t-num">985 &ndash; 1,120</td><td class="t-num">$7,410</td><td class="t-num">1</td></tr><tr><td class="t-res"><a href="#plan-b3">B3</a></td><td>Two Bedroom, West Collection <span class="badge">West Collection</span></td><td class="t-num">2 bedroom / 2 baths</td><td class="t-num">1,090 &ndash; 1,190</td><td class="t-num">$8,150</td><td class="t-num">3</td></tr><tr><td class="t-res"><a href="#plan-c1">C1</a></td><td>Three Bedroom</td><td class="t-num">3 bedroom / 2 baths</td><td class="t-num">1,285 &ndash; 1,410</td><td class="t-num">$9,240</td><td class="t-num">2</td></tr><tr><td class="t-res"><a href="#plan-c2">C2</a></td><td>Three Bedroom, West Collection <span class="badge">West Collection</span></td><td class="t-num">3 bedroom / 2.5 baths</td><td class="t-num">1,455 &ndash; 1,560</td><td class="t-num">$11,650</td><td class="t-num">2</td></tr></tbody></table></div>
+</div>
+<div class="wrap" style="padding-top:38px">
+  <div class="filters" role="group" aria-label="Filter floor plans">
+    <button class="chip" data-filter="all" aria-pressed="true">All plans</button>
+    <button class="chip" data-filter="0" aria-pressed="false">Studio</button>
+    <button class="chip" data-filter="1" aria-pressed="false">One bedroom</button>
+    <button class="chip" data-filter="2" aria-pressed="false">Two bedroom</button>
+    <button class="chip" data-filter="3" aria-pressed="false">Three bedroom</button>
+    <button class="chip" data-filter="west" aria-pressed="false">West Collection</button>
+  </div>
+  <article class="plan" id="plan-s1" data-beds="0" data-collection="">
+  <div class="plan-figure">
+    <img src="floorplans/s1.svg" width="900" loading="lazy"
+         alt="Floor plan drawing of the S1 Studio residence at The Larkin">
+    <p class="figure-note"><span>Plan S1 &mdash; north is up</span>
+      <a href="floorplans/s1.svg" target="_blank" rel="noopener">Open full plan</a></p>
+  </div>
+  <div class="plan-body">
+    <div class="plan-head"><span class="plan-code">S1</span><h2>Studio</h2></div>
+    <p class="spec-row"><span>Studio</span><span>1 bath</span><span>468 &ndash; 532 SF</span></p>
+    <p class="stack">Lines F and G &middot; Floors 5-27 &middot; South and South and East exposure</p>
+    <p class="rent">From $3,745<small>Net effective</small></p>
+    <p class="desc">One room with the glass on the long wall, so the bed and the sofa both face out. The kitchen runs along one side with a full-size Bosch range and a vented hood, and the washer and dryer sit behind a door off the entry. Ceilings are 9 feet 4 inches.</p>
+    <ul class="feat"><li>Floor-to-ceiling windows with solar shades</li><li>7-inch white oak plank flooring</li><li>Quartz counters and full-height backsplash</li><li>Bosch appliance suite, gas cooking, vented hood</li><li>Bosch washer and vented dryer in residence</li><li>Custom-fitted closet</li><li>Keyless entry and zoned heating and cooling</li><li>Ceilings 9 feet 4 inches</li></ul>
+    <div class="avail">
+      <h3>Available now &mdash; <em>3 residences</em></h3>
+      <div class="avail-wrap"><table>
+<thead><tr><th>Residence</th><th>Floor</th><th>SF</th><th>Exposure</th>
+<th>Net effective rent</th><th>Available</th></tr></thead>
+<tbody><tr><td class="t-res">06F<span class="t-view">South over the Hunters Point low-rise rooftops</span></td><td class="t-num">6</td><td class="t-num">496</td><td>South</td><td class="t-num">$3,745</td><td class="t-num">Nov 15, 2026</td></tr><tr><td class="t-res">09F<span class="badge now">Immediate</span><span class="t-view">South over the Hunters Point low-rise rooftops</span></td><td class="t-num">9</td><td class="t-num">496</td><td>South</td><td class="t-num">$3,795</td><td class="t-num">Now</td></tr><tr><td class="t-res">12G<span class="t-view">Court Square and the Citigroup Building</span></td><td class="t-num">12</td><td class="t-num">532</td><td>South and East</td><td class="t-num">$3,890</td><td class="t-num">Oct 12, 2026</td></tr><tr><td class="t-res">27F<span class="badge">Application pending</span><span class="t-view">South to the Kosciuszko Bridge and Newtown Creek</span></td><td class="t-num">27</td><td class="t-num">496</td><td>South</td><td class="t-num">$4,090</td><td class="t-num">Dec 5, 2026</td></tr></tbody></table></div><p class="tnote">27F: six weeks free on an 18-month lease.</p>
+    </div>
+  </div>
+</article>
+<article class="plan" id="plan-s2" data-beds="0" data-collection="">
+  <div class="plan-figure">
+    <img src="floorplans/s2.svg" width="900" loading="lazy"
+         alt="Floor plan drawing of the S2 Alcove Studio residence at The Larkin">
+    <p class="figure-note"><span>Plan S2 &mdash; north is up</span>
+      <a href="floorplans/s2.svg" target="_blank" rel="noopener">Open full plan</a></p>
+  </div>
+  <div class="plan-body">
+    <div class="plan-head"><span class="plan-code">S2</span><h2>Alcove Studio</h2></div>
+    <p class="spec-row"><span>Studio</span><span>1 bath</span><span>560 &ndash; 605 SF</span></p>
+    <p class="stack">Line K &middot; Floors 5-27 &middot; East exposure</p>
+    <p class="rent">From $4,050<small>Net effective</small></p>
+    <p class="desc">The alcove sits off the main room, deep enough for a queen bed and a nightstand and squared off so a curtain or a bookcase actually closes it. The rest reads as one room, kitchen along the wall and living area at the window. You get 80 more square feet than the S1 and a place to put the bed.</p>
+    <ul class="feat"><li>Sleeping alcove, 11 by 9 feet</li><li>Floor-to-ceiling windows with solar shades</li><li>7-inch white oak plank flooring</li><li>Two-tone cabinetry with under-cabinet lighting</li><li>Bosch appliance suite, gas cooking, vented hood</li><li>Bosch washer and vented dryer in residence</li><li>Honed porcelain bath with a niche</li><li>Ceilings 9 feet 4 inches</li></ul>
+    <div class="avail">
+      <h3>Available now &mdash; <em>3 residences</em></h3>
+      <div class="avail-wrap"><table>
+<thead><tr><th>Residence</th><th>Floor</th><th>SF</th><th>Exposure</th>
+<th>Net effective rent</th><th>Available</th></tr></thead>
+<tbody><tr><td class="t-res">05K<span class="t-view">East over Vernon Boulevard toward Sunnyside</span></td><td class="t-num">5</td><td class="t-num">560</td><td>East</td><td class="t-num">$4,050</td><td class="t-num">Nov 5, 2026</td></tr><tr><td class="t-res">07K<span class="badge now">Immediate</span><span class="t-view">East over Vernon Boulevard toward Sunnyside</span></td><td class="t-num">7</td><td class="t-num">578</td><td>East</td><td class="t-num">$4,105</td><td class="t-num">Now</td></tr><tr><td class="t-res">25K<span class="t-view">Court Square, the Citigroup Building, and the LIRR yards</span></td><td class="t-num">25</td><td class="t-num">578</td><td>East</td><td class="t-num">$4,430</td><td class="t-num">Oct 18, 2026</td></tr></tbody></table></div><p class="tnote">05K: six weeks free on an 18-month lease.</p>
+    </div>
+  </div>
+</article>
+<article class="plan" id="plan-a1" data-beds="1" data-collection="">
+  <div class="plan-figure">
+    <img src="floorplans/a1.svg" width="900" loading="lazy"
+         alt="Floor plan drawing of the A1 One Bedroom residence at The Larkin">
+    <p class="figure-note"><span>Plan A1 &mdash; north is up</span>
+      <a href="floorplans/a1.svg" target="_blank" rel="noopener">Open full plan</a></p>
+  </div>
+  <div class="plan-body">
+    <div class="plan-head"><span class="plan-code">A1</span><h2>One Bedroom</h2></div>
+    <p class="spec-row"><span>1 bedroom</span><span>1 bath</span><span>640 &ndash; 735 SF</span></p>
+    <p class="stack">Lines C and E &middot; Floors 5-27 &middot; West and South exposure</p>
+    <p class="rent">From $4,695<small>Net effective</small></p>
+    <p class="desc">The bedroom takes its own window wall and closes with a door. The living room keeps its glass, and the kitchen turns into the room with a peninsula that seats two. The C line faces west, which puts the Midtown skyline over Gantry Plaza State Park.</p>
+    <ul class="feat"><li>Separate bedroom with a door and a fitted closet</li><li>Kitchen peninsula seating two</li><li>Floor-to-ceiling windows, blackout shades in the bedroom</li><li>7-inch white oak plank flooring</li><li>Quartz counters and full-height backsplash</li><li>Bosch appliance suite, gas cooking, vented hood</li><li>Bosch washer and vented dryer in residence</li><li>Ceilings 9 feet 4 inches</li></ul>
+    <div class="avail">
+      <h3>Available now &mdash; <em>4 residences</em></h3>
+      <div class="avail-wrap"><table>
+<thead><tr><th>Residence</th><th>Floor</th><th>SF</th><th>Exposure</th>
+<th>Net effective rent</th><th>Available</th></tr></thead>
+<tbody><tr><td class="t-res">08E<span class="t-view">South over Hunter&#x27;s Point South Park</span></td><td class="t-num">8</td><td class="t-num">735</td><td>South</td><td class="t-num">$4,695</td><td class="t-num">Oct 24, 2026</td></tr><tr><td class="t-res">09C<span class="t-view">East River and the Midtown skyline over Gantry Plaza State Park</span></td><td class="t-num">9</td><td class="t-num">688</td><td>West</td><td class="t-num">$4,770</td><td class="t-num">Nov 1, 2026</td></tr><tr><td class="t-res">14C<span class="t-view">East River and the Midtown skyline over Gantry Plaza State Park</span></td><td class="t-num">14</td><td class="t-num">688</td><td>West</td><td class="t-num">$4,860</td><td class="t-num">Oct 1, 2026</td></tr><tr><td class="t-res">20E<span class="badge">Application pending</span><span class="t-view">South over Hunter&#x27;s Point South Park to the Kosciuszko Bridge</span></td><td class="t-num">20</td><td class="t-num">735</td><td>South</td><td class="t-num">$4,995</td><td class="t-num">Sep 19, 2026</td></tr><tr><td class="t-res">25C<span class="t-view">East River, the Midtown skyline, and the ferry landing at LIC Landing</span></td><td class="t-num">25</td><td class="t-num">688</td><td>West</td><td class="t-num">$5,165</td><td class="t-num">Dec 1, 2026</td></tr></tbody></table></div>
+    </div>
+  </div>
+</article>
+<article class="plan" id="plan-a2" data-beds="1" data-collection="">
+  <div class="plan-figure">
+    <img src="floorplans/a2.svg" width="900" loading="lazy"
+         alt="Floor plan drawing of the A2 One Bedroom with Balcony residence at The Larkin">
+    <p class="figure-note"><span>Plan A2 &mdash; north is up</span>
+      <a href="floorplans/a2.svg" target="_blank" rel="noopener">Open full plan</a></p>
+  </div>
+  <div class="plan-body">
+    <div class="plan-head"><span class="plan-code">A2</span><h2>One Bedroom with Balcony</h2></div>
+    <p class="spec-row"><span>1 bedroom</span><span>1 bath</span><span>690 &ndash; 760 SF</span></p>
+    <p class="stack">Line H &middot; Floors 5-27 &middot; North exposure</p>
+    <p class="rent">From $5,185<small>Net effective</small></p>
+    <p class="desc">The A1 layout with a balcony off the living room, 45 to 70 square feet, deep enough for two chairs and a small table. The H line faces north, which puts the Queensboro Bridge and Roosevelt Island in the frame. The balcony door is a full-height slider, not a window.</p>
+    <ul class="feat"><li>Private balcony, 45 to 70 square feet</li><li>Full-height slider to the balcony</li><li>Separate bedroom with a door and a fitted closet</li><li>Floor-to-ceiling windows, blackout shades in the bedroom</li><li>7-inch white oak plank flooring</li><li>Bosch appliance suite, gas cooking, vented hood</li><li>Bosch washer and vented dryer in residence</li><li>Ceilings 9 feet 4 inches</li></ul>
+    <div class="avail">
+      <h3>Available now &mdash; <em>3 residences</em></h3>
+      <div class="avail-wrap"><table>
+<thead><tr><th>Residence</th><th>Floor</th><th>SF</th><th>Exposure</th>
+<th>Net effective rent</th><th>Available</th></tr></thead>
+<tbody><tr><td class="t-res">17H<span class="t-view">Queensboro Bridge and Roosevelt Island</span></td><td class="t-num">17</td><td class="t-num">731</td><td>North</td><td class="t-num">$5,185</td><td class="t-num">Nov 20, 2026</td></tr><tr><td class="t-res">22H<span class="t-view">Queensboro Bridge, Roosevelt Island, and the Upper East Side beyond</span></td><td class="t-num">22</td><td class="t-num">731</td><td>North</td><td class="t-num">$5,325</td><td class="t-num">Oct 15, 2026</td></tr><tr><td class="t-res">26H<span class="t-view">Queensboro Bridge, Roosevelt Island, and the Upper East Side beyond</span></td><td class="t-num">26</td><td class="t-num">731</td><td>North</td><td class="t-num">$5,440</td><td class="t-num">Oct 30, 2026</td></tr></tbody></table></div>
+    </div>
+  </div>
+</article>
+<article class="plan" id="plan-a3" data-beds="1" data-collection="">
+  <div class="plan-figure">
+    <img src="floorplans/a3.svg" width="900" loading="lazy"
+         alt="Floor plan drawing of the A3 One Bedroom and Den residence at The Larkin">
+    <p class="figure-note"><span>Plan A3 &mdash; north is up</span>
+      <a href="floorplans/a3.svg" target="_blank" rel="noopener">Open full plan</a></p>
+  </div>
+  <div class="plan-body">
+    <div class="plan-head"><span class="plan-code">A3</span><h2>One Bedroom and Den</h2></div>
+    <p class="spec-row"><span>1 bedroom</span><span>1.5 baths</span><span>810 &ndash; 880 SF</span></p>
+    <p class="stack">Line J &middot; Floors 5-27 &middot; East exposure</p>
+    <p class="rent">From $5,540<small>Net effective</small></p>
+    <p class="desc">The den sits between the entry and the living room, with a door and a half bath beside it. It works as an office most days and a guest room when someone visits; it has no window, which is why it is a den and not a second bedroom. The bedroom and the living room both take the window wall.</p>
+    <ul class="feat"><li>Windowless den with a door, 9 by 8 feet</li><li>Half bath off the entry</li><li>Separate bedroom with a fitted walk-in closet</li><li>Floor-to-ceiling windows, blackout shades in the bedroom</li><li>7-inch white oak plank flooring</li><li>Bosch appliance suite, gas cooking, vented hood</li><li>Bosch washer and vented dryer in residence</li><li>Ceilings 9 feet 4 inches</li></ul>
+    <div class="avail">
+      <h3>Available now &mdash; <em>3 residences</em></h3>
+      <div class="avail-wrap"><table>
+<thead><tr><th>Residence</th><th>Floor</th><th>SF</th><th>Exposure</th>
+<th>Net effective rent</th><th>Available</th></tr></thead>
+<tbody><tr><td class="t-res">10J<span class="t-view">East over Vernon Boulevard toward Sunnyside Yards</span></td><td class="t-num">10</td><td class="t-num">848</td><td>East</td><td class="t-num">$5,540</td><td class="t-num">Nov 8, 2026</td></tr><tr><td class="t-res">18J<span class="t-view">Court Square and the Citigroup Building</span></td><td class="t-num">18</td><td class="t-num">848</td><td>East</td><td class="t-num">$5,745</td><td class="t-num">Oct 5, 2026</td></tr><tr><td class="t-res">24J<span class="t-view">Court Square, the Citigroup Building, and Sunnyside Yards</span></td><td class="t-num">24</td><td class="t-num">848</td><td>East</td><td class="t-num">$5,900</td><td class="t-num">Dec 15, 2026</td></tr></tbody></table></div><p class="tnote">10J: six weeks free on an 18-month lease.</p>
+    </div>
+  </div>
+</article>
+<article class="plan" id="plan-b1" data-beds="2" data-collection="">
+  <div class="plan-figure">
+    <img src="floorplans/b1.svg" width="900" loading="lazy"
+         alt="Floor plan drawing of the B1 Two Bedroom residence at The Larkin">
+    <p class="figure-note"><span>Plan B1 &mdash; north is up</span>
+      <a href="floorplans/b1.svg" target="_blank" rel="noopener">Open full plan</a></p>
+  </div>
+  <div class="plan-body">
+    <div class="plan-head"><span class="plan-code">B1</span><h2>Two Bedroom</h2></div>
+    <p class="spec-row"><span>2 bedroom</span><span>2 baths</span><span>940 &ndash; 1,085 SF</span></p>
+    <p class="stack">Lines B and L &middot; Floors 5-27 &middot; West and North and East exposure</p>
+    <p class="rent">From $6,825<small>Net effective</small></p>
+    <p class="desc">Bedrooms at opposite ends of the plan with the living room between them, so no one shares a wall. Both bedrooms have their own bath and a fitted closet, and the kitchen opens to the dining area with an island that seats three. The L line is a corner, north and east, and takes the Queensboro Bridge.</p>
+    <ul class="feat"><li>Split bedrooms, no shared wall</li><li>Two full baths, both en suite</li><li>Kitchen island seating three</li><li>Floor-to-ceiling windows, blackout shades in both bedrooms</li><li>7-inch white oak plank flooring</li><li>Bosch appliance suite, gas cooking, vented hood</li><li>Bosch washer and vented dryer in a dedicated closet</li><li>Ceilings 9 feet 4 inches</li></ul>
+    <div class="avail">
+      <h3>Available now &mdash; <em>3 residences</em></h3>
+      <div class="avail-wrap"><table>
+<thead><tr><th>Residence</th><th>Floor</th><th>SF</th><th>Exposure</th>
+<th>Net effective rent</th><th>Available</th></tr></thead>
+<tbody><tr><td class="t-res">13L<span class="t-view">Queensboro Bridge to the north, Court Square to the east</span></td><td class="t-num">13</td><td class="t-num">985</td><td>North and East</td><td class="t-num">$6,825</td><td class="t-num">Oct 22, 2026</td></tr><tr><td class="t-res">21B<span class="t-view">East River and the Midtown skyline, Empire State Building on the left</span></td><td class="t-num">21</td><td class="t-num">1,012</td><td>West</td><td class="t-num">$7,080</td><td class="t-num">Sep 26, 2026</td></tr><tr><td class="t-res">26B<span class="t-view">East River, the Midtown skyline, and the Queensboro Bridge to the north</span></td><td class="t-num">26</td><td class="t-num">1,012</td><td>West</td><td class="t-num">$7,190</td><td class="t-num">Nov 1, 2026</td></tr></tbody></table></div>
+    </div>
+  </div>
+</article>
+<article class="plan" id="plan-b2" data-beds="2" data-collection="">
+  <div class="plan-figure">
+    <img src="floorplans/b2.svg" width="900" loading="lazy"
+         alt="Floor plan drawing of the B2 Two Bedroom with Balcony residence at The Larkin">
+    <p class="figure-note"><span>Plan B2 &mdash; north is up</span>
+      <a href="floorplans/b2.svg" target="_blank" rel="noopener">Open full plan</a></p>
+  </div>
+  <div class="plan-body">
+    <div class="plan-head"><span class="plan-code">B2</span><h2>Two Bedroom with Balcony</h2></div>
+    <p class="spec-row"><span>2 bedroom</span><span>2 baths</span><span>985 &ndash; 1,120 SF</span></p>
+    <p class="stack">Line D &middot; Floors 5-27 &middot; West and South exposure</p>
+    <p class="rent">From $7,410<small>Net effective</small></p>
+    <p class="desc">The split-bedroom two bedroom with a balcony off the living room, 60 to 95 square feet. The D line is a corner and holds two exposures, west and south, so the living room takes the skyline and the light stays in the room until it goes down. Both baths are en suite and the laundry is its own closet.</p>
+    <ul class="feat"><li>Private balcony, 60 to 95 square feet</li><li>Corner residence, two exposures</li><li>Split bedrooms, both baths en suite</li><li>Kitchen island seating three</li><li>Floor-to-ceiling windows, blackout shades in both bedrooms</li><li>7-inch white oak plank flooring</li><li>Bosch appliance suite, gas cooking, vented hood</li><li>Bosch washer and vented dryer in a dedicated closet</li></ul>
+    <div class="avail">
+      <h3>Available now &mdash; <em>1 residence</em></h3>
+      <div class="avail-wrap"><table>
+<thead><tr><th>Residence</th><th>Floor</th><th>SF</th><th>Exposure</th>
+<th>Net effective rent</th><th>Available</th></tr></thead>
+<tbody><tr><td class="t-res">15D<span class="t-view">East River and the Midtown skyline, Hunter&#x27;s Point South Park below</span></td><td class="t-num">15</td><td class="t-num">1,046</td><td>West and South</td><td class="t-num">$7,410</td><td class="t-num">Nov 12, 2026</td></tr><tr><td class="t-res">23D<span class="badge">Application pending</span><span class="t-view">East River, the Midtown skyline, and south to the Kosciuszko Bridge</span></td><td class="t-num">23</td><td class="t-num">1,046</td><td>West and South</td><td class="t-num">$7,735</td><td class="t-num">Oct 9, 2026</td></tr></tbody></table></div><p class="tnote">15D: six weeks free on an 18-month lease.</p>
+    </div>
+  </div>
+</article>
+<article class="plan" id="plan-b3" data-beds="2" data-collection="West Collection">
+  <div class="plan-figure">
+    <img src="floorplans/b3.svg" width="900" loading="lazy"
+         alt="Floor plan drawing of the B3 Two Bedroom, West Collection residence at The Larkin">
+    <p class="figure-note"><span>Plan B3 &mdash; north is up</span>
+      <a href="floorplans/b3.svg" target="_blank" rel="noopener">Open full plan</a></p>
+  </div>
+  <div class="plan-body">
+    <div class="plan-head"><span class="plan-code">B3</span><h2>Two Bedroom, West Collection</h2><span class="pill">West Collection</span></div>
+    <p class="spec-row"><span>2 bedroom</span><span>2 baths</span><span>1,090 &ndash; 1,190 SF</span></p>
+    <p class="stack">Lines B, C, and D &middot; Floors 28-33 &middot; West exposure</p>
+    <p class="rent">From $8,150<small>Net effective</small></p>
+    <p class="desc">The West Collection two bedroom sits on 28 through 33, above the setback. Ceilings are 10 feet 6 inches, the island is quartzite with a waterfall edge, and the kitchen carries Fisher &amp; Paykel panel-ready refrigeration and a wine column. The D line here opens to a private terrace of 90 to 240 square feet.</p>
+    <ul class="feat"><li>Ceilings 10 feet 6 inches</li><li>Quartzite waterfall island with integrated under-edge lighting</li><li>Fisher &amp; Paykel panel-ready refrigeration and a wine column</li><li>Private terrace, 90 to 240 square feet, on the D line</li><li>West exposure, floor-to-ceiling glass</li><li>Split bedrooms, both baths en suite</li><li>7-inch white oak plank flooring</li><li>Bosch washer and vented dryer in a dedicated closet</li></ul>
+    <div class="avail">
+      <h3>Available now &mdash; <em>3 residences</em></h3>
+      <div class="avail-wrap"><table>
+<thead><tr><th>Residence</th><th>Floor</th><th>SF</th><th>Exposure</th>
+<th>Net effective rent</th><th>Available</th></tr></thead>
+<tbody><tr><td class="t-res">28B<span class="t-view">East River and the full Midtown skyline from above the setback</span></td><td class="t-num">28</td><td class="t-num">1,148</td><td>West</td><td class="t-num">$8,150</td><td class="t-num">Dec 10, 2026</td></tr><tr><td class="t-res">31D<span class="t-view">East River, the Midtown skyline, and the Queensboro Bridge</span></td><td class="t-num">31</td><td class="t-num">1,104</td><td>West</td><td class="t-num">$8,340</td><td class="t-num">Oct 20, 2026</td></tr><tr><td class="t-res">32C<span class="t-view">East River, the full Midtown skyline, and the ferries at LIC Landing</span></td><td class="t-num">32</td><td class="t-num">1,190</td><td>West</td><td class="t-num">$8,695</td><td class="t-num">Nov 25, 2026</td></tr></tbody></table></div>
+    </div>
+  </div>
+</article>
+<article class="plan" id="plan-c1" data-beds="3" data-collection="">
+  <div class="plan-figure">
+    <img src="floorplans/c1.svg" width="900" loading="lazy"
+         alt="Floor plan drawing of the C1 Three Bedroom residence at The Larkin">
+    <p class="figure-note"><span>Plan C1 &mdash; north is up</span>
+      <a href="floorplans/c1.svg" target="_blank" rel="noopener">Open full plan</a></p>
+  </div>
+  <div class="plan-body">
+    <div class="plan-head"><span class="plan-code">C1</span><h2>Three Bedroom</h2></div>
+    <p class="spec-row"><span>3 bedroom</span><span>2 baths</span><span>1,285 &ndash; 1,410 SF</span></p>
+    <p class="stack">Line A &middot; Floors 5-27 &middot; North and West exposure</p>
+    <p class="rent">From $9,240<small>Net effective</small></p>
+    <p class="desc">Three bedrooms off a single hall, with the living room and the primary bedroom sharing the corner. The A line runs north and west, so the Queensboro Bridge sits on one side and Midtown on the other. The kitchen island seats four and the laundry has its own closet, not a corner of the bath.</p>
+    <ul class="feat"><li>Corner residence, north and west</li><li>Primary bedroom with an en suite bath and a walk-in closet</li><li>Kitchen island seating four</li><li>Floor-to-ceiling windows, blackout shades in all three bedrooms</li><li>7-inch white oak plank flooring</li><li>Bosch appliance suite, gas cooking, vented hood</li><li>Bosch washer and vented dryer in a dedicated laundry closet</li><li>Ceilings 9 feet 4 inches</li></ul>
+    <div class="avail">
+      <h3>Available now &mdash; <em>2 residences</em></h3>
+      <div class="avail-wrap"><table>
+<thead><tr><th>Residence</th><th>Floor</th><th>SF</th><th>Exposure</th>
+<th>Net effective rent</th><th>Available</th></tr></thead>
+<tbody><tr><td class="t-res">12A<span class="t-view">Queensboro Bridge to the north, the East River and Midtown to the west</span></td><td class="t-num">12</td><td class="t-num">1,332</td><td>North and West</td><td class="t-num">$9,240</td><td class="t-num">Nov 3, 2026</td></tr><tr><td class="t-res">19A<span class="t-view">Queensboro Bridge, Roosevelt Island, and the Midtown skyline</span></td><td class="t-num">19</td><td class="t-num">1,332</td><td>North and West</td><td class="t-num">$9,485</td><td class="t-num">Dec 1, 2026</td></tr></tbody></table></div>
+    </div>
+  </div>
+</article>
+<article class="plan" id="plan-c2" data-beds="3" data-collection="West Collection">
+  <div class="plan-figure">
+    <img src="floorplans/c2.svg" width="900" loading="lazy"
+         alt="Floor plan drawing of the C2 Three Bedroom, West Collection residence at The Larkin">
+    <p class="figure-note"><span>Plan C2 &mdash; north is up</span>
+      <a href="floorplans/c2.svg" target="_blank" rel="noopener">Open full plan</a></p>
+  </div>
+  <div class="plan-body">
+    <div class="plan-head"><span class="plan-code">C2</span><h2>Three Bedroom, West Collection</h2><span class="pill">West Collection</span></div>
+    <p class="spec-row"><span>3 bedroom</span><span>2.5 baths</span><span>1,455 &ndash; 1,560 SF</span></p>
+    <p class="stack">Lines A and E &middot; Floors 28-33 &middot; North and West exposure</p>
+    <p class="rent">From $11,650<small>Net effective</small></p>
+    <p class="desc">The largest plan in the building, on 28 through 33. Two exposures, north and west, ceilings at 10 feet 6 inches, a quartzite island, and a half bath off the entry so guests never walk past a bedroom. The A line on 33 opens to a private terrace one floor under The Overlook.</p>
+    <ul class="feat"><li>Corner residence, north and west</li><li>Ceilings 10 feet 6 inches</li><li>Half bath off the entry, two full baths beyond</li><li>Quartzite waterfall island with integrated under-edge lighting</li><li>Fisher &amp; Paykel panel-ready refrigeration and a wine column</li><li>Private terrace, 140 to 240 square feet, on the A line</li><li>7-inch white oak plank flooring</li><li>Bosch washer and vented dryer in a dedicated laundry closet</li></ul>
+    <div class="avail">
+      <h3>Available now &mdash; <em>2 residences</em></h3>
+      <div class="avail-wrap"><table>
+<thead><tr><th>Residence</th><th>Floor</th><th>SF</th><th>Exposure</th>
+<th>Net effective rent</th><th>Available</th></tr></thead>
+<tbody><tr><td class="t-res">29E<span class="t-view">The Queensboro Bridge, the East River, and Midtown from above the setback</span></td><td class="t-num">29</td><td class="t-num">1,455</td><td>North and West</td><td class="t-num">$11,650</td><td class="t-num">Dec 12, 2026</td></tr><tr><td class="t-res">33A<span class="t-view">The full arc of it — Queensboro Bridge, Roosevelt Island, the East River, and Midtown, from the highest residential floor</span></td><td class="t-num">33</td><td class="t-num">1,512</td><td>North and West</td><td class="t-num">$12,980</td><td class="t-num">Nov 15, 2026</td></tr></tbody></table></div><p class="tnote">29E and 33A are quoted at the rent shown, with no concession applied.</p>
+    </div>
+  </div>
+</article>
+  <div class="legal">
+    <p>Advertised rents are net effective and reflect one month free on a 14-month lease. Gross rent is higher. Ask the leasing office for both figures.</p>
+    <p>Floor plan drawings are shown north up. Dimensions are approximate, vary with the method
+    of measurement, and are not to scale. Room dimensions and square footage may differ by line
+    and by floor. Furniture is shown for scale only and is not included.</p>
+    <p>Photographs reflect typical residence finishes and may not represent the actual residence. Each residence may vary. Dimensions are approximate and not to scale. All property information presented is subject to errors, omissions, price and offering changes, changed property conditions, and withdrawal of the property from the market, without notice. Any property information presented is for informational purposes only and shall not be binding upon the owner, landlord, leasing agent, or any employee. Equal Housing Opportunity.</p>
+    <p>Application fee $20 per adult, the New York State cap. Security deposit is one month&#x27;s rent, the statutory maximum. Household income of 40x the monthly rent, or a guarantor at 80x who resides in NY, NJ, CT, or PA.</p>
+    <p>The Larkin is an equal housing opportunity provider. We are pledged to the letter and spirit of U.S. policy for the achievement of equal housing opportunity throughout the Nation. We encourage and support an affirmative advertising and marketing program in which there are no barriers to obtaining housing because of race, color, religion, sex, handicap, familial status, or national origin.</p>
+    <p>72 residences at 130% AMI were leased through NYC Housing Connect under the building&#x27;s 421-a (Affordable New York) agreement. The lottery for the building&rsquo;s 72 affordable residences closed in 2023 and is
+    administered through NYC Housing Connect, not by the leasing office.</p>
+  </div>
+</div>
+</main>
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div>
+        <p class="foot-mark">The Larkin</p>
+        <p style="margin-top:18px">5-08 46th Avenue, Long Island City, NY 11101<br>Hunters Point, Long Island City — one block from the East River</p>
+        <p>Glass and champagne-anodized aluminum curtain wall over a two-story cast-stone base.</p>
+      </div>
+      <div>
+        <h4>Leasing</h4>
+        <a class="foot-tel" href="tel:+15169909252">+1 (516) 990-9252</a>
+        <p><a href="mailto:leasing@thelarkinlic.com">leasing@thelarkinlic.com</a></p>
+        <p>Leasing gallery on the ground floor, separate entrance on 5th Street.</p>
+      </div>
+      <div>
+        <h4>Leasing gallery hours</h4>
+        <dl class="hours"><dt>Monday</dt><dd>10:00am - 6:00pm</dd><dt>Tuesday</dt><dd>10:00am - 6:00pm</dd><dt>Wednesday</dt><dd>10:00am - 7:00pm</dd><dt>Thursday</dt><dd>10:00am - 7:00pm</dd><dt>Friday</dt><dd>10:00am - 6:00pm</dd><dt>Saturday</dt><dd>10:00am - 5:00pm</dd><dt>Sunday</dt><dd>11:00am - 4:00pm</dd></dl>
+      </div>
+      <div>
+        <h4>The building</h4>
+        <ul>
+          <li>Developer &mdash; Halbrook Property Group</li>
+          <li>Architect &mdash; Faircloth Rossi Architects</li>
+          <li>Interiors &mdash; Studio Marlowe</li>
+          <li>Landscape &mdash; Bower &amp; Field Landscape Architecture</li>
+          <li>Managed by Halbrook Residential Management</li>
+          <li>Leased in-house by the Halbrook Residential on-site team. No broker fee.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <p>All advertised rents are net effective and reflect one month free on a 14-month lease.</p>
+      <p>Photographs reflect typical residence finishes and may not represent the actual residence. Each residence may vary. Dimensions are approximate and not to scale. All property information presented is subject to errors, omissions, price and offering changes, changed property conditions, and withdrawal of the property from the market, without notice. Any property information presented is for informational purposes only and shall not be binding upon the owner, landlord, leasing agent, or any employee. Equal Housing Opportunity.</p>
+      <p>The Larkin is an equal housing opportunity provider. We are pledged to the letter and spirit of U.S. policy for the achievement of equal housing opportunity throughout the Nation. We encourage and support an affirmative advertising and marketing program in which there are no barriers to obtaining housing because of race, color, religion, sex, handicap, familial status, or national origin.</p>
+      <p>The Larkin strives to conform to Level AA of the W3C Web Content Accessibility Guidelines 2.1. If you have difficulty accessing any content on this site, call the leasing office at +1 (516) 990-9252 or email leasing@thelarkinlic.com and we will assist you.</p>
+      <div class="eho"><svg width="26" height="26" viewBox="0 0 26 26" role="img" aria-label="Equal Housing Opportunity"><path d="M13 3.6 2.6 11.2h2.3V22h16.2V11.2h2.3L13 3.6z" fill="none" stroke="rgba(244,241,234,.6)" stroke-width="1.3"/><path d="M8.4 14.2h9.2M8.4 17.4h9.2" stroke="rgba(244,241,234,.6)" stroke-width="1.3"/></svg><svg width="26" height="26" viewBox="0 0 26 26" role="img" aria-label="Accessible"><circle cx="13" cy="13" r="10.2" fill="none" stroke="rgba(244,241,234,.6)" stroke-width="1.3"/><circle cx="13" cy="7.6" r="1.7" fill="rgba(244,241,234,.6)"/><path d="M9.6 10.4h6.8M13 10.4v5.2h4l1.6 3.6M13 15.6a3.6 3.6 0 1 0 3 4.5" fill="none" stroke="rgba(244,241,234,.6)" stroke-width="1.3" stroke-linecap="round"/></svg></div>
+    </div>
+  </div>
+</footer>
+<script>
+(function () {
+  var chips = document.querySelectorAll('.chip');
+  var plans = document.querySelectorAll('.plan');
+  function apply(f) {
+    plans.forEach(function (p) {
+      var show = f === 'all' ? true
+        : f === 'west' ? p.dataset.collection === 'West Collection'
+        : p.dataset.beds === f;
+      p.hidden = !show;
+    });
+  }
+  chips.forEach(function (c) {
+    c.addEventListener('click', function () {
+      chips.forEach(function (o) { o.setAttribute('aria-pressed', String(o === c)); });
+      apply(c.dataset.filter);
+    });
+  });
+})();
+</script>
+</body>
+</html>

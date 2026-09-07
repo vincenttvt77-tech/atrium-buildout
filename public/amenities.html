@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Amenities on Three Floors | The Works, The Terrace, The Overlook | The Larkin</title>
+<meta name="description" content="26,000 square feet of amenities at The Larkin in Long Island City, with hours, reservation rules, and guest policy for every space.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#171A1C; --paper:#F4F1EA; --accent:#7F5E33; --muted:#6E6B64;
+  --rule:rgba(23,26,28,.14); --rule-soft:rgba(23,26,28,.08);
+  --card:#FAF8F3; --wash:rgba(23,26,28,.035);
+  --display:"Cormorant Garamond",Georgia,"Times New Roman",serif;
+  --body:"Jost","Helvetica Neue",Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--body);
+  font-weight:300;font-size:16px;line-height:1.62;
+  font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+img{max-width:100%;display:block}
+a{color:inherit}
+h1,h2,h3,h4{font-family:var(--display);font-weight:400;letter-spacing:.005em;margin:0}
+p{margin:0 0 1em}
+.wrap{max-width:1180px;margin:0 auto;padding:0 28px}
+.eyebrow{font-family:var(--body);font-size:11px;font-weight:500;letter-spacing:.22em;
+  text-transform:uppercase;color:var(--accent);margin:0 0 14px}
+.rule{height:1px;background:var(--rule);border:0;margin:0}
+
+/* ---- header ---- */
+.site-header{position:sticky;top:0;z-index:50;background:rgba(244,241,234,.94);
+  backdrop-filter:saturate(180%) blur(8px);border-bottom:1px solid var(--rule)}
+.hdr{display:flex;align-items:center;gap:26px;min-height:74px}
+.wordmark{font-family:var(--display);font-size:25px;letter-spacing:.16em;
+  text-transform:uppercase;text-decoration:none;white-space:nowrap;line-height:1}
+.wordmark small{display:block;font-family:var(--body);font-size:8.5px;letter-spacing:.3em;
+  color:var(--muted);margin-top:5px;font-weight:400}
+.nav{display:flex;gap:22px;margin-left:auto;flex-wrap:wrap}
+.nav a{font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;text-decoration:none;
+  color:var(--ink);padding:4px 0;border-bottom:1px solid transparent}
+.nav a:hover{border-bottom-color:var(--accent)}
+.nav a[aria-current]{border-bottom-color:var(--accent);color:var(--accent)}
+.hdr-cta{display:flex;align-items:center;gap:16px;margin-left:8px}
+.tel{font-size:14.5px;letter-spacing:.06em;text-decoration:none;white-space:nowrap;font-weight:400}
+.tel:hover{color:var(--accent)}
+.btn{display:inline-block;background:var(--accent);color:#FBF9F4;text-decoration:none;
+  font-size:11.5px;letter-spacing:.18em;text-transform:uppercase;padding:12px 20px;
+  border:1px solid var(--accent);white-space:nowrap}
+.btn:hover{background:transparent;color:var(--accent)}
+.btn.ghost{background:transparent;color:var(--accent)}
+.btn.ghost:hover{background:var(--accent);color:#FBF9F4}
+.offer{background:var(--ink);color:var(--paper)}
+.offer .wrap{display:flex;gap:8px 22px;flex-wrap:wrap;align-items:baseline;
+  padding-top:11px;padding-bottom:11px;font-size:13px;letter-spacing:.03em}
+.offer b{font-weight:500}
+.offer span{color:rgba(244,241,234,.62);font-size:12px}
+
+/* ---- page head ---- */
+.page-head{padding:64px 0 40px}
+.page-head h1{font-size:clamp(38px,5.4vw,62px);line-height:1.06;font-weight:300;max-width:15ch}
+.lede{font-size:19px;line-height:1.62;max-width:62ch;margin-top:22px;color:var(--ink)}
+.meta-row{display:flex;flex-wrap:wrap;gap:10px 30px;margin-top:30px;padding-top:18px;
+  border-top:1px solid var(--rule);font-size:12.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted)}
+.meta-row b{font-weight:500;color:var(--ink)}
+
+/* ---- index table ---- */
+.index-wrap{overflow-x:auto;margin:0 0 12px}
+table{border-collapse:collapse;width:100%;font-size:14.5px}
+th{font-family:var(--body);font-size:10.5px;font-weight:500;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--muted);text-align:left;
+  padding:0 16px 9px 0;border-bottom:1px solid var(--rule);white-space:nowrap}
+td{padding:11px 16px 11px 0;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+td:last-child,th:last-child{padding-right:0}
+tbody tr:hover{background:var(--wash)}
+.t-num{white-space:nowrap}
+.t-res{font-weight:500;letter-spacing:.06em}
+.t-res a{text-decoration:none;border-bottom:1px solid var(--rule)}
+.t-res a:hover{color:var(--accent);border-bottom-color:var(--accent)}
+.t-view{display:block;font-size:12.5px;color:var(--muted);line-height:1.45;margin-top:2px;
+  max-width:34ch}
+
+/* ---- filters ---- */
+.filters{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 34px}
+.chip{font:inherit;font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;
+  background:transparent;color:var(--ink);border:1px solid var(--rule);
+  padding:10px 17px;cursor:pointer}
+.chip:hover{border-color:var(--accent);color:var(--accent)}
+.chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+
+/* ---- plan card ---- */
+.plan{border-top:1px solid var(--rule);padding:46px 0 52px;
+  display:grid;grid-template-columns:minmax(0,46%) minmax(0,1fr);gap:48px;align-items:start}
+.plan-figure{position:sticky;top:104px}
+.plan-figure img{width:100%;border:1px solid var(--rule-soft);background:var(--paper)}
+.figure-note{display:flex;justify-content:space-between;gap:16px;margin-top:12px;
+  font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.figure-note a{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(127,94,51,.4)}
+.plan-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.plan-code{font-size:12px;font-weight:500;letter-spacing:.22em;color:var(--accent)}
+.plan h2{font-size:34px;line-height:1.1;font-weight:400}
+.pill{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);
+  border:1px solid rgba(127,94,51,.45);padding:4px 9px;white-space:nowrap}
+.spec-row{display:flex;flex-wrap:wrap;gap:6px 14px;margin:16px 0 4px;font-size:14.5px}
+.spec-row span:not(:last-child):after{content:"·";margin-left:14px;color:var(--muted)}
+.stack{font-size:13px;color:var(--muted);margin:0 0 20px}
+.rent{font-family:var(--display);font-size:27px;margin:0 0 6px}
+.rent small{font-family:var(--body);font-size:11.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted);margin-left:8px}
+.desc{margin:20px 0 24px;max-width:60ch}
+.feat{list-style:none;margin:0 0 30px;padding:0;columns:2;column-gap:34px;font-size:14px}
+.feat li{break-inside:avoid;padding:5px 0 5px 16px;position:relative;color:var(--ink)}
+.feat li:before{content:"";position:absolute;left:0;top:14px;width:6px;height:1px;
+  background:var(--accent)}
+.avail h3{font-size:12px;font-family:var(--body);font-weight:500;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--ink);margin:0 0 14px}
+.avail h3 em{font-style:normal;color:var(--muted);font-weight:400}
+.avail-wrap{overflow-x:auto}
+.badge{display:inline-block;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+  border:1px solid var(--rule);padding:2px 6px;margin-left:8px;color:var(--muted);
+  vertical-align:1px;white-space:nowrap}
+.badge.now{color:var(--accent);border-color:rgba(127,94,51,.45)}
+.tnote{font-size:12.5px;color:var(--muted);margin:12px 0 0;max-width:62ch}
+.none{font-size:14px;color:var(--muted);border:1px solid var(--rule-soft);
+  background:var(--wash);padding:16px 18px;margin:0}
+.none a{color:var(--accent)}
+
+/* ---- amenities ---- */
+.level-nav{display:flex;flex-wrap:wrap;gap:0;border-top:1px solid var(--rule);
+  border-bottom:1px solid var(--rule);margin-bottom:8px}
+.level-nav a{flex:1 1 220px;text-decoration:none;padding:22px 24px 22px 0;
+  border-right:1px solid var(--rule-soft)}
+.level-nav a:last-child{border-right:0}
+.level-nav b{display:block;font-family:var(--display);font-size:23px;font-weight:400}
+.level-nav span{display:block;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);margin-top:6px}
+.cat{padding:54px 0 10px;border-top:1px solid var(--rule);margin-top:44px}
+.cat:first-of-type{margin-top:0}
+.cat-head{display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr);gap:40px;
+  margin-bottom:36px}
+.cat-head h2{font-size:34px;line-height:1.1}
+.cat-head p{margin:0;color:var(--muted);font-size:15px;max-width:56ch}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:2px;
+  background:var(--rule-soft)}
+.card{background:var(--card);padding:30px 30px 32px}
+.card-head{display:flex;align-items:baseline;justify-content:space-between;gap:16px}
+.card h3{font-size:25px;line-height:1.15}
+.floor{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);
+  white-space:nowrap;padding-top:6px}
+.card p{font-size:14.5px;margin:14px 0 0}
+.dl{margin:20px 0 0;padding:18px 0 0;border-top:1px solid var(--rule-soft);
+  display:grid;grid-template-columns:104px minmax(0,1fr);gap:9px 18px;font-size:13.5px}
+.dl dt{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);
+  padding-top:3px}
+.dl dd{margin:0}
+.dl dd b{font-weight:500}
+.open-note{font-size:13.5px;color:var(--muted);margin-top:18px;padding-top:16px;
+  border-top:1px solid var(--rule-soft)}
+.two-col{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:40px;
+  margin-top:34px}
+.two-col h3{font-size:20px;margin-bottom:12px}
+.two-col ul{list-style:none;margin:0;padding:0;font-size:14.5px}
+.two-col li{padding:9px 0;border-bottom:1px solid var(--rule-soft);display:flex;gap:16px;
+  justify-content:space-between}
+.two-col li b{font-weight:500;white-space:nowrap}
+.two-col li span{color:var(--muted)}
+
+/* ---- legal / footer ---- */
+.legal{border-top:1px solid var(--rule);margin-top:60px;padding:34px 0 0;font-size:12px;
+  line-height:1.7;color:var(--muted);max-width:96ch}
+.legal p{margin:0 0 12px}
+.site-footer{background:var(--ink);color:rgba(244,241,234,.78);margin-top:78px;
+  padding:64px 0 40px;font-size:14px}
+.site-footer a{color:rgba(244,241,234,.78)}
+.foot-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:44px}
+.foot-grid h4{font-family:var(--body);font-size:10.5px;font-weight:500;letter-spacing:.2em;
+  text-transform:uppercase;color:rgba(244,241,234,.5);margin:0 0 16px}
+.foot-mark{font-family:var(--display);font-size:27px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--paper);line-height:1}
+.foot-grid p{margin:0 0 10px;line-height:1.65}
+.foot-grid ul{list-style:none;margin:0;padding:0}
+.foot-grid li{margin-bottom:9px}
+.foot-tel{font-family:var(--display);font-size:24px;color:var(--paper);text-decoration:none;
+  display:inline-block;margin-bottom:6px}
+.hours{display:grid;grid-template-columns:auto 1fr;gap:4px 18px;font-size:13.5px}
+.hours dt{color:rgba(244,241,234,.55)}
+.hours dd{margin:0;white-space:nowrap}
+.foot-bottom{border-top:1px solid rgba(244,241,234,.16);margin-top:52px;padding-top:26px;
+  display:flex;flex-wrap:wrap;gap:18px 32px;align-items:flex-start;
+  font-size:11.5px;color:rgba(244,241,234,.55);line-height:1.7}
+.foot-bottom p{margin:0;max-width:80ch}
+.eho{display:flex;align-items:center;gap:12px;margin-left:auto}
+.eho svg{display:block}
+.skip{position:absolute;left:-9999px}
+.skip:focus{left:8px;top:8px;position:fixed;background:var(--accent);color:#fff;
+  padding:10px 16px;z-index:99}
+
+@media (max-width:980px){
+  .plan{grid-template-columns:1fr;gap:30px}
+  .plan-figure{position:static}
+  .cat-head{grid-template-columns:1fr;gap:14px}
+  .feat{columns:1}
+  .nav{display:none}
+}
+@media (max-width:620px){
+  .wrap{padding:0 20px}
+  .hdr{min-height:64px;gap:14px}
+  .tel{display:none}
+  .page-head{padding:44px 0 30px}
+  .card{padding:24px 22px 26px}
+  .dl{grid-template-columns:1fr;gap:3px 0}
+  .dl dt{padding-top:10px}
+}
+@media print{
+  .site-header,.filters,.btn{display:none}
+  .plan{break-inside:avoid;page-break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap hdr">
+    <a class="wordmark" href="index.html">The Larkin<small>Long Island City</small></a>
+    <nav class="nav" aria-label="Primary"><a href="index.html">The building</a><a href="floorplans.html">Floor plans</a><a href="amenities.html" aria-current="page">Amenities</a><a href="index.html#neighborhood">Neighborhood</a><a href="floorplans.html#availability">Availability</a></nav>
+    <div class="hdr-cta">
+      <a class="tel" href="tel:+15169909252">+1 (516) 990-9252</a>
+      <a class="btn" href="index.html#tour">Schedule a tour</a>
+    </div>
+  </div>
+</header>
+<div class="offer">
+  <div class="wrap">
+    <b>One month free on a 14-month lease. No broker fee.</b>
+    <span>Offer expires October 31, 2026. Advertised rents are net effective.</span>
+  </div>
+</div>
+<main id="main">
+<div class="wrap page-head">
+  <p class="eyebrow">Amenities</p>
+  <h1>26,000 square feet on three floors, all of it facing the same direction you do.</h1>
+  <p class="lede">Twenty-six thousand square feet on three levels, and every one of them turned
+  west. The Works on three, The Terrace and its 62-foot pool on four, The Overlook on
+  thirty-four. Access is on your fob and included in the rent &mdash; there is no amenity fee at
+  The Larkin.</p>
+</div>
+<div class="wrap">
+  <nav class="level-nav" aria-label="Amenity levels"><a href="#the-works"><b>The Works</b><span>Level 3 &middot; Fitness, recovery, work, and The Larder</span></a><a href="#the-terrace"><b>The Terrace</b><span>Level 4 &middot; 62-foot pool, grills, dog run, playroom</span></a><a href="#the-overlook"><b>The Overlook</b><span>Level 34 &middot; Lounge, screening room, sky terrace at 372 feet</span></a></nav>
+</div>
+<div class="wrap" style="padding-top:46px">
+  <section class="cat" id="cat-fitness">
+  <div class="cat-head"><h2>Fitness and recovery</h2><p>The Works, The Studio, and The Recovery Suite share the third floor. Fob access, no membership, no amenity fee.</p></div>
+  <div class="cards"><article class="card" id="the-works">
+  <div class="card-head"><h3>The Works</h3><span class="floor">Level 3</span></div>
+  <p>Four thousand two hundred square feet of fitness on three, with Technogym strength and cardio, three Peloton bikes, and a 40-foot turf sprint lane along the west wall. It is open from five in the morning until midnight, and your fob is the only key you need. Outside trainers are welcome once they file a certificate of insurance with the resident manager.</p>
+  <dl class="dl"><dt>Hours</dt><dd>Daily, 5:00am - 12:00am. Fob access, no staffed hours. Towels are stocked; the floor is wiped down nightly at 12:00am.</dd><dt>Reserving</dt><dd>No reservation. Open to every resident on your fob.</dd></dl>
+</article><article class="card" id="the-studio">
+  <div class="card-head"><h3>The Studio</h3><span class="floor">Level 3</span></div>
+  <p>A mirrored room off The Works for yoga, mat pilates, and whatever your neighbors decide to teach. Mats, blocks, straps, a ballet barre, and eight sets of light dumbbells stay in the room. Class times post every Monday in the resident app, and the rest of the week you can hold the room for yourself.</p>
+  <dl class="dl"><dt>Hours</dt><dd>Daily, 6:00am - 10:00pm.</dd><dt>Reserving</dt><dd><b>One booking</b> at a time, up to <b>1.5 hours</b>, booked as far as <b>14 days</b> ahead. Residents only, no guests. Reserve in the resident app or at the front desk.</dd><dt>The fine print</dt><dd>Residents only, no guests. Scheduled classes take the room first: Monday, Wednesday, and Friday 7:00-8:00am, Tuesday and Thursday 6:30-7:30pm, and Saturday 9:00-10:00am are blocked every week. Reserve in the resident app or at the front desk.</dd></dl>
+</article><article class="card" id="the-recovery-suite">
+  <div class="card-head"><h3>The Recovery Suite</h3><span class="floor">Level 3</span></div>
+  <p>An infrared sauna, a cold plunge held at 50 degrees, and two treatment rooms you can book for your own massage therapist. The sauna runs in 30-minute sessions and seats four; the plunge is a single tub and works on a first-come basis when nobody has the room. Reserve a treatment room in the resident app up to a week out.</p>
+  <dl class="dl"><dt>Hours</dt><dd>Daily, 7:00am - 10:00pm. Sauna and plunge shut down 30 minutes before the suite closes.</dd><dt>Reserving</dt><dd><b>2 bookings</b> at a time, up to <b>1 hour</b>, booked as far as <b>7 days</b> ahead. Up to 1 guest, with you present. Reserve in the resident app or at the front desk.</dd><dt>The fine print</dt><dd>One guest per booking, and an outside practitioner counts as the guest and must be licensed in New York. Closed Tuesdays 6:00-9:00am for maintenance; the plunge is drained and refilled the first Monday of each month and is out of service that day.</dd></dl>
+</article></div>
+</section>
+<section class="cat" id="cat-social">
+  <div class="cat-head"><h2>Rooms for people</h2><p>Four rooms you can close for an evening and one you cannot. The Overlook and The Screening Room are on thirty-four; The Larder is on three, The Playroom on four.</p></div>
+  <div class="cards"><article class="card" id="the-larder">
+  <div class="card-head"><h3>The Larder</h3><span class="floor">Level 3</span></div>
+  <p>A demonstration kitchen and a 12-seat dining room on three, for the nights your own table is not big enough. There is a six-burner range, two ovens, a dishwasher, and glassware and flatware for twelve. Book it up to sixty days out; the $150 cleaning deposit comes back within five business days if you leave the room the way you found it.</p>
+  <dl class="dl"><dt>Hours</dt><dd>Daily, 8:00am - 11:00pm. Reservations seat between 10:00am and 10:00pm so the room is clear by close.</dd><dt>Reserving</dt><dd><b>One booking</b> at a time, up to <b>4 hours</b>, booked as far as <b>60 days</b> ahead. Up to 11 guests, with you present. Reserve in the resident app or at the front desk.</dd><dt>The fine print</dt><dd>The room seats twelve including you. A $150 refundable cleaning deposit is charged to your ledger at booking. Outside caterers need a certificate of insurance on file 48 hours ahead. Closed Thanksgiving Day, Christmas Day, and New Year&#x27;s Day.</dd></dl>
+</article><article class="card" id="the-playroom">
+  <div class="card-head"><h3>The Playroom</h3><span class="floor">Level 4</span></div>
+  <p>A playroom on four with a climbing structure, a reading nook, a sink, and a gated toddler yard that opens onto the deck. Children under twelve need an adult in the room with them. It is open to everyone from eight to eight, and you can close it for a birthday on Saturday or Sunday afternoons.</p>
+  <dl class="dl"><dt>Hours</dt><dd>Daily, 8:00am - 8:00pm. The toddler yard closes at dusk or 8:00pm, whichever comes first.</dd><dt>Reserving</dt><dd><b>One booking</b> at a time, up to <b>3 hours</b>, booked as far as <b>30 days</b> ahead. Up to 20 guests, with you present. Reserve in the resident app or at the front desk.</dd><dt>The fine print</dt><dd>Private use is Saturday and Sunday 12:00-5:00pm only, one booking per residence per quarter, and the room stays open to all residents at every other hour. Twenty-five people in the room at once, counting adults. Entertainers and outside vendors need a certificate of insurance 48 hours ahead.</dd></dl>
+</article><article class="card" id="the-overlook">
+  <div class="card-head"><h3>The Overlook</h3><span class="floor">Level 34</span></div>
+  <p>Three thousand one hundred square feet on the thirty-fourth floor, floor-to-ceiling glass on the west wall, and a sky terrace at 372 feet. A chef&#x27;s kitchen and a 14-seat table sit at one end and sofas at the other, and most nights it belongs to the whole building. Friday through Sunday evenings you can take the room for a private event, and the terrace stays open to everyone either way.</p>
+  <dl class="dl"><dt>Hours</dt><dd>Sunday - Thursday 7:00am - 11:00pm; Friday and Saturday 7:00am - 1:00am. Sky terrace closes at 11:00pm nightly, year-round.</dd><dt>Reserving</dt><dd><b>One booking</b> at a time, up to <b>5 hours</b>, booked as far as <b>90 days</b> ahead. Up to 60 guests, with you present. Reserve in the resident app or at the front desk.</dd><dt>The fine print</dt><dd>Private events are Friday, Saturday, and Sunday 6:00-11:00pm only; the room is open to all residents at every other hour. Sixty-five people including residents, per the fire occupancy posted at the door. A $500 refundable deposit, and a certificate of insurance for any event with catering or bar service. One weekend evening a month is held for building programming, and the sky terrace cannot be closed to other residents.</dd></dl>
+</article><article class="card" id="the-screening-room">
+  <div class="card-head"><h3>The Screening Room</h3><span class="floor">Level 34</span></div>
+  <p>Eighteen seats in three tiers, a 4K laser projector, and a 12-foot screen, off the lounge on thirty-four. Bring your own account — the room signs into whatever you stream, and there is an HDMI input at the front row. Book it in three-hour blocks, up to three weeks out.</p>
+  <dl class="dl"><dt>Hours</dt><dd>Daily, 10:00am - 11:00pm.</dd><dt>Reserving</dt><dd><b>One booking</b> at a time, up to <b>3 hours</b>, booked as far as <b>21 days</b> ahead. Up to 17 guests, with you present. Reserve in the resident app or at the front desk.</dd><dt>The fine print</dt><dd>Eighteen seats, so seventeen guests plus you. Held for the resident film series the second Thursday of each month, 7:00-10:00pm. Food is fine, open flame and outside alcohol service are not. Fifteen minutes late releases the room.</dd></dl>
+</article><article class="card" id="the-reading-room">
+  <div class="card-head"><h3>The Reading Room</h3><span class="floor">Level 34</span></div>
+  <p>A quiet room on thirty-four with eight chairs, four lamps, and the same west window as the lounge next door. No calls, no meetings, no laptop on speaker. It is open all day and all night and cannot be reserved by anyone, which is the point.</p>
+  <dl class="dl"><dt>Hours</dt><dd>24 hours, fob access.</dd><dt>Reserving</dt><dd>No reservation. Open to every resident on your fob.</dd></dl>
+</article></div>
+</section>
+<section class="cat" id="cat-work">
+  <div class="cat-head"><h2>Work</h2><p>The Study is open around the clock. The rooms inside it are reservable, and fifteen minutes late releases one.</p></div>
+  <div class="cards"><article class="card" id="the-study">
+  <div class="card-head"><h3>The Study</h3><span class="floor">Level 3</span></div>
+  <p>The co-working lounge on three: sixteen seats, a long shared table, hardwired ethernet at eight of them, and four phone rooms and two conference rooms behind glass. The lounge is open around the clock and never needs a reservation. The rooms do — phone rooms in one-hour blocks, conference rooms in three.</p>
+  <dl class="dl"><dt>Hours</dt><dd>Lounge open 24 hours with your fob. Phone rooms and conference rooms are bookable 7:00am - 10:00pm daily.</dd><dt>Reserving</dt><dd><b>2 bookings</b> at a time, up to <b>3 hours</b>, booked as far as <b>14 days</b> ahead. Up to 6 guests, with you present. Reserve in the resident app or at the front desk.</dd><dt>The fine print</dt><dd>Three hours is the conference room limit; phone rooms cap at 60 minutes and cannot be reserved more than 48 hours out. Both conference rooms are held for the building meeting the first Tuesday of each month, 6:00-8:00pm. Fifteen minutes late releases the room to the next resident.</dd></dl>
+</article></div>
+</section>
+<section class="cat" id="cat-outdoor">
+  <div class="cat-head"><h2>Outdoors</h2><p>The Terrace on four, facing the same direction the residences do. The pool runs May through September; the deck stays open year-round.</p></div>
+  <div class="cards"><article class="card" id="the-terrace">
+  <div class="card-head"><h3>The Terrace</h3><span class="floor">Level 4</span></div>
+  <p>The 62-foot pool on four, six cabanas, and a landscaped deck that faces the skyline. The pool runs from mid-May through the end of September and only opens when the lifeguard is on the chair — that is city code, not house policy. Cabanas are first come and cannot be held; the deck itself stays open year-round.</p>
+  <dl class="dl"><dt>Hours</dt><dd>Pool open May 15 - September 30, daily 9:00am - 8:00pm, lifeguard on duty. Deck open year-round, 7:00am - 11:00pm, with quiet hours from 10:00pm. Two guests per residence at the pool, signed in at the front desk.</dd><dt>Reserving</dt><dd>No reservation. Open to every resident on your fob.</dd></dl>
+</article><article class="card" id="the-grills">
+  <div class="card-head"><h3>The Grills and Pergola</h3><span class="floor">Level 4</span></div>
+  <p>Four gas grills, two firepits, and a pergola that seats twenty, at the north end of The Terrace. Tools, a cover, and a wire brush live in the cabinet under each grill. Reserve the pergola and grills three and four in two-hour blocks from April through November; grills one and two and both firepits stay first come.</p>
+  <dl class="dl"><dt>Hours</dt><dd>April 1 - November 1, daily 10:00am - 10:00pm. Gas shuts off at 9:30pm. Firepits run on a timer and stop at 10:00pm.</dd><dt>Reserving</dt><dd><b>One booking</b> at a time, up to <b>2 hours</b>, booked as far as <b>21 days</b> ahead. Up to 19 guests, with you present. Reserve in the resident app or at the front desk.</dd><dt>The fine print</dt><dd>Twenty at the pergola including you. Grills one and two and the firepits are never reservable. Closed November 2 through March 31, and closed on any day the deck is iced or under 35 degrees. Amplified music is not permitted at any hour.</dd></dl>
+</article></div>
+</section>
+<section class="cat" id="cat-pet">
+  <div class="cat-head"><h2>Pets</h2><p>Two pets per residence, fifty pounds each. The fee is $350 per pet, once, and there is no monthly pet rent.</p></div>
+  <div class="cards"><article class="card" id="the-pet-spa">
+  <div class="card-head"><h3>The Pet Spa</h3><span class="floor">Level 3</span></div>
+  <p>A raised stainless wash basin with a hand sprayer, a forced-air dryer, and a hook for the leash while you work. Shampoo, towels, and a rubber apron are stocked, and the floor drain and hose are there for the cleanup on your way out. Book a 45-minute slot in the resident app, one dog at a time.</p>
+  <dl class="dl"><dt>Hours</dt><dd>Daily, 7:00am - 9:00pm.</dd><dt>Reserving</dt><dd><b>One booking</b> at a time, up to <b>45 minutes</b>, booked as far as <b>7 days</b> ahead. Residents only, no guests. Reserve in the resident app or at the front desk.</dd><dt>The fine print</dt><dd>One dog per session, and the dog has to be registered with the front desk. Closed Wednesdays 9:00-11:00am for deep cleaning. Groomers from outside the building are not permitted in the room.</dd></dl>
+</article><article class="card" id="the-green">
+  <div class="card-head"><h3>The Green</h3><span class="floor">Level 4</span></div>
+  <p>A 1,400-square-foot dog run on four with artificial turf, a water bowl fed off the hose bib, and a bag station at the gate. It is hosed down every morning at seven and closed for the half hour that takes. No reservation, ever.</p>
+  <dl class="dl"><dt>Hours</dt><dd>Daily, 6:00am - 11:00pm. Closed 7:00am - 7:30am for cleaning.</dd><dt>Reserving</dt><dd>No reservation. Open to every resident on your fob.</dd></dl>
+</article></div>
+</section>
+<section class="cat" id="cat-service">
+  <div class="cat-head"><h2>Service</h2><p>The things that decide whether a building works on a Tuesday.</p></div>
+  <div class="cards"><article class="card" id="the-bike-room">
+  <div class="card-head"><h3>The Bike Room</h3><span class="floor">Level 3</span></div>
+  <p>Two hundred twenty tagged spaces on three, reached from the service elevator, at no charge. Every residence gets one space, and a second goes on a waitlist that runs about a month right now. There is a repair stand on the north wall with a floor pump and a hex set.</p>
+  <dl class="dl"><dt>Hours</dt><dd>24 hours, fob access. Tags are issued by the resident manager during office hours, Monday through Friday 9:00am - 5:00pm.</dd><dt>Reserving</dt><dd>No reservation. Open to every resident on your fob.</dd></dl>
+</article><article class="card" id="the-package-room">
+  <div class="card-head"><h3>The Package Room</h3><span class="floor">Lobby level</span></div>
+  <p>Luxer lockers and refrigerated storage behind the lobby, open twenty-four hours with your fob. You get a text and an email the minute something lands, and anything too big for a locker waits with the front desk. Packages are held ten days, then go back to the carrier.</p>
+  <dl class="dl"><dt>Hours</dt><dd>Lockers 24 hours. The desk handles oversized items, cold storage, and dry cleaning drop-off 8:00am - 10:00pm daily. Attended lobby 24 hours, live-in resident manager on site.</dd><dt>Reserving</dt><dd>No reservation. Open to every resident on your fob.</dd></dl>
+</article></div>
+</section>
+<section class="cat" id="cat-parking">
+  <div class="cat-head"><h2>Parking</h2><p>Eighty-four attended spaces below the building, entered from 5th Street.</p></div>
+  <div class="cards"><article class="card" id="the-garage">
+  <div class="card-head"><h3>The Garage</h3><span class="floor">Cellar level</span></div>
+  <p>Eighty-four attended spaces below the building, entered from 5th Street, staffed around the clock. A space is $425 a month on a license that runs month to month with thirty days&#x27; notice, and twelve spaces have Level 2 EV charging at no added cost. There is a waitlist of about two months right now, and guest parking runs $45 a day when there is room.</p>
+  <dl class="dl"><dt>Hours</dt><dd>24 hours, attended. Guest vehicles accepted 6:00am - 11:00pm, subject to space. Call the booth 20 minutes ahead for retrieval between midnight and 6:00am.</dd><dt>Reserving</dt><dd>No reservation. Open to every resident on your fob.</dd></dl>
+</article></div>
+</section>
+  <section class="cat" id="rules">
+    <div class="cat-head"><h2>Guests, quiet hours, and what it costs</h2>
+      <p>A guest in any amenity space is with you the whole time. No amenity is available to a
+      guest on their own, ever.</p></div>
+    <div class="two-col">
+      <div><h3>Guests, space by space</h3><ul><li><b>Every amenity</b><span>A guest in any amenity space is accompanied by you the entire time. No amenity is available to a guest on their own, ever.</span></li><li><b>The Works</b><span>Two guests per residence, accompanied, and each signs the waiver at the front desk once per lease year. Under 16 is not permitted on the fitness floor.</span></li><li><b>The Studio</b><span>Residents only. No guests, including in the open hours between classes.</span></li><li><b>The Recovery Suite</b><span>One guest per booking. An outside massage therapist or trainer counts as your guest, has to be licensed in New York, and files a certificate of insurance before the appointment.</span></li><li><b>The Terrace and pool</b><span>Two guests per residence at the pool, signed in at the front desk. Children under 14 are with an adult in the water. The deck is the same two-guest rule during quiet hours after 10:00pm.</span></li><li><b>The Green</b><span>No guest dogs.</span></li><li><b>The Larder</b><span>The room seats twelve including you, so eleven guests.</span></li><li><b>The Playroom</b><span>Twenty-five people in the room at once counting adults. A child under twelve has an adult with them.</span></li><li><b>The Study</b><span>Six guests in a conference room. The lounge itself is for residents.</span></li></ul></div>
+      <div><h3>What it costs</h3><ul><li><b>Parking</b><span>$425 per month &mdash; EV charging included; oversized vehicles $75 more</span></li><li><b>Motorcycle parking</b><span>$195 per month &mdash; Four spaces</span></li><li><b>Storage</b><span>$95 to $240 per month &mdash; By locker size</span></li><li><b>Bike room</b><span>$0 &mdash; One space per residence</span></li><li><b>Pet rent</b><span>$0 &mdash; There is none</span></li><li><b>Amenity fee</b><span>$0 &mdash; There is none. Amenity access is included in rent.</span></li></ul>
+        <h3 style="margin-top:34px">Quiet hours</h3>
+        <ul><li><b>Sunday &ndash; Thursday</b><span>10:00pm - 8:00am</span></li>
+            <li><b>Friday and Saturday</b><span>11:00pm - 9:00am</span></li>
+            <li><span>The Terrace deck goes quiet at 10:00pm and closes at 11:00pm</span></li><li><span>The Overlook sky terrace closes at 11:00pm year-round</span></li><li><span>No amplified music in any outdoor amenity space at any hour</span></li><li><span>The Reading Room on 34 is a no-calls, no-meetings room around the clock</span></li></ul>
+      </div>
+    </div>
+  </section>
+  <div class="legal">
+    <p><b>Smoke-free building.</b> The entire property. Residences, terraces, balconies, corridors, stairwells, the garage, the bike room, every amenity floor and outdoor deck, and the sidewalk within 15 feet of any entrance.</p>
+    <p>Amenity hours, seasons, and reservation rules are set by Halbrook Residential Management
+    and are subject to change. Spaces close for maintenance and for building programming as
+    noted above. Photographs and drawings reflect typical finishes and may not represent the
+    actual space.</p>
+    <p>The Larkin is an equal housing opportunity provider. We are pledged to the letter and spirit of U.S. policy for the achievement of equal housing opportunity throughout the Nation. We encourage and support an affirmative advertising and marketing program in which there are no barriers to obtaining housing because of race, color, religion, sex, handicap, familial status, or national origin.</p>
+    <p>The Larkin strives to conform to Level AA of the W3C Web Content Accessibility Guidelines 2.1. If you have difficulty accessing any content on this site, call the leasing office at +1 (516) 990-9252 or email leasing@thelarkinlic.com and we will assist you.</p>
+  </div>
+</div>
+</main>
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div>
+        <p class="foot-mark">The Larkin</p>
+        <p style="margin-top:18px">5-08 46th Avenue, Long Island City, NY 11101<br>Hunters Point, Long Island City — one block from the East River</p>
+        <p>Glass and champagne-anodized aluminum curtain wall over a two-story cast-stone base.</p>
+      </div>
+      <div>
+        <h4>Leasing</h4>
+        <a class="foot-tel" href="tel:+15169909252">+1 (516) 990-9252</a>
+        <p><a href="mailto:leasing@thelarkinlic.com">leasing@thelarkinlic.com</a></p>
+        <p>Leasing gallery on the ground floor, separate entrance on 5th Street.</p>
+      </div>
+      <div>
+        <h4>Leasing gallery hours</h4>
+        <dl class="hours"><dt>Monday</dt><dd>10:00am - 6:00pm</dd><dt>Tuesday</dt><dd>10:00am - 6:00pm</dd><dt>Wednesday</dt><dd>10:00am - 7:00pm</dd><dt>Thursday</dt><dd>10:00am - 7:00pm</dd><dt>Friday</dt><dd>10:00am - 6:00pm</dd><dt>Saturday</dt><dd>10:00am - 5:00pm</dd><dt>Sunday</dt><dd>11:00am - 4:00pm</dd></dl>
+      </div>
+      <div>
+        <h4>The building</h4>
+        <ul>
+          <li>Developer &mdash; Halbrook Property Group</li>
+          <li>Architect &mdash; Faircloth Rossi Architects</li>
+          <li>Interiors &mdash; Studio Marlowe</li>
+          <li>Landscape &mdash; Bower &amp; Field Landscape Architecture</li>
+          <li>Managed by Halbrook Residential Management</li>
+          <li>Leased in-house by the Halbrook Residential on-site team. No broker fee.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <p>All advertised rents are net effective and reflect one month free on a 14-month lease.</p>
+      <p>Photographs reflect typical residence finishes and may not represent the actual residence. Each residence may vary. Dimensions are approximate and not to scale. All property information presented is subject to errors, omissions, price and offering changes, changed property conditions, and withdrawal of the property from the market, without notice. Any property information presented is for informational purposes only and shall not be binding upon the owner, landlord, leasing agent, or any employee. Equal Housing Opportunity.</p>
+      <p>The Larkin is an equal housing opportunity provider. We are pledged to the letter and spirit of U.S. policy for the achievement of equal housing opportunity throughout the Nation. We encourage and support an affirmative advertising and marketing program in which there are no barriers to obtaining housing because of race, color, religion, sex, handicap, familial status, or national origin.</p>
+      <p>The Larkin strives to conform to Level AA of the W3C Web Content Accessibility Guidelines 2.1. If you have difficulty accessing any content on this site, call the leasing office at +1 (516) 990-9252 or email leasing@thelarkinlic.com and we will assist you.</p>
+      <div class="eho"><svg width="26" height="26" viewBox="0 0 26 26" role="img" aria-label="Equal Housing Opportunity"><path d="M13 3.6 2.6 11.2h2.3V22h16.2V11.2h2.3L13 3.6z" fill="none" stroke="rgba(244,241,234,.6)" stroke-width="1.3"/><path d="M8.4 14.2h9.2M8.4 17.4h9.2" stroke="rgba(244,241,234,.6)" stroke-width="1.3"/></svg><svg width="26" height="26" viewBox="0 0 26 26" role="img" aria-label="Accessible"><circle cx="13" cy="13" r="10.2" fill="none" stroke="rgba(244,241,234,.6)" stroke-width="1.3"/><circle cx="13" cy="7.6" r="1.7" fill="rgba(244,241,234,.6)"/><path d="M9.6 10.4h6.8M13 10.4v5.2h4l1.6 3.6M13 15.6a3.6 3.6 0 1 0 3 4.5" fill="none" stroke="rgba(244,241,234,.6)" stroke-width="1.3" stroke-linecap="round"/></svg></div>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

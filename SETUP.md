@@ -3,7 +3,17 @@
 Three things need doing, in this order. The first two are mine, the third is yours and
 takes about three minutes.
 
-## 1. Deploy (done via the Vercel integration)
+## Live now
+
+| | |
+|---|---|
+| Building website | https://ghost-building.vercel.app |
+| Operations dashboard | https://ghost-building.vercel.app/dashboard.html |
+| Vapi webhook | https://ghost-building.vercel.app/api/vapi |
+
+Deploys happen automatically on every push to `claude/scope-feasibility-mpxdhr`.
+
+## 1. Deploy (done — Vercel git integration)
 
 The site, the tour-booking backend and the operations dashboard all deploy together.
 
@@ -22,11 +32,12 @@ Never put any of these in the repo. `.env` is gitignored; production values live
 
 ## 3. Point Vapi at the deployment — your three minutes
 
-1. Run `node scripts/vapi-assistant.mjs https://<your-deployment>.vercel.app`.
-   It writes `vapi-assistant.json`.
+1. The config is already generated at `vapi-assistant.json` in the repo root,
+   pointed at the live deployment. Regenerate with
+   `node scripts/vapi-assistant.mjs https://ghost-building.vercel.app` if the URL changes.
 2. In the Vapi dashboard, create an assistant and import that JSON, or paste the fields.
    The one that matters is **Server URL**, which must be
-   `https://<your-deployment>.vercel.app/api/vapi`.
+   `https://ghost-building.vercel.app/api/vapi`
 3. Set the same **server secret** you used for `VAPI_WEBHOOK_SECRET`.
 4. Attach the assistant to **+1 (516) 990-9252**.
 5. Call it.
@@ -45,7 +56,7 @@ The demo is the product, so test it the way a sceptical owner would:
 | Book a tour, then check the dashboard | Show the booking as `confirmed` — meaning it was written *and read back*. |
 | "Wait — I smell gas" mid-sentence | Drop everything, give the gas safety instruction, tell you to call 911. |
 
-Then open `/dashboard.html` and watch it all land, with the words you actually said
+Then open the [operations dashboard](https://ghost-building.vercel.app/dashboard.html) and watch it all land, with the words you actually said
 attached to every field it extracted.
 
 ## What is not real yet
