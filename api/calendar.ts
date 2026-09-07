@@ -1,6 +1,6 @@
 import { authorizeOps } from '../src/ops/session.ts'
 import { calendarStoreFromEnv } from '../src/calendar/store.ts'
-import { generateSlots, statusOf, slotDate } from '../src/calendar/slots.ts'
+import { generateSlots, statusOf, slotDate, blockFor } from '../src/calendar/slots.ts'
 
 /**
  * The tour calendar, for the operations dashboard.
@@ -19,9 +19,7 @@ function slotsView(now: Date, state: Awaited<ReturnType<typeof store.read>>) {
   return generateSlots(now).map((s) => {
     const status = statusOf(s, state)
     const booking = status === 'booked' ? state.bookings.find((b) => b.slotId === s.slotId) : undefined
-    const block = status === 'blocked'
-      ? state.blocks.find((b) => b.target === s.slotId || b.target === slotDate(s.startsAt))
-      : undefined
+    const block = status === 'blocked' ? blockFor(s, state) : undefined
     return {
       slotId: s.slotId,
       startsAt: s.startsAt.toISOString(),

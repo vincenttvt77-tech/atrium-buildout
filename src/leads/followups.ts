@@ -1,4 +1,5 @@
 import type { LeadProfile } from './profile.ts'
+import { nyWall, nyInstant } from '../time/ny.ts'
 
 /**
  * What the building should do next about this person, and when.
@@ -36,14 +37,17 @@ export interface FollowUp {
 const HOUR = 3_600_000
 const DAY = 24 * HOUR
 
-/** Business-hours clamp in New York: nothing scheduled before 10am or after 6pm local. */
+/**
+ * Business-hours clamp in New York: nothing scheduled before 10am or after 6pm local.
+ * Offsets come from Intl per instant, so a follow-up derived in September for a December
+ * tour is not an hour off.
+ */
 function withinHours(t: Date): Date {
-  const local = new Date(t.getTime() - 4 * HOUR)
-  const h = local.getUTCHours()
-  if (h >= 10 && h < 18) return t
-  const day = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate()))
-  const tenAm = new Date(day.getTime() + 14 * HOUR) // 10am ET in UTC
-  return h < 10 ? tenAm : new Date(tenAm.getTime() + DAY)
+  const w = nyWall(t)
+  if (w.hour >= 10 && w.hour < 18) return t
+  if (w.hour < 10) return nyInstant(w.year, w.month, w.day, 10)
+  const nextDay = nyWall(new Date(t.getTime() + DAY))
+  return nyInstant(nextDay.year, nextDay.month, nextDay.day, 10)
 }
 
 const id = (phone: string, kind: string, due: Date) =>

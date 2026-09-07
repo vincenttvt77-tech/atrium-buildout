@@ -1,5 +1,6 @@
 import type { TourSlot } from '../booking/types.ts'
 import type { CalendarState } from './types.ts'
+import { nyWall, nyInstant, nyDate } from '../time/ny.ts'
 
 export interface BusinessHours {
   /** 0 = Sunday. Missing day means closed. */
@@ -18,14 +19,12 @@ export const DEFAULT_HOURS: BusinessHours = {
 }
 
 const DAY = 86_400_000
-/** New York is UTC-4 in EDT. Tours are shown in building time, so slots are built in it. */
-const NY_OFFSET_HOURS = 4
 
 export const slotIdFor = (startsAt: Date) => `slot-${startsAt.toISOString().slice(0, 13)}`
 
 /** The ISO date a slot falls on in building time — what a day block matches against. */
 export function slotDate(startsAt: Date): string {
-  return new Date(startsAt.getTime() - NY_OFFSET_HOURS * 3_600_000).toISOString().slice(0, 10)
+  return nyDate(startsAt)
 }
 
 export interface SlotOptions {
@@ -45,17 +44,15 @@ export function generateSlots(now: Date, opts: SlotOptions = {}): TourSlot[] {
 
   const slots: TourSlot[] = []
   for (let d = 0; d <= days; d++) {
-    const day = new Date(now.getTime() + d * DAY)
-    const local = new Date(day.getTime() - NY_OFFSET_HOURS * 3_600_000)
-    const window = hours[local.getUTCDay()]
+    // Step by calendar day in New York, not by 24 UTC hours, so the transition day is
+    // neither skipped nor doubled.
+    const wall = nyWall(new Date(now.getTime() + d * DAY))
+    const window = hours[wall.dayOfWeek]
     if (!window) continue
 
     for (let h = window.openHour; h < window.closeHour; h++) {
       for (let m = 0; m < 60; m += minutes) {
-        const startsAt = new Date(Date.UTC(
-          local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate(),
-          h + NY_OFFSET_HOURS, m, 0,
-        ))
+        const startsAt = nyInstant(wall.year, wall.month, wall.day, h, m)
         if (startsAt.getTime() < now.getTime() + notice) continue
         slots.push({
           slotId: slotIdFor(startsAt),
@@ -72,9 +69,18 @@ export type SlotStatus = 'open' | 'blocked' | 'booked'
 
 export function statusOf(slot: TourSlot, state: CalendarState): SlotStatus {
   if (state.bookings.some((b) => b.slotId === slot.slotId)) return 'booked'
+  return blockFor(slot, state) ? 'blocked' : 'open'
+}
+
+/**
+ * The block that applies to a slot. A slot-level block outranks a whole-day block so the
+ * dashboard shows the more specific reason, rather than whichever happened to be added
+ * first.
+ */
+export function blockFor(slot: TourSlot, state: CalendarState) {
   const date = slotDate(slot.startsAt)
-  if (state.blocks.some((b) => b.target === slot.slotId || b.target === date)) return 'blocked'
-  return 'open'
+  return state.blocks.find((b) => b.target === slot.slotId)
+    ?? state.blocks.find((b) => b.target === date)
 }
 
 /** Only these may be offered to a caller. */

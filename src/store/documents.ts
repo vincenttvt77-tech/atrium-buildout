@@ -77,7 +77,8 @@ export class KvDocumentStore implements DocumentStore {
     const res = await this.fetchImpl(`${this.url}/${parts.map(encodeURIComponent).join('/')}`, {
       headers: { authorization: `Bearer ${this.token}` },
     })
-    if (!res.ok) throw new Error(`KV ${res.status}`)
+    if (!res.ok) { this.lastError = `HTTP ${res.status}`; throw new Error(`KV ${res.status}`) }
+    this.lastError = null
     return ((await res.json()) as { result?: unknown }).result
   }
 
@@ -85,9 +86,11 @@ export class KvDocumentStore implements DocumentStore {
     try {
       const raw = await this.command(['get', this.k(key)])
       return typeof raw === 'string' && raw.length > 0 ? JSON.parse(raw) as T : null
-    } catch {
+    } catch (err) {
       // Treat an unreachable store as empty rather than throwing: the phone line must not
-      // go down because the profile store had a bad second.
+      // go down because the profile store had a bad second. But remember it, so the
+      // dashboard stops claiming state is persisting.
+      this.lastError = this.lastError ?? (err instanceof Error ? err.message : String(err))
       return null
     }
   }
@@ -120,8 +123,14 @@ export class KvDocumentStore implements DocumentStore {
     await this.command(['del', this.k(key)])
   }
 
+  /** Set when a read or write last failed, so describe() cannot claim durability it is
+   *  not delivering. */
+  private lastError: string | null = null
+
   describe() {
-    return { kind: 'kv' as const, durable: true, note: 'Persisted in KV.' }
+    return this.lastError
+      ? { kind: 'kv' as const, durable: false, note: `KV configured but unreachable: ${this.lastError}. State is not persisting until this clears.` }
+      : { kind: 'kv' as const, durable: true, note: 'Persisted in KV.' }
   }
 }
 
