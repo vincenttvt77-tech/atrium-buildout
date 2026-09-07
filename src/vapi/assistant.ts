@@ -10,7 +10,11 @@ export const TOOL_DEFINITIONS = [
       parameters: {
         type: 'object',
         properties: {
-          signal: { type: 'string', enum: ['moveInTiming', 'budget', 'bedrooms', 'pets', 'parking'] },
+          signal: {
+            type: 'string',
+            description: 'Which signal the caller just gave you.',
+            enum: ['moveInTiming', 'budget', 'bedrooms', 'pets', 'parking'],
+          },
           value: { type: 'string', description: 'Normalised value. For moveInTiming use an ISO date. For budget a number. For bedrooms a number or "studio".' },
           excerpt: { type: 'string', description: 'The words the caller actually used. Required.' },
         },
@@ -23,7 +27,18 @@ export const TOOL_DEFINITIONS = [
     function: {
       name: 'check_availability',
       description: 'Get the units you are allowed to quote. You may not name any unit, rent or availability date that did not come from this tool. Call it before discussing price.',
-      parameters: { type: 'object', properties: {}, required: [] },
+      // A parameter-less tool would be an empty `properties: {}`, which several schema
+      // validators reject. `reason` is genuinely useful anyway: it records what prompted
+      // the lookup, which is one more signal on the call.
+      parameters: {
+        type: 'object',
+        properties: {
+          reason: {
+            type: 'string',
+            description: 'Why you are checking now — for example "caller asked about one bedrooms".',
+          },
+        },
+      },
     },
   },
   {
@@ -34,9 +49,10 @@ export const TOOL_DEFINITIONS = [
       parameters: {
         type: 'object',
         properties: {
-          question: { type: 'string' },
+          question: { type: 'string', description: 'The question as the caller asked it.' },
           topic: {
             type: 'string',
+            description: 'Which kind of question this is. Restricted topics are routed to a human.',
             enum: [
               'pet_policy', 'parking', 'amenities', 'hours', 'utilities',
               'application_requirements', 'building_access', 'move_logistics',
@@ -71,9 +87,9 @@ export const TOOL_DEFINITIONS = [
       parameters: {
         type: 'object',
         properties: {
-          slotId: { type: 'string' },
-          prospectName: { type: 'string' },
-          prospectEmail: { type: 'string' },
+          slotId: { type: 'string', description: 'The slotId from list_tour_slots. Never invent one.' },
+          prospectName: { type: 'string', description: 'The name to put on the booking.' },
+          prospectEmail: { type: 'string', description: 'Where the confirmation goes, if they gave one.' },
           unitId: { type: 'string', description: 'The unit they want to see, if they picked one.' },
         },
         required: ['slotId', 'prospectName'],
@@ -90,6 +106,7 @@ export const TOOL_DEFINITIONS = [
         properties: {
           kind: {
             type: 'string',
+            description: 'The sticking point.',
             enum: ['priced_out', 'timing_mismatch', 'no_availability', 'bedroom_mismatch',
                    'pets', 'parking', 'policy', 'competitor', 'application_friction',
                    'feature_missing', 'went_quiet', 'not_qualified'],
@@ -111,6 +128,14 @@ export interface AssistantConfigOptions extends PromptContext {
 }
 
 /** The JSON to paste into Vapi. Everything the assistant needs, in one object. */
+/** Strips `required: []`, which some schema validators reject outright. */
+function pruneEmptyRequired(tools: unknown): unknown {
+  return JSON.parse(JSON.stringify(tools, (key, value) => {
+    if (key === 'required' && Array.isArray(value) && value.length === 0) return undefined
+    return value
+  }))
+}
+
 export function assistantConfig(opts: AssistantConfigOptions) {
   return {
     name: `${opts.buildingName} — Leasing`,
@@ -121,7 +146,7 @@ export function assistantConfig(opts: AssistantConfigOptions) {
       model: 'claude-sonnet-5',
       temperature: 0.4,
       messages: [{ role: 'system', content: systemPrompt(opts) }],
-      tools: TOOL_DEFINITIONS,
+      tools: pruneEmptyRequired(TOOL_DEFINITIONS),
     },
     voice: {
       provider: opts.voiceProvider ?? '11labs',

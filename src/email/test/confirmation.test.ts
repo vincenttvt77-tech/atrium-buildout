@@ -1,7 +1,8 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { sendConfirmation } from '../confirmation.ts'
-import { NoopTransport } from '../render.ts'
+import { NoopTransport, placeholdersIn } from '../render.ts'
 import type { Booking, TourSlot } from '../../booking/types.ts'
 import { propertyId, interactionId } from '../../domain/ids.ts'
 
@@ -64,5 +65,71 @@ describe('confirmation email follows the read-back discipline', () => {
     const r = await sendConfirmation(booking('confirmed'), ctx, new NoopTransport())
     assert.equal(r.sent, false)
     assert.match(r.reason, /no email provider/)
+  })
+})
+
+describe('the concession is never hardcoded into the confirmation', () => {
+  /** The file that actually gets sent, not a stand-in. */
+  const TEMPLATE = readFileSync(new URL('../../../emails/tour-confirmation.html', import.meta.url), 'utf8')
+  const realCtx = { ...ctx, template: TEMPLATE }
+
+  /**
+   * Every placeholder the shipped template asks for. The concession three are the point:
+   * delete one from the template and hardcode the sentence back, and this fails.
+   */
+  const PLACEHOLDERS = [
+    'address', 'bedrooms', 'buildingName',
+    'concessionDisclaimer', 'concessionLine', 'concessionSentence',
+    'confirmationCode', 'floorPlanName', 'leasingEmail', 'leasingPhone',
+    'managementCompany', 'monthlyRent', 'prospectName', 'rescheduleUrl',
+    'sqft', 'tourDate', 'tourTime', 'unitId',
+  ]
+
+  const send = async (extras: Parameters<typeof sendConfirmation>[3]) => {
+    const t = new NoopTransport()
+    const outcome = await sendConfirmation(booking('confirmed'), realCtx, t, extras)
+    return { outcome, html: t.outbox[0]!.html }
+  }
+
+  test('the template asks for exactly what sendConfirmation supplies', async () => {
+    assert.deepEqual(placeholdersIn(TEMPLATE).sort(), PLACEHOLDERS)
+    const { outcome } = await send({ floorPlanName: 'Three Bedroom', bedrooms: 3, sqft: 1512, monthlyRent: 12980, concession: null })
+    assert.deepEqual(outcome.missing, [], 'a placeholder the sender does not fill blanks a sentence in a sent email')
+  })
+
+  test('the template states no lease terms of its own', () => {
+    assert.ok(
+      !/net effective|month free|weeks free|14-month|18-month/i.test(TEMPLATE),
+      'concession language belongs to the residence, not to the template',
+    )
+  })
+
+  test('a residence with no concession is never promised a free month', async () => {
+    const { html } = await send({ floorPlanName: 'Three Bedroom', bedrooms: 3, sqft: 1512, monthlyRent: 12980, concession: null })
+    assert.ok(!/month free/i.test(html), '33A has no concession and must not be told it has one')
+    assert.ok(!/14-month/.test(html))
+    assert.match(html, /No concession on this residence/)
+    assert.match(html, /gross rent/)
+    assert.match(html, /\$12,980/)
+  })
+
+  test('a residence on other terms gets its own terms, not the house default', async () => {
+    const { html } = await send({ monthlyRent: 7410, concession: 'Six weeks free on an 18-month lease' })
+    assert.match(html, /Net effective\. Six weeks free on an 18-month lease\./)
+    assert.match(html, /reflects six weeks free on an 18-month lease/)
+    assert.ok(!/14-month/.test(html), '15D is on eighteen months, not fourteen')
+  })
+
+  test('the house terms still read the way they always did', async () => {
+    const { html } = await send({ monthlyRent: 7190, concession: 'One month free on a 14-month lease' })
+    assert.match(html, /Net effective\. One month free on a 14-month lease\./)
+    assert.match(html, /Gross rent is higher/)
+  })
+
+  test('an unknown concession promises nothing', async () => {
+    const { html } = await send({ monthlyRent: 7190 })
+    assert.ok(!/month free/i.test(html), 'a concession nobody supplied is not a concession we put in writing')
+    assert.ok(!/14-month/.test(html))
+    assert.match(html, /which concession applies to this residence/)
   })
 })
