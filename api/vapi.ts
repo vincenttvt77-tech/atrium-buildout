@@ -14,6 +14,9 @@ import { authorizeOps } from '../src/ops/session.ts'
 import { fetchCalls } from '../src/ops/vapi-calls.ts'
 import { calendarStoreFromEnv } from '../src/calendar/store.ts'
 import { storeBackedCalendar } from '../src/calendar/port.ts'
+import { documentStoreFromEnv } from '../src/store/documents.ts'
+import { consolidateCall } from '../src/leads/consolidate.ts'
+import type { LossReason } from '../src/record/store.ts'
 import { bookTour } from '../src/booking/book.ts'
 import type { CalendarPort, TourSlot } from '../src/booking/types.ts'
 import { sayableStatus } from '../src/booking/book.ts'
@@ -60,16 +63,54 @@ function load(now: Date) {
   return cache
 }
 
-/** Per-call conversation state. Lives as long as the warm instance does. */
-const calls = new Map<string, { qualification: QualificationState; name: string | null; email: string | null }>()
+/*
+ * Per-call conversation state, in the document store rather than a module-level Map.
+ *
+ * Vapi sends each tool call as its own request, and on serverless each request may land
+ * on a different instance. A Map meant capture_signal could run on one instance and
+ * check_availability on another that had never seen it — the second call found an empty
+ * qualification. Keyed by call id; consolidated into the caller's profile at end of call.
+ */
+interface CallState {
+  qualification: QualificationState
+  name: string | null
+  email: string | null
+  unitsDiscussed: string[]
+  booking: { slotId: string; startsAt: string; unitId: string | null; status: 'confirmed' | 'arranging' | 'failed' } | null
+  lossReason: LossReason | null
+  escalation: { trigger: string; detail: string } | null
+  toolsCalled: string[]
+}
 
-function callState(callId: string) {
-  let s = calls.get(callId)
-  if (!s) {
-    s = { qualification: emptyQualification(), name: null, email: null }
-    calls.set(callId, s)
+const documents = documentStoreFromEnv()
+const callKey = (id: string) => `call:${id}`
+
+const freshCall = (): CallState => ({
+  qualification: emptyQualification(), name: null, email: null, unitsDiscussed: [],
+  booking: null, lossReason: null, escalation: null, toolsCalled: [],
+})
+
+/** Dates inside QualificationState do not survive JSON; rehydrate them. */
+function reviveCall(raw: CallState | null): CallState {
+  if (!raw) return freshCall()
+  const q = raw.qualification as unknown as Record<string, unknown>
+  for (const k of ['moveInTiming', 'budget', 'bedrooms', 'pets', 'parking', 'source'] as const) {
+    const v = q[k] as { at?: string | Date; value?: Record<string, unknown> } | undefined
+    if (v?.at) v.at = new Date(v.at)
+    if (k === 'moveInTiming' && v?.value) {
+      if (v.value.earliest) v.value.earliest = new Date(v.value.earliest as string)
+      if (v.value.latest) v.value.latest = new Date(v.value.latest as string)
+    }
   }
-  return s
+  return { ...freshCall(), ...raw, qualification: raw.qualification }
+}
+
+async function getCall(callId: string): Promise<CallState> {
+  return reviveCall(await documents.get<CallState>(callKey(callId)))
+}
+
+async function saveCall(callId: string, state: CallState): Promise<void> {
+  await documents.set(callKey(callId), state)
 }
 
 /*
@@ -98,7 +139,8 @@ async function runTool(
   name: string, args: Record<string, unknown>, callId: string, now: Date,
 ): Promise<string> {
   const { inventory, articles, property } = load(now)
-  const state = callState(callId)
+  const state = await getCall(callId)
+  state.toolsCalled.push(name)
 
   const ctx: ToolContext = {
     propertyId: propertyId(String(property.id ?? 'prop-demo')),
@@ -116,19 +158,27 @@ async function runTool(
       const r = captureSignal(args as never, ctx)
       if (r.qualificationPatch) state.qualification = r.qualificationPatch
       logEvent(callId, r.record)
+      await saveCall(callId, state)
       return r.say
     }
 
     case 'check_availability': {
       const r = checkAvailability(ctx)
       logEvent(callId, r.record)
+      const offered = (r.record.unitsOffered as string[] | undefined) ?? []
+      state.unitsDiscussed = [...new Set([...state.unitsDiscussed, ...offered])]
+      await saveCall(callId, state)
       return r.say
     }
 
     case 'answer_question': {
       const r = answerQuestion(args as never, ctx)
       logEvent(callId, r.record)
-      if (r.escalate) logEvent(callId, { kind: 'escalated', trigger: r.escalate.trigger, detail: r.escalate.detail })
+      if (r.escalate) {
+        logEvent(callId, { kind: 'escalated', trigger: r.escalate.trigger, detail: r.escalate.detail })
+        state.escalation = r.escalate
+      }
+      await saveCall(callId, state)
       return r.say
     }
 
@@ -166,6 +216,13 @@ async function runTool(
         slot: fmtSlot(slot), unitId: args.unitId ?? null,
         prospectName: state.name, prospectEmail: state.email,
       })
+      state.booking = {
+        slotId: slot.slotId, startsAt: slot.startsAt.toISOString(),
+        unitId: args.unitId ? String(args.unitId) : null,
+        status: booking.state.status === 'confirmed' ? 'confirmed'
+          : booking.state.status === 'arranging' ? 'arranging' : 'failed',
+      }
+      await saveCall(callId, state)
       return sayableStatus(booking)
     }
 
@@ -177,6 +234,8 @@ async function runTool(
         confidence: 0.9,
       }, ctx)
       logEvent(callId, r.record)
+      state.lossReason = (r.record as { reason: LossReason }).reason
+      await saveCall(callId, state)
       return r.say
     }
 
@@ -270,7 +329,7 @@ export default async function handler(req: any, res: any) {
         propertyId: propertyId(String(property.id ?? 'prop-demo')),
         interactionId: interactionId(callId),
         inventory, articles,
-        qualification: callState(callId).qualification,
+        qualification: (await getCall(callId)).qualification,
         jurisdiction: 'NY', confidenceThreshold: 0.7, now,
       })
       if (emergency) {
@@ -294,9 +353,38 @@ export default async function handler(req: any, res: any) {
       return
     }
 
-    if (message.type === 'status-update' || message.type === 'end-of-call-report') {
-      logEvent(callId, { kind: 'call_status', status: message.status ?? message.type })
-      if (message.type === 'end-of-call-report') calls.delete(callId)
+    if (message.type === 'status-update') {
+      logEvent(callId, { kind: 'call_status', status: message.status })
+    }
+
+    if (message.type === 'end-of-call-report') {
+      logEvent(callId, { kind: 'call_status', status: 'end-of-call-report' })
+      /*
+       * The one moment the whole call is known. Fold it into the caller's profile and
+       * derive what the building should do next about them. Never allowed to fail the
+       * webhook: Vapi is told 200 whatever happens here, because a profile write that
+       * throws must not look like a dropped call.
+       */
+      try {
+        const state = await getCall(callId)
+        const call = message.call ?? body.call ?? {}
+        const phone = String(call?.customer?.number ?? message.customer?.number ?? 'unknown')
+        const started = call?.startedAt ? Date.parse(call.startedAt) : NaN
+        const ended = call?.endedAt ? Date.parse(call.endedAt) : now.getTime()
+        await consolidateCall(documents, {
+          callId, phone, at: now,
+          durationSeconds: Number.isNaN(started) ? null : Math.round((ended - started) / 1000),
+          qualification: state.qualification,
+          name: state.name, email: state.email,
+          unitsDiscussed: state.unitsDiscussed,
+          booking: state.booking, lossReason: state.lossReason, escalation: state.escalation,
+          toolsCalled: state.toolsCalled,
+        })
+        await documents.delete(callKey(callId))
+      } catch (err) {
+        console.error('[vapi] consolidate failed', err)
+        logEvent(callId, { kind: 'error', message: `consolidate: ${err instanceof Error ? err.message : String(err)}` })
+      }
     }
 
     res.status(200).json({})
