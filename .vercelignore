@@ -1,0 +1,9 @@
+# Vercel treats every file under api/ as a serverless function, so the handler tests were
+# being compiled and shipped. They are not reachable (404), but they produced a screen of
+# TypeScript errors in the build log — and a build log full of expected errors is a build
+# log nobody reads when a real one appears.
+**/test/**
+**/*.test.ts
+scripts/
+.vercel-build/
+node_modules/
