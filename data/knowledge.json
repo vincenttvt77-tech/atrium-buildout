@@ -1,5 +1,2409 @@
-[{"id":"art-pets","topic":"pet_policy","question":"Do you allow dogs?",
-  "answer":"We do — two pets per home, 50 pound limit, and a $500 one-time pet fee.",
-  "propertyScope":["prop-demo"],"jurisdictionScope":["NY"],"status":"published","version":1,
-  "source":"House Rules rev 2026-03","ownerId":"person-manager-1","approvedBy":"person-manager-1",
-  "approvedAt":"2026-03-01T00:00:00Z","reviewBy":"2027-03-01T00:00:00Z"}]
+[
+  {
+    "id": "art-pets-allowed",
+    "topic": "pet_policy",
+    "question": "Are you pet friendly?",
+    "answer": "We are. Two pets per residence, dogs or cats, up to 50 pounds each. There is a one-time $350 fee per pet and no monthly pet rent.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Pet Addendum, rev. 2026-03",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-03-01T00:00:00Z",
+    "reviewBy": "2027-03-01T00:00:00Z"
+  },
+  {
+    "id": "art-pets-two-cats-and-a-dog",
+    "topic": "pet_policy",
+    "question": "Can I have two cats and a dog?",
+    "answer": "The limit is two pets per residence total, so two cats and a dog would be three. Any two of the three works, and the front desk registers each one when you move in.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Pet Addendum, rev. 2026-03",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-03-01T00:00:00Z",
+    "reviewBy": "2027-03-01T00:00:00Z"
+  },
+  {
+    "id": "art-pets-weight-limit",
+    "topic": "pet_policy",
+    "question": "Is there a weight limit on dogs?",
+    "answer": "Fifty pounds per pet, full grown. If your dog is close to the line, bring the vet's most recent weight and we will sort it out before you sign.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Pet Addendum, rev. 2026-03",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-03-01T00:00:00Z",
+    "reviewBy": "2027-03-01T00:00:00Z"
+  },
+  {
+    "id": "art-pets-breeds",
+    "topic": "pet_policy",
+    "question": "Are there any breeds you don't allow?",
+    "answer": "There is a restricted breed list on the pet addendum, and it is the standard insurance list rather than anything we wrote ourselves. Tell me your dog's breed and I will check it against the list, or I can email you the addendum.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Pet Addendum, rev. 2026-03",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-03-01T00:00:00Z",
+    "reviewBy": "2027-03-01T00:00:00Z"
+  },
+  {
+    "id": "art-pets-dog-run",
+    "topic": "pet_policy",
+    "question": "Is there a dog run?",
+    "answer": "The Green is a 1,400-square-foot dog run on four with artificial turf, a water bowl, and a bag station at the gate. It is open 6:00am to 11:00pm, it never needs a reservation, and it closes for a half hour at seven each morning while it is hosed down.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity Operations Guide, rev. 2026-04",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-04-01T00:00:00Z",
+    "reviewBy": "2027-04-01T00:00:00Z"
+  },
+  {
+    "id": "art-pets-dog-wash",
+    "topic": "pet_policy",
+    "question": "Is there somewhere in the building I can wash my dog?",
+    "answer": "The Pet Spa on three has a raised stainless basin, a hand sprayer, and a forced-air dryer, and shampoo and towels are stocked. You book a 45-minute slot in the resident app, one dog at a time, and it is open 7:00am to 9:00pm.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity Operations Guide, rev. 2026-04",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-04-01T00:00:00Z",
+    "reviewBy": "2027-04-01T00:00:00Z"
+  },
+  {
+    "id": "art-parking-exists",
+    "topic": "parking",
+    "question": "Is there parking in the building?",
+    "answer": "There is an 84-space attended garage in the cellar with the entrance on 5th Street, staffed 24 hours. A space runs $425 a month on a license that stays month to month with 30 days' notice.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Garage License Agreement, rev. 2026-01",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-01-15T00:00:00Z",
+    "reviewBy": "2027-01-15T00:00:00Z"
+  },
+  {
+    "id": "art-parking-waitlist",
+    "topic": "parking",
+    "question": "Can I get a parking space right away?",
+    "answer": "Right now the garage runs a waitlist of roughly two months. You can put your name on it as soon as you sign, and the resident manager works it in order.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Garage License Agreement, rev. 2026-01",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-01-15T00:00:00Z",
+    "reviewBy": "2027-01-15T00:00:00Z"
+  },
+  {
+    "id": "art-parking-ev",
+    "topic": "parking",
+    "question": "Can I charge an electric car?",
+    "answer": "Twelve of the 84 spaces have Level 2 charging, and the electricity is included in the $425 — there is no separate charging fee. Ask for an EV space when you get on the list, since those turn over on their own schedule.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Garage License Agreement, rev. 2026-01",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-01-15T00:00:00Z",
+    "reviewBy": "2027-01-15T00:00:00Z"
+  },
+  {
+    "id": "art-parking-guests",
+    "topic": "parking",
+    "question": "Can my guests park in the garage?",
+    "answer": "Guest parking is $45 a day when there is room, and the attendant takes vehicles between 6:00am and 11:00pm. Between midnight and six, call the booth about 20 minutes before you need the car back.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Garage License Agreement, rev. 2026-01",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-01-15T00:00:00Z",
+    "reviewBy": "2027-01-15T00:00:00Z"
+  },
+  {
+    "id": "art-amenity-overview",
+    "topic": "amenities",
+    "question": "What amenities does the building have?",
+    "answer": "Twenty-six thousand square feet on three floors: The Works and The Study on three, The Terrace and its 62-foot pool on four, and The Overlook on thirty-four. All of it faces west toward the skyline, same as the residences.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity Operations Guide, rev. 2026-04",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-04-01T00:00:00Z",
+    "reviewBy": "2027-04-01T00:00:00Z"
+  },
+  {
+    "id": "art-amenity-pool-heated",
+    "topic": "amenities",
+    "question": "Is the pool heated?",
+    "answer": "It is not — the 62-foot pool on The Terrace is outdoors and runs on the season, open May 15 through September 30. It only opens when the lifeguard is on the chair, which is city code rather than house policy.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity Operations Guide, rev. 2026-04",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-04-01T00:00:00Z",
+    "reviewBy": "2027-04-01T00:00:00Z"
+  },
+  {
+    "id": "art-amenity-pool-guests",
+    "topic": "amenities",
+    "question": "Can I bring guests to the pool?",
+    "answer": "Two guests per residence, signed in at the front desk. Cabanas are first come and cannot be held, and the deck itself stays open year-round even after the pool closes for the season.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity Operations Guide, rev. 2026-04",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-04-01T00:00:00Z",
+    "reviewBy": "2027-04-01T00:00:00Z"
+  },
+  {
+    "id": "art-amenity-gym",
+    "topic": "amenities",
+    "question": "What's the gym like?",
+    "answer": "The Works is 4,200 square feet on three, with Technogym strength and cardio, three Peloton bikes, and a 40-foot turf sprint lane along the west wall. Your fob is the only key you need, and towels are stocked.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity Operations Guide, rev. 2026-04",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-04-01T00:00:00Z",
+    "reviewBy": "2027-04-01T00:00:00Z"
+  },
+  {
+    "id": "art-amenity-sauna",
+    "topic": "amenities",
+    "question": "Is there a sauna?",
+    "answer": "The Recovery Suite on three has an infrared sauna that seats four, a cold plunge held at 50 degrees, and two treatment rooms you can book. It runs 7:00am to 10:00pm, and the sauna and plunge shut down a half hour before close.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity Operations Guide, rev. 2026-04",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-04-01T00:00:00Z",
+    "reviewBy": "2027-04-01T00:00:00Z"
+  },
+  {
+    "id": "art-amenity-coworking",
+    "topic": "amenities",
+    "question": "Can I work from the building?",
+    "answer": "The Study on three is a co-working lounge with sixteen seats, hardwired ethernet at eight of them, four phone rooms, and two conference rooms. The lounge is open 24 hours on your fob and needs no reservation; the rooms are bookable 7:00am to 10:00pm.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity Operations Guide, rev. 2026-04",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-04-01T00:00:00Z",
+    "reviewBy": "2027-04-01T00:00:00Z"
+  },
+  {
+    "id": "art-amenity-party",
+    "topic": "amenities",
+    "question": "Can I rent out the lounge for a birthday party?",
+    "answer": "The Overlook on thirty-four takes private events Friday, Saturday, and Sunday evenings from 6:00 to 11:00, up to 65 people, with a $500 refundable deposit. Every other hour it stays open to the whole building, and the sky terrace is never closed off to other residents.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity Operations Guide, rev. 2026-04",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-04-01T00:00:00Z",
+    "reviewBy": "2027-04-01T00:00:00Z"
+  },
+  {
+    "id": "art-amenity-private-dining",
+    "topic": "amenities",
+    "question": "Is there a private dining room I can reserve?",
+    "answer": "The Larder on three is a demonstration kitchen with a 12-seat dining room, a six-burner range, two ovens, and glassware for twelve. You can book it up to 60 days out, and the $150 cleaning deposit comes back within five business days if you leave the room the way you found it.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity Operations Guide, rev. 2026-04",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-04-01T00:00:00Z",
+    "reviewBy": "2027-04-01T00:00:00Z"
+  },
+  {
+    "id": "art-amenity-fee",
+    "topic": "amenities",
+    "question": "Is there an amenity fee on top of the rent?",
+    "answer": "No. Every amenity space is included with your lease, and so is the bike room. The garage at $425 a month and private storage from $95 a month are the only two things billed separately.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Leasing Office Procedures, rev. 2026-02",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-02-01T00:00:00Z",
+    "reviewBy": "2027-02-01T00:00:00Z"
+  },
+  {
+    "id": "art-hours-leasing",
+    "topic": "hours",
+    "question": "What time is the leasing office open?",
+    "answer": "Monday and Tuesday 10 to 6, Wednesday and Thursday 10 to 7, Friday 10 to 6, Saturday 10 to 5, and Sunday 11 to 4. The gallery is on the ground floor with its own entrance on 5th Street.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Leasing Office Procedures, rev. 2026-02",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-02-01T00:00:00Z",
+    "reviewBy": "2027-02-01T00:00:00Z"
+  },
+  {
+    "id": "art-hours-gym",
+    "topic": "hours",
+    "question": "What time does the gym open?",
+    "answer": "The Works runs 5:00am to midnight every day on fob access, with no staffed hours. The floor gets wiped down nightly right at close.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity Operations Guide, rev. 2026-04",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-04-01T00:00:00Z",
+    "reviewBy": "2027-04-01T00:00:00Z"
+  },
+  {
+    "id": "art-hours-overlook",
+    "topic": "hours",
+    "question": "How late is the rooftop lounge open?",
+    "answer": "The Overlook is open 7:00am to 11:00pm Sunday through Thursday and until 1:00am Friday and Saturday. The sky terrace itself closes at 11:00 every night, year-round.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity Operations Guide, rev. 2026-04",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-04-01T00:00:00Z",
+    "reviewBy": "2027-04-01T00:00:00Z"
+  },
+  {
+    "id": "art-hours-quiet",
+    "topic": "hours",
+    "question": "Are there quiet hours in the building?",
+    "answer": "Quiet hours run 10:00pm to 8:00am throughout the building, and the outdoor deck on four goes quiet at 10:00pm as well. Amplified music is not permitted on The Terrace at any hour.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "House Rules, rev. 2026-03",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-03-01T00:00:00Z",
+    "reviewBy": "2027-03-01T00:00:00Z"
+  },
+  {
+    "id": "art-access-lockout",
+    "topic": "building_access",
+    "question": "What happens if I lock myself out at two in the morning?",
+    "answer": "You go to the front desk — it is attended 24 hours. Show ID, the attendant confirms you against the resident list and lets you in, and there is no lockout charge at any hour.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Front Desk Standing Orders, rev. 2026-06",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-06-01T00:00:00Z",
+    "reviewBy": "2027-06-01T00:00:00Z"
+  },
+  {
+    "id": "art-access-keys",
+    "topic": "building_access",
+    "question": "Do I get keys or a fob?",
+    "answer": "A fob for the lobby, the elevators, and every amenity floor, and keyless entry at your own door with a code you set. Your fob is what gets you into The Works, The Study, the bike room, and The Reading Room at any hour.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Front Desk Standing Orders, rev. 2026-06",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-06-01T00:00:00Z",
+    "reviewBy": "2027-06-01T00:00:00Z"
+  },
+  {
+    "id": "art-access-guests",
+    "topic": "building_access",
+    "question": "How do my guests get in?",
+    "answer": "They stop at the front desk, the attendant calls up, and you say yes. If someone visits often you can leave a standing authorization at the desk so they are waved through.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Front Desk Standing Orders, rev. 2026-06",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-06-01T00:00:00Z",
+    "reviewBy": "2027-06-01T00:00:00Z"
+  },
+  {
+    "id": "art-access-packages",
+    "topic": "building_access",
+    "question": "What happens to my packages if I'm not home?",
+    "answer": "The package room behind the lobby has Luxer lockers and refrigerated storage and is open 24 hours on your fob. You get a text and an email the minute something lands, and anything too big for a locker waits with the front desk.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Front Desk Standing Orders, rev. 2026-06",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-06-01T00:00:00Z",
+    "reviewBy": "2027-06-01T00:00:00Z"
+  },
+  {
+    "id": "art-access-package-hold",
+    "topic": "building_access",
+    "question": "How long will you hold a package for me?",
+    "answer": "Ten days, then it goes back to the carrier. If you are traveling longer than that, tell the front desk and they will hold it rather than send it back.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Front Desk Standing Orders, rev. 2026-06",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-06-01T00:00:00Z",
+    "reviewBy": "2027-06-01T00:00:00Z"
+  },
+  {
+    "id": "art-utilities-included",
+    "topic": "utilities",
+    "question": "What utilities are included in the rent?",
+    "answer": "Water, trash, and cooking gas are included. Electricity is on your own Con Edison account, and because heating and cooling are electric and individually zoned, that bill covers them too.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Lease Rider - Utilities, rev. 2026-01",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-01-15T00:00:00Z",
+    "reviewBy": "2027-01-15T00:00:00Z"
+  },
+  {
+    "id": "art-utilities-ac",
+    "topic": "utilities",
+    "question": "Is there air conditioning?",
+    "answer": "Every residence has its own zoned heating and cooling, so you set the temperature room by room rather than waiting on a building boiler. It runs off your electric account.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Lease Rider - Utilities, rev. 2026-01",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-01-15T00:00:00Z",
+    "reviewBy": "2027-01-15T00:00:00Z"
+  },
+  {
+    "id": "art-utilities-internet",
+    "topic": "utilities",
+    "question": "Do I have to set up my own internet?",
+    "answer": "Yes, and you have a choice — the building is wired for both Verizon Fios and Spectrum. There is no bulk internet charge on the rent, so you pay the provider directly.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Lease Rider - Utilities, rev. 2026-01",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-01-15T00:00:00Z",
+    "reviewBy": "2027-01-15T00:00:00Z"
+  },
+  {
+    "id": "art-app-income",
+    "topic": "application_requirements",
+    "question": "What do I need to qualify?",
+    "answer": "Household income of 40 times the monthly rent, which is the standard across the market here, or a guarantor at 80 times. All adults who will live in the residence apply together and their income counts as one household.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Rental Application Standards, rev. 2026-05",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-05-01T00:00:00Z",
+    "reviewBy": "2027-05-01T00:00:00Z"
+  },
+  {
+    "id": "art-app-fee",
+    "topic": "application_requirements",
+    "question": "How much is the application fee?",
+    "answer": "Twenty dollars per adult. That is the cap New York State sets, and it covers the credit and background check.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Rental Application Standards, rev. 2026-05",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-05-01T00:00:00Z",
+    "reviewBy": "2027-05-01T00:00:00Z"
+  },
+  {
+    "id": "art-app-deposit",
+    "topic": "application_requirements",
+    "question": "How big is the security deposit?",
+    "answer": "One month's rent. New York caps it there, so nobody in the building pays more than that regardless of the residence.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Rental Application Standards, rev. 2026-05",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-05-01T00:00:00Z",
+    "reviewBy": "2027-05-01T00:00:00Z"
+  },
+  {
+    "id": "art-app-guarantor-out-of-state",
+    "topic": "application_requirements",
+    "question": "My dad lives in California — can he cosign for me?",
+    "answer": "Our guarantor has to reside in New York, New Jersey, Connecticut, or Pennsylvania, so California would not work. An institutional guarantor service is the usual way around that, and I can point you to the ones residents here have used.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Rental Application Standards, rev. 2026-05",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-05-01T00:00:00Z",
+    "reviewBy": "2027-05-01T00:00:00Z"
+  },
+  {
+    "id": "art-app-documents",
+    "topic": "application_requirements",
+    "question": "What documents do I need to apply?",
+    "answer": "Photo ID, your two most recent pay stubs, last year's tax return or W-2, two months of bank statements, and a letter from your employer. If you are self-employed, bring the last two years of returns instead of the stubs.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Rental Application Standards, rev. 2026-05",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-05-01T00:00:00Z",
+    "reviewBy": "2027-05-01T00:00:00Z"
+  },
+  {
+    "id": "art-app-broker-fee",
+    "topic": "application_requirements",
+    "question": "Is there a broker fee?",
+    "answer": "No. The Larkin is leased in-house by the Halbrook Residential team on site, so there is no broker fee on any residence in the building.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Leasing Office Procedures, rev. 2026-02",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-02-01T00:00:00Z",
+    "reviewBy": "2027-02-01T00:00:00Z"
+  },
+  {
+    "id": "art-move-days",
+    "topic": "move_logistics",
+    "question": "When am I allowed to move in?",
+    "answer": "Move-ins run Monday through Saturday, 9:00am to 5:00pm, with the service elevator reserved through the resident manager. Book the elevator at least a week out if you can, since Saturdays fill first.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Move-In and Move-Out Procedure, rev. 2026-02",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-02-01T00:00:00Z",
+    "reviewBy": "2027-02-01T00:00:00Z"
+  },
+  {
+    "id": "art-move-sunday",
+    "topic": "move_logistics",
+    "question": "Can I move in on a Sunday?",
+    "answer": "Sundays are the one day we cannot do it — the building holds move-ins to Monday through Saturday, 9 to 5. If your movers are only free Sunday, the resident manager can usually find you a Saturday slot instead.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Move-In and Move-Out Procedure, rev. 2026-02",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-02-01T00:00:00Z",
+    "reviewBy": "2027-02-01T00:00:00Z"
+  },
+  {
+    "id": "art-move-deposit",
+    "topic": "move_logistics",
+    "question": "Is there a move-in fee?",
+    "answer": "A $500 move-in deposit, and it is refundable — it comes back after the resident manager walks the elevator and corridors and finds no damage.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Move-In and Move-Out Procedure, rev. 2026-02",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-02-01T00:00:00Z",
+    "reviewBy": "2027-02-01T00:00:00Z"
+  },
+  {
+    "id": "art-fact-building",
+    "topic": "general_property_fact",
+    "question": "How big is the building?",
+    "answer": "Thirty-four stories, 318 residences, 372 feet tall. Residences run from the 5th floor to the 33rd, and the amenity floors are three, four, and thirty-four.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Property Fact Sheet, rev. 2026-08",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-08-01T00:00:00Z",
+    "reviewBy": "2027-08-01T00:00:00Z"
+  },
+  {
+    "id": "art-fact-subway",
+    "topic": "general_property_fact",
+    "question": "How far is the subway?",
+    "answer": "The 7 at Vernon Blvd-Jackson Ave is two blocks. Court Square, with the E, M, and G, is about an eleven-minute walk, and the LIRR at Hunterspoint Ave puts you at Penn in six minutes.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Property Fact Sheet, rev. 2026-08",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-08-01T00:00:00Z",
+    "reviewBy": "2027-08-01T00:00:00Z"
+  },
+  {
+    "id": "art-fact-smoking",
+    "topic": "general_property_fact",
+    "question": "What's the smoking policy?",
+    "answer": "The Larkin is smoke-free throughout, and that includes private terraces and every outdoor amenity space. It applies to cannabis and vaping the same way it applies to cigarettes.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "House Rules, rev. 2026-03",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-03-01T00:00:00Z",
+    "reviewBy": "2027-03-01T00:00:00Z"
+  },
+  {
+    "id": "art-fact-doorman",
+    "topic": "general_property_fact",
+    "question": "Is there a doorman?",
+    "answer": "The lobby is attended 24 hours a day, seven days a week, and there is a live-in resident manager in the building. The same desk handles packages, guests, and lockouts.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Front Desk Standing Orders, rev. 2026-06",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-06-01T00:00:00Z",
+    "reviewBy": "2027-06-01T00:00:00Z"
+  },
+  {
+    "id": "art-fact-west-collection",
+    "topic": "general_property_fact",
+    "question": "What's the West Collection?",
+    "answer": "Twenty-eight residences on floors 28 through 33 with west and north exposures only, ten-foot-six ceilings, Fisher & Paykel panel-ready refrigeration with a wine column, and a quartzite waterfall island. The 28th-floor setback gives that floor private terraces of 90 to 240 square feet.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Property Fact Sheet, rev. 2026-08",
+    "ownerId": "person-manager-1",
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-08-01T00:00:00Z",
+    "reviewBy": "2027-08-01T00:00:00Z"
+  },
+  {
+    "id": "art-derived-001",
+    "topic": "amenities",
+    "question": "Tell me about The Works",
+    "answer": "Four thousand two hundred square feet of fitness on three, with Technogym strength and cardio, three Peloton bikes, and a 40-foot turf sprint lane along the west wall. It is open from five in the morning until midnight, and your fob is the only key you need. Outside trainers are welcome once they file a certificate of insurance with the resident manager.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Works",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Works",
+      "gym",
+      "fitness",
+      "workout",
+      "exercise",
+      "weights",
+      "cardio",
+      "turf"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-002",
+    "topic": "hours",
+    "question": "What are the hours for The Works?",
+    "answer": "The Works on 3 is open Daily, 5:00am - 12:00am. Fob access, no staffed hours. Towels are stocked; the floor is wiped down nightly at 12:00am..",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Works",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Works",
+      "gym",
+      "fitness",
+      "workout",
+      "exercise",
+      "weights",
+      "cardio",
+      "turf"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-003",
+    "topic": "amenities",
+    "question": "Tell me about The Studio",
+    "answer": "A mirrored room off The Works for yoga, mat pilates, and whatever your neighbors decide to teach. Mats, blocks, straps, a ballet barre, and eight sets of light dumbbells stay in the room. Class times post every Monday in the resident app, and the rest of the week you can hold the room for yourself.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Studio",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Studio",
+      "gym",
+      "fitness",
+      "workout",
+      "exercise",
+      "weights",
+      "cardio",
+      "yoga",
+      "pilates"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-004",
+    "topic": "hours",
+    "question": "What are the hours for The Studio?",
+    "answer": "The Studio on 3 is open Daily, 6:00am - 10:00pm..",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Studio",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Studio",
+      "gym",
+      "fitness",
+      "workout",
+      "exercise",
+      "weights",
+      "cardio",
+      "yoga",
+      "pilates"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-005",
+    "topic": "amenities",
+    "question": "How do I reserve The Studio?",
+    "answer": "You can book the The Studio up to 90 minutes at a time, as much as 14 days ahead, 1 reservation at a time per residence. Residents only, no guests. Scheduled classes take the room first: Monday, Wednesday, and Friday 7:00-8:00am, Tuesday and Thursday 6:30-7:30pm, and Saturday 9:00-10:00am are blocked every week. Reserve in the resident app or at the front desk.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity booking rules: The Studio",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Studio",
+      "gym",
+      "fitness",
+      "workout",
+      "exercise",
+      "weights",
+      "cardio",
+      "yoga",
+      "pilates"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-006",
+    "topic": "amenities",
+    "question": "Tell me about The Recovery Suite",
+    "answer": "An infrared sauna, a cold plunge held at 50 degrees, and two treatment rooms you can book for your own massage therapist. The sauna runs in 30-minute sessions and seats four; the plunge is a single tub and works on a first-come basis when nobody has the room. Reserve a treatment room in the resident app up to a week out.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Recovery Suite",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Recovery Suite",
+      "gym",
+      "fitness",
+      "workout",
+      "exercise",
+      "weights",
+      "cardio",
+      "sauna",
+      "plunge"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-007",
+    "topic": "hours",
+    "question": "What are the hours for The Recovery Suite?",
+    "answer": "The Recovery Suite on 3 is open Daily, 7:00am - 10:00pm. Sauna and plunge shut down 30 minutes before the suite closes..",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Recovery Suite",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Recovery Suite",
+      "gym",
+      "fitness",
+      "workout",
+      "exercise",
+      "weights",
+      "cardio",
+      "sauna",
+      "plunge"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-008",
+    "topic": "amenities",
+    "question": "How do I reserve The Recovery Suite?",
+    "answer": "You can book the The Recovery Suite up to 60 minutes at a time, as much as 7 days ahead, with up to 1 guests, 2 reservations at a time per residence. One guest per booking, and an outside practitioner counts as the guest and must be licensed in New York. Closed Tuesdays 6:00-9:00am for maintenance; the plunge is drained and refilled the first Monday of each month and is out of service that day.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity booking rules: The Recovery Suite",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Recovery Suite",
+      "gym",
+      "fitness",
+      "workout",
+      "exercise",
+      "weights",
+      "cardio",
+      "sauna",
+      "plunge"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-009",
+    "topic": "amenities",
+    "question": "Tell me about The Larder",
+    "answer": "A demonstration kitchen and a 12-seat dining room on three, for the nights your own table is not big enough. There is a six-burner range, two ovens, a dishwasher, and glassware and flatware for twelve. Book it up to sixty days out; the $150 cleaning deposit comes back within five business days if you leave the room the way you found it.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Larder",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Larder",
+      "lounge",
+      "party",
+      "entertain",
+      "events",
+      "social",
+      "kitchen",
+      "dining"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-010",
+    "topic": "hours",
+    "question": "What are the hours for The Larder?",
+    "answer": "The Larder on 3 is open Daily, 8:00am - 11:00pm. Reservations seat between 10:00am and 10:00pm so the room is clear by close..",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Larder",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Larder",
+      "lounge",
+      "party",
+      "entertain",
+      "events",
+      "social",
+      "kitchen",
+      "dining"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-011",
+    "topic": "amenities",
+    "question": "How do I reserve The Larder?",
+    "answer": "You can book the The Larder up to 240 minutes at a time, as much as 60 days ahead, with up to 11 guests, 1 reservation at a time per residence. The room seats twelve including you. A $150 refundable cleaning deposit is charged to your ledger at booking. Outside caterers need a certificate of insurance on file 48 hours ahead. Closed Thanksgiving Day, Christmas Day, and New Year's Day.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity booking rules: The Larder",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Larder",
+      "lounge",
+      "party",
+      "entertain",
+      "events",
+      "social",
+      "kitchen",
+      "dining"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-012",
+    "topic": "amenities",
+    "question": "Tell me about The Study",
+    "answer": "The co-working lounge on three: sixteen seats, a long shared table, hardwired ethernet at eight of them, and four phone rooms and two conference rooms behind glass. The lounge is open around the clock and never needs a reservation. The rooms do — phone rooms in one-hour blocks, conference rooms in three.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Study",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Study",
+      "coworking",
+      "office",
+      "desk",
+      "wifi",
+      "zoom",
+      "conference",
+      "work",
+      "lounge"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-013",
+    "topic": "hours",
+    "question": "What are the hours for The Study?",
+    "answer": "The Study on 3 is open Lounge open 24 hours with your fob. Phone rooms and conference rooms are bookable 7:00am - 10:00pm daily..",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Study",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Study",
+      "coworking",
+      "office",
+      "desk",
+      "wifi",
+      "zoom",
+      "conference",
+      "work",
+      "lounge"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-014",
+    "topic": "amenities",
+    "question": "How do I reserve The Study?",
+    "answer": "You can book the The Study up to 180 minutes at a time, as much as 14 days ahead, with up to 6 guests, 2 reservations at a time per residence. Three hours is the conference room limit; phone rooms cap at 60 minutes and cannot be reserved more than 48 hours out. Both conference rooms are held for the building meeting the first Tuesday of each month, 6:00-8:00pm. Fifteen minutes late releases the room to the next resident.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity booking rules: The Study",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Study",
+      "coworking",
+      "office",
+      "desk",
+      "wifi",
+      "zoom",
+      "conference",
+      "work",
+      "lounge"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-015",
+    "topic": "amenities",
+    "question": "Tell me about The Pet Spa",
+    "answer": "A raised stainless wash basin with a hand sprayer, a forced-air dryer, and a hook for the leash while you work. Shampoo, towels, and a rubber apron are stocked, and the floor drain and hose are there for the cleanup on your way out. Book a 45-minute slot in the resident app, one dog at a time.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Pet Spa",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Pet Spa",
+      "dog",
+      "cat",
+      "pet",
+      "puppy"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-016",
+    "topic": "hours",
+    "question": "What are the hours for The Pet Spa?",
+    "answer": "The Pet Spa on 3 is open Daily, 7:00am - 9:00pm..",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Pet Spa",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Pet Spa",
+      "dog",
+      "cat",
+      "pet",
+      "puppy"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-017",
+    "topic": "amenities",
+    "question": "How do I reserve The Pet Spa?",
+    "answer": "You can book the The Pet Spa up to 45 minutes at a time, as much as 7 days ahead, 1 reservation at a time per residence. One dog per session, and the dog has to be registered with the front desk. Closed Wednesdays 9:00-11:00am for deep cleaning. Groomers from outside the building are not permitted in the room.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity booking rules: The Pet Spa",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Pet Spa",
+      "dog",
+      "cat",
+      "pet",
+      "puppy"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-018",
+    "topic": "amenities",
+    "question": "Tell me about The Bike Room",
+    "answer": "Two hundred twenty tagged spaces on three, reached from the service elevator, at no charge. Every residence gets one space, and a second goes on a waitlist that runs about a month right now. There is a repair stand on the north wall with a floor pump and a hex set.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Bike Room",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Bike Room",
+      "package",
+      "delivery",
+      "storage",
+      "laundry",
+      "service"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-019",
+    "topic": "hours",
+    "question": "What are the hours for The Bike Room?",
+    "answer": "The Bike Room on 3 is open 24 hours, fob access. Tags are issued by the resident manager during office hours, Monday through Friday 9:00am - 5:00pm..",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Bike Room",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Bike Room",
+      "package",
+      "delivery",
+      "storage",
+      "laundry",
+      "service"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-020",
+    "topic": "amenities",
+    "question": "Tell me about The Terrace",
+    "answer": "The 62-foot pool on four, six cabanas, and a landscaped deck that faces the skyline. The pool runs from mid-May through the end of September and only opens when the lifeguard is on the chair — that is city code, not house policy. Cabanas are first come and cannot be held; the deck itself stays open year-round.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Terrace",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Terrace",
+      "outside",
+      "terrace",
+      "deck",
+      "roof",
+      "rooftop",
+      "patio",
+      "outdoor",
+      "pool"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-021",
+    "topic": "hours",
+    "question": "What are the hours for The Terrace?",
+    "answer": "The Terrace on 4 is open Pool open May 15 - September 30, daily 9:00am - 8:00pm, lifeguard on duty. Deck open year-round, 7:00am - 11:00pm, with quiet hours from 10:00pm. Two guests per residence at the pool, signed in at the front desk..",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Terrace",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Terrace",
+      "outside",
+      "terrace",
+      "deck",
+      "roof",
+      "rooftop",
+      "patio",
+      "outdoor",
+      "pool"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-022",
+    "topic": "amenities",
+    "question": "Tell me about The Grills and Pergola",
+    "answer": "Four gas grills, two firepits, and a pergola that seats twenty, at the north end of The Terrace. Tools, a cover, and a wire brush live in the cabinet under each grill. Reserve the pergola and grills three and four in two-hour blocks from April through November; grills one and two and both firepits stay first come.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Grills and Pergola",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Grills and Pergola",
+      "outside",
+      "terrace",
+      "deck",
+      "roof",
+      "rooftop",
+      "patio",
+      "outdoor",
+      "grill"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-023",
+    "topic": "hours",
+    "question": "What are the hours for The Grills and Pergola?",
+    "answer": "The Grills and Pergola on 4 is open April 1 - November 1, daily 10:00am - 10:00pm. Gas shuts off at 9:30pm. Firepits run on a timer and stop at 10:00pm..",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Grills and Pergola",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Grills and Pergola",
+      "outside",
+      "terrace",
+      "deck",
+      "roof",
+      "rooftop",
+      "patio",
+      "outdoor",
+      "grill"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-024",
+    "topic": "amenities",
+    "question": "How do I reserve The Grills and Pergola?",
+    "answer": "You can book the The Grills and Pergola up to 120 minutes at a time, as much as 21 days ahead, with up to 19 guests, 1 reservation at a time per residence. Twenty at the pergola including you. Grills one and two and the firepits are never reservable. Closed November 2 through March 31, and closed on any day the deck is iced or under 35 degrees. Amplified music is not permitted at any hour.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity booking rules: The Grills and Pergola",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Grills and Pergola",
+      "outside",
+      "terrace",
+      "deck",
+      "roof",
+      "rooftop",
+      "patio",
+      "outdoor",
+      "grill"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-025",
+    "topic": "amenities",
+    "question": "Tell me about The Green",
+    "answer": "A 1,400-square-foot dog run on four with artificial turf, a water bowl fed off the hose bib, and a bag station at the gate. It is hosed down every morning at seven and closed for the half hour that takes. No reservation, ever.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Green",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Green",
+      "dog",
+      "cat",
+      "pet",
+      "puppy",
+      "dog run",
+      "turf"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-026",
+    "topic": "hours",
+    "question": "What are the hours for The Green?",
+    "answer": "The Green on 4 is open Daily, 6:00am - 11:00pm. Closed 7:00am - 7:30am for cleaning..",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Green",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Green",
+      "dog",
+      "cat",
+      "pet",
+      "puppy",
+      "dog run",
+      "turf"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-027",
+    "topic": "amenities",
+    "question": "Tell me about The Playroom",
+    "answer": "A playroom on four with a climbing structure, a reading nook, a sink, and a gated toddler yard that opens onto the deck. Children under twelve need an adult in the room with them. It is open to everyone from eight to eight, and you can close it for a birthday on Saturday or Sunday afternoons.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Playroom",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Playroom",
+      "lounge",
+      "party",
+      "entertain",
+      "events",
+      "social",
+      "playroom",
+      "deck"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-028",
+    "topic": "hours",
+    "question": "What are the hours for The Playroom?",
+    "answer": "The Playroom on 4 is open Daily, 8:00am - 8:00pm. The toddler yard closes at dusk or 8:00pm, whichever comes first..",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Playroom",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Playroom",
+      "lounge",
+      "party",
+      "entertain",
+      "events",
+      "social",
+      "playroom",
+      "deck"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-029",
+    "topic": "amenities",
+    "question": "How do I reserve The Playroom?",
+    "answer": "You can book the The Playroom up to 180 minutes at a time, as much as 30 days ahead, with up to 20 guests, 1 reservation at a time per residence. Private use is Saturday and Sunday 12:00-5:00pm only, one booking per residence per quarter, and the room stays open to all residents at every other hour. Twenty-five people in the room at once, counting adults. Entertainers and outside vendors need a certificate of insurance 48 hours ahead.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity booking rules: The Playroom",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Playroom",
+      "lounge",
+      "party",
+      "entertain",
+      "events",
+      "social",
+      "playroom",
+      "deck"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-030",
+    "topic": "amenities",
+    "question": "Tell me about The Overlook",
+    "answer": "Three thousand one hundred square feet on the thirty-fourth floor, floor-to-ceiling glass on the west wall, and a sky terrace at 372 feet. A chef's kitchen and a 14-seat table sit at one end and sofas at the other, and most nights it belongs to the whole building. Friday through Sunday evenings you can take the room for a private event, and the terrace stays open to everyone either way.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Overlook",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Overlook",
+      "lounge",
+      "party",
+      "entertain",
+      "events",
+      "social",
+      "terrace",
+      "kitchen"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-031",
+    "topic": "hours",
+    "question": "What are the hours for The Overlook?",
+    "answer": "The Overlook on 34 is open Sunday - Thursday 7:00am - 11:00pm; Friday and Saturday 7:00am - 1:00am. Sky terrace closes at 11:00pm nightly, year-round..",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Overlook",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Overlook",
+      "lounge",
+      "party",
+      "entertain",
+      "events",
+      "social",
+      "terrace",
+      "kitchen"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-032",
+    "topic": "amenities",
+    "question": "How do I reserve The Overlook?",
+    "answer": "You can book the The Overlook up to 300 minutes at a time, as much as 90 days ahead, with up to 60 guests, 1 reservation at a time per residence. Private events are Friday, Saturday, and Sunday 6:00-11:00pm only; the room is open to all residents at every other hour. Sixty-five people including residents, per the fire occupancy posted at the door. A $500 refundable deposit, and a certificate of insurance for any event with catering or bar service. One weekend evening a month is held for building programming, and the sky terrace cannot be closed to other residents.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity booking rules: The Overlook",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Overlook",
+      "lounge",
+      "party",
+      "entertain",
+      "events",
+      "social",
+      "terrace",
+      "kitchen"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-033",
+    "topic": "amenities",
+    "question": "Tell me about The Screening Room",
+    "answer": "Eighteen seats in three tiers, a 4K laser projector, and a 12-foot screen, off the lounge on thirty-four. Bring your own account — the room signs into whatever you stream, and there is an HDMI input at the front row. Book it in three-hour blocks, up to three weeks out.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Screening Room",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Screening Room",
+      "lounge",
+      "party",
+      "entertain",
+      "events",
+      "social"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-034",
+    "topic": "hours",
+    "question": "What are the hours for The Screening Room?",
+    "answer": "The Screening Room on 34 is open Daily, 10:00am - 11:00pm..",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Screening Room",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Screening Room",
+      "lounge",
+      "party",
+      "entertain",
+      "events",
+      "social"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-035",
+    "topic": "amenities",
+    "question": "How do I reserve The Screening Room?",
+    "answer": "You can book the The Screening Room up to 180 minutes at a time, as much as 21 days ahead, with up to 17 guests, 1 reservation at a time per residence. Eighteen seats, so seventeen guests plus you. Held for the resident film series the second Thursday of each month, 7:00-10:00pm. Food is fine, open flame and outside alcohol service are not. Fifteen minutes late releases the room.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity booking rules: The Screening Room",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Screening Room",
+      "lounge",
+      "party",
+      "entertain",
+      "events",
+      "social"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-036",
+    "topic": "amenities",
+    "question": "Tell me about The Reading Room",
+    "answer": "A quiet room on thirty-four with eight chairs, four lamps, and the same west window as the lounge next door. No calls, no meetings, no laptop on speaker. It is open all day and all night and cannot be reserved by anyone, which is the point.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Reading Room",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Reading Room",
+      "lounge",
+      "party",
+      "entertain",
+      "events",
+      "social"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-037",
+    "topic": "hours",
+    "question": "What are the hours for The Reading Room?",
+    "answer": "The Reading Room on 34 is open 24 hours, fob access..",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Reading Room",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Reading Room",
+      "lounge",
+      "party",
+      "entertain",
+      "events",
+      "social"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-038",
+    "topic": "amenities",
+    "question": "Tell me about The Package Room",
+    "answer": "Luxer lockers and refrigerated storage behind the lobby, open twenty-four hours with your fob. You get a text and an email the minute something lands, and anything too big for a locker waits with the front desk. Packages are held ten days, then go back to the carrier.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Package Room",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Package Room",
+      "package",
+      "delivery",
+      "storage",
+      "laundry",
+      "service",
+      "locker"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-039",
+    "topic": "hours",
+    "question": "What are the hours for The Package Room?",
+    "answer": "The Package Room on Lobby level is open Lockers 24 hours. The desk handles oversized items, cold storage, and dry cleaning drop-off 8:00am - 10:00pm daily. Attended lobby 24 hours, live-in resident manager on site..",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Package Room",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Package Room",
+      "package",
+      "delivery",
+      "storage",
+      "laundry",
+      "service",
+      "locker"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-040",
+    "topic": "amenities",
+    "question": "Tell me about The Garage",
+    "answer": "Eighty-four attended spaces below the building, entered from 5th Street, staffed around the clock. A space is $425 a month on a license that runs month to month with thirty days' notice, and twelve spaces have Level 2 EV charging at no added cost. There is a waitlist of about two months right now, and guest parking runs $45 a day when there is room.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Garage",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Garage",
+      "car",
+      "garage",
+      "parking",
+      "vehicle",
+      "ev",
+      "charging"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-041",
+    "topic": "hours",
+    "question": "What are the hours for The Garage?",
+    "answer": "The Garage on Cellar level, entrance on 5th Street is open 24 hours, attended. Guest vehicles accepted 6:00am - 11:00pm, subject to space. Call the booth 20 minutes ahead for retrieval between midnight and 6:00am..",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Amenity record: The Garage",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "Garage",
+      "car",
+      "garage",
+      "parking",
+      "vehicle",
+      "ev",
+      "charging"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-042",
+    "topic": "pet_policy",
+    "question": "What is your pet policy?",
+    "answer": "Two pets per residence, fifty pounds each, dogs and cats. The fee is $350 per pet, once, and there is no monthly pet rent. Register the pet at signing with a rabies certificate, a vet record, and the NYC dog license, and check the restricted breed list before you fall in love with a puppy. Your fob opens the Pet Spa on three and The Green on four, and dogs stay leashed everywhere else in the building. Service animals and approved emotional support animals are not pets under the law — they pay no fee and the breed and weight limits do not apply, and the resident manager handles those requests directly.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "House Rules: pets",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "pets"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-043",
+    "topic": "parking",
+    "question": "Do you have parking?",
+    "answer": "The garage is 84 attended spaces under the building, entered from 5th Street, staffed around the clock. A space is $425 a month on a license that runs month to month with thirty days' notice, and twelve of the spaces have Level 2 charging at no extra cost. There is a waitlist right now of about two months, 19 households deep, ordered by the day you asked. Guests park for $45 a day when there is room, motorcycles are $195, and the bike room on three is free with one tagged space per residence.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "House Rules: parking",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "car",
+      "garage",
+      "parking",
+      "vehicle",
+      "ev"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-044",
+    "topic": "building_access",
+    "question": "What is the guest policy?",
+    "answer": "Guests are welcome and they are yours to escort. Fourteen consecutive nights is the limit, and thirty nights in any six months, after which the person is an occupant and gets added to the lease at no cost. Register anyone coming up in the resident app or at the desk, and use the app's 24-hour QR pass rather than handing over your fob. In the amenity spaces a guest is with you the whole time: two at the pool, two in The Works, none in The Studio or The Green, and sixty-five people total in The Overlook.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "House Rules: guests",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "guests"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-045",
+    "topic": "move_logistics",
+    "question": "How does move-in work?",
+    "answer": "Reserve the freight elevator through the resident manager at least five business days out, in four-hour blocks, Monday through Saturday 9:00am to 5:00pm — no Sundays and no building holidays. Your mover sends a certificate of insurance five business days ahead naming 5-08 46th Avenue Owner LLC and Halbrook Residential Management as additional insureds, with a million per occurrence and statutory workers comp. There is a $500 deposit that is refundable and no move fee, and it comes back to your ledger within ten business days once the corridor and the freight car check out. Everything comes in through the service entrance on 5th Street, and staff hang the pads and lay the floor protection before your block starts.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "House Rules: moving",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "moving"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-046",
+    "topic": "general_property_fact",
+    "question": "How does trash and recycling work?",
+    "answer": "There is a chute closet on every residential floor next to the service elevator, and your fob opens it. Household trash goes down the chute between 6:00am and 11:00pm in a tied bag — no glass, no cardboard. The blue and green recycling bins and the brown compost bin are in the same closet and are open around the clock, and the compost bin is a city requirement, not a house preference. Bulk items get a tag from the front desk and go to the staging room on the cellar level, mattresses have to be bagged first, and anything left in a hallway is removed at $75 an item.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "House Rules: trashAndRecycling",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "trash and recycling"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-047",
+    "topic": "utilities",
+    "question": "What utilities are included in the rent?",
+    "answer": "Heat, hot water, cooling, water, cooking gas, and trash are included in your rent, and so is the WiFi in every amenity space. What you pay separately is electricity through Con Edison and internet in your own residence. Because heat and cooling come off the building's central system rather than your meter, the electric bill is small — figure $45 to $70 in a studio and $95 to $160 in a three-bedroom, with July and August at the top. The building is wired for both Verizon Fios and Spectrum with no bulk contract, so you choose. Open the Con Edison account at least three business days before you pick up keys, because the desk cannot release them without the account number.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "House Rules: wifiAndUtilities",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "wifi and utilities"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-048",
+    "topic": "general_property_fact",
+    "question": "How do packages work?",
+    "answer": "Luxer lockers behind the lobby are open 24 hours with your fob, and there is refrigerated and freezer storage for groceries. You get a text and an email the minute a package lands. Anything too big for a locker waits with the front desk, which is staffed around the clock, and everything is held for ten days before it goes back to the carrier — there is no storage fee. Cold storage holds for 24 hours. The desk cannot accept anything needing a signature, a COD, or an item declared over $2,500, and food couriers stop in the lobby unless you have turned on door delivery in the app.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "House Rules: packages",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "packages"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-049",
+    "topic": "building_access",
+    "question": "How do I get into the building?",
+    "answer": "Your fob opens the lobby, the elevator to your floor and the three amenity floors, and every amenity door, and the resident app does the same over Bluetooth. Two fobs come with the residence and a third or fourth is $50. Guests are announced at the desk or use a 24-hour QR pass you send from the app, and carriers get the lobby and the package room only. If you lock yourself out, the desk verifies you against the lease and lets you in — the first time in a lease year is free, after that it is $75, or $125 between 11:00pm and 7:00am.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "House Rules: buildingAccess",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "building access"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-050",
+    "topic": "general_property_fact",
+    "question": "What is the smoking policy?",
+    "answer": "The Larkin is smoke-free everywhere — inside your residence, on the terraces and balconies, in the garage and the bike room, on every amenity floor, and within fifteen feet of the entrance. That covers cigarettes, cigars, hookah, vaping, and cannabis, which is legal in New York and still not permitted here. No charcoal, no propane, and no candles outdoors; the gas grills on The Terrace are the exception. You sign a smoke-free rider with your lease, as New York City requires, and a violation runs from a written notice to $250 to $500 and a notice to cure.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "House Rules: smoking",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "smoking"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-051",
+    "topic": "general_property_fact",
+    "question": "What are the quiet hours?",
+    "answer": "Quiet hours are 10:00pm to 8:00am Sunday through Thursday and 11:00pm to 9:00am Friday and Saturday, and the rest of the day the standard is nothing a neighbor hears through a closed door. Your lease requires rugs over 80 percent of the floor in every room but the kitchen, baths, entry, and closets, which is what actually keeps a tower this size quiet. Outdoor amenity spaces have no amplified music at any hour and go quiet at 10:00pm. Report noise to the front desk while it is happening — it is staffed 24 hours, it logs the time, and it never tells your neighbor who called.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "House Rules: noiseAndQuietHours",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "noise and quiet hours"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-052",
+    "topic": "general_property_fact",
+    "question": "Can I sublet or list on Airbnb?",
+    "answer": "Short-term rentals are not permitted here in any form. A rental under thirty days without you present is illegal under state law, the building is on New York City's prohibited buildings list under Local Law 18, and a listing costs $1,000 and a notice to cure the first time. Subletting is different and it is allowed: send a written request by certified mail thirty days out with the term, the subtenant's name and addresses, your reason, and where you will be living, and management answers in writing within thirty days. There is a $250 administrative fee and the subtenant applies like anyone else at $20 an adult. You stay on the lease and stay liable for the term.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "House Rules: sublettingAndShortTermRentals",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "subletting and short term rentals"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-053",
+    "topic": "application_requirements",
+    "question": "Do I need renters insurance?",
+    "answer": "Renters insurance is required for the whole lease term, with at least $300,000 in personal liability, and the certificate has to be on file before the desk hands you keys. Name 5-08 46th Avenue Owner LLC, care of Halbrook Residential Management at the building address, as additional interest. Coverage in this neighborhood runs about $15 to $30 a month. If it lapses, the building can place a policy that protects the owner and not your belongings and bill you $14.95 a month for it, so keep the certificate current — the app reminds you thirty days ahead. If you have a dog, make sure the liability coverage does not exclude the breed.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "House Rules: insurance",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "insurance"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-054",
+    "topic": "application_requirements",
+    "question": "What do I need to apply?",
+    "answer": "The application fee is $20 per adult, which is the New York cap, and it covers the credit and background check — you get a copy of both. There is no broker fee, because we lease in-house. The security deposit is one month's rent and cannot be more than that under state law, and it sits in an interest-bearing account with the bank disclosed to you at signing. We look for household income of 40 times the monthly rent, or a guarantor at 80 times who lives in New York, New Jersey, Connecticut, or Pennsylvania, and institutional guarantors are accepted. Bring photo ID, an employment letter, two pay stubs, last year's tax return, and two bank statements. We do not ask about criminal history, we do not use housing court records, and housing vouchers are accepted. Decisions take one to three business days.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "House Rules: applicationRequirements",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "application requirements"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-055",
+    "topic": "application_requirements",
+    "question": "What lease terms do you offer?",
+    "answer": "Terms run 12 to 24 months and each term is priced on its own, with 14 months carrying the current concession — one month free, no broker fee, through October 31, 2026. Advertised rents are net effective, so ask for the gross number too and we will give you both without being asked: we will show you both the net effective and the gross number for any residence you are considering. Rent is due on the first, the late fee is $50 and only after five days, which is the state cap, and you pay by ACH from the portal at no charge. Market-rate residences here are free-market, not stabilized.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "House Rules: leaseTerms",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "lease terms"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-056",
+    "topic": "general_property_fact",
+    "question": "How does renewal work?",
+    "answer": "Your renewal offer arrives 90 days before the lease ends, by email and under your door, with 12, 18, and 24-month terms each priced separately. You have thirty days to accept. There is no renewal fee, no new application, and no new deposit — the one you paid rides over, because New York caps it at one month either way. If you would rather move within the building, you can transfer after nine months with a $500 fee and no second deposit. If you are not renewing, sixty days' written notice, take the pre-move-out walkthrough we offer two to four weeks ahead so you know what would be deducted, and the deposit comes back within fourteen days with an itemized statement.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "House Rules: renewal",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "renewal"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-057",
+    "topic": "general_property_fact",
+    "question": "Is there storage available?",
+    "answer": "Private storage in the cellar starts at $95 a month for a 4-by-4-by-6 locker and runs to $240 for the largest, on a month-to-month agreement with thirty days' notice. Access is 24 hours with your fob. There is a waitlist of about six weeks right now. Nothing flammable, perishable, or alive goes in a locker, and the contents are covered by your renters policy, not by the building.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "House Rules: storage",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "storage"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-058",
+    "topic": "application_requirements",
+    "question": "What fees should I expect?",
+    "answer": "The charges that exist here are short: $20 an adult to apply, one month's security, $350 once per pet, and a refundable $500 move-in deposit. Parking is $425 a month with EV charging included, storage starts at $95, and the bike room, the amenity spaces, and pet rent are all zero. There is no broker fee and no amenity fee. Everything posts to your resident ledger, the late fee is $50 and only after five days, and the front desk does not take money for anything.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "House Rules: feeSchedule",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "fee schedule"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  }
+]

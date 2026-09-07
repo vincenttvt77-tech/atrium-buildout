@@ -1,0 +1,868 @@
+{
+  "meta": {
+    "propertyId": "prop-demo",
+    "buildingName": "The Larkin",
+    "address": "5-08 46th Avenue, Long Island City, NY 11101",
+    "managementCompany": "Halbrook Residential Management",
+    "owner": "5-08 46th Avenue Owner LLC",
+    "jurisdiction": "NY",
+    "document": "The Larkin House Rules and Resident Policies",
+    "revision": "rev 2026-08",
+    "effectiveDate": "2026-08-01",
+    "lastReviewed": "2026-08-15",
+    "nextReview": "2027-08-01",
+    "approvedBy": "Halbrook Residential Management, Property Operations",
+    "contact": {
+      "leasingPhone": "+1 (516) 990-9252",
+      "leasingEmail": "leasing@thelarkinlic.com",
+      "residentEmail": "residents@thelarkinlic.com",
+      "frontDesk": "Attended lobby, 24 hours. Reachable in person, through the resident app, or at the leasing line during office hours.",
+      "residentManager": "Live-in resident manager, office on the lobby level, Monday through Friday 9:00am - 5:00pm."
+    },
+    "sourceOfTruthNote": "This file is the source of truth for building policy. Figures here are authoritative and should be quoted exactly. Do not paraphrase a number, and do not invent a policy that is not in this file; if it is not here, say so and offer the resident manager.",
+    "answerRules": {
+      "answerFromThisFile": [
+        "pet_policy",
+        "parking",
+        "amenities",
+        "hours",
+        "utilities",
+        "application_requirements",
+        "building_access",
+        "move_logistics",
+        "general_property_fact"
+      ],
+      "neverAnswerFromThisFile": [
+        "pricing",
+        "unit_availability",
+        "tour_slot_availability",
+        "application_status",
+        "account_status",
+        "work_order_status"
+      ],
+      "escalateToHuman": [
+        "reasonable_accommodation",
+        "eligibility_or_denial",
+        "fair_housing",
+        "legal_question",
+        "dispute",
+        "money_movement",
+        "protected_class_inquiry"
+      ],
+      "note": "Rents and availability live in the inventory feed, never here. Any request for an accommodation, any question about whether a specific person qualifies, and any dispute goes to the resident manager with full context."
+    }
+  },
+  "policies": {
+    "pets": {
+      "topic": "pet_policy",
+      "petsAllowed": true,
+      "maxPetsPerResidence": 2,
+      "weightLimitLbs": 50,
+      "weightLimitNote": "Fifty pounds applies to each pet at full grown weight, not to the two of them combined. Two 50-pound dogs are fine.",
+      "speciesAllowed": [
+        "Dogs",
+        "Cats",
+        "Caged birds",
+        "Fish tanks up to 20 gallons",
+        "Small caged animals such as rabbits, guinea pigs, and hamsters"
+      ],
+      "speciesProhibited": [
+        "Reptiles and snakes",
+        "Ferrets",
+        "Farm animals and poultry",
+        "Any animal prohibited by the NYC Health Code Article 161",
+        "Aquariums over 20 gallons"
+      ],
+      "oneTimeFeePerPet": 350,
+      "oneTimeFeeRefundable": false,
+      "monthlyPetRent": 0,
+      "petDeposit": 0,
+      "depositNote": "There is no separate pet deposit. New York caps total security at one month's rent under General Obligations Law 7-108, so the only pet charge is the one-time $350 fee per pet.",
+      "restrictedBreeds": [
+        "Pit Bull Terrier",
+        "American Staffordshire Terrier",
+        "Rottweiler",
+        "Doberman Pinscher",
+        "German Shepherd",
+        "Presa Canario",
+        "Akita",
+        "Alaskan Malamute",
+        "Chow Chow",
+        "Wolf hybrid",
+        "Any mix of the above"
+      ],
+      "restrictedBreedBasis": "The list comes from the building's general liability carrier, not from a house preference. It does not apply to service animals or approved assistance animals.",
+      "registrationRequired": true,
+      "registrationDocuments": [
+        "Photo of the pet",
+        "Current rabies certificate",
+        "Veterinarian record showing breed, age, and adult weight",
+        "NYC dog license number, required by NYC Health Code Article 161 for every dog over four months old",
+        "Proof that your renters insurance liability coverage does not exclude the breed"
+      ],
+      "registrationTiming": "Pets are registered at lease signing, or within 5 days of the pet arriving if you get one mid-lease. An unregistered pet is a lease violation, not a fee.",
+      "leashRule": "Dogs are leashed in the lobby, the elevators, the corridors, and every amenity floor. The only place a dog is off leash is inside The Green.",
+      "elevatorRule": "Dogs ride the passenger elevators. If someone at the door would rather wait for the next car, let them.",
+      "wasteRule": "Waste is picked up immediately, indoors and out, and goes in the bag station at the gate of The Green or in a hallway chute closet bin, never in a lobby trash can.",
+      "petSpaAccess": "The Pet Spa on three is included with your fob. Book a 45-minute slot in the resident app, one dog per session, up to 7 days out. Closed Wednesdays 9:00am to 11:00am. Outside groomers are not permitted to work in the room.",
+      "dogRunRules": {
+        "name": "The Green",
+        "floor": "4",
+        "size": "1,400 square feet of artificial turf",
+        "hours": "Daily 6:00am - 11:00pm, closed 7:00am - 7:30am while it is hosed down",
+        "rules": [
+          "Registered dogs only",
+          "Your dog stays in your sight the whole time you are in the run",
+          "No food, no treats, no toys left behind",
+          "Dogs in heat and dogs under four months stay out",
+          "Two dogs per resident at a time",
+          "No guest dogs, and no dog walkers with a group from outside the building",
+          "Pick up after your dog and use the bag station at the gate"
+        ]
+      },
+      "serviceAndAssistanceAnimals": "Service animals and qualifying emotional support animals are not pets. They are exempt from the pet fee, the two-pet limit, the weight limit, and the breed list under the Fair Housing Act and the New York State and City Human Rights Laws. Requests are handled by the resident manager, never over the phone by the leasing team.",
+      "escalationTopic": "reasonable_accommodation",
+      "visitingPets": "A guest's dog may visit for up to 3 nights and has to be announced at the front desk. Visiting dogs cannot use The Green or the Pet Spa.",
+      "petWalkersAndSitters": "Dog walkers and sitters are added to your recurring visitor list at the front desk with a photo ID on file. They get lobby and elevator access to your floor only, and only on the days you list.",
+      "noiseAndNuisance": "A dog that barks for long stretches while you are out is handled the way any noise complaint is handled: a note from the resident manager, then a written notice, then a notice to cure.",
+      "violations": "First incident is a written notice. A second within six months is $100. A third is a notice to cure the lease. An unregistered pet, a restricted breed, or a bite incident goes straight to the resident manager.",
+      "nycNotes": "New York City's pet law, Administrative Code 27-2009.1, waives a no-pet clause when a pet is kept openly for three months and the landlord does nothing. The Larkin allows pets, so the clause is moot here, but it is the reason we register pets promptly rather than looking the other way.",
+      "residentSummary": "Two pets per residence, fifty pounds each, dogs and cats. The fee is $350 per pet, once, and there is no monthly pet rent. Register the pet at signing with a rabies certificate, a vet record, and the NYC dog license, and check the restricted breed list before you fall in love with a puppy. Your fob opens the Pet Spa on three and The Green on four, and dogs stay leashed everywhere else in the building. Service animals and approved emotional support animals are not pets under the law \u2014 they pay no fee and the breed and weight limits do not apply, and the resident manager handles those requests directly."
+    },
+    "parking": {
+      "topic": "parking",
+      "garageName": "The Garage",
+      "location": "Cellar level, entrance on 5th Street",
+      "totalSpaces": 84,
+      "attended": true,
+      "hours": "24 hours, attended. Between midnight and 6:00am, call the booth about 20 minutes ahead so your car is at the door when you are.",
+      "monthlyRate": 425,
+      "rateStructure": "One flat rate. There is no premium for a larger space and no discount for a compact car.",
+      "secondVehicleRate": 425,
+      "motorcycleRate": 195,
+      "motorcycleSpaces": 4,
+      "evCharging": {
+        "spaces": 12,
+        "level": "Level 2, 240 volt",
+        "cost": "Included in the $425. There is no separate charging fee and no idle fee.",
+        "assignment": "EV spaces are assigned to residents with an electric or plug-in hybrid vehicle, in the order they ask. All twelve are spoken for right now and there are 5 households waiting."
+      },
+      "licenseAgreement": "Parking runs on a month-to-month license, separate from your lease. Thirty days' written notice ends it from either side. Giving up the space means going back to the end of the waitlist.",
+      "waitlist": {
+        "exists": true,
+        "currentWait": "About two months",
+        "householdsWaiting": 19,
+        "order": "Strictly by the date you asked. Residents come before applicants, and an applicant can join the list once a lease is signed.",
+        "howToJoin": "Ask the front desk or email residents@thelarkinlic.com. There is no fee to hold a place."
+      },
+      "guestParking": {
+        "rate": 45,
+        "unit": "per day",
+        "hours": "Guest vehicles are accepted 6:00am - 11:00pm, subject to space that day. The booth cannot hold a spot in advance.",
+        "maxConsecutiveNights": 5,
+        "billing": "Charged to your resident ledger, not paid at the booth."
+      },
+      "requirements": [
+        "Vehicle registration in the name of a resident on the lease",
+        "Proof of auto insurance",
+        "A key left with the booth, since the garage is attended and cars are stacked"
+      ],
+      "sizeLimits": "Clearance is 6 feet 8 inches. Vehicles longer than 18 feet are $75 a month more and are subject to space.",
+      "prohibited": [
+        "Long-term storage of a vehicle you do not drive",
+        "Repairs, oil changes, and detailing",
+        "Car covers",
+        "Storing anything in the space other than the vehicle"
+      ],
+      "bicycles": {
+        "room": "The Bike Room on three, 220 tagged spaces, free",
+        "allowance": "One space per residence at no charge, a second on a waitlist that is running about a month",
+        "access": "24 hours by fob, from the service elevator. Tags are issued by the resident manager Monday through Friday 9:00am - 5:00pm.",
+        "rules": "Tagged bikes only. Untagged bikes are removed after a 14-day notice on the frame. Bikes do not ride the passenger elevators or live in hallways, and e-bike batteries are not charged in the room or in the residence per FDNY rules."
+      },
+      "streetAndAlternatives": "There is metered and alternate-side street parking on 46th Avenue and 5th Street, and a Citi Bike dock at 46th Avenue and Vernon Boulevard. Most residents here do not keep a car.",
+      "residentSummary": "The garage is 84 attended spaces under the building, entered from 5th Street, staffed around the clock. A space is $425 a month on a license that runs month to month with thirty days' notice, and twelve of the spaces have Level 2 charging at no extra cost. There is a waitlist right now of about two months, 19 households deep, ordered by the day you asked. Guests park for $45 a day when there is room, motorcycles are $195, and the bike room on three is free with one tagged space per residence."
+    },
+    "guests": {
+      "topic": "building_access",
+      "overnightGuests": {
+        "maxConsecutiveNights": 14,
+        "maxNightsPerSixMonths": 30,
+        "beyondThat": "Someone staying longer than that is an occupant, not a guest, and needs to be added to the lease. Adding an occupant is free and takes a short form and a photo ID."
+      },
+      "roommateLaw": "New York Real Property Law 235-f lets you live with your immediate family and one additional occupant plus that occupant's dependent children, whether or not they are on the lease. Tell the resident manager within 30 days so the person gets a fob and shows up on the access list.",
+      "registration": "Register a guest in the resident app or with the front desk. Unannounced visitors are held in the lobby while the desk calls you. The desk logs a photo ID for anyone going upstairs without you.",
+      "visitorPass": "The resident app issues a QR visitor pass good for 24 hours. It opens the lobby vestibule and the elevator to your floor only. Passes are not issued to a guest for a stay longer than 3 nights \u2014 at that point the person is added to your recurring visitor list.",
+      "recurringVisitors": "Housekeepers, dog walkers, sitters, and home health aides go on a recurring visitor list at the desk with a photo ID and the days they come.",
+      "escortRule": "Guests are your responsibility from the moment they walk in. You are liable for what a guest does to the building.",
+      "amenityGuestRules": {
+        "general": "A guest in any amenity space is accompanied by you the entire time. No amenity is available to a guest on their own, ever.",
+        "theWorks": "Two guests per residence, accompanied, and each signs the waiver at the front desk once per lease year. Under 16 is not permitted on the fitness floor.",
+        "theStudio": "Residents only. No guests, including in the open hours between classes.",
+        "theRecoverySuite": "One guest per booking. An outside massage therapist or trainer counts as your guest, has to be licensed in New York, and files a certificate of insurance before the appointment.",
+        "theTerraceAndPool": "Two guests per residence at the pool, signed in at the front desk. Children under 14 are with an adult in the water. The deck is the same two-guest rule during quiet hours after 10:00pm.",
+        "theGreen": "No guest dogs.",
+        "theLarder": "The room seats twelve including you, so eleven guests.",
+        "thePlayroom": "Twenty-five people in the room at once counting adults. A child under twelve has an adult with them.",
+        "theScreeningRoom": "Eighteen seats, so seventeen guests plus you.",
+        "theOverlook": "Sixty-five people including residents, per the fire occupancy posted at the door. Private events run Friday, Saturday, and Sunday 6:00pm - 11:00pm with a $500 refundable deposit, and a certificate of insurance for any event with catering or bar service. The sky terrace stays open to other residents even during a private event.",
+        "theStudy": "Six guests in a conference room. The lounge itself is for residents."
+      },
+      "partiesAndEvents": "Gatherings above ten people belong in a reserved amenity space, not in a residence. Amplified music is not permitted in outdoor amenity space at any hour.",
+      "prohibited": [
+        "Handing your fob to a guest",
+        "Propping any door, including the stair doors and the garage pedestrian door",
+        "Sending a guest to an amenity floor to wait for you"
+      ],
+      "shortTermRentalCrossReference": "A paying guest is not a guest. See the subletting and short-term rental policy.",
+      "residentSummary": "Guests are welcome and they are yours to escort. Fourteen consecutive nights is the limit, and thirty nights in any six months, after which the person is an occupant and gets added to the lease at no cost. Register anyone coming up in the resident app or at the desk, and use the app's 24-hour QR pass rather than handing over your fob. In the amenity spaces a guest is with you the whole time: two at the pool, two in The Works, none in The Studio or The Green, and sixty-five people total in The Overlook."
+    },
+    "moving": {
+      "topic": "move_logistics",
+      "reservationRequired": true,
+      "howToReserve": "Book the freight elevator through the resident manager, in person or at residents@thelarkinlic.com, at least 5 business days ahead. The slot is confirmed in writing.",
+      "blockLength": "Four-hour blocks. A second block the same day is available if nobody else has it.",
+      "permittedHours": "Monday through Saturday, 9:00am - 5:00pm. No moves on Sundays and no moves on New Year's Day, Memorial Day, July 4th, Labor Day, Thanksgiving Day, or Christmas Day.",
+      "entrance": "Service entrance on 5th Street, into the freight car. Nothing moves through the lobby.",
+      "deposit": {
+        "amount": 500,
+        "refundable": true,
+        "appliesTo": "Both move-in and move-out",
+        "return": "Returned to your ledger within 10 business days after the resident manager walks the corridor, the freight car, and the loading area. Damage is deducted with photographs and an itemized statement."
+      },
+      "movingFee": 0,
+      "feeNote": "There is no non-refundable move fee. The $500 is a deposit and you get it back.",
+      "certificateOfInsurance": {
+        "required": true,
+        "dueBy": "5 business days before the move",
+        "sendTo": "residents@thelarkinlic.com",
+        "additionalInsureds": [
+          "5-08 46th Avenue Owner LLC",
+          "Halbrook Residential Management"
+        ],
+        "certificateHolder": "5-08 46th Avenue Owner LLC, c/o Halbrook Residential Management, 5-08 46th Avenue, Long Island City, NY 11101",
+        "limits": {
+          "commercialGeneralLiability": "$1,000,000 per occurrence / $2,000,000 aggregate",
+          "umbrella": "$2,000,000",
+          "workersCompensation": "Statutory, New York",
+          "employersLiability": "$500,000",
+          "automobile": "$1,000,000 combined single limit"
+        },
+        "note": "No certificate, no elevator. This is the single most common reason a move gets pushed a day, so send it early. Licensed movers issue these routinely; ask your mover for a COI naming both entities above."
+      },
+      "protection": "Building staff hang the elevator pads and lay masonite on the corridor and lobby-level path before your block starts. Do not move the pads.",
+      "selfMoves": "You can move yourself, and the same reservation, hours, and deposit apply. A self-move still needs a COI only if you hire anyone with a truck; a rented van you drive yourself does not.",
+      "furnitureDeliveries": "A delivery that ties up the freight car for more than 30 minutes is treated as a move: reserve the block, same hours. Anything smaller goes through the service entrance during business hours with the desk notified.",
+      "largeItems": "Nothing goes up the stairs. The freight car is 4 feet 6 inches wide, 7 feet 8 inches deep, and 8 feet high, with a 4,000-pound capacity. Measure a sofa before you buy it.",
+      "contractorsAndInstallers": "Anyone doing work in a residence \u2014 cable installers, closet companies, art hangers, movers \u2014 files the same certificate of insurance and works Monday through Friday 9:00am - 5:00pm.",
+      "moveOutNotice": "Sixty days' written notice before your lease ends, and the move-out block booked the same way as the move-in.",
+      "residentSummary": "Reserve the freight elevator through the resident manager at least five business days out, in four-hour blocks, Monday through Saturday 9:00am to 5:00pm \u2014 no Sundays and no building holidays. Your mover sends a certificate of insurance five business days ahead naming 5-08 46th Avenue Owner LLC and Halbrook Residential Management as additional insureds, with a million per occurrence and statutory workers comp. There is a $500 deposit that is refundable and no move fee, and it comes back to your ledger within ten business days once the corridor and the freight car check out. Everything comes in through the service entrance on 5th Street, and staff hang the pads and lay the floor protection before your block starts."
+    },
+    "trashAndRecycling": {
+      "topic": "general_property_fact",
+      "chuteRoom": "A chute closet on every residential floor, floors 5 through 33, next to the service elevator. Your fob opens it.",
+      "chuteHours": "The trash chute is open 6:00am - 11:00pm. The closet itself is open 24 hours, so recycling and compost can go down any time.",
+      "chuteRules": [
+        "Household trash only, in a tied bag under 15 pounds",
+        "No glass down the chute \u2014 it breaks and it carries through the whole stack",
+        "No cardboard, no hangers, no construction debris",
+        "Nothing left on the floor of the closet"
+      ],
+      "recycling": {
+        "streams": [
+          "Blue bin: metal, glass, plastic, and cartons",
+          "Green bin: paper and flattened cardboard"
+        ],
+        "location": "Both bins are in the chute closet on your floor",
+        "cardboard": "Broken down flat. A box left whole fills the bin for the entire floor.",
+        "collection": "Porters bring the floors down nightly. DSNY collects recycling on Tuesday and Friday mornings."
+      },
+      "compost": {
+        "required": true,
+        "bin": "Brown bin in the chute closet, lined, emptied nightly",
+        "accepted": "Food scraps, food-soiled paper, and plant waste. Compostable bags are stocked in the closet.",
+        "basis": "New York City requires residential organics separation citywide, and DSNY has been issuing fines to buildings since April 2025 \u2014 $100 for a first violation, $200 for a second, $400 after that. The building eats those fines, so the brown bin is not optional.",
+        "collection": "Collected with recycling, Tuesday and Friday mornings."
+      },
+      "bulkItems": {
+        "process": "Get a tag from the front desk, then bring the item to the bulk staging room on the cellar level, 8:00am - 8:00pm. Do not leave anything in a hallway or a chute closet.",
+        "collection": "DSNY takes bulk on Tuesday mornings.",
+        "mattresses": "Sealed in a plastic mattress bag before it leaves your residence. DSNY fines $100 for an unbagged mattress and the fine follows the residence. Bags are $10 at the front desk.",
+        "hallwayFee": 75,
+        "hallwayFeeNote": "Anything left in a corridor, a stairwell, or a chute closet is removed by staff at $75 per item, charged to your ledger.",
+        "constructionDebris": "Not accepted. If you are having work done, the contractor carts it out."
+      },
+      "electronicsAndHazardous": {
+        "eWaste": "Electronics cannot go in the trash in New York State. The building runs an e-waste collection in the cellar the first Saturday of every quarter, 9:00am - 1:00pm, with a licensed recycler.",
+        "batteriesAndBulbs": "A collection bin sits next to the mail room for household batteries and CFL bulbs.",
+        "lithiumBatteries": "Damaged or swollen e-bike and scooter batteries go to the front desk, not in any bin. FDNY rules, and it matters.",
+        "paintAndChemicals": "Not accepted anywhere in the building. DSNY runs SAFE disposal events across Queens."
+      },
+      "textiles": "A refashionNYC bin in the cellar takes clothing, shoes, and linens year-round.",
+      "residentSummary": "There is a chute closet on every residential floor next to the service elevator, and your fob opens it. Household trash goes down the chute between 6:00am and 11:00pm in a tied bag \u2014 no glass, no cardboard. The blue and green recycling bins and the brown compost bin are in the same closet and are open around the clock, and the compost bin is a city requirement, not a house preference. Bulk items get a tag from the front desk and go to the staging room on the cellar level, mattresses have to be bagged first, and anything left in a hallway is removed at $75 an item."
+    },
+    "wifiAndUtilities": {
+      "topic": "utilities",
+      "includedInRent": [
+        "Heat",
+        "Hot water",
+        "Cooling from the building's four-pipe system",
+        "Cold water and sewer",
+        "Cooking gas, master metered",
+        "Trash and recycling removal",
+        "Amenity access, including The Works, The Study, and the bike room",
+        "WiFi in every amenity space and the lobby"
+      ],
+      "paidSeparately": [
+        "Electricity, through Con Edison, in your name",
+        "Internet and television in your residence",
+        "Parking, storage, and any optional service"
+      ],
+      "heatAndCooling": {
+        "system": "Four-pipe fan coil, individually zoned, with a thermostat in the living area and in each bedroom",
+        "included": true,
+        "note": "Heating and cooling both come off the building's central plant, so you set the temperature and it does not show up on a bill. New York City requires heat from October 1 through May 31 at 68 degrees during the day and 62 at night; the building runs warmer than that.",
+        "seasonalChangeover": "The plant changes over between heating and cooling in April and again in October. There are a few days each spring and fall when only one is available, and the resident manager posts the dates."
+      },
+      "electricity": {
+        "provider": "Con Edison",
+        "accountRequired": "In your name, active on your lease start date. Open it at least 3 business days before key pickup \u2014 the front desk cannot release keys without the account number.",
+        "meterLocation": "Each residence is separately metered; the meter number is on your lease rider.",
+        "typicalMonthlyCost": {
+          "studio": "$45 - $70",
+          "oneBedroom": "$55 - $90",
+          "twoBedroom": "$80 - $130",
+          "threeBedroom": "$95 - $160"
+        },
+        "costNote": "These are real ranges for this building because heat and cooling are not on your meter \u2014 you are paying for lights, outlets, the washer and dryer, and the fan coil's fan. July and August run at the top of the range."
+      },
+      "internet": {
+        "wiredFor": [
+          "Verizon Fios",
+          "Spectrum"
+        ],
+        "bulkContract": false,
+        "bulkNote": "There is no bulk internet deal and no mandatory building provider, so you pick and you pay your provider directly.",
+        "typicalCost": "Fios 500/500 runs about $75 a month and gigabit about $95. Spectrum starts around $70.",
+        "installation": "Both providers are already in the building, so activation is usually a self-install kit or a one-hour appointment. Installers file a certificate of insurance and work Monday through Friday 9:00am - 5:00pm.",
+        "amenityWifi": "The resident network in the amenity spaces is 'Larkin Resident'; the password is in the resident app and rotates each quarter. There is a separate guest network in the lobby."
+      },
+      "television": "Fios TV and Spectrum both serve the building. Satellite dishes are not permitted on terraces, balconies, or the facade.",
+      "waterAndGas": "Water, sewer, and cooking gas are master metered and included. There is no separate water bill and no National Grid account for a resident to open.",
+      "residentSummary": "Heat, hot water, cooling, water, cooking gas, and trash are included in your rent, and so is the WiFi in every amenity space. What you pay separately is electricity through Con Edison and internet in your own residence. Because heat and cooling come off the building's central system rather than your meter, the electric bill is small \u2014 figure $45 to $70 in a studio and $95 to $160 in a three-bedroom, with July and August at the top. The building is wired for both Verizon Fios and Spectrum with no bulk contract, so you choose. Open the Con Edison account at least three business days before you pick up keys, because the desk cannot release them without the account number."
+    },
+    "packages": {
+      "topic": "general_property_fact",
+      "room": "The Package Room, behind the lobby",
+      "lockers": "Luxer lockers, 24 hours, opened with your fob or the code in the app",
+      "coldStorage": {
+        "available": true,
+        "type": "Two refrigerated lockers and one freezer locker",
+        "holdTime": "24 hours. Grocery and meal deliveries are put in cold storage automatically when the carrier marks them perishable.",
+        "note": "The desk texts you the moment something goes into cold storage, and it stays yours for 24 hours before staff has to clear it."
+      },
+      "notification": "A text and an email the minute an item is logged in, with the carrier and the locker number.",
+      "holdingPeriod": {
+        "lockers": "10 days, then the item goes back to the carrier",
+        "oversized": "10 days at the desk, same as a locker",
+        "storageFee": 0,
+        "feeNote": "There is no daily storage fee. Items are returned to the carrier on day 11 rather than charged for."
+      },
+      "oversizedItems": {
+        "definition": "Anything that does not fit a Luxer locker, roughly larger than 24 by 20 by 15 inches or heavier than 50 pounds",
+        "handling": "Held at the front desk, which is staffed 24 hours. Furniture and appliances are treated as a delivery and go through the service entrance on 5th Street during business hours.",
+        "deskHours": "The desk handles oversized items, cold storage, and dry cleaning drop-off 8:00am - 10:00pm daily. Lockers are always available."
+      },
+      "notAccepted": [
+        "Anything requiring an adult signature or ID at delivery",
+        "COD deliveries",
+        "Items with a declared value over $2,500",
+        "Perishables that need a freezer beyond 24 hours",
+        "Firearms and hazardous materials"
+      ],
+      "outbound": "Leave a labeled prepaid package with the desk for UPS, FedEx, or USPS pickup, or use the Luxer return slot. The desk does not print labels.",
+      "mail": "USPS boxes are in the mail room off the lobby, keyed separately from your fob. Package mail from USPS goes into the same Luxer lockers.",
+      "vacationHold": "Tell the desk and they will hold everything for up to 14 days without the 10-day clock running.",
+      "foodDelivery": "Food and grocery couriers come to the lobby, not to your door, unless you have opted into door delivery in the resident app for the hours between 7:00am and 11:00pm.",
+      "liability": "Packages are accepted as a courtesy. The building logs every item in and out and the lobby is on camera, but it does not insure your deliveries \u2014 that is what renters insurance contents coverage is for.",
+      "residentSummary": "Luxer lockers behind the lobby are open 24 hours with your fob, and there is refrigerated and freezer storage for groceries. You get a text and an email the minute a package lands. Anything too big for a locker waits with the front desk, which is staffed around the clock, and everything is held for ten days before it goes back to the carrier \u2014 there is no storage fee. Cold storage holds for 24 hours. The desk cannot accept anything needing a signature, a COD, or an item declared over $2,500, and food couriers stop in the lobby unless you have turned on door delivery in the app."
+    },
+    "buildingAccess": {
+      "topic": "building_access",
+      "system": "Encrypted fob plus a mobile credential in the resident app. The lobby is attended 24 hours and there is a live-in resident manager.",
+      "fobsPerResidence": {
+        "included": 2,
+        "maximum": 4,
+        "note": "Two fobs come with the residence. Additional fobs are $50 each, up to four, and every fob is tied to a named adult on the lease or a registered occupant."
+      },
+      "fobOpens": [
+        "Lobby vestibule",
+        "Elevator to your floor and to floors 3, 4, and 34",
+        "Amenity doors",
+        "Chute closet on your floor",
+        "Bike room",
+        "Garage pedestrian door",
+        "Package room lockers"
+      ],
+      "elevatorRestriction": "Elevators are floor-restricted. Your fob calls your own floor and the three amenity floors, nothing else.",
+      "replacementFobFee": 50,
+      "lostFob": "Report it immediately and the desk kills the credential on the spot. A killed fob cannot be revived; the replacement is $50.",
+      "mobileCredential": "The resident app opens the same doors over Bluetooth. It works on one phone at a time, and re-pairing a new phone is done at the desk with ID.",
+      "visitorAccess": "Guests are announced at the desk and held in the lobby until you answer, or they use the 24-hour QR pass you issue in the app, which opens the vestibule and the elevator to your floor only. The desk logs a photo ID for anyone going up without you.",
+      "deliveryAccess": "Carriers reach the lobby and the package room, never a residential floor. Furniture and appliance deliveries use the service entrance on 5th Street during business hours with the desk notified.",
+      "contractorAccess": "Anyone working in your residence is on the day's access list with a certificate of insurance on file, and works Monday through Friday 9:00am - 5:00pm.",
+      "lockout": {
+        "procedure": "Go to the front desk. Staff verifies you against the lease and a photo ID and lets you in \u2014 24 hours, no appointment.",
+        "freePerLeaseYear": 1,
+        "feeAfterFirst": 75,
+        "overnightFee": 125,
+        "overnightWindow": "11:00pm - 7:00am",
+        "note": "The first lockout in a lease year is free. After that it is $75, or $125 between 11:00pm and 7:00am when the resident manager has to come down. Charged to your ledger, never in cash at the desk."
+      },
+      "keyHoldProgram": "The building does not keep a copy of your key unless you opt in. If you do, it lives in a sealed, numbered envelope in the manager's safe and is only opened for an emergency or for access you authorize in writing.",
+      "staffEntry": "Staff enter for scheduled work with at least 24 hours' written notice, and immediately without notice for a genuine emergency such as water, fire, or gas. Every entry is logged with the time and the reason.",
+      "cameras": "Cameras cover the lobby, the elevators, the amenity floors, the garage, the bike room, and the service entrance. Footage is retained 30 days and released only to law enforcement on a valid request. There are no cameras in any residence, corridor bathroom, or the Recovery Suite.",
+      "doorRules": "No door in the building gets propped, including the stair doors and the garage pedestrian door. Stairs are for exit and for exercise, not for access between floors.",
+      "emergencies": "Call 911 first. Then tell the front desk, which is staffed 24 hours and holds the FDNY key box and the elevator recall.",
+      "residentSummary": "Your fob opens the lobby, the elevator to your floor and the three amenity floors, and every amenity door, and the resident app does the same over Bluetooth. Two fobs come with the residence and a third or fourth is $50. Guests are announced at the desk or use a 24-hour QR pass you send from the app, and carriers get the lobby and the package room only. If you lock yourself out, the desk verifies you against the lease and lets you in \u2014 the first time in a lease year is free, after that it is $75, or $125 between 11:00pm and 7:00am."
+    },
+    "smoking": {
+      "topic": "general_property_fact",
+      "smokeFree": true,
+      "scope": "The entire property. Residences, terraces, balconies, corridors, stairwells, the garage, the bike room, every amenity floor and outdoor deck, and the sidewalk within 15 feet of any entrance.",
+      "coveredSubstances": [
+        "Cigarettes",
+        "Cigars",
+        "Pipes",
+        "Hookah and water pipes",
+        "Vaping and e-cigarettes",
+        "Cannabis in any smoked or vaped form"
+      ],
+      "cannabisNote": "Adult-use cannabis is legal in New York, and the building's smoke-free policy still applies to it exactly as it applies to tobacco. Edibles are not a lease matter.",
+      "openFlame": "No charcoal grills, no propane tanks, no fire pits, and no candles on any terrace or balcony. The gas grills and firepits on The Terrace are building equipment and are the only open flame permitted outdoors.",
+      "leaseRider": "Every lease includes a signed smoke-free rider. Under New York City Local Law 147 of 2017, every building with three or more residences must have a written smoking policy and disclose it to residents; ours is the rider, and you get a copy at signing and again at every renewal.",
+      "violations": {
+        "first": "Written notice",
+        "second": "$250, charged to the ledger",
+        "third": "$500 and a notice to cure the lease",
+        "damage": "Smoke remediation \u2014 sealing, painting, replacing flooring \u2014 is billed at cost and is separate from any fine."
+      },
+      "guests": "The policy covers your guests, and the charge lands on your ledger.",
+      "howToReport": "Tell the front desk with the time and where you smelled it. Staff can usually place a stack within a day or two.",
+      "residentSummary": "The Larkin is smoke-free everywhere \u2014 inside your residence, on the terraces and balconies, in the garage and the bike room, on every amenity floor, and within fifteen feet of the entrance. That covers cigarettes, cigars, hookah, vaping, and cannabis, which is legal in New York and still not permitted here. No charcoal, no propane, and no candles outdoors; the gas grills on The Terrace are the exception. You sign a smoke-free rider with your lease, as New York City requires, and a violation runs from a written notice to $250 to $500 and a notice to cure."
+    },
+    "noiseAndQuietHours": {
+      "topic": "general_property_fact",
+      "quietHours": {
+        "sundayThroughThursday": "10:00pm - 8:00am",
+        "fridayAndSaturday": "11:00pm - 9:00am"
+      },
+      "generalStandard": "Outside quiet hours the standard is simple: nothing a neighbor can hear through a closed door.",
+      "floorCovering": "Your lease carries the standard New York clause \u2014 carpets or rugs covering at least 80 percent of the floor area in every room other than the kitchen, bathrooms, entry, and closets. It is the single biggest thing that keeps this building quiet.",
+      "amenityNoise": [
+        "The Terrace deck goes quiet at 10:00pm and closes at 11:00pm",
+        "The Overlook sky terrace closes at 11:00pm year-round",
+        "No amplified music in any outdoor amenity space at any hour",
+        "The Reading Room on 34 is a no-calls, no-meetings room around the clock"
+      ],
+      "instruments": "Acoustic practice is fine 9:00am - 9:00pm. Amplified instruments and drums are not, at any hour.",
+      "residentWork": "Alterations need written consent from management. Any approved contractor works Monday through Friday 9:00am - 5:00pm, never on a weekend, with a certificate of insurance on file.",
+      "buildingWork": "Scheduled building work runs Monday through Friday 8:00am - 5:00pm. The resident manager posts anything loud at least 48 hours ahead in the lobby and the app.",
+      "howToReport": "Call or visit the front desk while it is happening \u2014 that is what the 24-hour desk is for. The desk logs the time and the residence and the resident manager follows up in writing. For something the building cannot resolve, 311 handles the city noise code and 911 handles anything unsafe.",
+      "escalation": "A first substantiated complaint is a conversation. A second in six months is a written notice. A third is a notice to cure the lease.",
+      "confidentiality": "The neighbor you complain about is told the time and the nature of the noise, never who reported it.",
+      "residentSummary": "Quiet hours are 10:00pm to 8:00am Sunday through Thursday and 11:00pm to 9:00am Friday and Saturday, and the rest of the day the standard is nothing a neighbor hears through a closed door. Your lease requires rugs over 80 percent of the floor in every room but the kitchen, baths, entry, and closets, which is what actually keeps a tower this size quiet. Outdoor amenity spaces have no amplified music at any hour and go quiet at 10:00pm. Report noise to the front desk while it is happening \u2014 it is staffed 24 hours, it logs the time, and it never tells your neighbor who called."
+    },
+    "sublettingAndShortTermRentals": {
+      "topic": "general_property_fact",
+      "shortTermRentals": {
+        "permitted": false,
+        "platforms": [
+          "Airbnb",
+          "Vrbo",
+          "Booking.com",
+          "Any listing platform"
+        ],
+        "legalBasis": "A rental of fewer than 30 days in a Class A multiple dwelling where the permanent resident is not present is illegal under New York Multiple Dwelling Law 4(8)(a). Since New York City's Local Law 18 took effect in September 2023, hosts also have to register with the Mayor's Office of Special Enforcement, and The Larkin is on the city's prohibited buildings list, so no registration can be issued here.",
+        "enforcement": "A first listing is a $1,000 charge and a notice to cure. A second is a termination of the lease. The building also cooperates with OSE, which fines the host directly.",
+        "whyItMatters": "It is not a house preference. A short-term guest invalidates the building's insurance and the certificate of occupancy, and the fines land on the owner."
+      },
+      "subletting": {
+        "permitted": true,
+        "conditions": "With written consent, which will not be unreasonably withheld \u2014 that is your right under New York Real Property Law 226-b in a building with four or more residences.",
+        "howToRequest": "Send a written request by certified mail, return receipt requested, to Halbrook Residential Management at the building address, at least 30 days before the sublet would start.",
+        "requestMustInclude": [
+          "The term of the sublet, with start and end dates",
+          "The name, home address, and business address of the proposed subtenant",
+          "Your reason for subletting",
+          "Your address during the sublet",
+          "The written consent of any co-tenant or guarantor",
+          "A copy of the proposed sublease with a copy of your lease attached"
+        ],
+        "landlordResponse": "Management has 10 days to ask for additional information and 30 days from your request, or from the additional information, to consent or to state the reasons for refusal in writing. No answer within 30 days is a consent.",
+        "screening": "The proposed subtenant completes the same application as any resident. The application fee is $20 per adult, the New York cap.",
+        "administrativeFee": 250,
+        "termLimits": "A sublet cannot run longer than your remaining lease term, and you stay liable for the rent and for the residence the whole time.",
+        "amenityAccess": "An approved subtenant gets fobs and full amenity access. Your fobs are deactivated for the sublet term."
+      },
+      "assignment": "Assigning the lease outright requires management's written consent, which may be withheld \u2014 that is the distinction Real Property Law 226-b draws between an assignment and a sublet. If consent is refused, you may be released from the lease on 30 days' notice.",
+      "roommates": "New York Real Property Law 235-f lets you add one additional occupant plus that occupant's dependent children beyond the named tenants and immediate family. Tell the resident manager within 30 days so the person is on the access list. Adding a roommate to the lease itself requires the same application and income review.",
+      "earlyTermination": {
+        "buyout": "Sixty days' written notice plus a termination fee of two months' rent, and the security deposit is still returned on the normal schedule if the residence is in good order.",
+        "dutyToMitigate": "New York Real Property Law 227-e requires the owner to make reasonable efforts to re-rent, and any rent collected from a new resident reduces what you owe.",
+        "militaryAndSafety": "Servicemembers may terminate under the federal Servicemembers Civil Relief Act, and victims of domestic violence may terminate under Real Property Law 227-c. Neither carries a fee. Those requests go to the resident manager."
+      },
+      "corporateLeases": "Considered on a 12-month minimum, with the company as tenant, a named occupant on the lease, and a certificate of insurance. Rotating occupants are not permitted.",
+      "residentSummary": "Short-term rentals are not permitted here in any form. A rental under thirty days without you present is illegal under state law, the building is on New York City's prohibited buildings list under Local Law 18, and a listing costs $1,000 and a notice to cure the first time. Subletting is different and it is allowed: send a written request by certified mail thirty days out with the term, the subtenant's name and addresses, your reason, and where you will be living, and management answers in writing within thirty days. There is a $250 administrative fee and the subtenant applies like anyone else at $20 an adult. You stay on the lease and stay liable for the term."
+    },
+    "insurance": {
+      "topic": "general_property_fact",
+      "required": true,
+      "who": "Every residence, maintained for the entire lease term including renewals.",
+      "minimumLiability": 300000,
+      "contentsCoverage": "Your call on the amount. Most residents here carry $25,000 to $50,000.",
+      "waterDamageLegalLiability": "Included in the required liability coverage. Ask your carrier to confirm the policy covers water damage you cause to other residences.",
+      "additionalInterest": "5-08 46th Avenue Owner LLC, c/o Halbrook Residential Management, 5-08 46th Avenue, Long Island City, NY 11101",
+      "certificateHolder": "Same as the additional interest",
+      "proofDue": "Before key pickup. The desk cannot release keys without a certificate on file.",
+      "renewalProof": "A new certificate every time the policy renews. The app sends a reminder 30 days out.",
+      "lapse": {
+        "consequence": "If coverage lapses, the building may place a landlord liability policy that protects the owner and not you, and bill it to your ledger at $14.95 a month until you provide proof of your own.",
+        "note": "That placed policy covers the building's interest only. It does nothing for your belongings."
+      },
+      "petLiability": "If you have a dog, the policy's liability coverage cannot exclude the breed. Bring that page with the pet registration.",
+      "typicalCost": "$15 to $30 a month for a studio or one-bedroom in Long Island City, more with high-value contents or jewelry riders.",
+      "moversAndContractors": "Separate from your policy. Any mover, installer, or contractor files a certificate of insurance naming the owner and the manager as additional insureds \u2014 see the moving policy for the limits.",
+      "floodNote": "Parts of Hunters Point sit in a FEMA flood zone. The Larkin's residences start on the fifth floor and the mechanical plant is above the design flood elevation, so residential flood exposure is low; contents flood coverage is still your decision.",
+      "residentSummary": "Renters insurance is required for the whole lease term, with at least $300,000 in personal liability, and the certificate has to be on file before the desk hands you keys. Name 5-08 46th Avenue Owner LLC, care of Halbrook Residential Management at the building address, as additional interest. Coverage in this neighborhood runs about $15 to $30 a month. If it lapses, the building can place a policy that protects the owner and not your belongings and bill you $14.95 a month for it, so keep the certificate current \u2014 the app reminds you thirty days ahead. If you have a dog, make sure the liability coverage does not exclude the breed."
+    },
+    "applicationRequirements": {
+      "topic": "application_requirements",
+      "applicationFee": {
+        "amount": 20,
+        "per": "adult applicant, including guarantors",
+        "basis": "New York caps application fees at $20 per applicant, and that has to cover the background and credit check. The cap came in with the Housing Stability and Tenant Protection Act of 2019.",
+        "receipt": "You get a copy of the background and credit report and a receipt for the fee, which the law requires.",
+        "refundable": false
+      },
+      "brokerFee": {
+        "amount": 0,
+        "note": "There is no broker fee. The Larkin is leased in-house by the Halbrook Residential team, so nobody hires a broker on your behalf. Under New York City's FARE Act, in effect since June 2025, the party who hires the broker pays the broker."
+      },
+      "securityDeposit": {
+        "amount": "One month's rent",
+        "cap": "One month is the statutory maximum in New York under General Obligations Law 7-108(1-a). No last month's rent, no additional security for a pet or a lower credit score.",
+        "heldIn": "An interest-bearing account at a New York bank, as required for buildings with six or more residences. The bank and account are disclosed at signing, interest is credited to you annually, and the owner retains the 1 percent administrative fee the statute allows.",
+        "return": "Within 14 days of move-out, with an itemized statement of any deduction. Failure to itemize forfeits the right to keep any of it.",
+        "preMoveOutInspection": "You are offered a walkthrough between 14 and 30 days before your lease ends, with a written list of anything that would be deducted, so you can fix it first. That offer is a legal requirement, not a courtesy."
+      },
+      "incomeRequirement": {
+        "multiple": 40,
+        "basis": "Annual gross household income of at least 40 times the monthly rent. Roommates may combine incomes.",
+        "example": "A residence at $4,860 a month needs $194,400 in combined annual income, or a guarantor."
+      },
+      "guarantor": {
+        "multiple": 80,
+        "residency": "Must reside in New York, New Jersey, Connecticut, or Pennsylvania",
+        "documents": "Same document package as an applicant, plus the guarantor signs the lease and a guaranty rider",
+        "institutional": "Third-party guarantor services such as TheGuarantors and Insurent are accepted and are the usual path for an applicant who is short on income or has no US credit history."
+      },
+      "credit": {
+        "target": "700 or above for a standard approval",
+        "below700": "An application under 700 is approved with a guarantor or an institutional guaranty rather than with extra money down, because New York does not allow a larger deposit.",
+        "noCreditHistory": "International applicants and recent graduates without US credit are common here. The usual path is an institutional guaranty or verified assets."
+      },
+      "documentsRequired": [
+        "Government-issued photo ID for each applicant",
+        "Letter of employment on company letterhead with title, salary, and start date",
+        "Two most recent pay stubs",
+        "First two pages of last year's federal tax return",
+        "Two most recent bank statements",
+        "Contact information for your current landlord"
+      ],
+      "documentsSelfEmployed": [
+        "Two years of federal tax returns",
+        "A letter from your accountant confirming income",
+        "Three most recent months of bank statements"
+      ],
+      "verification": "Employment is verified directly. Prior landlord is contacted for payment history.",
+      "criminalHistory": {
+        "considered": false,
+        "basis": "The New York City Fair Chance for Housing Act, effective January 1, 2025, took criminal history out of housing screening. We do not ask about it on the application and it is not part of the decision, apart from the narrow state sex offender registry check the law still permits after a conditional offer."
+      },
+      "housingCourtHistory": {
+        "considered": false,
+        "basis": "New York law since 2019 bars refusing an applicant solely because they were once in housing court. We do not buy or use tenant blacklist data."
+      },
+      "sourceOfIncome": "Housing vouchers and rental assistance, including CityFHEPS and Section 8, are a lawful source of income in New York City and are accepted. Refusing them is illegal, and the voucher counts toward the income requirement.",
+      "occupancyStandard": "Set by the New York City Housing Maintenance Code and the certificate of occupancy, not by a house rule. Questions about who may live in a residence go to the resident manager.",
+      "decisionTimeline": "One to three business days once the file is complete.",
+      "holdDeposit": {
+        "amount": "One month's rent",
+        "effect": "Takes the residence off the market while the application is reviewed and becomes the security deposit at signing",
+        "ifDeclined": "Refunded in full",
+        "ifYouWithdraw": "Refunded in full if you withdraw within 24 hours of applying; after that it is forfeited"
+      },
+      "approvalWindow": "An approval holds the residence for 48 hours. Leases are signed electronically and the first month's rent and the deposit are due at signing.",
+      "escalationTopic": "eligibility_or_denial",
+      "escalationNote": "Whether a specific applicant qualifies, why an application was declined, and any request for an accommodation are never answered by the assistant. They go to the resident manager.",
+      "residentSummary": "The application fee is $20 per adult, which is the New York cap, and it covers the credit and background check \u2014 you get a copy of both. There is no broker fee, because we lease in-house. The security deposit is one month's rent and cannot be more than that under state law, and it sits in an interest-bearing account with the bank disclosed to you at signing. We look for household income of 40 times the monthly rent, or a guarantor at 80 times who lives in New York, New Jersey, Connecticut, or Pennsylvania, and institutional guarantors are accepted. Bring photo ID, an employment letter, two pay stubs, last year's tax return, and two bank statements. We do not ask about criminal history, we do not use housing court records, and housing vouchers are accepted. Decisions take one to three business days."
+    },
+    "leaseTerms": {
+      "topic": "application_requirements",
+      "termsOffered": [
+        12,
+        14,
+        16,
+        18,
+        20,
+        24
+      ],
+      "standardRange": "12 to 24 months",
+      "pricingByTerm": "Every term is priced separately. The 14-month term is the one carrying the current concession, so it usually prices best net effective.",
+      "shortTerms": "Terms under 12 months are quoted case by case and price at a premium. There is no month-to-month on an initial lease.",
+      "startDates": "Any calendar day. A mid-month start is prorated on the actual days.",
+      "concession": {
+        "current": "One month free on a 14-month lease",
+        "expires": "2026-10-31",
+        "howApplied": "The free month is taken as the first full month of the lease. It is not amortized across the term.",
+        "brokerFee": "None"
+      },
+      "netEffectiveExplanation": {
+        "rule": "Advertised rents are net effective and reflect the concession. The gross rent \u2014 the number printed on the lease and the number your renewal is calculated from \u2014 is higher.",
+        "math": "Net effective = gross rent multiplied by 13 and divided by 14 on a 14-month lease with one month free.",
+        "example": "Residence 14C advertises at $4,860 net effective. The gross rent on the lease is $5,234, month one is free, and you pay $5,234 for the remaining thirteen months.",
+        "disclosureRule": "The leasing team states both numbers before being asked. Never quote the net effective figure alone."
+      },
+      "rentDue": "The first of the month.",
+      "lateFee": {
+        "amount": 50,
+        "trigger": "Charged only after rent is more than 5 days late",
+        "basis": "New York caps late fees at $50 or 5 percent of the monthly rent, whichever is less, and only after a 5-day grace period."
+      },
+      "returnedPayment": 20,
+      "paymentMethods": "ACH from the resident portal at no charge, or a card for a 2.95 percent processing fee. No cash, and the front desk does not take rent.",
+      "regulatoryStatus": "The 246 market-rate residences are free-market. They are not rent stabilized and not rent controlled. The 72 affordable residences were leased through NYC Housing Connect under the building's 421-a agreement and are regulated separately, outside the leasing office.",
+      "guarantorRider": "A guarantor signs the lease and a separate guaranty rider covering the initial term and any renewal.",
+      "utilitiesRider": "Confirms what is included \u2014 heat, hot water, cooling, water, cooking gas \u2014 and that electricity and internet are yours.",
+      "otherRiders": [
+        "Smoke-free rider, required by NYC Local Law 147",
+        "Window guard rider, required by the NYC Health Code for any residence with a child under 11",
+        "Bedbug disclosure, required annually by New York State",
+        "Sprinkler disclosure",
+        "Lead paint disclosure, which reads not applicable in a 2023 building",
+        "Pet rider where applicable",
+        "House rules, incorporated by reference"
+      ],
+      "renewalNoticeLaw": "New York Real Property Law 226-c requires written notice before a renewal increase over 5 percent or a decision not to renew: 30 days if you have lived here under a year, 60 days between one and two years, and 90 days after two years.",
+      "residentSummary": "Terms run 12 to 24 months and each term is priced on its own, with 14 months carrying the current concession \u2014 one month free, no broker fee, through October 31, 2026. Advertised rents are net effective, so ask for the gross number too and we will give you both without being asked: we will show you both the net effective and the gross number for any residence you are considering. Rent is due on the first, the late fee is $50 and only after five days, which is the state cap, and you pay by ACH from the portal at no charge. Market-rate residences here are free-market, not stabilized."
+    },
+    "renewal": {
+      "topic": "application_requirements",
+      "offerTiming": "The renewal offer goes out 90 days before your lease ends, by email and on paper under your door.",
+      "responseWindow": "Thirty days to accept. After that the offer expires and the terms are requoted at whatever the market is then.",
+      "termsOffered": "12, 18, and 24 months, each priced separately.",
+      "increaseBasis": "Set against current market rents for the same line and floor band, not by a formula. The offer states the new rent as a gross figure.",
+      "statutoryNotice": "Under Real Property Law 226-c the owner gives written notice of an increase over 5 percent or of a decision not to renew: 30 days under one year of tenancy, 60 days between one and two years, 90 days after two years. The 90-day renewal offer satisfies that for most residents.",
+      "renewalFee": 0,
+      "newApplication": "None. No new application, no new fee, no new credit check.",
+      "securityDeposit": "Rides over untouched. New York does not permit topping it up when the rent goes up, because one month is the cap in the first place.",
+      "concessionsAtRenewal": "A renewal concession is a separate decision and is never guaranteed. If one is offered it is stated on the renewal notice, not assumed from the original lease.",
+      "monthToMonth": "Available only by written agreement after the initial term, at 110 percent of the last monthly rent, with 30 days' notice on either side.",
+      "holdover": "Staying past the end of a lease without a signed renewal is a month-to-month tenancy by operation of law once rent is accepted, at the rate stated in the renewal notice.",
+      "transfers": {
+        "eligibility": "After 9 months of residency and a clean payment history",
+        "term": "A new lease of at least 12 months on the new residence",
+        "fee": 500,
+        "deposit": "Your existing deposit transfers. There is no second deposit.",
+        "conditions": "Subject to availability, and the transfer date follows the new residence's availability, not your convenience. The freight elevator is reserved the same way as any move."
+      },
+      "notToRenew": "Sixty days' written notice if you are not renewing, which is also what your lease requires. Notice goes to residents@thelarkinlic.com or to the resident manager in writing.",
+      "moveOutProcess": [
+        "Give 60 days' written notice",
+        "Accept the pre-move-out inspection offered 14 to 30 days before the end of the lease and get the written punch list",
+        "Reserve the freight elevator, Monday through Saturday 9:00am - 5:00pm, with the mover's certificate of insurance 5 business days ahead",
+        "Return every fob, garage remote, and mail key to the front desk",
+        "Leave a forwarding address",
+        "Deposit returned within 14 days with an itemized statement"
+      ],
+      "escalationTopic": "account_status",
+      "escalationNote": "A specific renewal rate, a ledger balance, or the status of a particular offer comes from the account system, not from this file.",
+      "residentSummary": "Your renewal offer arrives 90 days before the lease ends, by email and under your door, with 12, 18, and 24-month terms each priced separately. You have thirty days to accept. There is no renewal fee, no new application, and no new deposit \u2014 the one you paid rides over, because New York caps it at one month either way. If you would rather move within the building, you can transfer after nine months with a $500 fee and no second deposit. If you are not renewing, sixty days' written notice, take the pre-move-out walkthrough we offer two to four weeks ahead so you know what would be deducted, and the deposit comes back within fourteen days with an itemized statement."
+    },
+    "storage": {
+      "topic": "general_property_fact",
+      "available": true,
+      "location": "Cellar level, off the service corridor, fob access",
+      "startingPrice": 95,
+      "priceRange": "$95 to $240 a month depending on size",
+      "sizes": [
+        "4 by 4 by 6 feet, $95",
+        "5 by 6 by 8 feet, $160",
+        "8 by 8 by 8 feet, $240"
+      ],
+      "agreement": "Month to month, separate from the lease, 30 days' notice either way",
+      "access": "24 hours by fob",
+      "waitlist": "About six weeks. Ask the front desk or email residents@thelarkinlic.com to join.",
+      "prohibited": [
+        "Anything flammable, including gasoline, propane, and lithium batteries being charged",
+        "Food and anything perishable",
+        "Firearms",
+        "Anything living"
+      ],
+      "insurance": "Contents are yours to insure. Your renters policy usually extends to a storage locker on the same property, but confirm it with your carrier.",
+      "residentSummary": "Private storage in the cellar starts at $95 a month for a 4-by-4-by-6 locker and runs to $240 for the largest, on a month-to-month agreement with thirty days' notice. Access is 24 hours with your fob. There is a waitlist of about six weeks right now. Nothing flammable, perishable, or alive goes in a locker, and the contents are covered by your renters policy, not by the building."
+    },
+    "feeSchedule": {
+      "topic": "general_property_fact",
+      "note": "Every recurring and one-time charge in one place. Nothing else is charged without written notice. All charges post to your resident ledger; the front desk does not handle money.",
+      "oneTime": [
+        {
+          "item": "Application fee",
+          "amount": "$20 per adult",
+          "note": "New York statutory cap"
+        },
+        {
+          "item": "Broker fee",
+          "amount": "$0",
+          "note": "Leased in-house"
+        },
+        {
+          "item": "Security deposit",
+          "amount": "One month's rent",
+          "note": "Statutory maximum, held in an interest-bearing account"
+        },
+        {
+          "item": "Pet fee",
+          "amount": "$350 per pet",
+          "note": "One time, non-refundable, two pets maximum"
+        },
+        {
+          "item": "Move-in deposit",
+          "amount": "$500",
+          "note": "Refundable, returned within 10 business days"
+        },
+        {
+          "item": "Move-out deposit",
+          "amount": "$500",
+          "note": "Refundable, same terms"
+        },
+        {
+          "item": "Additional fob",
+          "amount": "$50",
+          "note": "Two included, four maximum"
+        },
+        {
+          "item": "Lockout after the first in a lease year",
+          "amount": "$75",
+          "note": "$125 between 11:00pm and 7:00am"
+        },
+        {
+          "item": "Sublet administrative fee",
+          "amount": "$250",
+          "note": "Plus $20 per adult for the subtenant's application"
+        },
+        {
+          "item": "Transfer fee",
+          "amount": "$500",
+          "note": "After 9 months of residency"
+        },
+        {
+          "item": "Early termination",
+          "amount": "Two months' rent",
+          "note": "Plus 60 days' written notice"
+        },
+        {
+          "item": "Hallway item removal",
+          "amount": "$75 per item",
+          "note": "Anything left in a corridor or chute closet"
+        },
+        {
+          "item": "Mattress bag",
+          "amount": "$10",
+          "note": "Required by DSNY before disposal"
+        }
+      ],
+      "recurring": [
+        {
+          "item": "Parking",
+          "amount": "$425 per month",
+          "note": "EV charging included; oversized vehicles $75 more"
+        },
+        {
+          "item": "Motorcycle parking",
+          "amount": "$195 per month",
+          "note": "Four spaces"
+        },
+        {
+          "item": "Storage",
+          "amount": "$95 to $240 per month",
+          "note": "By locker size"
+        },
+        {
+          "item": "Bike room",
+          "amount": "$0",
+          "note": "One space per residence"
+        },
+        {
+          "item": "Pet rent",
+          "amount": "$0",
+          "note": "There is none"
+        },
+        {
+          "item": "Amenity fee",
+          "amount": "$0",
+          "note": "There is none. Amenity access is included in rent."
+        },
+        {
+          "item": "Placed liability insurance",
+          "amount": "$14.95 per month",
+          "note": "Only if your renters policy lapses"
+        }
+      ],
+      "situational": [
+        {
+          "item": "Late fee",
+          "amount": "$50",
+          "note": "Only after rent is 5 days late; state cap"
+        },
+        {
+          "item": "Returned payment",
+          "amount": "$20",
+          "note": "Per occurrence"
+        },
+        {
+          "item": "Card payment processing",
+          "amount": "2.95 percent",
+          "note": "ACH from the portal is free"
+        },
+        {
+          "item": "Guest parking",
+          "amount": "$45 per day",
+          "note": "Subject to space"
+        },
+        {
+          "item": "Smoking violation",
+          "amount": "$250 second offense, $500 third",
+          "note": "Plus remediation at cost"
+        },
+        {
+          "item": "Pet violation",
+          "amount": "$100 second offense",
+          "note": "First is a written notice"
+        },
+        {
+          "item": "The Larder cleaning deposit",
+          "amount": "$150",
+          "note": "Refundable within 5 business days"
+        },
+        {
+          "item": "The Overlook event deposit",
+          "amount": "$500",
+          "note": "Refundable; COI required for catering or bar service"
+        }
+      ],
+      "residentSummary": "The charges that exist here are short: $20 an adult to apply, one month's security, $350 once per pet, and a refundable $500 move-in deposit. Parking is $425 a month with EV charging included, storage starts at $95, and the bike room, the amenity spaces, and pet rent are all zero. There is no broker fee and no amenity fee. Everything posts to your resident ledger, the late fee is $50 and only after five days, and the front desk does not take money for anything."
+    }
+  }
+}

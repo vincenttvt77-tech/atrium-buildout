@@ -73,11 +73,14 @@ export function decideAnswer(req: AnswerRequest): AnswerDecision {
     return { kind: 'refuse', reason: 'below_confidence_threshold', propose: propose() }
   }
 
+  // Candidates arrive best-first from retrieval. The answer is the top one; the runners-up
+  // are cited so a human reviewing the call can see what else was in scope and judge
+  // whether the right article won.
   const best = servable[0]!
   return {
     kind: 'answer',
     text: best.answer,
-    sources: servable.map((a) => ({ id: a.id, version: a.version })),
+    sources: servable.slice(0, 3).map((a) => ({ id: a.id, version: a.version })),
     confidence: req.confidence,
   }
 }

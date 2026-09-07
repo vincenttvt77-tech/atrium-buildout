@@ -4,6 +4,7 @@ import type { QualificationState } from '../leasing/qualification.ts'
 import { mayQuote, nextSignalToAsk, captureCore } from '../leasing/qualification.ts'
 import { extracted } from '../leasing/captured.ts'
 import { decideAnswer } from '../knowledge/answer.ts'
+import { retrieve } from '../knowledge/retrieve.ts'
 import type { KnowledgeArticle } from '../knowledge/article.ts'
 import type { Topic } from '../knowledge/topics.ts'
 import { detectEmergency, primaryEmergency, safetyInstruction } from '../escalation/emergency.ts'
@@ -169,13 +170,19 @@ export interface AnswerArgs {
 
 /** Property questions. Answers only from approved knowledge; escalates the restricted. */
 export function answerQuestion(args: AnswerArgs, ctx: ToolContext): ToolResult {
+  // Rank against what was actually asked. Passing every article filed under the topic and
+  // taking the first is how "what are the gym hours" gets answered with the leasing
+  // office's hours — approved, fluent, and wrong.
+  const inTopic = ctx.articles.filter((a) => a.topic === args.topic)
+  const { ranked, confidence } = retrieve(args.question, inTopic)
+
   const decision = decideAnswer({
     question: args.question,
     topic: args.topic,
     propertyId: ctx.propertyId,
     jurisdiction: ctx.jurisdiction,
-    candidates: ctx.articles.filter((a) => a.topic === args.topic),
-    confidence: 0.9,
+    candidates: ranked.map((r) => r.article),
+    confidence,
     confidenceThreshold: ctx.confidenceThreshold,
     now: ctx.now,
   })
@@ -186,7 +193,8 @@ export function answerQuestion(args: AnswerArgs, ctx: ToolContext): ToolResult {
         say: decision.text,
         record: {
           kind: 'question_answered', question: args.question, topic: args.topic,
-          decision: 'answer', sources: decision.sources.map((s) => `${s.id}@v${s.version}`),
+          decision: 'answer', sources: decision.sources.slice(0, 3).map((s) => `${s.id}@v${s.version}`),
+          confidence: Number(confidence.toFixed(2)),
         },
       }
 

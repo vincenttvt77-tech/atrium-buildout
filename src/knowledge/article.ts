@@ -29,6 +29,12 @@ export interface KnowledgeArticle {
   approvedAt: Date | null
   /** After this date the article is stale and must not be served. */
   reviewBy: Date
+  /**
+   * Extra terms retrieval matches against but the agent never says. Buildings name their
+   * amenities ("The Works") while callers say "gym" — without a place to put the caller's
+   * word, a correct article is unreachable.
+   */
+  keywords?: string[]
 }
 
 /** A gap the agent hit. Becomes a human review task, never an auto-published answer. */

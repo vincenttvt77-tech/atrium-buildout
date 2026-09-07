@@ -6,6 +6,7 @@
  * the entire live-inventory discipline, and it is invisible until someone is quoted it.
  */
 import { readFile } from 'node:fs/promises'
+import { findRentFigure } from './rent-guard.mjs'
 
 const VOLATILE = new Set(['unit_availability', 'pricing', 'tour_slot_availability',
   'application_status', 'account_status', 'work_order_status'])
@@ -54,7 +55,6 @@ const available = (units ?? []).filter((u) => u.status === 'available')
 if (available.length === 0) fail('inventory.json', 'nothing is available — the agent can never quote')
 
 // ---- knowledge base
-const RENT = /\$\s?\d{1,2},?\d{3}\b|\b\d{1,2},\d{3}\s?(?:a month|per month|\/month|monthly)/i
 const seen = new Set()
 
 for (const a of articles ?? []) {
@@ -66,13 +66,16 @@ for (const a of articles ?? []) {
   else if (RESTRICTED.has(a.topic)) fail(w, `topic "${a.topic}" is restricted — must escalate, never be answered`)
   else if (!POLICY.has(a.topic)) fail(w, `topic "${a.topic}" is not a valid PolicyTopic`)
 
+  // in_review and draft are legitimate states — the article simply will not be served.
+  // Published-with-no-approver is the dangerous one: it claims approval it does not have.
   if (a.status !== 'published') warn(w, `status "${a.status}" — will not be served`)
-  if (!a.approvedBy) fail(w, 'approvedBy is null — an AI answer cannot become approved policy')
+  else if (!a.approvedBy) fail(w, 'published but approvedBy is null — an AI answer cannot become approved policy')
   if (Number.isNaN(Date.parse(a.reviewBy ?? ''))) fail(w, 'reviewBy unparseable')
   else if (new Date(a.reviewBy) <= NOW) fail(w, `reviewBy ${a.reviewBy} is past — will not be served`)
   if (!a.source) warn(w, 'no source cited')
 
-  if (RENT.test(a.answer ?? '')) fail(w, `answer contains a rent figure: "${(a.answer.match(RENT) ?? [])[0]}" — rents come from live inventory only`)
+  const rent = findRentFigure(a.answer)
+  if (rent) fail(w, `answer freezes a rent: ${rent.matched} — "${rent.context.slice(0, 70)}…". Rents come from live inventory only.`)
 
   const q = (a.question ?? '').toLowerCase()
   for (const [pat, why] of [
@@ -82,7 +85,18 @@ for (const a of articles ?? []) {
   ]) if (pat.test(q)) fail(w, `question concerns ${why} — must escalate, not be answered by an article`)
 }
 
-if ((articles ?? []).length < 10) warn('knowledge.json', `only ${(articles ?? []).length} articles — the agent will refuse a lot`)
+const servable = (articles ?? []).filter((a) => a.status === 'published' && a.approvedBy)
+if (servable.length < 10) warn('knowledge.json', `only ${servable.length} servable articles — the agent will refuse a lot`)
+
+// Two published articles answering the same question is not an error, but the agent will
+// silently pick one, so it is worth knowing about.
+const byQuestion = new Map()
+for (const a of servable) {
+  const k = (a.question ?? '').toLowerCase().replace(/[^a-z0-9 ]/g, '').trim()
+  byQuestion.set(k, (byQuestion.get(k) ?? 0) + 1)
+}
+const dupes = [...byQuestion.entries()].filter(([, n]) => n > 1)
+if (dupes.length) warn('knowledge.json', `${dupes.length} questions have more than one published answer`)
 
 // ---- report
 const errors = problems.filter((p) => p.severity === 'error')
