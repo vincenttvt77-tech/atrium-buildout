@@ -156,18 +156,59 @@ export function assistantConfig(opts: AssistantConfigOptions) {
       // does not make the answer arrive sooner; it makes the wait legible.
       fillerInjectionEnabled: true,
     },
-    transcriber: { provider: 'deepgram', model: 'nova-3', language: 'en' },
+    transcriber: {
+      provider: 'deepgram',
+      model: 'nova-3',
+      language: 'en',
+      /*
+       * Vapi's own schema says the 10ms default "can cause some missing words". It is the
+       * likeliest cause of a caller answering and the agent behaving as though they had
+       * not: the endpoint fires mid-utterance and everything after it never reaches the
+       * model at all.
+       */
+      endpointing: 300,
+      /*
+       * Transcripts below the confidence threshold are discarded silently. The default of
+       * 0.4 drops a mumbled "two months" without trace, and a dropped transcript looks
+       * exactly like a caller who said nothing.
+       */
+      confidenceThreshold: 0.25,
+    },
+
     server: { url: opts.serverUrl },
+
     /*
-     * Endpointing. The first setting truncated callers: 0.4s of silence is a breath, not
-     * the end of a sentence, so "I'm looking for... a one bedroom" was answered at the
-     * pause and the second half was lost. A second of patience costs a second; talking
-     * over someone costs the call.
+     * Endpointing, the part that decides when the caller has finished.
+     *
+     * waitSeconds alone does not fix truncation — it governs how long the agent waits
+     * before speaking, which is the wrong end of the pipeline. Truncation is decided by
+     * the endpointing plan below, and words spoken after the endpoint fires never reach
+     * the model.
+     *
+     * The waitFunction is the balanced preset rather than the conservative one: the
+     * conservative floor adds 700ms to every turn by design, and this caller's other
+     * complaint was that the agent is slow.
      */
     startSpeakingPlan: {
-      waitSeconds: 0.8,
-      smartEndpointingEnabled: true,
+      waitSeconds: 0.6,
+      smartEndpointingPlan: {
+        provider: 'livekit',
+        waitFunction: '(20 + 500 * sqrt(x) + 2500 * x^3 + 700 + 4000 * max(0, x-0.5)) / 2',
+      },
+      /*
+       * Callers answer leasing questions with bare numbers — "two months", "one bedroom",
+       * "thirty-eight hundred", a phone number. Those are exactly where a short endpoint
+       * cuts them off, so the rules below buy time on the questions that invite one.
+       */
+      customEndpointingRules: [
+        {
+          type: 'assistant',
+          regex: '(how many bedrooms|what.s your budget|when are you looking|move|phone number|email|spell)',
+          timeoutSeconds: 3,
+        },
+      ],
     },
+
     // Three words rather than two: two is short enough that "mm-hm" stops the agent
     // mid-sentence, which reads as the agent losing its place.
     stopSpeakingPlan: {
@@ -175,6 +216,7 @@ export function assistantConfig(opts: AssistantConfigOptions) {
       voiceSeconds: 0.2,
       backoffSeconds: 1,
     },
+
     silenceTimeoutSeconds: 30,
     maxDurationSeconds: 900,
     recordingEnabled: true,

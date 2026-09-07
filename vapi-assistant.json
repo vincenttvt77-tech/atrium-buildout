@@ -211,14 +211,26 @@
   "transcriber": {
     "provider": "deepgram",
     "model": "nova-3",
-    "language": "en"
+    "language": "en",
+    "endpointing": 300,
+    "confidenceThreshold": 0.25
   },
   "server": {
     "url": "https://ghost-building.vercel.app/api/vapi"
   },
   "startSpeakingPlan": {
-    "waitSeconds": 0.8,
-    "smartEndpointingEnabled": true
+    "waitSeconds": 0.6,
+    "smartEndpointingPlan": {
+      "provider": "livekit",
+      "waitFunction": "(20 + 500 * sqrt(x) + 2500 * x^3 + 700 + 4000 * max(0, x-0.5)) / 2"
+    },
+    "customEndpointingRules": [
+      {
+        "type": "assistant",
+        "regex": "(how many bedrooms|what.s your budget|when are you looking|move|phone number|email|spell)",
+        "timeoutSeconds": 3
+      }
+    ]
   },
   "stopSpeakingPlan": {
     "numWords": 3,
