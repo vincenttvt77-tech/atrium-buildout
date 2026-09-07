@@ -35,7 +35,7 @@
 .fp__figure{margin-bottom:clamp(26px,3.2vw,40px)}
 .fp__sheet{display:block;width:max-content;max-width:100%;background:#F4F1EA;
   border:1px solid var(--line-soft);padding:10px}
-.fp__sheet img{display:block;width:auto;max-width:100%;height:auto}
+.fp__sheet img{display:block;width:auto;max-width:100%;height:auto;aspect-ratio:attr(width) / attr(height)}
 .fp__figure figcaption{display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap;
   max-width:940px;font-size:11.5px;letter-spacing:.11em;text-transform:uppercase}
 .fp__figure figcaption a{color:var(--accent);text-decoration:none;
@@ -51,8 +51,8 @@
 .fp__empty a{color:var(--accent)}
 .fp .plan-panel__desc,.fp .fineprint{max-width:66ch}
 @media (max-width:900px){
-  .fp__sheet{width:auto;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:8px}
-  .fp__sheet img{max-width:none}
+  .fp__sheet{width:100%;padding:8px}
+  .fp__sheet img{width:100%;max-width:100%}
 }
 .u-gross{display:block;font-size:12px;color:var(--muted);margin-top:6px;letter-spacing:.02em;
   font-variant-numeric:tabular-nums}
@@ -146,10 +146,10 @@
     <article class="fp" id="plan-s1" data-beds="0" data-collection="">
   <figure class="fp__figure">
     <div class="fp__sheet">
-      <img src="/floorplans/s1.svg" loading="lazy" decoding="async"
+      <img src="/floorplans/s1.svg" width="472" height="436" loading="lazy" decoding="async"
            alt="Architectural floor plan of the S1 residence at The Larkin, studio, 496 square feet, north at the top">
     </div>
-    <figcaption><span>Plan S1 &middot; north is up &middot; all plans drawn to one scale</span>
+    <figcaption><span>Plan S1 &middot; north is up &middot; drawn to scale, scale bar on the sheet</span>
       <a href="/floorplans/s1.svg" target="_blank" rel="noopener">Open the drawing</a></figcaption>
   </figure>
 
@@ -189,10 +189,10 @@
 <article class="fp" id="plan-s2" data-beds="0" data-collection="">
   <figure class="fp__figure">
     <div class="fp__sheet">
-      <img src="/floorplans/s2.svg" loading="lazy" decoding="async"
+      <img src="/floorplans/s2.svg" width="493" height="464" loading="lazy" decoding="async"
            alt="Architectural floor plan of the S2 residence at The Larkin, alcove studio, 578 square feet, north at the top">
     </div>
-    <figcaption><span>Plan S2 &middot; north is up &middot; all plans drawn to one scale</span>
+    <figcaption><span>Plan S2 &middot; north is up &middot; drawn to scale, scale bar on the sheet</span>
       <a href="/floorplans/s2.svg" target="_blank" rel="noopener">Open the drawing</a></figcaption>
   </figure>
 
@@ -232,10 +232,10 @@
 <article class="fp" id="plan-a1" data-beds="1" data-collection="">
   <figure class="fp__figure">
     <div class="fp__sheet">
-      <img src="/floorplans/a1.svg" loading="lazy" decoding="async"
+      <img src="/floorplans/a1.svg" width="535" height="485" loading="lazy" decoding="async"
            alt="Architectural floor plan of the A1 residence at The Larkin, one bedroom, 688 square feet, north at the top">
     </div>
-    <figcaption><span>Plan A1 &middot; north is up &middot; all plans drawn to one scale</span>
+    <figcaption><span>Plan A1 &middot; north is up &middot; drawn to scale, scale bar on the sheet</span>
       <a href="/floorplans/a1.svg" target="_blank" rel="noopener">Open the drawing</a></figcaption>
   </figure>
 
@@ -275,10 +275,10 @@
 <article class="fp" id="plan-a2" data-beds="1" data-collection="">
   <figure class="fp__figure">
     <div class="fp__sheet">
-      <img src="/floorplans/a2.svg" loading="lazy" decoding="async"
+      <img src="/floorplans/a2.svg" width="542" height="567" loading="lazy" decoding="async"
            alt="Architectural floor plan of the A2 residence at The Larkin, one bedroom with balcony, 731 square feet, north at the top">
     </div>
-    <figcaption><span>Plan A2 &middot; north is up &middot; all plans drawn to one scale</span>
+    <figcaption><span>Plan A2 &middot; north is up &middot; drawn to scale, scale bar on the sheet</span>
       <a href="/floorplans/a2.svg" target="_blank" rel="noopener">Open the drawing</a></figcaption>
   </figure>
 
@@ -318,10 +318,10 @@
 <article class="fp" id="plan-a3" data-beds="1" data-collection="">
   <figure class="fp__figure">
     <div class="fp__sheet">
-      <img src="/floorplans/a3.svg" loading="lazy" decoding="async"
+      <img src="/floorplans/a3.svg" width="584" height="520" loading="lazy" decoding="async"
            alt="Architectural floor plan of the A3 residence at The Larkin, one bedroom and den, 848 square feet, north at the top">
     </div>
-    <figcaption><span>Plan A3 &middot; north is up &middot; all plans drawn to one scale</span>
+    <figcaption><span>Plan A3 &middot; north is up &middot; drawn to scale, scale bar on the sheet</span>
       <a href="/floorplans/a3.svg" target="_blank" rel="noopener">Open the drawing</a></figcaption>
   </figure>
 
@@ -361,10 +361,10 @@
 <article class="fp" id="plan-b1" data-beds="2" data-collection="">
   <figure class="fp__figure">
     <div class="fp__sheet">
-      <img src="/floorplans/b1.svg" loading="lazy" decoding="async"
+      <img src="/floorplans/b1.svg" width="535" height="646" loading="lazy" decoding="async"
            alt="Architectural floor plan of the B1 residence at The Larkin, two bedroom, 1,012 square feet, north at the top">
     </div>
-    <figcaption><span>Plan B1 &middot; north is up &middot; all plans drawn to one scale</span>
+    <figcaption><span>Plan B1 &middot; north is up &middot; drawn to scale, scale bar on the sheet</span>
       <a href="/floorplans/b1.svg" target="_blank" rel="noopener">Open the drawing</a></figcaption>
   </figure>
 
@@ -404,10 +404,10 @@
 <article class="fp" id="plan-b2" data-beds="2" data-collection="">
   <figure class="fp__figure">
     <div class="fp__sheet">
-      <img src="/floorplans/b2.svg" loading="lazy" decoding="async"
+      <img src="/floorplans/b2.svg" width="621" height="660" loading="lazy" decoding="async"
            alt="Architectural floor plan of the B2 residence at The Larkin, two bedroom with balcony, 1,046 square feet, north at the top">
     </div>
-    <figcaption><span>Plan B2 &middot; north is up &middot; all plans drawn to one scale</span>
+    <figcaption><span>Plan B2 &middot; north is up &middot; drawn to scale, scale bar on the sheet</span>
       <a href="/floorplans/b2.svg" target="_blank" rel="noopener">Open the drawing</a></figcaption>
   </figure>
 
@@ -447,10 +447,10 @@
 <article class="fp" id="plan-b3" data-beds="2" data-collection="West Collection">
   <figure class="fp__figure">
     <div class="fp__sheet">
-      <img src="/floorplans/b3.svg" loading="lazy" decoding="async"
+      <img src="/floorplans/b3.svg" width="684" height="681" loading="lazy" decoding="async"
            alt="Architectural floor plan of the B3 residence at The Larkin, two bedroom, west collection, 1,148 square feet, north at the top">
     </div>
-    <figcaption><span>Plan B3 &middot; north is up &middot; all plans drawn to one scale</span>
+    <figcaption><span>Plan B3 &middot; north is up &middot; drawn to scale, scale bar on the sheet</span>
       <a href="/floorplans/b3.svg" target="_blank" rel="noopener">Open the drawing</a></figcaption>
   </figure>
 
@@ -490,10 +490,10 @@
 <article class="fp" id="plan-c1" data-beds="3" data-collection="">
   <figure class="fp__figure">
     <div class="fp__sheet">
-      <img src="/floorplans/c1.svg" loading="lazy" decoding="async"
+      <img src="/floorplans/c1.svg" width="724" height="590" loading="lazy" decoding="async"
            alt="Architectural floor plan of the C1 residence at The Larkin, three bedroom, 1,332 square feet, north at the top">
     </div>
-    <figcaption><span>Plan C1 &middot; north is up &middot; all plans drawn to one scale</span>
+    <figcaption><span>Plan C1 &middot; north is up &middot; drawn to scale, scale bar on the sheet</span>
       <a href="/floorplans/c1.svg" target="_blank" rel="noopener">Open the drawing</a></figcaption>
   </figure>
 
@@ -533,10 +533,10 @@
 <article class="fp" id="plan-c2" data-beds="3" data-collection="West Collection">
   <figure class="fp__figure">
     <div class="fp__sheet">
-      <img src="/floorplans/c2.svg" loading="lazy" decoding="async"
+      <img src="/floorplans/c2.svg" width="899" height="625" loading="lazy" decoding="async"
            alt="Architectural floor plan of the C2 residence at The Larkin, three bedroom, west collection, 1,512 square feet, north at the top">
     </div>
-    <figcaption><span>Plan C2 &middot; north is up &middot; all plans drawn to one scale</span>
+    <figcaption><span>Plan C2 &middot; north is up &middot; drawn to scale, scale bar on the sheet</span>
       <a href="/floorplans/c2.svg" target="_blank" rel="noopener">Open the drawing</a></figcaption>
   </figure>
 
