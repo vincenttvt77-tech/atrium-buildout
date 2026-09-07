@@ -1,0 +1,568 @@
+{
+  "comment": "Demo call history for scripts/dev-ops.mjs. Each call has exactly the keys GET /api/vapi returns per call (src/ops/vapi-calls.ts VapiCall). startedAt is relative New York wall time ('-2d 11:05' = two days ago at 11:05am); endedAt null = startedAt + durationSeconds. A book_tour slotId of '$slot:+1@14:00' is replaced with a real open slot id from GET /api/calendar (tomorrow, 2pm NY, or the nearest later slot that day); {{tour_when}}, {{tour_day}}, {{tour_date}}, {{tour_time}} in any text become that slot's time. With --seed, every tool result is replaced by what the real handler returned. See README.md.",
+  "blocks": [
+    {
+      "target": "+2",
+      "reason": "Fire alarm inspection — no tours"
+    },
+    {
+      "target": "+1@10:00",
+      "reason": "Residence 13L being photographed"
+    },
+    {
+      "target": "+1@10:30",
+      "reason": "Residence 13L being photographed"
+    },
+    {
+      "target": "+4@15:00",
+      "reason": "Leasing team meeting"
+    }
+  ],
+  "staff": [
+    {
+      "action": "note",
+      "phone": "+13475550163",
+      "text": "name: Tomás Herrera"
+    },
+    {
+      "action": "note",
+      "phone": "+17185550129",
+      "text": "name: Lena Okafor"
+    },
+    {
+      "action": "note",
+      "phone": "+17185550129",
+      "text": "Partner is Sam. They liked 13L — offer it again first when they call back."
+    },
+    {
+      "action": "followup_status",
+      "phone": "+19175550188",
+      "kind": "confirm_tour",
+      "status": "done"
+    },
+    {
+      "action": "followup_status",
+      "phone": "+19175550188",
+      "kind": "collect_email",
+      "status": "skipped"
+    }
+  ],
+  "calls": [
+    {
+      "id": "dev-call-01",
+      "startedAt": "-3d 14:40",
+      "endedAt": null,
+      "durationSeconds": 372,
+      "endedReason": "customer-ended-call",
+      "customerNumber": "+19175550188",
+      "transcript": "AI: Thanks for calling The Larkin. I'm an AI assistant for the building and this call is recorded — how can I help?\nUser: Hi, yeah, I'm looking for a one bedroom. I saw the building on StreetEasy.\nAI: Happy to help with that. When are you looking to move?\nUser: First of October, maybe a little after — my lease is up end of September.\nAI: Got it. And a one bedroom — is that firm, or would a one bedroom with a den work too?\nUser: A one bedroom is fine. A den would be nice but not a must.\nAI: And roughly what monthly rent are you working with?\nUser: Around five thousand. Five two at the most.\nAI: Thanks. Let me check what's open for October. I have a few one bedrooms in your range. Residence 14C is a One Bedroom, 688 square feet, $4,910 a month, available October first, with one month free on a 14-month lease. There's also 18J, a One Bedroom and Den at $4,935 from October 5th, and 08E at $4,475 from October 24th.\nUser: 14C sounds right. What floor is that?\nAI: 14C is on the fourteenth floor, facing east over the East River and the Midtown skyline. Would you like to come and see it?\nUser: Yeah. Quick question first — is there parking in the building?\nAI: There is — an 84-space attended garage in the cellar with the entrance on 5th Street, staffed 24 hours. A space runs $425 a month, month to month with 30 days' notice.\nUser: Okay, good. Can I come by tomorrow?\nAI: Let me look at the calendar. Tomorrow I have 10, 10:30, 11 or 11:30 in the morning, or later in the afternoon.\nUser: Eleven works.\nAI: Can I get your name for the booking?\nUser: Marcus Bell.\nAI: You're all set, Marcus. I've got you down for {{tour_when}} to see residence 14C. Would you like the confirmation by email as well?\nUser: I'll just take the text, thanks. See you tomorrow.\nAI: See you {{tour_day}}, Marcus. Thanks for calling.",
+      "recordingUrl": "https://example.com/recordings/dev-call-01.wav",
+      "toolCalls": [
+        {
+          "name": "capture_signal",
+          "arguments": {
+            "signal": "moveInTiming",
+            "value": "2026-10-01",
+            "excerpt": "First of October, maybe a little after — my lease is up end of September"
+          },
+          "result": "Got it. Next, ask about how many bedrooms."
+        },
+        {
+          "name": "capture_signal",
+          "arguments": {
+            "signal": "bedrooms",
+            "value": "1",
+            "excerpt": "A one bedroom is fine. A den would be nice but not a must"
+          },
+          "result": "Got it. You have enough to check availability now."
+        },
+        {
+          "name": "capture_signal",
+          "arguments": {
+            "signal": "budget",
+            "value": "5000",
+            "excerpt": "Around five thousand. Five two at the most"
+          },
+          "result": "Got it. You have enough to check availability now."
+        },
+        {
+          "name": "check_availability",
+          "arguments": {
+            "reason": "caller wants a one bedroom around $5,000 for early October"
+          },
+          "result": "Available in their window and range — quote exactly these:\nUnit 14C: 1 bed, 1 bath, 688 sq ft, $4,910/month, available October 1. Concession: One month free on a 14-month lease, signed by December 31, 2026. East River and the Midtown skyline over Gantry Plaza State Park\nUnit 18J: 1 bed, 1.5 bath, 848 sq ft, $4,935/month, available October 5. Concession: One month free on a 14-month lease, signed by December 31, 2026. Court Square and the Citigroup Building\nUnit 08E: 1 bed, 1 bath, 735 sq ft, $4,475/month, available October 24. Concession: One month free on a 14-month lease, signed by December 31, 2026. South over Hunter's Point South Park\n\nSlightly above their range: Unit 22H at $5,290 — offer this ONLY after acknowledging it is over what they said.\n\nAlso, if they can wait a little:\nComing up a bit later: Unit 17H, 1 bed, $5,070/month, free November 20.\nComing up a bit later: Unit 24J, 1 bed, $5,195/month, free December 15.\nSay it warmly — something like \"we've got this by the time you're looking to move, and a couple more opening up after if you're able to wait.\" Do NOT call these unavailable.\n\nThere are also 09C, 10J in their range and window — mention that more exist and offer to go through them. If they ask about one by name, look it up."
+        },
+        {
+          "name": "answer_question",
+          "arguments": {
+            "question": "Is there parking in the building?",
+            "topic": "parking"
+          },
+          "result": "There is an 84-space attended garage in the cellar with the entrance on 5th Street, staffed 24 hours. A space runs $425 a month on a license that stays month to month with 30 days' notice."
+        },
+        {
+          "name": "list_tour_slots",
+          "arguments": {
+            "preferredDate": "{{tour_iso}}"
+          },
+          "result": "Real open tour times — offer only these, and use the slotId when booking:\nslot-2026-09-04T21:00 — Friday, September 4 at 5:00 PM\nslot-2026-09-04T21:30 — Friday, September 4 at 5:30 PM\nslot-2026-09-05T14:00 — Saturday, September 5 at 10:00 AM\nslot-2026-09-05T14:30 — Saturday, September 5 at 10:30 AM\nslot-2026-09-05T15:00 — Saturday, September 5 at 11:00 AM\nslot-2026-09-05T15:30 — Saturday, September 5 at 11:30 AM"
+        },
+        {
+          "name": "book_tour",
+          "arguments": {
+            "slotId": "$slot:-2@11:00",
+            "prospectName": "Marcus Bell",
+            "unitId": "14C"
+          },
+          "result": "You're all set, Marcus Bell. I've got you down for {{tour_when}}. You'll get a confirmation by email shortly."
+        }
+      ],
+      "cost": 0.47
+    },
+    {
+      "id": "dev-call-02",
+      "startedAt": "-2d 11:05",
+      "endedAt": null,
+      "durationSeconds": 331,
+      "endedReason": "customer-ended-call",
+      "customerNumber": "+15165550142",
+      "transcript": "AI: Thanks for calling The Larkin. I'm an AI assistant for the building and this call is recorded — how can I help?\nUser: Hi, we're looking at two bedrooms in Long Island City. Is anything available in November?\nAI: Yes — let me get a couple of details so I only quote what actually fits. November first, or later in the month?\nUser: November first. Our lease ends October 31st.\nAI: And two bedrooms — is that for roommates, or a couple?\nUser: A couple, with a home office. So two bedrooms.\nAI: Got it. Do you have a monthly budget in mind?\nUser: Seven thousand is the ceiling. Less would be lovely.\nAI: Understood. Anything else I should know — pets, parking?\nUser: We have two cats. Is that okay?\nAI: Two cats are fine. The building allows two pets per residence, dogs or cats, up to fifty pounds each, with no pet fee, no pet deposit and no monthly pet rent.\nUser: Oh, that's great.\nAI: Let me check what's open for November. Two residences fit. 13L is a Two Bedroom, 985 square feet, $5,875 a month, available October 22nd, with one month free on a 14-month lease and views of the Queensboro Bridge. 21B is $6,925, available September 26th, on the twenty-first floor with East River views. Slightly above your range there's also 26B at $7,225 and 15D at $7,140, if you wanted to stretch.\nUser: 13L for sure. Can we see it this week?\nAI: I have {{tour_day}} at {{tour_time}}, or a few times later that afternoon. Would either work?\nUser: {{tour_day}} at {{tour_time}} is perfect.\nAI: Can I get a name for the booking, and an email for the confirmation?\nUser: Priya Raman. P-R-I-Y-A, Raman. And priya.raman at example dot com.\nAI: You're all set, Priya — {{tour_when}} to see residence 13L. You'll get a confirmation by email shortly.\nUser: Thanks so much. Bye.",
+      "recordingUrl": "https://example.com/recordings/dev-call-02.wav",
+      "toolCalls": [
+        {
+          "name": "capture_signal",
+          "arguments": {
+            "signal": "moveInTiming",
+            "value": "2026-11-01",
+            "excerpt": "November first. Our lease ends October 31st"
+          },
+          "result": "Got it. Next, ask about how many bedrooms."
+        },
+        {
+          "name": "capture_signal",
+          "arguments": {
+            "signal": "bedrooms",
+            "value": "2",
+            "excerpt": "A couple, with a home office. So two bedrooms"
+          },
+          "result": "Got it. You have enough to check availability now."
+        },
+        {
+          "name": "capture_signal",
+          "arguments": {
+            "signal": "budget",
+            "value": "7000",
+            "excerpt": "Seven thousand is the ceiling. Less would be lovely"
+          },
+          "result": "Got it. You have enough to check availability now."
+        },
+        {
+          "name": "capture_signal",
+          "arguments": {
+            "signal": "pets",
+            "value": "two cats",
+            "excerpt": "We have two cats. Is that okay?"
+          },
+          "result": "Got it. You have enough to check availability now."
+        },
+        {
+          "name": "answer_question",
+          "arguments": {
+            "question": "Are you pet friendly? We have two cats.",
+            "topic": "pet_policy"
+          },
+          "result": "Yes. Two pets per residence, dogs or cats, up to 50 pounds each. There is no pet fee, no pet deposit, and no monthly pet rent — New York does not permit them. Pets are registered at lease signing, and there is a restricted breed list from the building's insurer, so tell me the breed and I can check it."
+        },
+        {
+          "name": "check_availability",
+          "arguments": {
+            "reason": "caller wants a two bedroom up to $7,000 for November 1"
+          },
+          "result": "Available in their window and range — quote exactly these:\nUnit 13L: 2 bed, 2 bath, 985 sq ft, $5,875/month, available October 22. Concession: One month free on a 14-month lease, signed by December 31, 2026. Queensboro Bridge to the north, Court Square to the east\nUnit 21B: 2 bed, 2 bath, 1012 sq ft, $6,925/month, available September 26. Concession: One month free on a 14-month lease, signed by December 31, 2026. East River and the Midtown skyline, Empire State Building on the left\n\nSlightly above their range: Unit 15D at $7,140 — offer this ONLY after acknowledging it is over what they said.\nSlightly above their range: Unit 26B at $7,225 — offer this ONLY after acknowledging it is over what they said."
+        },
+        {
+          "name": "list_tour_slots",
+          "arguments": {},
+          "result": "Real open tour times — offer only these, and use the slotId when booking:\nslot-2026-09-05T17:30 — Saturday, September 5 at 1:30 PM\nslot-2026-09-05T18:00 — Saturday, September 5 at 2:00 PM\nslot-2026-09-05T18:30 — Saturday, September 5 at 2:30 PM\nslot-2026-09-05T19:00 — Saturday, September 5 at 3:00 PM\nslot-2026-09-05T19:30 — Saturday, September 5 at 3:30 PM\nslot-2026-09-05T20:00 — Saturday, September 5 at 4:00 PM"
+        },
+        {
+          "name": "book_tour",
+          "arguments": {
+            "slotId": "$slot:+1@14:00",
+            "prospectName": "Priya Raman",
+            "prospectEmail": "priya.raman@example.com",
+            "unitId": "13L"
+          },
+          "result": "You're all set, Priya Raman. I've got you down for {{tour_when}}. You'll get a confirmation by email shortly."
+        }
+      ],
+      "cost": 0.41
+    },
+    {
+      "id": "dev-call-03",
+      "startedAt": "-2d 15:30",
+      "endedAt": null,
+      "durationSeconds": 185,
+      "endedReason": "customer-ended-call",
+      "customerNumber": "+15165550195",
+      "transcript": "AI: Thanks for calling The Larkin. I'm an AI assistant for the building and this call is recorded — how can I help?\nUser: Hi. Do you have any four bedrooms?\nAI: Let me check. When are you looking to move, and is four bedrooms firm?\nUser: Middle of October. And yes — four bedrooms, we're a family of six.\nAI: Understood. Checking now. I'm sorry — we don't have a four bedroom available. The largest layouts in the building are three bedrooms. Would a three bedroom work, or is four a must?\nUser: No, we need four bedrooms. Three won't work for us.\nAI: I understand. I'll make a note of that, and if it ever changes someone from the office can reach out. Is there anything else I can help with?\nUser: No, that's it. Thanks anyway.\nAI: Thanks for calling.",
+      "recordingUrl": null,
+      "toolCalls": [
+        {
+          "name": "capture_signal",
+          "arguments": {
+            "signal": "moveInTiming",
+            "value": "2026-10-15",
+            "excerpt": "Middle of October"
+          },
+          "result": "Got it. Next, ask about how many bedrooms."
+        },
+        {
+          "name": "capture_signal",
+          "arguments": {
+            "signal": "bedrooms",
+            "value": "4",
+            "excerpt": "four bedrooms, we're a family of six"
+          },
+          "result": "Got it. You have enough to check availability now."
+        },
+        {
+          "name": "check_availability",
+          "arguments": {
+            "reason": "caller needs four bedrooms for mid October"
+          },
+          "result": "We do not have that bedroom count available. Say so plainly, ask whether a different size would work, and capture the mismatch."
+        },
+        {
+          "name": "capture_loss_reason",
+          "arguments": {
+            "kind": "bedroom_mismatch",
+            "detail": "wants 4 bedrooms; the largest layout in the building is 3",
+            "evidence": "No, we need four bedrooms. Three won't work for us."
+          },
+          "result": "Noted."
+        }
+      ],
+      "cost": 0.22
+    },
+    {
+      "id": "dev-call-04",
+      "startedAt": "-1d 09:58",
+      "endedAt": null,
+      "durationSeconds": 19,
+      "endedReason": "customer-ended-call",
+      "customerNumber": "+12015550174",
+      "transcript": "AI: Thanks for calling The Larkin. I'm an AI assistant for the building and this call is recorded — how can I help?\nUser: Uh — sorry, is this the Larkin restaurant?\nAI: This is The Larkin, a residential building in Long Island City. If you were looking for a restaurant, I'm afraid this is the wrong number.\nUser: Yeah, wrong number. Sorry about that.",
+      "recordingUrl": null,
+      "toolCalls": [],
+      "cost": 0.03
+    },
+    {
+      "id": "dev-call-05",
+      "startedAt": "-1d 12:15",
+      "endedAt": null,
+      "durationSeconds": 288,
+      "endedReason": "assistant-said-end-call-phrase",
+      "customerNumber": "+13475550163",
+      "transcript": "AI: Thanks for calling The Larkin. I'm an AI assistant for the building and this call is recorded — how can I help?\nUser: Hi, I'm interested in a one bedroom for mid November.\nAI: Great — one bedroom, mid November. Let me note that. Do you have a budget in mind?\nUser: Before we get to that — I have a service dog. Is that going to be a problem with the pet policy?\nAI: That's something a member of the team needs to handle directly, so I'm going to pass it to the leasing manager rather than answer it myself. Can I take your name and the best number to reach you?\nUser: Sure. Tomás Herrera, and this number is fine.\nAI: Thank you, Tomás. The leasing manager will follow up with you. Is there anything else I can help with in the meantime?\nUser: No, I'll wait to hear from them.\nAI: Thanks for calling. Goodbye.",
+      "recordingUrl": "https://example.com/recordings/dev-call-05.wav",
+      "toolCalls": [
+        {
+          "name": "capture_signal",
+          "arguments": {
+            "signal": "moveInTiming",
+            "value": "2026-11-15",
+            "excerpt": "a one bedroom for mid November"
+          },
+          "result": "Got it. Next, ask about how many bedrooms."
+        },
+        {
+          "name": "capture_signal",
+          "arguments": {
+            "signal": "bedrooms",
+            "value": "1",
+            "excerpt": "I'm interested in a one bedroom"
+          },
+          "result": "Got it. You have enough to check availability now."
+        },
+        {
+          "name": "answer_question",
+          "arguments": {
+            "question": "I have a service dog. Is that going to be a problem with the pet policy?",
+            "topic": "pet_policy"
+          },
+          "result": "That is something a member of the team needs to handle directly. Tell the caller you are passing it to the leasing manager who will follow up, take their contact details, and do NOT attempt to answer, characterise, or redirect the question."
+        }
+      ],
+      "cost": 0.36
+    },
+    {
+      "id": "dev-call-06",
+      "startedAt": "-1d 18:40",
+      "endedAt": null,
+      "durationSeconds": 242,
+      "endedReason": "customer-ended-call",
+      "customerNumber": "+16315550117",
+      "transcript": "AI: Thanks for calling The Larkin. I'm an AI assistant for the building and this call is recorded — how can I help?\nUser: Hi, do you have any studios?\nAI: We do — let me check what's open. When are you looking to move?\nUser: October, as soon as possible really.\nAI: And it's a studio you're after, not a one bedroom?\nUser: Just a studio, it's only me.\nAI: What monthly rent are you working with?\nUser: Twenty-four hundred. That's my limit.\nAI: Thanks for being straight with me — let me check. I want to be honest with you: nothing is available at or below $2,400 right now. The lowest studio we have is $3,165 a month, which is $765 above what you said. Is that gap workable at all, or would you rather someone let you know if something closer opens up?\nUser: No — twenty-four hundred is really my limit. I can't do three thousand.\nAI: Completely understand. I'll make a note so the office can reach out if anything in your range opens up. Thanks for calling, and good luck with the search.\nUser: Thanks. Bye.",
+      "recordingUrl": null,
+      "toolCalls": [
+        {
+          "name": "capture_signal",
+          "arguments": {
+            "signal": "moveInTiming",
+            "value": "2026-10-01",
+            "excerpt": "October, as soon as possible really"
+          },
+          "result": "Got it. Next, ask about how many bedrooms."
+        },
+        {
+          "name": "capture_signal",
+          "arguments": {
+            "signal": "bedrooms",
+            "value": "studio",
+            "excerpt": "Just a studio, it's only me"
+          },
+          "result": "Got it. You have enough to check availability now."
+        },
+        {
+          "name": "capture_signal",
+          "arguments": {
+            "signal": "budget",
+            "value": "2400",
+            "excerpt": "Twenty-four hundred. That's my limit"
+          },
+          "result": "Got it. You have enough to check availability now."
+        },
+        {
+          "name": "check_availability",
+          "arguments": {
+            "reason": "studio at or under $2,400 for October"
+          },
+          "result": "Nothing is available at or below $2,400. The lowest available right now is $3,165 — $765 above what they said. Be straight with them about that. Do NOT pitch a more expensive unit as though it met their budget. Ask whether that gap is workable, or whether they would like to hear when something closer opens up."
+        },
+        {
+          "name": "capture_loss_reason",
+          "arguments": {
+            "kind": "priced_out",
+            "detail": "$765 over the stated $2,400 ceiling — the cheapest studio is $3,165",
+            "evidence": "No — twenty-four hundred is really my limit. I can't do three thousand."
+          },
+          "result": "Noted."
+        }
+      ],
+      "cost": 0.29
+    },
+    {
+      "id": "dev-call-07",
+      "startedAt": "0d 09:35",
+      "endedAt": null,
+      "durationSeconds": 110,
+      "endedReason": "customer-ended-call",
+      "customerNumber": "+19175550188",
+      "transcript": "AI: Thanks for calling The Larkin. I'm an AI assistant for the building and this call is recorded — how can I help?\nUser: Hi, this is Marcus Bell — I toured 14C on the weekend. I wanted to ask about the application before I put it in.\nAI: Of course, Marcus. What would you like to know?\nUser: How much is the application fee?\nAI: Twenty dollars per adult — that's the cap New York State sets, and it covers the credit and background check.\nUser: And my dad's going to cosign. He lives in California — is that okay?\nAI: Our guarantor has to reside in New York, New Jersey, Connecticut or Pennsylvania, so California wouldn't work. An institutional guarantor service is the usual way around that — the office can point you to the ones residents here have used.\nUser: Okay. I'll sort that out with the office. Thanks.\nAI: Thanks for calling, Marcus.",
+      "recordingUrl": null,
+      "toolCalls": [
+        {
+          "name": "answer_question",
+          "arguments": {
+            "question": "How much is the application fee?",
+            "topic": "application_requirements"
+          },
+          "result": "Twenty dollars per adult. That is the cap New York State sets, and it covers the credit and background check."
+        },
+        {
+          "name": "answer_question",
+          "arguments": {
+            "question": "My dad is going to cosign. He lives in California — is that okay?",
+            "topic": "application_requirements"
+          },
+          "result": "Our guarantor has to reside in New York, New Jersey, Connecticut, or Pennsylvania, so California would not work. An institutional guarantor service is the usual way around that, and I can point you to the ones residents here have used."
+        }
+      ],
+      "cost": 0.14
+    },
+    {
+      "id": "dev-call-08",
+      "startedAt": "0d 10:20",
+      "endedAt": null,
+      "durationSeconds": 310,
+      "endedReason": "customer-ended-call",
+      "customerNumber": "+17185550129",
+      "transcript": "AI: Thanks for calling The Larkin. I'm an AI assistant for the building and this call is recorded — how can I help?\nUser: Hi, my partner and I are looking for a two bedroom for December.\nAI: Happy to help. December first, or later in the month?\nUser: December first-ish. We're flexible by a week or two.\nAI: And two bedrooms — is that firm?\nUser: Two bedrooms, yes.\nAI: Do you have a monthly budget in mind?\nUser: Sixty-five hundred. Could go a bit over for the right place.\nAI: Let me check what's open. 13L is a Two Bedroom, 985 square feet, $5,875 a month, available October 22nd, with one month free on a 14-month lease and views of the Queensboro Bridge. Slightly above your range, 21B is $6,925 on the twenty-first floor with East River views.\nUser: 13L sounds interesting. What's the gym like?\nAI: The Works is 4,200 square feet on the third floor, with Technogym strength and cardio equipment, three Peloton bikes and a 40-foot turf lane.\nUser: Nice. Could we come and see 13L?\nAI: Of course. I have this afternoon from 12:30, or tomorrow morning. What suits?\nUser: Let me check with my partner first and call you back.\nAI: No problem — any of the leasing team can pick this up; just say you're interested in 13L. Thanks for calling.\nUser: Thanks, bye.",
+      "recordingUrl": "https://example.com/recordings/dev-call-08.wav",
+      "toolCalls": [
+        {
+          "name": "capture_signal",
+          "arguments": {
+            "signal": "moveInTiming",
+            "value": "2026-12-01",
+            "excerpt": "December first-ish. We're flexible by a week or two"
+          },
+          "result": "Got it. Next, ask about how many bedrooms."
+        },
+        {
+          "name": "capture_signal",
+          "arguments": {
+            "signal": "bedrooms",
+            "value": "2",
+            "excerpt": "Two bedrooms, yes"
+          },
+          "result": "Got it. You have enough to check availability now."
+        },
+        {
+          "name": "capture_signal",
+          "arguments": {
+            "signal": "budget",
+            "value": "6500",
+            "excerpt": "Sixty-five hundred. Could go a bit over for the right place"
+          },
+          "result": "Got it. You have enough to check availability now."
+        },
+        {
+          "name": "check_availability",
+          "arguments": {
+            "reason": "two bedroom around $6,500 for December"
+          },
+          "result": "Available in their window and range — quote exactly these:\nUnit 13L: 2 bed, 2 bath, 985 sq ft, $5,875/month, available October 22. Concession: One month free on a 14-month lease, signed by December 31, 2026. Queensboro Bridge to the north, Court Square to the east\n\nSlightly above their range: Unit 21B at $6,925 — offer this ONLY after acknowledging it is over what they said."
+        },
+        {
+          "name": "answer_question",
+          "arguments": {
+            "question": "What's the gym like?",
+            "topic": "amenities"
+          },
+          "result": "The Works is 4,200 square feet on three, with Technogym strength and cardio, three Peloton bikes, and a 40-foot turf sprint lane along the west wall. Your fob is the only key you need, and towels are stocked."
+        },
+        {
+          "name": "list_tour_slots",
+          "arguments": {},
+          "result": "Real open tour times — offer only these, and use the slotId when booking:\nslot-2026-09-07T16:30 — Monday, September 7 at 12:30 PM\nslot-2026-09-07T17:00 — Monday, September 7 at 1:00 PM\nslot-2026-09-07T17:30 — Monday, September 7 at 1:30 PM\nslot-2026-09-07T18:00 — Monday, September 7 at 2:00 PM\nslot-2026-09-07T18:30 — Monday, September 7 at 2:30 PM\nslot-2026-09-07T19:00 — Monday, September 7 at 3:00 PM"
+        }
+      ],
+      "cost": 0.38
+    },
+    {
+      "id": "dev-call-09",
+      "startedAt": "0d 11:45",
+      "endedAt": null,
+      "durationSeconds": 425,
+      "endedReason": "customer-ended-call",
+      "customerNumber": "+19295550151",
+      "transcript": "AI: Thanks for calling The Larkin. I'm an AI assistant for the building and this call is recorded — how can I help?\nUser: Hi! I'm looking for a one bedroom, ideally mid-October.\nAI: Let me get a couple of details. Mid-October — around the fifteenth?\nUser: Yes, the fifteenth or so.\nAI: And a one bedroom — firm on that?\nUser: A one bedroom, yes.\nAI: What monthly rent are you working with?\nUser: Forty-eight hundred.\nAI: Let me check what's open. Three one bedrooms fit. 08E is 735 square feet, $4,475 a month, available October 24th, with one month free on a 14-month lease and views south over Hunter's Point. 09C is $4,685 from November first, and 10J is a One Bedroom and Den at $4,585 from November 8th. Slightly above your range, 14C is $4,910 and available October first.\nUser: Is there parking? I have a car.\nAI: There's an 84-space attended garage in the cellar, staffed 24 hours, with the entrance on 5th Street. Spaces are assigned from a waitlist.\nUser: Okay. Tell me more about 08E.\nAI: Residence 08E is a One Bedroom, one bath, 735 square feet, $4,475 a month, available October 24th, with one month free on a 14-month lease. It faces south over Hunter's Point.\nUser: I'd like to see it. I work until five — do you have anything after that this week?\nAI: I do. {{tour_day}} at {{tour_time}} is open, or a little earlier the same day.\nUser: {{tour_day}} at {{tour_time}}, please.\nAI: Can I get a name and an email for the confirmation?\nUser: Aisha Khan, and it's aisha.khan at example dot com.\nAI: You're all set, Aisha — {{tour_when}} to see residence 08E. You'll get a confirmation by email shortly.\nUser: Great, thank you!",
+      "recordingUrl": "https://example.com/recordings/dev-call-09.wav",
+      "toolCalls": [
+        {
+          "name": "capture_signal",
+          "arguments": {
+            "signal": "moveInTiming",
+            "value": "2026-10-15",
+            "excerpt": "ideally mid-October. Yes, the fifteenth or so"
+          },
+          "result": "Got it. Next, ask about how many bedrooms."
+        },
+        {
+          "name": "capture_signal",
+          "arguments": {
+            "signal": "bedrooms",
+            "value": "1",
+            "excerpt": "A one bedroom, yes"
+          },
+          "result": "Got it. You have enough to check availability now."
+        },
+        {
+          "name": "capture_signal",
+          "arguments": {
+            "signal": "budget",
+            "value": "4800",
+            "excerpt": "Forty-eight hundred"
+          },
+          "result": "Got it. You have enough to check availability now."
+        },
+        {
+          "name": "check_availability",
+          "arguments": {
+            "reason": "one bedroom up to $4,800 for mid October"
+          },
+          "result": "Available in their window and range — quote exactly these:\nUnit 08E: 1 bed, 1 bath, 735 sq ft, $4,475/month, available October 24. Concession: One month free on a 14-month lease, signed by December 31, 2026. South over Hunter's Point South Park\nUnit 09C: 1 bed, 1 bath, 688 sq ft, $4,685/month, available November 1. Concession: One month free on a 14-month lease, signed by December 31, 2026. East River and the Midtown skyline over Gantry Plaza State Park\nUnit 10J: 1 bed, 1.5 bath, 848 sq ft, $4,585/month, available November 8. Concession: One month free on a 14-month lease, signed by December 31, 2026. East over Vernon Boulevard toward Sunnyside Yards\n\nSlightly above their range: Unit 14C at $4,910 — offer this ONLY after acknowledging it is over what they said.\nSlightly above their range: Unit 18J at $4,935 — offer this ONLY after acknowledging it is over what they said."
+        },
+        {
+          "name": "answer_question",
+          "arguments": {
+            "question": "Is there parking? I have a car.",
+            "topic": "parking"
+          },
+          "result": "The garage is 84 attended spaces under the building, entered from 5th Street, staffed around the clock. A space is $425 a month on a license that runs month to month with thirty days' notice, and twelve of the spaces have Level 2 charging at no extra cost. There is a waitlist right now of about two months, 19 households deep, ordered by the day you asked. Guests park for $45 a day when there is room, motorcycles are $195, and the bike room on three is free with one tagged space per residence."
+        },
+        {
+          "name": "check_availability",
+          "arguments": {
+            "unitId": "08E",
+            "reason": "caller asked about 08E by name"
+          },
+          "result": "Residence 08E is available: 1 bed, 1 bath, 735 sq ft (One Bedroom), $4,475/month, available October 24. One month free on a 14-month lease, signed by December 31, 2026. South over Hunter's Point South Park. Quote exactly this."
+        },
+        {
+          "name": "list_tour_slots",
+          "arguments": {},
+          "result": "Real open tour times — offer only these, and use the slotId when booking:\nslot-2026-09-07T18:00 — Monday, September 7 at 2:00 PM\nslot-2026-09-07T18:30 — Monday, September 7 at 2:30 PM\nslot-2026-09-07T19:00 — Monday, September 7 at 3:00 PM\nslot-2026-09-07T19:30 — Monday, September 7 at 3:30 PM\nslot-2026-09-07T20:00 — Monday, September 7 at 4:00 PM\nslot-2026-09-07T20:30 — Monday, September 7 at 4:30 PM"
+        },
+        {
+          "name": "book_tour",
+          "arguments": {
+            "slotId": "$slot:+3@17:30",
+            "prospectName": "Aisha Khan",
+            "prospectEmail": "aisha.khan@example.com",
+            "unitId": "08E"
+          },
+          "result": "You're all set, Aisha Khan. I've got you down for {{tour_when}}. You'll get a confirmation by email shortly."
+        }
+      ],
+      "cost": 0.52
+    },
+    {
+      "id": "dev-call-10",
+      "startedAt": "0d 12:30",
+      "endedAt": null,
+      "durationSeconds": 65,
+      "endedReason": "customer-ended-call",
+      "customerNumber": "+16465550199",
+      "transcript": "AI: Thanks for calling The Larkin. I'm an AI assistant for the building and this call is recorded — how can I help?\nUser: Hi, what time is the leasing office open?\nAI: Monday and Tuesday 10 to 6, Wednesday and Thursday 10 to 7, Friday 10 to 6, Saturday 10 to 5, and Sunday 11 to 4.\nUser: Okay, I'll come by. Thanks.\nAI: Anything else I can help with — a particular size you're looking for?\nUser: No, I'll just come by. Bye.",
+      "recordingUrl": null,
+      "toolCalls": [
+        {
+          "name": "answer_question",
+          "arguments": {
+            "question": "What time is the leasing office open?",
+            "topic": "hours"
+          },
+          "result": "Monday and Tuesday 10 to 6, Wednesday and Thursday 10 to 7, Friday 10 to 6, Saturday 10 to 5, and Sunday 11 to 4. The gallery is on the ground floor with its own entrance on 5th Street."
+        }
+      ],
+      "cost": 0.08
+    },
+    {
+      "id": "dev-call-11",
+      "startedAt": "0d 12:52",
+      "endedAt": null,
+      "durationSeconds": 41,
+      "endedReason": "silence-timed-out",
+      "customerNumber": null,
+      "transcript": "AI: Thanks for calling The Larkin. I'm an AI assistant for the building and this call is recorded — how can I help?\nAI: Hello? I'm not hearing anything on the line.\nAI: If you can hear me, please call back any time — the number is on the website. Goodbye.",
+      "recordingUrl": null,
+      "toolCalls": [],
+      "cost": 0.05
+    },
+    {
+      "id": "dev-call-12",
+      "startedAt": "0d 13:05",
+      "endedAt": null,
+      "durationSeconds": 150,
+      "endedReason": "customer-ended-call",
+      "customerNumber": "+17185550166",
+      "transcript": "AI: Thanks for calling The Larkin. I'm an AI assistant for the building and this call is recorded — how can I help?\nUser: Hi, I live in 12G and there's water coming through the ceiling — my kitchen is flooding.\nAI: I'm sorry — let's deal with that right away. If it's safe to do so, switch off the power to the kitchen at the breaker and move anything electrical away from the water. I'm flagging this to the building team as an emergency now. Are you safe where you are?\nUser: Yeah, I'm fine, it's just coming down fast.\nAI: Okay. The 24-hour maintenance line on your resident portal is the fastest way to get someone up to you — please call that now, or the front desk. I've logged this as urgent for the team as well.\nUser: Okay, calling them now.\nAI: Please do. Thanks for calling.",
+      "recordingUrl": null,
+      "toolCalls": [],
+      "cost": 0.17
+    }
+  ]
+}

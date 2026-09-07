@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "bundle": "node scripts/build-api.mjs",
     "validate": "node scripts/validate-data.mjs",
-    "build:ops": "node scripts/build-ops.mjs"
+    "build:ops": "node scripts/build-ops.mjs",
+    "dev:ops": "node scripts/dev-ops.mjs"
   },
   "devDependencies": {
     "@types/node": "22.20.1",
