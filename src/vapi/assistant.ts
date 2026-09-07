@@ -222,12 +222,21 @@ export function assistantConfig(opts: AssistantConfigOptions) {
       ],
     },
 
-    // Three words rather than two: two is short enough that "mm-hm" stops the agent
-    // mid-sentence, which reads as the agent losing its place.
+    /*
+     * numWords stays at 0, the documented default and the recommended value.
+     *
+     * An earlier version raised it to 3 on the theory that a low threshold made the agent
+     * twitchy. That was backwards: above 0 the agent waits for transcribed words before
+     * it will stop, which adds 200-500ms and swallows short answers — the exact complaint.
+     * At 0 it uses voice activity and interrupts in 50-100ms, and Vapi already suppresses
+     * "okay", "yeah" and "right" internally, so it does not trip on backchannel.
+     */
     stopSpeakingPlan: {
-      numWords: 3,
+      numWords: 0,
       voiceSeconds: 0.2,
-      backoffSeconds: 1,
+      // Blocks all assistant audio after an interruption. The default of 1s reads as
+      // sluggish when a caller cuts in and then waits.
+      backoffSeconds: 0.8,
     },
 
     silenceTimeoutSeconds: 30,

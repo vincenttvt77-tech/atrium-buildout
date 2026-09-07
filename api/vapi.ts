@@ -11,6 +11,7 @@ import {
   type ToolContext,
 } from '../src/conversation/tools.ts'
 import { authorizeOps } from '../src/ops/session.ts'
+import { fetchCalls } from '../src/ops/vapi-calls.ts'
 import { bookTour } from '../src/booking/book.ts'
 import type { CalendarPort, TourSlot } from '../src/booking/types.ts'
 import { sayableStatus } from '../src/booking/book.ts'
@@ -240,10 +241,28 @@ export default async function handler(req: any, res: any) {
       return
     }
 
+    /*
+     * Calls come from Vapi, not from eventLog. On serverless each request may land on a
+     * different instance, so a dashboard request routinely queried an instance that had
+     * never seen the call and the log looked empty — the call was not lost, it was
+     * somewhere else. Vapi holds the authoritative record and needs no second store to
+     * drift from it.
+     *
+     * eventLog is still returned because it carries what this process decided — the quote
+     * gate, the priced-out gap, which article answered — that Vapi has no view of. It is
+     * supplementary now, not the source.
+     */
+    const history = await fetchCalls({ limit: 20 })
+
     res.status(200).json({
+      calls: history.ok ? history.calls : [],
+      callsError: history.ok ? null : history.reason,
+      callsConfigured: history.ok ? true : history.configured,
       events: eventLog,
       generatedAt: new Date().toISOString(),
-      note: 'In-memory, warm-instance scoped. Resets on cold start.',
+      note: history.ok
+        ? 'Calls from Vapi. Decision events are in-process and reset on cold start.'
+        : 'Call history unavailable — see callsError.',
     })
     return
   }

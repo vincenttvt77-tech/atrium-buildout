@@ -65,6 +65,23 @@
            border:1px solid var(--line);border-radius:5px;padding:3px 9px;cursor:pointer}
   .signout:hover{color:var(--ink);border-color:var(--muted)}
   @media(max-width:600px){.ev{grid-template-columns:1fr;gap:4px}.t{padding-top:0}}
+
+  .vcall{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+         margin-bottom:14px;overflow:hidden}
+  .vcall-h{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;
+           justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline}
+  .vcall-who{font-weight:600}
+  .vcall-meta{font:400 11.5px JetBrains Mono,ui-monospace,monospace;color:var(--muted)}
+  .tc{padding:9px 16px;border-bottom:1px solid var(--line);font-size:13px}
+  .tc:last-child{border-bottom:0}
+  .tc-name{font:500 12px JetBrains Mono,ui-monospace,monospace;color:var(--accent)}
+  .tc-args{color:var(--muted);font-size:12.5px;margin:3px 0}
+  .tc-res{white-space:pre-wrap;word-break:break-word;border-left:2px solid var(--line);
+          padding-left:10px;margin-top:4px;color:var(--ink)}
+  .tc-none{color:var(--danger);font-style:italic}
+  .tx{padding:11px 16px;white-space:pre-wrap;font-size:13px;line-height:1.55;
+      border-top:1px solid var(--line);max-height:280px;overflow:auto}
+  .tx summary{cursor:pointer;color:var(--muted);font-size:12.5px;padding:9px 16px}
 </style>
 </head>
 <body>
@@ -83,6 +100,9 @@
     when you are done.</div>
 
   <div class="tiles" id="tiles"></div>
+  <h2>Calls</h2>
+  <div id="calls-vapi"></div>
+
   <h2>Call activity</h2>
   <div id="calls"></div>
 
@@ -137,7 +157,43 @@ function describe(e){
   }
 }
 
+function renderCalls(d){
+  const el = document.getElementById('calls-vapi')
+  if (!el) return
+  if (d.callsError) {
+    el.innerHTML = `<div class="empty"><strong>Call history unavailable</strong>${escapeHtml(d.callsError)}
+      ${d.callsConfigured === false ? '<br>Set <code>VAPI_PRIVATE_KEY</code> in the Vercel project and redeploy.' : ''}</div>`
+    return
+  }
+  const calls = d.calls || []
+  if (!calls.length) {
+    el.innerHTML = `<div class="empty"><strong>No calls yet</strong>
+      Call <a class="tel" href="tel:+15169909252">(516) 990-9252</a>.</div>`
+    return
+  }
+  el.innerHTML = calls.map(c => {
+    const when = c.startedAt ? new Date(c.startedAt).toLocaleString('en-US',
+      {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '—'
+    const tools = (c.toolCalls||[]).map(t => `<div class="tc">
+        <span class="tc-name">${escapeHtml(t.name)}</span>
+        <div class="tc-args">${escapeHtml(JSON.stringify(t.arguments))}</div>
+        ${t.result
+          ? `<div class="tc-res">${escapeHtml(String(t.result).slice(0,600))}</div>`
+          : `<div class="tc-none">no result returned — this is what a hung call looks like</div>`}
+      </div>`).join('') || '<div class="tc tc-none">No tools were called on this call.</div>'
+    return `<div class="vcall">
+      <div class="vcall-h">
+        <span class="vcall-who">${escapeHtml(c.customerNumber || 'Unknown caller')}</span>
+        <span class="vcall-meta">${when} · ${c.durationSeconds!=null?c.durationSeconds+'s':'—'} · ${escapeHtml(c.endedReason||'')}</span>
+      </div>
+      ${tools}
+      ${c.transcript ? `<details><summary>Transcript</summary><div class="tx">${escapeHtml(c.transcript)}</div></details>` : ''}
+    </div>`
+  }).join('')
+}
+
 function render(data){
+  renderCalls(data)
   const evs = data.events || []
   const byCall = {}
   for(const e of evs){ (byCall[e.callId] ||= []).push(e) }
