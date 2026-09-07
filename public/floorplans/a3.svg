@@ -68,7 +68,7 @@
 <circle cx="212.6" cy="422.3" r="4.62" fill="none" stroke="#171A1C" stroke-width="0.65"/>
 <circle cx="226.6" cy="411.66" r="4.62" fill="none" stroke="#171A1C" stroke-width="0.65"/>
 <circle cx="226.6" cy="422.3" r="4.62" fill="none" stroke="#171A1C" stroke-width="0.65"/>
-<rect x="146.8" y="346.0" width="98.0" height="33.6" fill="none" stroke="#171A1C" stroke-width="1.0"/>
+<rect x="247.6" y="368.4" width="32.2" height="63.98" fill="none" stroke="#171A1C" stroke-width="0.9"/>
 <rect x="183.9" y="288.6" width="78.4" height="35.0" fill="none" stroke="#171A1C" stroke-width="0.85"/>
 <rect x="187.82" y="292.52" width="70.56" height="27.16" fill="none" stroke="#171A1C" stroke-width="0.6" rx="4.2"/>
 <circle cx="251.8" cy="306.1" r="1.54" fill="none" stroke="#171A1C" stroke-width="0.5"/>
@@ -103,8 +103,8 @@
 <text x="200.0" y="122.0" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="8.6" fill="#171A1C" letter-spacing="1.7" text-anchor="middle" font-weight="500">DEN</text>
 <rect x="164.0" y="124.62" width="72.0" height="12.0" fill="#F4F1EA"/>
 <text x="200.0" y="133.5" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="7" fill="#6E6B64" letter-spacing="0.7" text-anchor="middle" font-weight="400">9&#39;-0&quot; x 8&#39;-0&quot;</text>
-<rect x="211.64" y="362.62" width="43.92" height="11.6" fill="#F4F1EA"/>
-<text x="233.6" y="371.2" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="6.6" fill="#6E6B64" letter-spacing="1.2" text-anchor="middle" font-weight="500">KITCHEN</text>
+<rect x="155.64" y="359.82" width="43.92" height="11.6" fill="#F4F1EA"/>
+<text x="177.6" y="368.4" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="6.6" fill="#6E6B64" letter-spacing="1.2" text-anchor="middle" font-weight="500">KITCHEN</text>
 <rect x="209.27" y="275.22" width="31.86" height="12.4" fill="#F4F1EA"/>
 <text x="225.2" y="284.4" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="7.4" fill="#171A1C" letter-spacing="1.7" text-anchor="middle" font-weight="500">BATH</text>
 <rect x="189.2" y="287.02" width="72.0" height="12.0" fill="#F4F1EA"/>

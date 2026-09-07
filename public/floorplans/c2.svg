@@ -132,8 +132,8 @@
 <circle cx="454.8" cy="398.92" r="4.62" fill="none" stroke="#171A1C" stroke-width="0.65"/>
 <rect x="468.8" y="295.6" width="86.8" height="33.6" fill="none" stroke="#171A1C" stroke-width="0.9"/>
 <rect x="527.6" y="332.0" width="33.6" height="30.8" fill="none" stroke="#171A1C" stroke-width="0.9"/>
-<rect x="474.4" y="340.4" width="44.8" height="92.4" fill="none" stroke="#171A1C" stroke-width="1.0"/>
-<rect x="477.48" y="343.48" width="38.64" height="86.24" fill="none" stroke="#171A1C" stroke-width="0.55" opacity="0.6"/>
+<rect x="474.4" y="340.4" width="44.8" height="67.2" fill="none" stroke="#171A1C" stroke-width="1.0"/>
+<rect x="477.48" y="343.48" width="38.64" height="61.04" fill="none" stroke="#171A1C" stroke-width="0.55" opacity="0.6"/>
 <rect x="429.6" y="423.0" width="81.2" height="36.4" fill="none" stroke="#171A1C" stroke-width="0.85"/>
 <rect x="433.52" y="426.92" width="73.36" height="28.56" fill="none" stroke="#171A1C" stroke-width="0.6" rx="4.2"/>
 <circle cx="500.3" cy="441.2" r="1.54" fill="none" stroke="#171A1C" stroke-width="0.5"/>
@@ -180,14 +180,14 @@
 <text x="309.2" y="326.4" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="8.6" fill="#171A1C" letter-spacing="1.7" text-anchor="middle" font-weight="500">PRIMARY BEDROOM</text>
 <rect x="268.3" y="329.02" width="81.8" height="12.0" fill="#F4F1EA"/>
 <text x="309.2" y="337.9" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="7" fill="#6E6B64" letter-spacing="0.7" text-anchor="middle" font-weight="400">15&#39;-2&quot; x 17&#39;-8&quot;</text>
-<rect x="540.68" y="201.54" width="69.04" height="13.6" fill="#F4F1EA"/>
-<text x="575.2" y="211.6" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="8.6" fill="#171A1C" letter-spacing="1.7" text-anchor="middle" font-weight="500">BEDROOM 2</text>
-<rect x="534.3" y="214.22" width="81.8" height="12.0" fill="#F4F1EA"/>
-<text x="575.2" y="223.1" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="7" fill="#6E6B64" letter-spacing="0.7" text-anchor="middle" font-weight="400">12&#39;-0&quot; x 12&#39;-6&quot;</text>
-<rect x="714.28" y="209.94" width="69.04" height="13.6" fill="#F4F1EA"/>
-<text x="748.8" y="220.0" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="8.6" fill="#171A1C" letter-spacing="1.7" text-anchor="middle" font-weight="500">BEDROOM 3</text>
-<rect x="707.9" y="222.62" width="81.8" height="12.0" fill="#F4F1EA"/>
-<text x="748.8" y="231.5" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="7" fill="#6E6B64" letter-spacing="0.7" text-anchor="middle" font-weight="400">12&#39;-8&quot; x 13&#39;-6&quot;</text>
+<rect x="574.28" y="204.34" width="69.04" height="13.6" fill="#F4F1EA"/>
+<text x="608.8" y="214.4" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="8.6" fill="#171A1C" letter-spacing="1.7" text-anchor="middle" font-weight="500">BEDROOM 2</text>
+<rect x="567.9" y="217.02" width="81.8" height="12.0" fill="#F4F1EA"/>
+<text x="608.8" y="225.9" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="7" fill="#6E6B64" letter-spacing="0.7" text-anchor="middle" font-weight="400">12&#39;-0&quot; x 12&#39;-6&quot;</text>
+<rect x="745.08" y="218.34" width="69.04" height="13.6" fill="#F4F1EA"/>
+<text x="779.6" y="228.4" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="8.6" fill="#171A1C" letter-spacing="1.7" text-anchor="middle" font-weight="500">BEDROOM 3</text>
+<rect x="738.7" y="231.02" width="81.8" height="12.0" fill="#F4F1EA"/>
+<text x="779.6" y="239.9" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="7" fill="#6E6B64" letter-spacing="0.7" text-anchor="middle" font-weight="400">12&#39;-8&quot; x 13&#39;-6&quot;</text>
 <rect x="480.44" y="303.82" width="43.92" height="11.6" fill="#F4F1EA"/>
 <text x="502.4" y="312.4" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="6.6" fill="#6E6B64" letter-spacing="1.2" text-anchor="middle" font-weight="500">KITCHEN</text>
 <rect x="601.27" y="328.42" width="31.86" height="12.4" fill="#F4F1EA"/>
@@ -208,7 +208,6 @@
 <text x="785.2" y="500.0" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="6.6" fill="#6E6B64" letter-spacing="1.2" text-anchor="middle" font-weight="500">FOYER</text>
 <rect x="673.64" y="301.02" width="43.92" height="11.6" fill="#F4F1EA"/>
 <text x="695.6" y="309.6" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="6.6" fill="#6E6B64" letter-spacing="1.2" text-anchor="middle" font-weight="500">GALLERY</text>
-<text x="474.4" y="323.6" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="5.6" fill="#6E6B64" letter-spacing="0.9" text-anchor="middle" font-weight="400">QUARTZITE ISLAND</text>
 <line x1="200.0" y1="575.0" x2="851.0" y2="575.0" stroke="#6E6B64" stroke-width="0.7"/>
 <line x1="196.75" y1="571.75" x2="203.25" y2="578.25" stroke="#6E6B64" stroke-width="0.9"/>
 <line x1="847.75" y1="571.75" x2="854.25" y2="578.25" stroke="#6E6B64" stroke-width="0.9"/>
