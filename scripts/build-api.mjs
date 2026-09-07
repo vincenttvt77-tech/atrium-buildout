@@ -9,6 +9,11 @@
 import { build } from 'esbuild'
 import { readdir, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import { buildOpsPage } from './build-ops.mjs'
+
+// The dashboard page is compiled into api/dashboard.ts rather than served from public/,
+// so regenerate it first — bundling a stale page is how a fix appears not to have landed.
+await buildOpsPage()
 
 const SRC = 'api'
 const OUT = '.vercel-build/api'

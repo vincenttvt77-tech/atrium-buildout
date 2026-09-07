@@ -33,8 +33,12 @@ async function addTree(dir, prefix = '') {
 
 await mkdir('.vercel-build', { recursive: true })
 
-// The bundled function.
-await addFile('.vercel-build/api/vapi.mjs', 'api/vapi.mjs')
+// The bundled functions. Every one of them: api/dashboard.mjs is the only way the
+// operations page is reachable now that it is not a static file, so a manifest that
+// listed vapi.mjs by hand would ship a dashboard route that 404s.
+for (const f of (await readdir('.vercel-build/api')).filter((f) => f.endsWith('.mjs')).sort()) {
+  await addFile(join('.vercel-build/api', f), `api/${f}`)
+}
 
 // The website, flattened to the deployment root.
 await addTree('public')

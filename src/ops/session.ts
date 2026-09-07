@@ -41,11 +41,19 @@ export function constantTimeEquals(a: string, b: string): boolean {
   return timingSafeEqual(ha, hb)
 }
 
-/** The configured passcode, or null when the operator has not set one yet. */
+/**
+ * The configured passcode, or null when the operator has not set one yet.
+ *
+ * `DASHBOARD_TOKEN` is accepted as an alias because that is the name in `.env.example`.
+ * Two names for one secret is not lovely, but the failure it prevents is: an operator sets
+ * the variable the example file named, nothing opens, and someone "fixes" it by taking the
+ * gate off.
+ */
 export function opsPasscode(env: NodeJS.ProcessEnv = process.env): string | null {
-  return hasSecret('OPS_DASHBOARD_PASSCODE', env)
-    ? requireSecret('OPS_DASHBOARD_PASSCODE', env)
-    : null
+  for (const name of ['OPS_DASHBOARD_PASSCODE', 'DASHBOARD_TOKEN'] as const) {
+    if (hasSecret(name, env)) return requireSecret(name, env)
+  }
+  return null
 }
 
 function sign(payload: string, passcode: string): string {

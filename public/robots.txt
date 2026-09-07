@@ -1,12 +1,15 @@
 # The Larkin is a demonstration property. It does not exist.
 #
 # Indexing it would put a fictional building with fictional rents into search
-# results beside real listings, which is how a demo becomes a complaint.
+# results next to real listings, which is how a demo turns into a complaint.
 User-agent: *
 Disallow: /
 
-# Named explicitly as well as covered by the rule above: a later decision to
-# open the marketing pages to crawlers must not quietly open these too.
+# The operations routes are named explicitly as well. Not because a crawler that
+# honours the blanket rule above needs telling twice, but because the day someone
+# opens the site to indexing, these two must not come along. robots.txt is a
+# request, never a control — the passcode gate on /api/dashboard and /api/vapi is
+# what actually keeps prospect names and call excerpts private.
 Disallow: /api/
-Disallow: /dashboard
-Disallow: /ops/
+Disallow: /api/dashboard
+Disallow: /dashboard.html
