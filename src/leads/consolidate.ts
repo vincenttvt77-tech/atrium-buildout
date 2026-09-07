@@ -1,7 +1,7 @@
 import type { DocumentStore } from '../store/documents.ts'
 import type { QualificationState } from '../leasing/qualification.ts'
 import type { LossReason } from '../record/store.ts'
-import { emptyProfile, deriveStage, normalisePhone } from './profile.ts'
+import { emptyProfile, deriveStage, normalisePhone, pinnedName } from './profile.ts'
 import type { LeadProfile, CallSummary } from './profile.ts'
 import { deriveFollowUps } from './followups.ts'
 import type { FollowUp } from './followups.ts'
@@ -51,7 +51,9 @@ export async function consolidateCall(
     // A human correction on the profile outranks anything a later call extracts; a name
     // the caller gave outranks a null; a later extraction outranks an earlier one.
     const next: LeadProfile = { ...p, lastSeenAt: at }
-    if (o.name && !p.notes.some((n) => n.startsWith('name:'))) next.name = o.name
+    const pinned = pinnedName(p.notes)
+    if (pinned) next.name = pinned
+    else if (o.name) next.name = o.name
     if (o.email) next.email = o.email
 
     const q = o.qualification

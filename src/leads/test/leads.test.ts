@@ -2,6 +2,10 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { emptyProfile, deriveStage, normalisePhone } from '../profile.ts'
 import { deriveFollowUps } from '../followups.ts'
+import { pinnedName } from '../profile.ts'
+import { consolidateCall } from '../consolidate.ts'
+import { MemoryDocumentStore } from '../../store/documents.ts'
+import { emptyQualification } from '../../leasing/qualification.ts'
 
 const NOW = new Date('2026-09-07T18:00:00Z') // Monday 2pm ET
 
@@ -114,5 +118,29 @@ describe('follow-ups are the system showing it knows what to do next', () => {
       const h = Number(new Date(f.dueAt).toLocaleTimeString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/New_York' }))
       assert.ok(h >= 10 && h < 18, `${f.kind} due at ${h}:00 ET`)
     }
+  })
+})
+
+describe('a human note pins the name', () => {
+  const call = (callId: string, name: string | null, at: Date) => ({
+    callId, phone: '+1 (516) 990-9252', at, durationSeconds: 90, qualification: emptyQualification(),
+    name, email: null, unitsDiscussed: [], booking: null, lossReason: null, escalation: null, toolsCalled: [],
+  })
+
+  test('a stamped "name:" note is read, and the last one wins', () => {
+    assert.equal(pinnedName(['2026-09-07T18:00:00.000Z name: Vincent T.']), 'Vincent T.')
+    assert.equal(pinnedName(['name: A', '2026-09-07T18:00:00.000Z name: B']), 'B')
+    assert.equal(pinnedName(['2026-09-07T18:00:00.000Z called back, no answer']), null)
+  })
+
+  test('a later call cannot overwrite a pinned name', async () => {
+    const store = new MemoryDocumentStore()
+    const first = await consolidateCall(store, call('c1', 'Vince', NOW))
+    assert.equal(first.profile.name, 'Vince')
+    await store.update(`lead:${first.profile.phone}`, first.profile, (p) => ({
+      ...p, notes: [...p.notes, '2026-09-07T18:30:00.000Z name: Vincent T.'],
+    }))
+    const second = await consolidateCall(store, call('c2', 'Vinny', new Date(NOW.getTime() + 3_600_000)))
+    assert.equal(second.profile.name, 'Vincent T.')
   })
 })

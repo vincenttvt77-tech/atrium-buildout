@@ -3,7 +3,7 @@ import { documentStoreFromEnv } from '../src/store/documents.ts'
 import { listProfiles, listFollowUps, profileKey, followUpKey } from '../src/leads/consolidate.ts'
 import type { LeadProfile } from '../src/leads/profile.ts'
 import type { FollowUp } from '../src/leads/followups.ts'
-import { normalisePhone } from '../src/leads/profile.ts'
+import { normalisePhone, pinnedName } from '../src/leads/profile.ts'
 
 /**
  * Lead profiles and the follow-up queue, for the operations dashboard.
@@ -68,9 +68,11 @@ export default async function handler(req: any, res: any) {
         if (phone === 'unknown' || !text) { res.status(400).json({ error: 'phone and text are required' }); return }
         const existing = await store.get<LeadProfile>(profileKey(phone))
         if (!existing) { res.status(404).json({ error: 'no such lead' }); return }
-        const updated = await store.update<LeadProfile>(profileKey(phone), existing, (p) => ({
-          ...p, notes: [...p.notes, `${now.toISOString()} ${text}`],
-        }))
+        const updated = await store.update<LeadProfile>(profileKey(phone), existing, (p) => {
+          const notes = [...p.notes, `${now.toISOString()} ${text}`]
+          const pinned = pinnedName(notes)
+          return { ...p, notes, ...(pinned ? { name: pinned } : {}) }
+        })
         res.status(200).json({ profile: updated })
         return
       }

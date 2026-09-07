@@ -43,6 +43,19 @@ export interface LeadBooking {
   callId: string
 }
 
+/**
+ * A human pins the caller's name by leaving a note "name: Vincent T." — with or without
+ * the timestamp the API stamps on the front. It outranks every later extraction, and
+ * the last such note wins.
+ */
+export function pinnedName(notes: string[]): string | null {
+  for (let i = notes.length - 1; i >= 0; i--) {
+    const m = /^(?:\S+\s+)?name:\s*(.+)$/i.exec(notes[i] ?? '')
+    if (m?.[1]?.trim()) return m[1].trim()
+  }
+  return null
+}
+
 export interface LeadProfile {
   phone: string
   name: string | null
