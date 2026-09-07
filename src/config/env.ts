@@ -48,6 +48,12 @@ export const SECRETS: readonly SecretSpec[] = [
     requiredFor: ['ops.dashboard', 'ops.event_log'],
   },
   {
+    name: 'DASHBOARD_TOKEN',
+    purpose: 'Accepted alias for OPS_DASHBOARD_PASSCODE, so either name opens the dashboard',
+    owner: 'client',
+    requiredFor: ['ops.dashboard', 'ops.event_log'],
+  },
+  {
     name: 'ANTHROPIC_API_KEY',
     purpose: 'Model provider for the conversation engine',
     owner: 'atrium',
