@@ -1,5 +1,603 @@
-[{"unitId":"08S","floorPlanId":"S1","floor":8,"bedrooms":0,"bathrooms":1,"sqft":480,
-  "monthlyRent":3100,"availableFrom":"2026-10-01","status":"available"},
- {"unitId":"21A","floorPlanId":"A1","floor":21,"bedrooms":1,"bathrooms":1,"sqft":700,
-  "monthlyRent":4200,"availableFrom":"2026-11-01","status":"available",
-  "concession":"One month free on a 14-month lease","view":"Manhattan skyline"}]
+[
+  {
+    "unitId": "06F",
+    "floorPlanId": "S1",
+    "floor": 6,
+    "bedrooms": 0,
+    "bathrooms": 1,
+    "sqft": 496,
+    "monthlyRent": 3745,
+    "availableFrom": "2026-11-15",
+    "exposure": "South",
+    "view": "South over the Hunters Point low-rise rooftops",
+    "status": "available",
+    "concession": "One month free on a 14-month lease",
+    "features": [
+      "Washer/dryer in unit",
+      "Full-size Bosch range with a vented hood",
+      "Solar shades throughout",
+      "Custom-fitted entry closet"
+    ]
+  },
+  {
+    "unitId": "09F",
+    "floorPlanId": "S1",
+    "floor": 9,
+    "bedrooms": 0,
+    "bathrooms": 1,
+    "sqft": 496,
+    "monthlyRent": 3795,
+    "availableFrom": "2026-09-07",
+    "exposure": "South",
+    "view": "South over the Hunters Point low-rise rooftops",
+    "status": "available",
+    "concession": "One month free on a 14-month lease",
+    "features": [
+      "Immediate move-in",
+      "Washer/dryer in unit",
+      "Full-size Bosch range with a vented hood",
+      "Solar shades throughout"
+    ]
+  },
+  {
+    "unitId": "12G",
+    "floorPlanId": "S1",
+    "floor": 12,
+    "bedrooms": 0,
+    "bathrooms": 1,
+    "sqft": 532,
+    "monthlyRent": 3890,
+    "availableFrom": "2026-10-12",
+    "exposure": "South and East",
+    "view": "Court Square and the Citigroup Building",
+    "status": "available",
+    "concession": "One month free on a 14-month lease",
+    "features": [
+      "Corner unit",
+      "Two exposures",
+      "Washer/dryer in unit",
+      "Largest studio layout in the building"
+    ]
+  },
+  {
+    "unitId": "27F",
+    "floorPlanId": "S1",
+    "floor": 27,
+    "bedrooms": 0,
+    "bathrooms": 1,
+    "sqft": 496,
+    "monthlyRent": 4090,
+    "availableFrom": "2026-12-05",
+    "exposure": "South",
+    "view": "South to the Kosciuszko Bridge and Newtown Creek",
+    "status": "pending",
+    "concession": "Six weeks free on an 18-month lease",
+    "features": [
+      "Top of the standard stack, one floor under the West Collection",
+      "Washer/dryer in unit",
+      "Solar shades throughout"
+    ]
+  },
+  {
+    "unitId": "05K",
+    "floorPlanId": "S2",
+    "floor": 5,
+    "bedrooms": 0,
+    "bathrooms": 1,
+    "sqft": 560,
+    "monthlyRent": 4050,
+    "availableFrom": "2026-11-05",
+    "exposure": "East",
+    "view": "East over Vernon Boulevard toward Sunnyside",
+    "status": "available",
+    "concession": "Six weeks free on an 18-month lease",
+    "features": [
+      "Sleeping alcove, 11 by 9 feet",
+      "Washer/dryer in unit",
+      "Honed porcelain bath with a niche",
+      "Steps from the leasing gallery entrance on 5th Street"
+    ]
+  },
+  {
+    "unitId": "07K",
+    "floorPlanId": "S2",
+    "floor": 7,
+    "bedrooms": 0,
+    "bathrooms": 1,
+    "sqft": 578,
+    "monthlyRent": 4105,
+    "availableFrom": "2026-09-07",
+    "exposure": "East",
+    "view": "East over Vernon Boulevard toward Sunnyside",
+    "status": "available",
+    "concession": "One month free on a 14-month lease",
+    "features": [
+      "Immediate move-in",
+      "Sleeping alcove, 11 by 9 feet",
+      "Washer/dryer in unit",
+      "Two-tone cabinetry with under-cabinet lighting"
+    ]
+  },
+  {
+    "unitId": "25K",
+    "floorPlanId": "S2",
+    "floor": 25,
+    "bedrooms": 0,
+    "bathrooms": 1,
+    "sqft": 578,
+    "monthlyRent": 4430,
+    "availableFrom": "2026-10-18",
+    "exposure": "East",
+    "view": "Court Square, the Citigroup Building, and the LIRR yards",
+    "status": "available",
+    "concession": "One month free on a 14-month lease",
+    "features": [
+      "Sleeping alcove, 11 by 9 feet",
+      "Washer/dryer in unit",
+      "High floor"
+    ]
+  },
+  {
+    "unitId": "08E",
+    "floorPlanId": "A1",
+    "floor": 8,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 735,
+    "monthlyRent": 4695,
+    "availableFrom": "2026-10-24",
+    "exposure": "South",
+    "view": "South over Hunter's Point South Park",
+    "status": "available",
+    "concession": "One month free on a 14-month lease",
+    "features": [
+      "Largest one bedroom on the standard floors",
+      "Washer/dryer in unit",
+      "Kitchen peninsula seating two",
+      "Blackout shades in the bedroom"
+    ]
+  },
+  {
+    "unitId": "09C",
+    "floorPlanId": "A1",
+    "floor": 9,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 688,
+    "monthlyRent": 4770,
+    "availableFrom": "2026-11-01",
+    "exposure": "West",
+    "view": "East River and the Midtown skyline over Gantry Plaza State Park",
+    "status": "available",
+    "concession": "One month free on a 14-month lease",
+    "features": [
+      "West-facing river and skyline exposure",
+      "Washer/dryer in unit",
+      "Kitchen peninsula seating two"
+    ]
+  },
+  {
+    "unitId": "14C",
+    "floorPlanId": "A1",
+    "floor": 14,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 688,
+    "monthlyRent": 4860,
+    "availableFrom": "2026-10-01",
+    "exposure": "West",
+    "view": "East River and the Midtown skyline over Gantry Plaza State Park",
+    "status": "available",
+    "concession": "One month free on a 14-month lease",
+    "features": [
+      "West-facing river and skyline exposure",
+      "Washer/dryer in unit",
+      "Blackout shades in the bedroom",
+      "Model residence layout"
+    ]
+  },
+  {
+    "unitId": "20E",
+    "floorPlanId": "A1",
+    "floor": 20,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 735,
+    "monthlyRent": 4995,
+    "availableFrom": "2026-09-19",
+    "exposure": "South",
+    "view": "South over Hunter's Point South Park to the Kosciuszko Bridge",
+    "status": "pending",
+    "concession": "One month free on a 14-month lease",
+    "features": [
+      "Largest one bedroom on the standard floors",
+      "Washer/dryer in unit",
+      "High floor"
+    ]
+  },
+  {
+    "unitId": "25C",
+    "floorPlanId": "A1",
+    "floor": 25,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 688,
+    "monthlyRent": 5165,
+    "availableFrom": "2026-12-01",
+    "exposure": "West",
+    "view": "East River, the Midtown skyline, and the ferry landing at LIC Landing",
+    "status": "available",
+    "concession": "One month free on a 14-month lease",
+    "features": [
+      "West-facing river and skyline exposure",
+      "High floor",
+      "Washer/dryer in unit"
+    ]
+  },
+  {
+    "unitId": "17H",
+    "floorPlanId": "A2",
+    "floor": 17,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 731,
+    "monthlyRent": 5185,
+    "availableFrom": "2026-11-20",
+    "exposure": "North",
+    "view": "Queensboro Bridge and Roosevelt Island",
+    "status": "available",
+    "concession": "One month free on a 14-month lease",
+    "features": [
+      "Private balcony, 62 square feet",
+      "Full-height slider to the balcony",
+      "Washer/dryer in unit"
+    ]
+  },
+  {
+    "unitId": "22H",
+    "floorPlanId": "A2",
+    "floor": 22,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 731,
+    "monthlyRent": 5325,
+    "availableFrom": "2026-10-15",
+    "exposure": "North",
+    "view": "Queensboro Bridge, Roosevelt Island, and the Upper East Side beyond",
+    "status": "available",
+    "concession": "One month free on a 14-month lease",
+    "features": [
+      "Private balcony, 62 square feet",
+      "Full-height slider to the balcony",
+      "Washer/dryer in unit",
+      "High floor"
+    ]
+  },
+  {
+    "unitId": "26H",
+    "floorPlanId": "A2",
+    "floor": 26,
+    "bedrooms": 1,
+    "bathrooms": 1,
+    "sqft": 731,
+    "monthlyRent": 5440,
+    "availableFrom": "2026-10-30",
+    "exposure": "North",
+    "view": "Queensboro Bridge, Roosevelt Island, and the Upper East Side beyond",
+    "status": "available",
+    "concession": "One month free on a 14-month lease",
+    "features": [
+      "Private balcony, 70 square feet",
+      "Highest available balcony residence",
+      "Washer/dryer in unit"
+    ]
+  },
+  {
+    "unitId": "10J",
+    "floorPlanId": "A3",
+    "floor": 10,
+    "bedrooms": 1,
+    "bathrooms": 1.5,
+    "sqft": 848,
+    "monthlyRent": 5540,
+    "availableFrom": "2026-11-08",
+    "exposure": "East",
+    "view": "East over Vernon Boulevard toward Sunnyside Yards",
+    "status": "available",
+    "concession": "Six weeks free on an 18-month lease",
+    "features": [
+      "Den with a door, 9 by 8 feet",
+      "Half bath off the entry",
+      "Walk-in closet in the bedroom",
+      "Washer/dryer in unit"
+    ]
+  },
+  {
+    "unitId": "18J",
+    "floorPlanId": "A3",
+    "floor": 18,
+    "bedrooms": 1,
+    "bathrooms": 1.5,
+    "sqft": 848,
+    "monthlyRent": 5745,
+    "availableFrom": "2026-10-05",
+    "exposure": "East",
+    "view": "Court Square and the Citigroup Building",
+    "status": "available",
+    "concession": "One month free on a 14-month lease",
+    "features": [
+      "Den with a door, 9 by 8 feet",
+      "Half bath off the entry",
+      "Walk-in closet in the bedroom",
+      "Washer/dryer in unit"
+    ]
+  },
+  {
+    "unitId": "24J",
+    "floorPlanId": "A3",
+    "floor": 24,
+    "bedrooms": 1,
+    "bathrooms": 1.5,
+    "sqft": 848,
+    "monthlyRent": 5900,
+    "availableFrom": "2026-12-15",
+    "exposure": "East",
+    "view": "Court Square, the Citigroup Building, and Sunnyside Yards",
+    "status": "available",
+    "concession": "One month free on a 14-month lease",
+    "features": [
+      "Den with a door, 9 by 8 feet",
+      "Half bath off the entry",
+      "High floor",
+      "Washer/dryer in unit"
+    ]
+  },
+  {
+    "unitId": "13L",
+    "floorPlanId": "B1",
+    "floor": 13,
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "sqft": 985,
+    "monthlyRent": 6825,
+    "availableFrom": "2026-10-22",
+    "exposure": "North and East",
+    "view": "Queensboro Bridge to the north, Court Square to the east",
+    "status": "available",
+    "concession": "One month free on a 14-month lease",
+    "features": [
+      "Corner unit",
+      "Split bedrooms, both baths en suite",
+      "Kitchen island seating three",
+      "Washer/dryer in unit"
+    ]
+  },
+  {
+    "unitId": "21B",
+    "floorPlanId": "B1",
+    "floor": 21,
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "sqft": 1012,
+    "monthlyRent": 7080,
+    "availableFrom": "2026-09-26",
+    "exposure": "West",
+    "view": "East River and the Midtown skyline, Empire State Building on the left",
+    "status": "available",
+    "concession": "One month free on a 14-month lease",
+    "features": [
+      "West-facing river and skyline exposure",
+      "Split bedrooms, both baths en suite",
+      "Kitchen island seating three",
+      "Washer/dryer in unit"
+    ]
+  },
+  {
+    "unitId": "26B",
+    "floorPlanId": "B1",
+    "floor": 26,
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "sqft": 1012,
+    "monthlyRent": 7190,
+    "availableFrom": "2026-11-01",
+    "exposure": "West",
+    "view": "East River, the Midtown skyline, and the Queensboro Bridge to the north",
+    "status": "available",
+    "concession": "One month free on a 14-month lease",
+    "features": [
+      "West-facing river and skyline exposure",
+      "High floor",
+      "Split bedrooms, both baths en suite",
+      "Washer/dryer in unit"
+    ]
+  },
+  {
+    "unitId": "15D",
+    "floorPlanId": "B2",
+    "floor": 15,
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "sqft": 1046,
+    "monthlyRent": 7410,
+    "availableFrom": "2026-11-12",
+    "exposure": "West and South",
+    "view": "East River and the Midtown skyline, Hunter's Point South Park below",
+    "status": "available",
+    "concession": "Six weeks free on an 18-month lease",
+    "features": [
+      "Corner unit",
+      "Private balcony, 78 square feet",
+      "Split bedrooms, both baths en suite",
+      "Washer/dryer in unit"
+    ]
+  },
+  {
+    "unitId": "23D",
+    "floorPlanId": "B2",
+    "floor": 23,
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "sqft": 1046,
+    "monthlyRent": 7735,
+    "availableFrom": "2026-10-09",
+    "exposure": "West and South",
+    "view": "East River, the Midtown skyline, and south to the Kosciuszko Bridge",
+    "status": "pending",
+    "concession": "One month free on a 14-month lease",
+    "features": [
+      "Corner unit",
+      "Private balcony, 95 square feet",
+      "High floor",
+      "Washer/dryer in unit"
+    ]
+  },
+  {
+    "unitId": "28B",
+    "floorPlanId": "B3",
+    "floor": 28,
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "sqft": 1148,
+    "monthlyRent": 8150,
+    "availableFrom": "2026-12-10",
+    "exposure": "West",
+    "view": "East River and the full Midtown skyline from above the setback",
+    "status": "available",
+    "concession": "One month free on a 14-month lease",
+    "features": [
+      "West Collection",
+      "Ceilings 10 feet 6 inches",
+      "Quartzite waterfall island",
+      "Fisher & Paykel panel-ready refrigeration and a wine column",
+      "Washer/dryer in unit"
+    ]
+  },
+  {
+    "unitId": "31D",
+    "floorPlanId": "B3",
+    "floor": 31,
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "sqft": 1104,
+    "monthlyRent": 8340,
+    "availableFrom": "2026-10-20",
+    "exposure": "West",
+    "view": "East River, the Midtown skyline, and the Queensboro Bridge",
+    "status": "available",
+    "concession": "One month free on a 14-month lease",
+    "features": [
+      "West Collection",
+      "Private terrace, 180 square feet",
+      "Ceilings 10 feet 6 inches",
+      "Quartzite waterfall island",
+      "Washer/dryer in unit"
+    ]
+  },
+  {
+    "unitId": "32C",
+    "floorPlanId": "B3",
+    "floor": 32,
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "sqft": 1190,
+    "monthlyRent": 8695,
+    "availableFrom": "2026-11-25",
+    "exposure": "West",
+    "view": "East River, the full Midtown skyline, and the ferries at LIC Landing",
+    "status": "available",
+    "concession": "One month free on a 14-month lease",
+    "features": [
+      "West Collection",
+      "Largest two bedroom in the building",
+      "Ceilings 10 feet 6 inches",
+      "Fisher & Paykel panel-ready refrigeration and a wine column",
+      "Washer/dryer in unit"
+    ]
+  },
+  {
+    "unitId": "12A",
+    "floorPlanId": "C1",
+    "floor": 12,
+    "bedrooms": 3,
+    "bathrooms": 2,
+    "sqft": 1332,
+    "monthlyRent": 9240,
+    "availableFrom": "2026-11-03",
+    "exposure": "North and West",
+    "view": "Queensboro Bridge to the north, the East River and Midtown to the west",
+    "status": "available",
+    "concession": "One month free on a 14-month lease",
+    "features": [
+      "Corner unit",
+      "Primary bedroom with an en suite bath and a walk-in closet",
+      "Kitchen island seating four",
+      "Dedicated laundry closet with a Bosch washer and vented dryer"
+    ]
+  },
+  {
+    "unitId": "19A",
+    "floorPlanId": "C1",
+    "floor": 19,
+    "bedrooms": 3,
+    "bathrooms": 2,
+    "sqft": 1332,
+    "monthlyRent": 9485,
+    "availableFrom": "2026-12-01",
+    "exposure": "North and West",
+    "view": "Queensboro Bridge, Roosevelt Island, and the Midtown skyline",
+    "status": "available",
+    "concession": "One month free on a 14-month lease",
+    "features": [
+      "Corner unit",
+      "Primary bedroom with an en suite bath and a walk-in closet",
+      "Kitchen island seating four",
+      "Dedicated laundry closet with a Bosch washer and vented dryer"
+    ]
+  },
+  {
+    "unitId": "29E",
+    "floorPlanId": "C2",
+    "floor": 29,
+    "bedrooms": 3,
+    "bathrooms": 2.5,
+    "sqft": 1455,
+    "monthlyRent": 11650,
+    "availableFrom": "2026-12-12",
+    "exposure": "North and West",
+    "view": "The Queensboro Bridge, the East River, and Midtown from above the setback",
+    "status": "available",
+    "concession": null,
+    "features": [
+      "West Collection",
+      "Corner unit",
+      "Ceilings 10 feet 6 inches",
+      "Half bath off the entry",
+      "Quartzite waterfall island and a wine column",
+      "Dedicated laundry closet with a Bosch washer and vented dryer"
+    ]
+  },
+  {
+    "unitId": "33A",
+    "floorPlanId": "C2",
+    "floor": 33,
+    "bedrooms": 3,
+    "bathrooms": 2.5,
+    "sqft": 1512,
+    "monthlyRent": 12980,
+    "availableFrom": "2026-11-15",
+    "exposure": "North and West",
+    "view": "The full arc of it — Queensboro Bridge, Roosevelt Island, the East River, and Midtown, from the highest residential floor",
+    "status": "available",
+    "concession": null,
+    "features": [
+      "West Collection",
+      "Highest residential floor, one under The Overlook",
+      "Private terrace, 240 square feet",
+      "Corner unit",
+      "Ceilings 10 feet 6 inches",
+      "Fisher & Paykel panel-ready refrigeration and a wine column",
+      "Dedicated laundry closet with a Bosch washer and vented dryer"
+    ]
+  }
+]
