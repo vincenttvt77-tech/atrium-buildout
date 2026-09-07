@@ -40,7 +40,7 @@ deliberately not a template engine: no loops, no conditionals, no filters. Every
 HTML-escaped on the way in, so a prospect named `<script>` cannot inject into an email we
 send.
 
-`tour-confirmation.html` uses exactly these fifteen, and every one of them is supplied by
+`tour-confirmation.html` uses exactly these eighteen, and every one of them is supplied by
 `sendConfirmation()`. There are no missing placeholders and no unused values.
 
 | Placeholder | Example | Notes |
@@ -58,16 +58,29 @@ send.
 | `{{bedrooms}}` | `2` | A bare integer. Rendered as "2 bed". A studio renders "0 bed", which is the NYC convention (`0x1`), not a bug. |
 | `{{sqft}}` | `1012` | Bare integer. Rendered as "1012 square feet" — pass a formatted string if you want the thousands comma. |
 | `{{monthlyRent}}` | `$7,190` | **Arrives with the dollar sign already on it** (`confirmation.ts` formats it). Do not prefix another `$`. |
+| `{{concessionLine}}` | `Net effective. One month free on a 14-month lease.` | Sub-line under the rent. Built by `concessionCopy()` from the residence's own terms. |
+| `{{concessionSentence}}` | `The rent we quote you for this residence is net effective and reflects one month free on a 14-month lease. Ask for the gross figure and we will give you both, on the spot.` | The "What to expect" paragraph. Same source. |
+| `{{concessionDisclaimer}}` | `The advertised rent for this residence is net effective and reflects one month free on a 14-month lease. Gross rent is higher; ask the leasing office for both figures. Concessions vary by residence.` | Footer disclosure, ahead of the standing listing disclaimer. Same source. |
 | `{{confirmationCode}}` | `LK-2026-0912-26B` | The booking's `externalId`. Appears in the preheader, the detail card, the reschedule copy, and the unsubscribe line. |
 | `{{rescheduleUrl}}` | `tel:+15169909252` | The primary button href. Today `confirmation.ts` derives a `tel:` link from the leasing phone; swap it for an https booking URL and the button keeps working. |
 
-### Two things that will bite you
+### Three things that will bite you
 
 **The `tel:` hrefs are hardcoded to `+15169909252`.** `{{leasingPhone}}` is the human
 form — `+1 (516) 990-9252` — and putting that in an `href` is sloppy. So the three phone
 links use a literal `tel:+15169909252` and show `{{leasingPhone}}` as the text. If the
 leasing line ever changes, change both. (`{{rescheduleUrl}}` is the exception: it already
 arrives E.164-normalized.)
+
+**The concession is not the same on every residence, so the template states none.**
+Four residences are on six weeks free over eighteen months and two carry nothing at all,
+so `concessionCopy()` in `confirmation.ts` builds all three concession strings from the
+residence's own `concession` field and the template just prints them. Pass it:
+`concession: unit.concession` — the string verbatim, `null` when the residence has none.
+Omit the key only when you genuinely do not know, and the email says so rather than
+guessing. Never put the terms back in the HTML; `src/email/test/confirmation.test.ts`
+fails if you do, and the reason it exists is that a $12,980 residence with no concession
+was being sent a free month in writing.
 
 **There are no conditionals, so every row always renders.** If a prospect books a general
 tour with no residence selected, `unitId`, `floorPlanName`, `bedrooms`, `sqft` and
@@ -108,7 +121,7 @@ const outcome = await sendConfirmation(
     template,
   },
   transportFromEnv(),
-  { floorPlanName: 'Two Bedroom', bedrooms: 2, sqft: 1012, monthlyRent: 7190 },
+  { floorPlanName: 'Two Bedroom', bedrooms: 2, sqft: 1012, monthlyRent: 7190, concession: unit.concession ?? null },
 )
 
 if (outcome.missing.length) console.warn('unfilled placeholders:', outcome.missing)
@@ -134,6 +147,9 @@ const v = {prospectName:'Dana Okonkwo', buildingName:'The Larkin',
   managementCompany:'Halbrook Residential Management',
   tourDate:'Saturday, September 12', tourTime:'2:00 PM', unitId:'26B',
   floorPlanName:'Two Bedroom', bedrooms:2, sqft:1012, monthlyRent:'\$7,190',
+  concessionLine:'Net effective. One month free on a 14-month lease.',
+  concessionSentence:'The rent we quote you for this residence is net effective and reflects one month free on a 14-month lease. Ask for the gross figure and we will give you both, on the spot.',
+  concessionDisclaimer:'The advertised rent for this residence is net effective and reflects one month free on a 14-month lease. Gross rent is higher; ask the leasing office for both figures. Concessions vary by residence.',
   confirmationCode:'LK-2026-0912-26B', rescheduleUrl:'tel:+15169909252'}
 writeFileSync('/tmp/preview.html', t.replace(/\{\{\s*(\w+)\s*\}\}/g,(_,k)=>String(v[k]??'')))
 " && open /tmp/preview.html
@@ -171,9 +187,11 @@ curated, elevated, resort-style, oasis, sanctuary, unparalleled, iconic, nestled
 
 Two things in the copy are load-bearing and should survive any edit:
 
-1. **The net-effective disclosure is volunteered, twice** — in the detail card under the
-   rent, and again in the footer. The leasing team's discipline on the phone is to
-   disclose net effective before being asked; the email holds the same line.
+1. **The concession disclosure is volunteered, three times** — under the rent in the
+   detail card, in "What to expect", and again in the footer. The leasing team's
+   discipline on the phone is to disclose net effective before being asked; the email
+   holds the same line, and it holds it per residence rather than assuming the house
+   default.
 2. **Rescheduling is offered without friction.** "Move it or cancel it any time, and you
    do not owe us a reason." A confirmation email that makes cancelling hard is how a
    building earns a no-show instead of a reschedule.
@@ -186,7 +204,8 @@ Present in the footer of every send, and none of it is decoration:
   (`5-08 46th Avenue Owner LLC`).
 - The full HUD equal-housing pledge with the seven protected classes named, plus the
   Equal Housing Opportunity mark.
-- The net-effective disclosure tied to its lease term, and the NYC listing disclaimer.
+- The concession disclosure for the residence being toured, tied to its own lease term
+  (or the plain statement that it carries none), and the NYC listing disclaimer.
 - An accessibility statement with a real phone number and email for accommodation
   requests — WCAG 2.1 Level AA, matching `legal.accessibility` in `data/property.json`.
 - An unsubscribe line that is honest about what it does: it stops marketing email and
