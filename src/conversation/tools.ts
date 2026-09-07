@@ -3,6 +3,7 @@ import { findMatches } from '../inventory/match.ts'
 import type { QualificationState } from '../leasing/qualification.ts'
 import { mayQuote, nextSignalToAsk, captureCore } from '../leasing/qualification.ts'
 import { extracted } from '../leasing/captured.ts'
+import { parseMoveIn } from '../leasing/when.ts'
 import { decideAnswer } from '../knowledge/answer.ts'
 import { retrieve } from '../knowledge/retrieve.ts'
 import { guardTopic } from '../knowledge/guard.ts'
@@ -68,33 +69,58 @@ export interface CaptureArgs {
 export function captureSignal(args: CaptureArgs, ctx: ToolContext): ToolResult {
   const conf = args.confidence ?? 0.85
   let q = ctx.qualification
+  let captured = false
 
   if (args.signal === 'budget') {
     const n = Number(String(args.value).replace(/[^0-9.]/g, ''))
     if (Number.isFinite(n) && n > 0) {
       q = captureCore(q, 'budget', extracted({ maxMonthly: n, stated: true }, conf, ctx.interactionId, args.excerpt, ctx.now))
+      captured = true
     }
   } else if (args.signal === 'bedrooms') {
     const n = /studio/i.test(args.value) ? 0 : Number(String(args.value).replace(/[^0-9]/g, ''))
     if (Number.isFinite(n)) {
       q = captureCore(q, 'bedrooms', extracted({ min: n, max: n }, conf, ctx.interactionId, args.excerpt, ctx.now))
+      captured = true
     }
   } else if (args.signal === 'moveInTiming') {
-    const parsed = Date.parse(args.value)
-    if (!Number.isNaN(parsed)) {
-      q = captureCore(q, 'moveInTiming', extracted({ earliest: new Date(parsed), latest: null }, conf, ctx.interactionId, args.excerpt, ctx.now))
+    // Callers say "2 months", not "2026-11-07". Parsing that with Date.parse returned NaN,
+    // captured nothing, and the tool then asked the model to collect the same signal again
+    // — which it did, forever, while the caller listened to ambience.
+    const window = parseMoveIn(args.value, ctx.now) ?? parseMoveIn(args.excerpt, ctx.now)
+    if (window) {
+      q = captureCore(q, 'moveInTiming', extracted(
+        { earliest: window.earliest, latest: window.latest }, conf, ctx.interactionId, args.excerpt, ctx.now))
+      captured = true
     }
+  } else {
+    // pets and parking are recorded as evidence without gating anything.
+    captured = true
   }
 
   const gate = mayQuote(q)
   const next = nextSignalToAsk(q)
-  return {
-    say: gate.allowed
-      ? 'Got it.'
+
+  /*
+   * What this says back is the loop guard. Naming a signal the agent already asked about
+   * sends it round again; the caller answers the same way, nothing parses, and the call
+   * hangs. So an unparseable value says so once and hands back control, and a successful
+   * capture never names the signal just captured.
+   */
+  const say = !captured
+    ? `Could not read "${args.value}" as ${args.signal}. Do NOT ask that question again the same way — either ask it differently once, or move on with what you have and check availability.`
+    : gate.allowed
+      ? 'Got it. You have enough to check availability now.'
       : next
-        ? `Got it. Still need: ${next}.`
-        : 'Got it.',
-    record: { kind: 'signal_captured', signal: args.signal, value: args.value, excerpt: args.excerpt, confidence: conf },
+        ? `Got it. Next, ask about ${next === 'moveInTiming' ? 'when they want to move' : next === 'bedrooms' ? 'how many bedrooms' : 'their budget'}.`
+        : 'Got it.'
+
+  return {
+    say,
+    record: {
+      kind: 'signal_captured', signal: args.signal, value: args.value,
+      excerpt: args.excerpt, confidence: conf, captured,
+    },
     qualificationPatch: q,
   }
 }

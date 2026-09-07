@@ -38,9 +38,9 @@ function buildingFacts(p) {
   if (p.buildingFacts?.residenceNumbering) f.push(p.buildingFacts.residenceNumbering)
   if (p.leasingOffice) f.push(p.leasingOffice)
   if (p.team?.leasing) f.push(p.team.leasing)
-  for (const t of (p.neighborhood?.transit ?? []).slice(0, 4)) f.push(`Transit: ${t}`)
-  for (const n of (p.neighborhood?.nearby ?? []).slice(0, 4)) f.push(`Nearby: ${n}`)
-  if (p.buildingFacts?.affordableNote) f.push(p.buildingFacts.affordableNote)
+  // Only the two transit facts a caller asks about unprompted. The rest is in the
+  // knowledge base, where it costs nothing until someone actually asks.
+  for (const t of (p.neighborhood?.transit ?? []).slice(0, 2)) f.push(`Transit: ${t}`)
   return f
 }
 
@@ -51,6 +51,7 @@ const config = assistantConfig({
   leasingHours: property.leasingHours,
   managementCompany: property.managementCompany ?? 'the management office',
   facts: buildingFacts(property),
+  today: new Date(),
   serverUrl: `${serverUrl.replace(/\/$/, '')}/api/vapi`,
   firstMessage: `Thanks for calling ${property.buildingName}. I'm an AI assistant for the building and this call is recorded — how can I help?`,
 })

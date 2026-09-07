@@ -151,14 +151,30 @@ export function assistantConfig(opts: AssistantConfigOptions) {
     voice: {
       provider: opts.voiceProvider ?? '11labs',
       voiceId: opts.voiceId ?? 'burt',
-      // Reduce the pause before the agent speaks; long gaps read as a dropped call.
-      fillerInjectionEnabled: false,
+      // Was false. Every tool call then played as dead air, and a caller hearing silence
+      // assumes the line dropped long before they assume a lookup is running. The filler
+      // does not make the answer arrive sooner; it makes the wait legible.
+      fillerInjectionEnabled: true,
     },
     transcriber: { provider: 'deepgram', model: 'nova-3', language: 'en' },
     server: { url: opts.serverUrl },
-    // Let the caller cut in. A leasing agent who talks over people loses them.
-    startSpeakingPlan: { waitSeconds: 0.4 },
-    stopSpeakingPlan: { numWords: 2 },
+    /*
+     * Endpointing. The first setting truncated callers: 0.4s of silence is a breath, not
+     * the end of a sentence, so "I'm looking for... a one bedroom" was answered at the
+     * pause and the second half was lost. A second of patience costs a second; talking
+     * over someone costs the call.
+     */
+    startSpeakingPlan: {
+      waitSeconds: 0.8,
+      smartEndpointingEnabled: true,
+    },
+    // Three words rather than two: two is short enough that "mm-hm" stops the agent
+    // mid-sentence, which reads as the agent losing its place.
+    stopSpeakingPlan: {
+      numWords: 3,
+      voiceSeconds: 0.2,
+      backoffSeconds: 1,
+    },
     silenceTimeoutSeconds: 30,
     maxDurationSeconds: 900,
     recordingEnabled: true,
