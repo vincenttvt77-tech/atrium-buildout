@@ -93,11 +93,30 @@ src/conversation/   the tools, where the guards actually live
 src/record/         the shared operational record
 src/email/          template rendering with escaping
 src/vapi/           system prompt and assistant config
-api/vapi.ts         the webhook Vapi calls; GET serves the dashboard log
+src/ops/            the session gate in front of the dashboard and its log
+api/vapi.ts         the webhook Vapi calls; GET serves the dashboard log, gated
+api/dashboard.ts    serves the operations dashboard, behind the same gate
 data/               the demo property, inventory, knowledge and policies
-public/             the building website and /dashboard.html
+ops/dashboard.html  the dashboard page, compiled into api/dashboard.ts
+public/             the building website — and only what is safe to serve openly
 scripts/            build, deploy manifest, assistant config, data validation
 ```
+
+## Who can read the call log
+
+The event log behind the dashboard is the most sensitive thing this service holds: prospect
+names, email addresses, budget ceilings, and verbatim excerpts of what a caller said. It
+shipped as a page in `public/` polling an open endpoint, which meant anyone who guessed the
+URL read the whole leasing pipeline — a NY SHIELD Act reasonable-safeguards failure, and the
+opposite of what the site's privacy notice promises.
+
+Both halves are now gated by `OPS_DASHBOARD_PASSCODE` (`src/ops/session.ts`):
+
+- the page is not a static file any more, it is served by `api/dashboard.ts` after sign-in
+- `GET /api/vapi` returns 401 without a session, and no partial answer — there is
+  deliberately no redacted public shape for someone to add a field to later
+- with no passcode configured, both refuse everyone rather than falling open
+- `public/robots.txt` disallows the routes as well, which is a note to crawlers, not a control
 
 ## Working in this repo
 
@@ -119,6 +138,8 @@ logged by accident. Never in the repo, never in chat, never in a screenshot.
 - **The building is fictional.** Every residence, rent and policy is invented.
 
 ## Traceability
+
+Dashboard access control and the credential inventory are SOW §15.2 and §18.2.
 
 Knowledge governance is SOW §7.3; the never-guess rule §5.2(3), §6.2 and §7.1;
 restricted-topic escalation §3.2, §5.2(7) and §10; the quote gate §5.2(4); evidence-linked

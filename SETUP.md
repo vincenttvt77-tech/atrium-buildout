@@ -8,7 +8,7 @@ takes about three minutes.
 | | |
 |---|---|
 | Building website | https://ghost-building.vercel.app |
-| Operations dashboard | https://ghost-building.vercel.app/dashboard.html |
+| Operations dashboard | https://ghost-building.vercel.app/api/dashboard — passcode required |
 | Vapi webhook | https://ghost-building.vercel.app/api/vapi |
 
 Deploys happen automatically on every push to `claude/scope-feasibility-mpxdhr`.
@@ -17,14 +17,17 @@ Deploys happen automatically on every push to `claude/scope-feasibility-mpxdhr`.
 
 The site, the tour-booking backend and the operations dashboard all deploy together.
 
-- `public/` — the building website and `/dashboard.html`
+- `public/` — the building website, and nothing else; everything here is public
 - `api/vapi.ts` — the tool webhook Vapi calls during a conversation
+- `api/dashboard.ts` — the operations dashboard, behind the passcode gate
+- `ops/dashboard.html` — the dashboard page itself, compiled into the function above
 
 ## 2. Environment variables (Vercel → Project → Settings → Environment Variables)
 
 | Variable | Needed for | Notes |
 |---|---|---|
 | `VAPI_WEBHOOK_SECRET` | Verifying inbound webhooks are genuinely from Vapi | Invent any long random string. Put the same value in Vapi's server settings. **Set this before showing anyone the URL** — without it, the endpoint URL is the only thing protecting the agent. |
+| `OPS_DASHBOARD_PASSCODE` | Opening the operations dashboard and its call log | **Required.** Invent a long random string; give it to whoever needs the dashboard. Until it is set, `/api/dashboard` and the log both refuse everyone — the log holds caller names, emails, budgets and verbatim excerpts, so it fails closed rather than open. `DASHBOARD_TOKEN` works as an alias. |
 | `RESEND_API_KEY` | Sending the branded confirmation email | Optional. Without it the email renders and queues but does not send, and the dashboard says so rather than claiming it went. |
 | `VAPI_PRIVATE_KEY` | Reading call recordings back from Vapi | Optional, not needed for the demo. |
 
@@ -56,8 +59,11 @@ The demo is the product, so test it the way a sceptical owner would:
 | Book a tour, then check the dashboard | Show the booking as `confirmed` — meaning it was written *and read back*. |
 | "Wait — I smell gas" mid-sentence | Drop everything, give the gas safety instruction, tell you to call 911. |
 
-Then open the [operations dashboard](https://ghost-building.vercel.app/dashboard.html) and watch it all land, with the words you actually said
-attached to every field it extracted.
+Then open the [operations dashboard](https://ghost-building.vercel.app/api/dashboard), sign in with
+`OPS_DASHBOARD_PASSCODE`, and watch it all land, with the words you actually said attached to
+every field it extracted. Sign out when you are done — the page shows prospect names,
+email addresses and call excerpts, and the privacy notice on the website promises those go
+no further than the people operating the building.
 
 ## What is not real yet
 

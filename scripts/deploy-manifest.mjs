@@ -51,7 +51,16 @@ files.push({
     buildCommand: null,
     installCommand: null,
     outputDirectory: null,
-    headers: [{ source: '/api/(.*)', headers: [{ key: 'cache-control', value: 'no-store' }] }],
+    headers: [{
+      source: '/api/(.*)',
+      headers: [
+        { key: 'cache-control', value: 'no-store' },
+        // The dashboard and its log live under /api. Neither belongs in a search index.
+        { key: 'x-robots-tag', value: 'noindex, nofollow, noarchive, nosnippet' },
+        { key: 'referrer-policy', value: 'no-referrer' },
+        { key: 'x-content-type-options', value: 'nosniff' },
+      ],
+    }],
   }, null, 2),
 })
 
