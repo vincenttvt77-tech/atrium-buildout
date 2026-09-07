@@ -12,6 +12,8 @@ import {
 } from '../src/conversation/tools.ts'
 import { authorizeOps } from '../src/ops/session.ts'
 import { fetchCalls } from '../src/ops/vapi-calls.ts'
+import { calendarStoreFromEnv } from '../src/calendar/store.ts'
+import { storeBackedCalendar } from '../src/calendar/port.ts'
 import { bookTour } from '../src/booking/book.ts'
 import type { CalendarPort, TourSlot } from '../src/booking/types.ts'
 import { sayableStatus } from '../src/booking/book.ts'
@@ -70,45 +72,13 @@ function callState(callId: string) {
   return s
 }
 
-/** Demo tour calendar: weekday and weekend slots for the next 10 days. */
-function demoSlots(now: Date): TourSlot[] {
-  const slots: TourSlot[] = []
-  for (let d = 1; d <= 10; d++) {
-    const day = new Date(now.getTime() + d * 86_400_000)
-    const dow = day.getUTCDay()
-    const hours = dow === 0 ? [15, 17] : dow === 6 ? [14, 15, 16, 18] : [14, 16, 18, 21]
-    for (const h of hours) {
-      const startsAt = new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), h, 0, 0))
-      slots.push({
-        slotId: `slot-${startsAt.toISOString().slice(0, 13)}`,
-        startsAt,
-        endsAt: new Date(startsAt.getTime() + 30 * 60_000),
-      })
-    }
-  }
-  return slots
-}
-
-const booked = new Map<string, { externalId: string; slot: TourSlot }>()
-
-function demoCalendar(now: Date): CalendarPort {
-  return {
-    async listSlots() {
-      return demoSlots(now).filter((s) => ![...booked.values()].some((b) => b.slot.slotId === s.slotId))
-    },
-    async createBooking(intent) {
-      const existing = booked.get(intent.idempotencyKey)
-      if (existing) return { externalId: existing.externalId }
-      const externalId = `demo-${intent.idempotencyKey.replace(/[^a-zA-Z0-9]/g, '').slice(-16)}`
-      booked.set(intent.idempotencyKey, { externalId, slot: intent.request.slot })
-      return { externalId }
-    },
-    async readBooking(externalId) {
-      for (const b of booked.values()) if (b.externalId === externalId) return b
-      return null
-    },
-  }
-}
+/*
+ * The tour calendar the phone line books against. It is the same store the operations
+ * dashboard edits, so a block set there is a time the agent will not offer here — which is
+ * the test that proves it reads a calendar rather than inventing one.
+ */
+const calendarStore = calendarStoreFromEnv()
+const demoCalendar = (now: Date) => storeBackedCalendar(calendarStore, () => now)
 
 const fmtSlot = (s: TourSlot) =>
   s.startsAt.toLocaleString('en-US', {
