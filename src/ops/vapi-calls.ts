@@ -106,9 +106,11 @@ export type FetchResult =
 export async function fetchCalls(
   opts: { apiKey?: string | undefined; limit?: number; fetchImpl?: typeof fetch } = {},
 ): Promise<FetchResult> {
-  const apiKey = opts.apiKey ?? process.env.VAPI_PRIVATE_KEY
+  // Either name. VAPI_API_KEY is what someone naturally types into the Vercel form, and
+  // a dashboard that stays empty because of a variable name is a bad afternoon.
+  const apiKey = opts.apiKey ?? process.env.VAPI_PRIVATE_KEY ?? process.env.VAPI_API_KEY
   if (!apiKey || !apiKey.trim()) {
-    return { ok: false, reason: 'VAPI_PRIVATE_KEY is not set, so call history cannot be read.', configured: false }
+    return { ok: false, reason: 'VAPI_PRIVATE_KEY (or VAPI_API_KEY) is not set, so call history cannot be read.', configured: false }
   }
 
   const doFetch = opts.fetchImpl ?? fetch
