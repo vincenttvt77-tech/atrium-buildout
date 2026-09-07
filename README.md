@@ -4,88 +4,124 @@ AI leasing and resident operations for multifamily buildings.
 
 ## Where this is
 
-Early. This repo currently contains the **knowledge safety core** (what the agent may answer at
-all), the **qualification gate** (what it must learn before quoting), and **secret
-handling**. The voice adapter, inventory and tour booking are still ahead.
+A working voice leasing agent with the safety machinery built first, plus a demo property
+(**The Larkin**, a fictional 318-residence tower in Long Island City) to exercise it against.
 
-The knowledge safety core was deliberately the first thing built. The difference between a product and a chatbot
-that loses you a Fair Housing complaint is whether it will confidently say something it
-cannot support, and that property has to be structural rather than a prompt instruction.
-
-## Running it
-
-Requires Node 22.18+. There are **no dependencies** — Node runs the TypeScript directly.
+**149 tests, no dependencies.** Node 22 runs the TypeScript directly.
 
 ```
-npm test          # 45 tests, no install step
-npm run typecheck # needs tsc; optional
+npm test              # unit + handler integration tests
+npm run build         # bundle the API function for deploy
+node scripts/validate-data.mjs   # check property data against the runtime contracts
 ```
+
+See `SETUP.md` for getting the phone line live.
 
 ## The one idea worth understanding
 
-Every question is classified into one of three kinds, and the *kind* decides what may
-happen — not the retrieved content, not the model's confidence.
+Every rule that matters is enforced in **code the model cannot argue with** — not in the
+system prompt. A prompt instruction is a request. A tool that refuses is a constraint.
 
-| Kind | Examples | What Atrium may do |
+A caller who talks the agent into wanting to quote a price still gets a refusal, because
+the quote gate lives in the tool implementation, not the prompt.
+
+### Three kinds of question
+
+The *classification* decides what may happen — not the retrieved content, not the model's
+confidence.
+
+| Kind | Examples | What the agent may do |
 |---|---|---|
-| **Restricted** | accommodation requests, eligibility, disputes, legal, money | **Never answers.** Escalates to a human with full context. No confidence level unlocks this. |
-| **Volatile** | price, availability, tour slots, account status | **Never answers from the knowledge base.** Defers to the owning live system, and the answer is verified by read-back before it is spoken. |
-| **Policy** | pet policy, parking, hours, amenities | May answer — but only from an article that is published, human-approved, scoped to this property and jurisdiction, and not past its review date. |
+| **Restricted** | vouchers, accommodation, eligibility, disputes, legal, money | **Never answers.** Escalates with full context. No confidence level unlocks this. |
+| **Volatile** | rent, availability, tour slots, account status | **Never answers from the knowledge base.** Defers to the live source, verified by read-back. |
+| **Policy** | pets, parking, hours, amenities | May answer — but only from an article that is published, human-approved, in scope for the property and jurisdiction, and not past its review date. |
 
-Two consequences that are easy to miss and are covered by tests:
+Two consequences that are easy to miss, both covered by tests:
 
-- A restricted topic escalates **even when a perfect, published article exists and
-  confidence is 1.0**. Content never overrides classification.
-- A price question defers to live inventory **even when an article answers it**. A stale
-  quote is worse than no quote — it loses the lease and it is a compliance problem.
+- A restricted topic escalates **even with a perfect published article at confidence 1.0**.
+- A rent question defers to live inventory **even when an article answers it**. A stale
+  quote loses the lease *and* is a compliance problem.
 
-When Atrium cannot answer, it does not improvise. It refuses, offers a human, and files
-the gap as a proposed article carrying a `timesAsked` count so the questions residents
-actually ask rise to the top of the review queue. An AI-generated answer can never become
-approved policy: `approvedBy` is a person, and nothing can set it to a machine.
+### Three more guards
 
-## Working in this repo
+**The quote gate.** No rent is stated until at least two of move-in timing, bedroom need
+and budget are captured. Quoting blind is how a $4,200 residence gets shown to someone with
+a $2,500 ceiling, and how the loss reason becomes "went quiet" instead of the truth.
 
-Node runs the TypeScript directly in **strip-only mode**, which means no dependencies but
-also no TypeScript syntax that requires real transformation: no `enum`, no constructor
-parameter properties (`constructor(public readonly x: T)`), no `namespace`, no decorators.
-Types, interfaces and `satisfies` are all fine. Write the field out explicitly instead.
+**Priced out is a first-class outcome.** When nothing fits the stated budget, the agent
+says so and records the gap **as a number**. It does not quietly offer something dearer.
+That number is the countable loss reason the whole product exists to produce.
 
-## Secrets
+**Read-back before "confirmed."** A booking is written, then re-read from the calendar and
+compared. Only a match may be called confirmed; an unverified write says "being arranged"
+and a failure says a person will call back. What the agent may say is derived from booking
+state, so no conversational pressure produces a false confirmation.
 
-Never in the repo, never in chat, never in a screenshot. `src/config/env.ts` is the only
-place secrets are read; it holds the credential inventory (SOW 18.2), throws by name when
-one is missing, and exposes `redact()` so a key cannot be logged by accident.
+### Emergencies
 
-Locally: copy `.env.example` to `.env` (gitignored). In production: the host's environment
-variable store, never a file.
+Detection runs ahead of intent classification, qualification, knowledge and authority — and
+uses fixed approved instructions rather than generated text.
+
+It is keyword-driven on purpose. A model having a bad day can misclassify "I smell gas"; a
+keyword list cannot. Probing the first draft found seven false positives — *"can I smoke in
+my apartment"* and *"is there a fire pit on the roof"* both routed to a fire emergency. A
+leasing line takes far more amenity questions than emergencies, and a detector that cries
+wolf trains staff to ignore it. All 20 benign probes and 21 emergency phrasings are now
+locked in as tests.
+
+## Evidence, everywhere
+
+Every captured value carries its provenance, confidence, source interaction, and **the words
+that justified it**. The dashboard cannot say "budget: $4,200" — it says
+*"budget: $4,200, from 'up to about forty-two hundred', call #1, 87% confident."*
+
+Human corrections outrank the model permanently, at any confidence. Between two AI
+extractions the later one wins, because people revise mid-call.
+
+This was built in from the first commit deliberately. Retrofitting provenance means going
+back through every field and guessing where values came from.
 
 ## Layout
 
 ```
-src/domain/ids.ts          branded identifiers
-src/knowledge/topics.ts    the three-way classification and live-source routing
-src/knowledge/article.ts   article governance — approval, scope, versioning, review dates
-src/knowledge/answer.ts    the decision engine
-src/knowledge/test/        tests, mostly asserting what the agent must refuse to do
-src/leasing/captured.ts    evidence provenance — every field knows where it came from
-src/leasing/qualification.ts  the quote gate: two of three signals before any price
-src/config/env.ts          secret access, credential inventory, redaction
+src/knowledge/      the three-way classification, article governance, decision engine
+src/leasing/        the quote gate and evidence provenance
+src/inventory/      validating loader, matching, the priced-out branch
+src/booking/        read-back verification and idempotency
+src/escalation/     emergency detection and escalation context
+src/conversation/   the tools, where the guards actually live
+src/record/         the shared operational record
+src/email/          template rendering with escaping
+src/vapi/           system prompt and assistant config
+api/vapi.ts         the webhook Vapi calls; GET serves the dashboard log
+data/               the demo property, inventory, knowledge and policies
+public/             the building website and /dashboard.html
+scripts/            build, deploy manifest, assistant config, data validation
 ```
 
-## Next
+## Working in this repo
 
-1. ~~Qualification — capture move-in timing, budget, unit need before quoting~~ done
-2. Live inventory from CSV/Sheet (no PMS partnership needed for the first building)
-3. Tour booking with read-back verification
-4. Loss-reason capture with linked conversation evidence and confidence
-5. Follow-up sequencing with objection-specific logic and hard stop conditions
-6. Escalation routing
-7. Voice/SMS adapters — deliberately last, and behind an interface, so the vendor choice
-   stays reversible
+Node runs the TypeScript in **strip-only mode** — no dependencies, but also no TypeScript
+syntax needing real transformation: no `enum`, no constructor parameter properties, no
+`namespace`, no decorators. Types, interfaces and `satisfies` are fine.
 
-## Scope note
+Secrets are read in exactly one place, `src/config/env.ts`. It holds the credential
+inventory, throws by name when one is missing, and exposes `redact()` so a key cannot be
+logged by accident. Never in the repo, never in chat, never in a screenshot.
 
-Traceability to the Scope of Work: knowledge governance is §7.3, the never-guess rule is
-§5.2(3)/§6.2/§7.1, restricted-topic escalation is §3.2/§5.2(7)/§10, and configurable
-confidence thresholds are §15.3.
+## What is not real yet
+
+- **SMS** — needs 10DLC, which needs the EIN.
+- **Apple Messages for Business** — needs the entity and Apple's review.
+- **The tour calendar** is an in-memory demo, not Google Calendar or a PMS.
+- **The dashboard log** lives in the function's memory and resets on cold start. The
+  `RecordStore` interface in `src/record/store.ts` is waiting for a KV implementation.
+- **The building is fictional.** Every residence, rent and policy is invented.
+
+## Traceability
+
+Knowledge governance is SOW §7.3; the never-guess rule §5.2(3), §6.2 and §7.1;
+restricted-topic escalation §3.2, §5.2(7) and §10; the quote gate §5.2(4); evidence-linked
+prospect records §6.3; loss-reason capture §6.2; read-back verification and truthful
+messaging §13.3; emergency routing §8.1; escalation context §10; secrets and credential
+inventory §15.2 and §18.2.
