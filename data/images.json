@@ -1,5 +1,5 @@
 {
-  "note": "Generated demo imagery hosted on the generator's CDN. Referenced directly because the build environment's egress policy blocks that host, so the files could not be pulled into the repo. A visitor's browser reaches them fine. For anything beyond a demo these should be downloaded and served from the same origin as the site — a third-party CDN URL is not a dependency you want under a client's building.",
+  "note": "Generated demo imagery hosted on the generator's CDN. Referenced directly because the build environment's egress policy blocks that host, so the files could not be pulled into the repo. A visitor's browser reaches them fine. For anything beyond a demo these should be downloaded and served from the same origin as the site \u2014 a third-party CDN URL is not a dependency you want under a client's building.",
   "images": {
     "hero": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_145500_e6576246-13ef-4e2f-a969-6dbda18c3470.png",
     "lobby": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_145458_7da20671-19d6-4146-8956-6f953670c1fc.png",
@@ -12,6 +12,18 @@
     "two-bed-interior": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_145459_780fa3af-8c08-4427-9bca-283416a62589.png",
     "kitchen": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_145458_806002b6-8215-4c42-a5f1-1321a79a417c.png",
     "bathroom": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_145458_37018f36-122d-405f-962f-e4aaba482c3b.png",
-    "neighborhood": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_145458_a4039fac-515f-47ff-8246-659e8e851b6b.png"
+    "neighborhood": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_145458_a4039fac-515f-47ff-8246-659e8e851b6b.png",
+    "yoga-studio": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_165727_50c0bfce-8abf-4ea6-9a39-ab37f68d5178.png",
+    "recovery-suite": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_165727_c72d631b-f9a1-4d16-a97b-580443e63b75.png",
+    "private-dining": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_165729_e66c11e5-b379-458a-b8ac-a84b01c8b3d6.png",
+    "pet-spa": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_165727_b7ee81e0-c2b5-41f6-9848-8b5cf0864bef.png",
+    "bike-room": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_165727_758d537a-52bd-413f-a79a-293841046e3e.png",
+    "grilling-terrace": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_165728_dc59f458-6ec9-4a38-9cbb-597f8c6210fd.png",
+    "dog-run": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_165728_e2b6b0b2-905e-4ed4-98d7-068dd7bf9b0b.png",
+    "playroom": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_165727_e58b6ed7-7839-4dd6-9c0c-8cc766b7cc1a.png",
+    "screening-room": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_165727_9da03123-dde4-484f-a550-e526494bb2c5.png",
+    "reading-room": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_165727_73c419c8-008b-420f-a275-77cb791e7956.png",
+    "package-room": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_165728_5ff73e0b-3e03-4147-be93-0cec16b7e83d.png",
+    "parking-garage": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_165727_e374c5ae-a7b4-4998-8171-d0458618c0dc.png"
   }
 }

@@ -5,6 +5,7 @@ import { mayQuote, nextSignalToAsk, captureCore } from '../leasing/qualification
 import { extracted } from '../leasing/captured.ts'
 import { decideAnswer } from '../knowledge/answer.ts'
 import { retrieve } from '../knowledge/retrieve.ts'
+import { guardTopic } from '../knowledge/guard.ts'
 import type { KnowledgeArticle } from '../knowledge/article.ts'
 import type { Topic } from '../knowledge/topics.ts'
 import { detectEmergency, primaryEmergency, safetyInstruction } from '../escalation/emergency.ts'
@@ -170,15 +171,31 @@ export interface AnswerArgs {
 
 /** Property questions. Answers only from approved knowledge; escalates the restricted. */
 export function answerQuestion(args: AnswerArgs, ctx: ToolContext): ToolResult {
+  /*
+   * The topic is an argument the model supplies. Trusting it alone means one
+   * misclassification is a Fair Housing incident, so the question text is screened first
+   * and can override the topic upward into a restricted one — never downward.
+   */
+  const guard = guardTopic(args.question)
+  const topic = guard ? guard.topic : args.topic
+
   // Rank against what was actually asked. Passing every article filed under the topic and
   // taking the first is how "what are the gym hours" gets answered with the leasing
   // office's hours — approved, fluent, and wrong.
-  const inTopic = ctx.articles.filter((a) => a.topic === args.topic)
+  /*
+   * Only articles that could actually be served are ranked. retrieve() returns the
+   * confidence of its top hit, and decideAnswer() filters to servable afterwards — so
+   * ranking a held draft lets it set ceiling confidence for whatever servable article
+   * happens to rank next. Unpublishing text is not the same as removing it.
+   */
+  const inTopic = ctx.articles.filter(
+    (a) => a.topic === topic && a.status === 'published' && a.approvedBy !== null,
+  )
   const { ranked, confidence } = retrieve(args.question, inTopic)
 
   const decision = decideAnswer({
     question: args.question,
-    topic: args.topic,
+    topic,
     propertyId: ctx.propertyId,
     jurisdiction: ctx.jurisdiction,
     candidates: ranked.map((r) => r.article),
@@ -192,7 +209,7 @@ export function answerQuestion(args: AnswerArgs, ctx: ToolContext): ToolResult {
       return {
         say: decision.text,
         record: {
-          kind: 'question_answered', question: args.question, topic: args.topic,
+          kind: 'question_answered', question: args.question, topic,
           decision: 'answer', sources: decision.sources.slice(0, 3).map((s) => `${s.id}@v${s.version}`),
           confidence: Number(confidence.toFixed(2)),
         },
@@ -201,14 +218,18 @@ export function answerQuestion(args: AnswerArgs, ctx: ToolContext): ToolResult {
     case 'escalate':
       return {
         say: 'That is something a member of the team needs to handle directly. Tell the caller you are passing it to the leasing manager who will follow up, take their contact details, and do NOT attempt to answer, characterise, or redirect the question.',
-        record: { kind: 'question_answered', question: args.question, topic: args.topic, decision: 'escalate', sources: [] },
-        escalate: { trigger: `restricted:${args.topic}`, detail: args.question },
+        record: {
+          kind: 'question_answered', question: args.question, topic,
+          decision: 'escalate', sources: [],
+          ...(guard ? { guardedFrom: args.topic, guardMatched: guard.matched } : {}),
+        },
+        escalate: { trigger: `restricted:${topic}`, detail: args.question },
       }
 
     case 'defer_to_live_source':
       return {
         say: `That is live information — use the availability tool, not your own knowledge. Do NOT answer from memory.`,
-        record: { kind: 'question_answered', question: args.question, topic: args.topic, decision: 'defer', sources: [] },
+        record: { kind: 'question_answered', question: args.question, topic, decision: 'defer', sources: [] },
       }
 
     case 'refuse':

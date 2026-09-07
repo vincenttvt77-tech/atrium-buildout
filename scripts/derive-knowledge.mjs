@@ -12,6 +12,7 @@
  */
 import { readFile, writeFile } from 'node:fs/promises'
 import { findRentFigure } from './rent-guard.mjs'
+import { findRestrictedContent } from './restricted-guard.mjs'
 
 const approve = process.argv.includes('--approve')
 const OWNER = 'person-manager-1'
@@ -44,6 +45,18 @@ const SYNONYMS = {
 
 function add(topic, question, answer, source, keywords, hold) {
   if (!answer || String(answer).trim().length < 8) return
+  /*
+   * A policy summary can carry restricted subject matter in its body while sitting under a
+   * perfectly ordinary topic. Deriving it would put an answerable article in front of a
+   * question that must reach a human, so these are dropped rather than held: an in_review
+   * article still influences retrieval confidence, so holding is not the same as removing.
+   */
+  const restricted = findRestrictedContent(answer)
+  if (restricted) {
+    skipped.push(`${topic} / "${question}" — states ${restricted.why}; must escalate`)
+    return
+  }
+
   const rent = findRentFigure(answer)
   if (rent) {
     skipped.push(`${topic} / "${question}" — $${rent.amount.toLocaleString()} in rent context`)

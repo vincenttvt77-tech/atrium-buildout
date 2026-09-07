@@ -115,8 +115,19 @@ describe('questions are answered only from approved knowledge', () => {
   test('a voucher question escalates and is never characterised', () => {
     const r = answerQuestion({ question: 'do you take section 8', topic: 'fair_housing' }, ctx())
     assert.ok(r.escalate)
-    assert.match(r.escalate!.trigger, /restricted:fair_housing/)
+    // The question guard reclassifies this to protected_class_inquiry — source of income is
+    // a protected class in New York City. Either way it escalates; the guard is more precise.
+    assert.match(r.escalate!.trigger, /restricted:(fair_housing|protected_class_inquiry)/)
     assert.match(r.say, /do NOT attempt to answer/i)
+  })
+
+  test('a pet question mentioning a service animal escalates despite a pet_policy topic', () => {
+    const r = answerQuestion(
+      { question: 'do you allow German Shepherds, mine is a service dog', topic: 'pet_policy' },
+      ctx())
+    assert.ok(r.escalate, 'the model chose pet_policy; the guard must override it')
+    assert.match(r.escalate!.trigger, /reasonable_accommodation/)
+    assert.equal(r.record.guardedFrom, 'pet_policy')
   })
 
   test('an accommodation request escalates', () => {

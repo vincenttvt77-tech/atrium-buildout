@@ -1365,7 +1365,7 @@
     "id": "art-derived-018",
     "topic": "amenities",
     "question": "Tell me about The Bike Room",
-    "answer": "Two hundred twenty tagged spaces on three, reached from the service elevator, at no charge. Every residence gets one space, and a second goes on a waitlist that runs about a month right now. There is a repair stand on the north wall with a floor pump and a hex set.",
+    "answer": "Two hundred twenty tagged spaces on three for 318 residences, reached from the service elevator, at no charge. One space per residence when one is open, and the waitlist runs about a month right now. There is a repair stand on the north wall with a floor pump and a hex set.",
     "propertyScope": [
       "prop-demo"
     ],
@@ -2044,29 +2044,6 @@
   },
   {
     "id": "art-derived-042",
-    "topic": "pet_policy",
-    "question": "What is your pet policy?",
-    "answer": "Two pets per residence, fifty pounds each, dogs and cats. There is no pet fee, no pet deposit, and no monthly pet rent — New York does not permit them, and damage a pet causes is billed at cost after the fact instead. Register the pet at signing with a rabies certificate, a vet record, and the NYC dog license, and check the restricted breed list before you fall in love with a puppy. Your fob opens the Pet Spa on three and The Green on four, and dogs stay leashed everywhere else in the building.",
-    "propertyScope": [
-      "prop-demo"
-    ],
-    "jurisdictionScope": [
-      "NY"
-    ],
-    "status": "published",
-    "version": 2,
-    "source": "House Rules: pets",
-    "ownerId": "person-manager-1",
-    "keywords": [
-      "pets"
-    ],
-    "approvedBy": "person-manager-1",
-    "approvedAt": "2026-09-01T00:00:00.000Z",
-    "reviewBy": "2027-09-07T00:00:00.000Z",
-    "correctionNote": "Truncated 2026-09-07. The answer closed with \"Service animals and approved emotional support animals are not pets under the law. They pay no fee, the breed and weight limits do not apply, and the resident manager handles those requests directly.\" That is a reasonable_accommodation ruling plus a legal assertion, delivered by the agent, and the hand-off at the end does not undo it. policies.json pets declares escalationTopic \"reasonable_accommodation\", which the derived article dropped. The sentence is gone, so no article contains emotional, support, or service animal and an accommodation question has no candidate to serve. Version bumped to 2; the resident manager should re-sign it."
-  },
-  {
-    "id": "art-derived-043",
     "topic": "parking",
     "question": "Do you have parking?",
     "answer": "The garage is 84 attended spaces under the building, entered from 5th Street, staffed around the clock. A space is $425 a month on a license that runs month to month with thirty days' notice, and twelve of the spaces have Level 2 charging at no extra cost. There is a waitlist right now of about two months, 19 households deep, ordered by the day you asked. Guests park for $45 a day when there is room, motorcycles are $195, and the bike room on three is free with one tagged space per residence.",
@@ -2092,7 +2069,7 @@
     "reviewBy": "2027-09-07T00:00:00.000Z"
   },
   {
-    "id": "art-derived-044",
+    "id": "art-derived-043",
     "topic": "building_access",
     "question": "What is the guest policy?",
     "answer": "Guests are welcome and they are yours to escort. Fourteen consecutive nights is the limit, and thirty nights in any six months, after which the person is an occupant and gets added to the lease at no cost. Register anyone coming up in the resident app or at the desk, and use the app's 24-hour QR pass rather than handing over your fob. In the amenity spaces a guest is with you the whole time: two at the pool, two in The Works, none in The Studio or The Green, and sixty-five people total in The Overlook.",
@@ -2114,7 +2091,7 @@
     "reviewBy": "2027-09-07T00:00:00.000Z"
   },
   {
-    "id": "art-derived-045",
+    "id": "art-derived-044",
     "topic": "move_logistics",
     "question": "How does move-in work?",
     "answer": "Reserve the freight elevator through the resident manager at least five business days out, in four-hour blocks, Monday through Saturday 9:00am to 5:00pm — no Sundays and no building holidays. Your mover sends a certificate of insurance five business days ahead naming 5-08 46th Avenue Owner LLC and Halbrook Residential Management as additional insureds, with a million per occurrence and statutory workers comp. There is no move fee and no move deposit. The resident manager photographs the corridor, the freight car, and the loading area before and after your block, and damage from a move is repaired and billed at cost with an itemized statement. Everything comes in through the service entrance on 5th Street, and staff hang the pads and lay the floor protection before your block starts.",
@@ -2136,7 +2113,7 @@
     "reviewBy": "2027-09-07T00:00:00.000Z"
   },
   {
-    "id": "art-derived-046",
+    "id": "art-derived-045",
     "topic": "general_property_fact",
     "question": "How does trash and recycling work?",
     "answer": "There is a chute closet on every residential floor next to the service elevator, and your fob opens it. Household trash goes down the chute between 6:00am and 11:00pm in a tied bag — no glass, no cardboard. The blue and green recycling bins and the brown compost bin are in the same closet and are open around the clock, and the compost bin is a city requirement, not a house preference. Bulk items get a tag from the front desk and go to the staging room on the cellar level, mattresses have to be bagged first, and anything left in a hallway is removed at $75 an item.",
@@ -2158,7 +2135,7 @@
     "reviewBy": "2027-09-07T00:00:00.000Z"
   },
   {
-    "id": "art-derived-047",
+    "id": "art-derived-046",
     "topic": "utilities",
     "question": "What utilities are included in the rent?",
     "answer": "Heat, hot water, cooling, water, cooking gas, and trash are included in your rent, and so is the WiFi in every amenity space. What you pay separately is electricity through Con Edison and internet in your own residence. Because heat and cooling come off the building's central system rather than your meter, the electric bill is small — figure $45 to $70 in a studio and $95 to $160 in a three-bedroom, with July and August at the top. The building is wired for both Verizon Fios and Spectrum with no bulk contract, so you choose. Open the Con Edison account at least three business days before you pick up keys, because the desk cannot release them without the account number.",
@@ -2180,7 +2157,7 @@
     "reviewBy": "2027-09-07T00:00:00.000Z"
   },
   {
-    "id": "art-derived-048",
+    "id": "art-derived-047",
     "topic": "general_property_fact",
     "question": "How do packages work?",
     "answer": "Luxer lockers behind the lobby are open 24 hours with your fob, and there is refrigerated and freezer storage for groceries. You get a text and an email the minute a package lands. Anything too big for a locker waits with the front desk, which is staffed around the clock, and everything is held for ten days before it goes back to the carrier — there is no storage fee. Cold storage holds for 24 hours. The desk cannot accept anything needing a signature, a COD, or an item declared over $2,500, and food couriers stop in the lobby unless you have turned on door delivery in the app.",
@@ -2202,7 +2179,7 @@
     "reviewBy": "2027-09-07T00:00:00.000Z"
   },
   {
-    "id": "art-derived-049",
+    "id": "art-derived-048",
     "topic": "building_access",
     "question": "How do I get into the building?",
     "answer": "Your fob opens the lobby, the elevator to your floor and the three amenity floors, and every amenity door, and the resident app does the same over Bluetooth. Two fobs come with the residence and a third or fourth is $50. Guests are announced at the desk or use a 24-hour QR pass you send from the app, and carriers get the lobby and the package room only. If you lock yourself out, the desk verifies you against the lease and lets you in — the first time in a lease year is free, after that it is $75, or $125 between 11:00pm and 7:00am.",
@@ -2224,7 +2201,7 @@
     "reviewBy": "2027-09-07T00:00:00.000Z"
   },
   {
-    "id": "art-derived-050",
+    "id": "art-derived-049",
     "topic": "general_property_fact",
     "question": "What is the smoking policy?",
     "answer": "The Larkin is smoke-free everywhere — inside your residence, on the terraces and balconies, in the garage and the bike room, on every amenity floor, and within fifteen feet of the entrance. That covers cigarettes, cigars, hookah, vaping, and cannabis, which is legal in New York and still not permitted here. No charcoal, no propane, and no candles outdoors; the gas grills on The Terrace are the exception. You sign a smoke-free rider with your lease, as New York City requires, and a violation runs from a written notice to $250 to $500 and a notice to cure.",
@@ -2246,7 +2223,7 @@
     "reviewBy": "2027-09-07T00:00:00.000Z"
   },
   {
-    "id": "art-derived-051",
+    "id": "art-derived-050",
     "topic": "general_property_fact",
     "question": "What are the quiet hours?",
     "answer": "Quiet hours are 10:00pm to 8:00am Sunday through Thursday and 11:00pm to 9:00am Friday and Saturday, and the rest of the day the standard is nothing a neighbor hears through a closed door. Your lease requires rugs over 80 percent of the floor in every room but the kitchen, baths, entry, and closets, which is what actually keeps a tower this size quiet. Outdoor amenity spaces have no amplified music at any hour and go quiet at 10:00pm. Report noise to the front desk while it is happening — it is staffed 24 hours, it logs the time, and it never tells your neighbor who called.",
@@ -2268,10 +2245,10 @@
     "reviewBy": "2027-09-07T00:00:00.000Z"
   },
   {
-    "id": "art-derived-052",
+    "id": "art-derived-051",
     "topic": "general_property_fact",
     "question": "Can I sublet or list on Airbnb?",
-    "answer": "Short-term rentals are not permitted here in any form. A rental under thirty days without you present is illegal under state law, the building is on New York City's prohibited buildings list under Local Law 18, and a listing costs $1,000 and a notice to cure the first time. Subletting is different and it is allowed: send a written request by certified mail thirty days out with the term, the subtenant's name and addresses, your reason, and where you will be living, and management answers in writing within thirty days. There is a $250 administrative fee and the subtenant applies like anyone else at $20 an adult. You stay on the lease and stay liable for the term.",
+    "answer": "Short-term rentals are not permitted here in any form. A listing costs $1,000 and a notice to cure the first time. If you want to know how the city's short-term rental rules apply to your situation, the leasing office will put you in touch with someone who can answer that properly. Subletting is different and it is allowed: send a written request by certified mail thirty days out with the term, the subtenant's name and addresses, your reason, and where you will be living, and management answers in writing within thirty days. There is a $250 administrative fee and the subtenant applies like anyone else at $20 an adult. You stay on the lease and stay liable for the term.",
     "propertyScope": [
       "prop-demo"
     ],
@@ -2290,7 +2267,7 @@
     "reviewBy": "2027-09-07T00:00:00.000Z"
   },
   {
-    "id": "art-derived-053",
+    "id": "art-derived-052",
     "topic": "application_requirements",
     "question": "Do I need renters insurance?",
     "answer": "Renters insurance is required for the whole lease term, with at least $300,000 in personal liability, and the certificate has to be on file before the desk hands you keys. Name 5-08 46th Avenue Owner LLC, care of Halbrook Residential Management at the building address, as additional interest. Coverage in this neighborhood runs about $15 to $30 a month. If it lapses, the building can place a policy that protects the owner and not your belongings and bill you $14.95 a month for it, so keep the certificate current — the app reminds you thirty days ahead. If you have a dog, make sure the liability coverage does not exclude the breed.",
@@ -2312,30 +2289,7 @@
     "reviewBy": "2027-09-07T00:00:00.000Z"
   },
   {
-    "id": "art-derived-054",
-    "topic": "application_requirements",
-    "question": "What do I need to apply?",
-    "answer": "The application fee is $20 per adult, which is the New York cap, and it covers the credit and background check — you get a copy of both. There is no broker fee, because we lease in-house. Nothing is due before you sign. There is no hold deposit, and the first month's rent and the security deposit are collected at lease signing. The security deposit is one month's rent and cannot be more than that under state law, and it sits in an interest-bearing account with the bank disclosed to you at signing. Bring photo ID, an employment letter, two pay stubs, last year's tax return, and two bank statements; if you are self-employed, bring two years of returns, a letter from your accountant, and three months of bank statements. Decisions take one to three business days. Anything specific to your own application goes to the resident manager.",
-    "propertyScope": [
-      "prop-demo"
-    ],
-    "jurisdictionScope": [
-      "NY"
-    ],
-    "status": "published",
-    "version": 2,
-    "source": "House Rules: applicationRequirements",
-    "ownerId": "person-manager-1",
-    "keywords": [
-      "application requirements"
-    ],
-    "approvedBy": "person-manager-1",
-    "approvedAt": "2026-09-01T00:00:00.000Z",
-    "reviewBy": "2027-09-07T00:00:00.000Z",
-    "correctionNote": "Split 2026-09-07. The answer was a verbatim copy of policies.json applicationRequirements.residentSummary, whose block declares escalationTopic \"eligibility_or_denial\". Removed: the 40x income and 80x guarantor test, the guarantor residency list, \"we do not ask about criminal history\", \"we do not use housing court records\", and \"housing vouchers are accepted\". Those four subjects — incomeRequirement, criminalHistory, housingCourtHistory, and sourceOfIncome — now have no article anywhere in the corpus, so decideAnswer() finds no candidate and falls through to escalate. What is left is fees, deposits, the document list, and the decision timeline. Version bumped to 2; the resident manager should re-sign it."
-  },
-  {
-    "id": "art-derived-055",
+    "id": "art-derived-053",
     "topic": "application_requirements",
     "question": "What lease terms do you offer?",
     "answer": "Leases here run one year or two years, and the term is your choice. Every residence in the building is rent stabilized for the term of the 421-a benefit, market-rate homes included, so the rent on your lease is a legal regulated rent and your renewal arrives on DHCR form RTP-8 at the Rent Guidelines Board increase, served 90 to 150 days before your lease ends with 60 days to accept. Rent is due on the first, the late fee is $50 and only after five days, which is the state cap, and you pay by ACH from the portal at no charge. Your lease carries the DHCR rent stabilization rider, the smoke-free rider, and a preferential rent rider if the rent you pay is below the legal regulated rent. Advertised rents and any concession come from the leasing team against live availability, never from this document.",
@@ -2355,10 +2309,10 @@
     "approvedBy": null,
     "approvedAt": null,
     "reviewBy": "2027-09-07T00:00:00.000Z",
-    "reviewNote": "Held out of the published set on 2026-09-07. The answer states that every residence in the building is rent stabilized under the 421-a benefit, which is a legal characterization counsel reviews before it is said to a caller. Until then the agent refuses this question and proposes the article for approval. To publish after sign-off, set status to published, approvedBy to person-manager-1, and approvedAt to a timestamp."
+    "reviewNote": "Held out of the published set by derive-knowledge.mjs. The source block policies.json \"leaseTerms\" declares escalationTopic \"legal_question\": The legal regulated rent for a particular residence, the rent registration history, how the 421-a benefit applies to a specific tenancy, and any question about a rent overcharge go to the resident manager. The assistant does not answer them, and it does not quote a rent from this file. A derived summary cannot carry that flag, so this article is never auto-approved. Redact every sentence covering the escalation subject before publishing, and leave those subjects with no article at all so decideAnswer() falls through to escalate. To publish the redacted remainder, set status to published, approvedBy to person-manager-1, and approvedAt to a timestamp."
   },
   {
-    "id": "art-derived-056",
+    "id": "art-derived-054",
     "topic": "general_property_fact",
     "question": "How does renewal work?",
     "answer": "Your renewal arrives on DHCR form RTP-8, served 90 to 150 days before your lease ends, and you have sixty days to accept. You pick one year or two years, and the increase is the one the New York City Rent Guidelines Board ordered for a lease starting on your renewal date, applied to your legal regulated rent. There is no renewal fee, no new application, and no new deposit. There is no month-to-month option and no holdover premium, because a stabilized lease does not convert. If you would rather move within the building, you can transfer after nine months with a $500 fee and no second deposit. If you are not renewing, sixty days' written notice, take the pre-move-out walkthrough we offer two to four weeks ahead, and the deposit comes back within fourteen days with an itemized statement.",
@@ -2368,19 +2322,20 @@
     "jurisdictionScope": [
       "NY"
     ],
-    "status": "published",
+    "status": "in_review",
     "version": 1,
     "source": "House Rules: renewal",
     "ownerId": "person-manager-1",
     "keywords": [
       "renewal"
     ],
-    "approvedBy": "person-manager-1",
-    "approvedAt": "2026-09-01T00:00:00.000Z",
-    "reviewBy": "2027-09-07T00:00:00.000Z"
+    "approvedBy": null,
+    "approvedAt": null,
+    "reviewBy": "2027-09-07T00:00:00.000Z",
+    "reviewNote": "Held out of the published set by derive-knowledge.mjs. The source block policies.json \"renewal\" declares escalationTopic \"account_status\": A specific renewal rate, a ledger balance, or the status of a particular offer comes from the account system, not from this file. A derived summary cannot carry that flag, so this article is never auto-approved. Redact every sentence covering the escalation subject before publishing, and leave those subjects with no article at all so decideAnswer() falls through to escalate. To publish the redacted remainder, set status to published, approvedBy to person-manager-1, and approvedAt to a timestamp."
   },
   {
-    "id": "art-derived-057",
+    "id": "art-derived-055",
     "topic": "general_property_fact",
     "question": "Is there storage available?",
     "answer": "Private storage in the cellar starts at $95 a month for a 4-by-4-by-6 locker and runs to $240 for the largest, on a month-to-month agreement with thirty days' notice. Access is 24 hours with your fob. There is a waitlist of about six weeks right now. Nothing flammable, perishable, or alive goes in a locker, and the contents are covered by your renters policy, not by the building.",
@@ -2402,10 +2357,10 @@
     "reviewBy": "2027-09-07T00:00:00.000Z"
   },
   {
-    "id": "art-derived-058",
+    "id": "art-derived-056",
     "topic": "application_requirements",
     "question": "What fees should I expect?",
-    "answer": "Before you have keys there is a $20 application fee for each adult and one month's rent as security. There is no broker fee, no hold deposit, no pet fee, and no move-in or move-out deposit, because New York caps what a building may hold to one month's rent. The recurring charges are parking at $425 a month with EV charging included, motorcycle parking at $195, storage from $95 to $240 by locker size, and placed liability insurance at $14.95 a month if your renters policy lapses; the bike room, the amenity spaces, and pet rent are all zero. The one-time charges are an additional fob at $50, a lockout at $75 or $125 between 11:00pm and 7:00am once you have used your free one for the lease year, a $250 sublet administrative fee, a $500 transfer fee, $75 an item for anything left in a corridor, and $10 for the mattress bag DSNY requires. The situational charges are a $50 late fee after rent is five days late, $20 for a returned payment, 2.95 percent to pay by card when ACH from the portal is free, $45 a day for guest parking, $250 and then $500 for a smoking violation, and $100 for a second pet violation. Everything posts to your resident ledger, the front desk does not take money, and damage is billed at cost after the fact with an itemized statement.",
+    "answer": "The charges you are most likely to meet are: $20 an adult to apply and one month's security. Those are the ones that apply to most applications. There is no broker fee, no hold deposit, no pet fee, no move-in or move-out deposit, and no amenity deposit, because New York caps what a building may hold to one month's rent. Parking is $425 a month with EV charging included, storage starts at $95, and the bike room, the amenity spaces, and pet rent are all zero. Everything posts to your resident ledger, the late fee is $50 and only after five days, and the front desk does not take money for anything. Damage is billed at cost after the fact with an itemized statement, never collected up front. Ask the leasing office for the current fee schedule in writing before you sign.",
     "propertyScope": [
       "prop-demo"
     ],
@@ -2413,15 +2368,14 @@
       "NY"
     ],
     "status": "published",
-    "version": 2,
-    "source": "House Rules: feeSchedule, rev 2026-09",
+    "version": 1,
+    "source": "House Rules: feeSchedule",
     "ownerId": "person-manager-1",
     "keywords": [
       "fee schedule"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
-    "reviewBy": "2027-09-07T00:00:00.000Z",
-    "correctionNote": "Regenerated 2026-09-07 from the whole of policies.json feeSchedule — oneTime, recurring, situational, and notCharged — instead of feeSchedule.residentSummary. The summary opened \"the charges that exist here are short\" and named five charges out of roughly twenty-five, which reinforced the exhaustive-list claim in art-amenity-fee. Version bumped to 2; the resident manager should re-sign it."
+    "reviewBy": "2027-09-07T00:00:00.000Z"
   }
 ]
