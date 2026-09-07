@@ -4,12 +4,13 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22.18"
+    "node": "22.x"
   },
   "scripts": {
     "test": "node --test \"src/**/*.test.ts\" \"api/**/*.test.ts\"",
     "test:watch": "node --test --watch \"src/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
-    "build": "node scripts/build-api.mjs"
+    "bundle": "node scripts/build-api.mjs",
+    "validate": "node scripts/validate-data.mjs"
   }
 }
