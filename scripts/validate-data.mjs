@@ -7,6 +7,7 @@
  */
 import { readFile } from 'node:fs/promises'
 import { findRentFigure } from './rent-guard.mjs'
+import { findRestrictedContent } from './restricted-guard.mjs'
 
 const VOLATILE = new Set(['unit_availability', 'pricing', 'tour_slot_availability',
   'application_status', 'account_status', 'work_order_status'])
@@ -165,13 +166,8 @@ for (const a of articles ?? []) {
    * servable article ranked next. So a derived article held by derive-knowledge.mjs fails
    * this check until a human actually redacts it, which is the point.
    */
-  const body = (a.answer ?? '').toLowerCase()
-  for (const [pat, why] of [
-    [/section 8|voucher|cityfheps|housing choice|source of income/, 'housing vouchers and source of income'],
-    [/emotional support|service animal|assistance animal|reasonable accommodation/, 'reasonable accommodation'],
-    [/criminal history|criminal record|conviction|housing court|tenant blacklist/, 'criminal or housing court history'],
-    [/\b(40|80)\s*(times|x)\b|times the monthly rent/, 'the income eligibility test'],
-  ]) if (pat.test(body)) fail(w, `answer states ${why} — a RestrictedTopic decideAnswer() must escalate. Remove it so no article can serve the question.`)
+  const restricted = findRestrictedContent(a.answer, a.topic)
+  if (restricted) fail(w, `answer states ${restricted.why} ("${restricted.matched}") — a RestrictedTopic decideAnswer() must escalate. Remove it so no article can serve the question.`)
 
   /*
    * A fee answer that closes the list is the most authoritative-sounding way to be wrong.

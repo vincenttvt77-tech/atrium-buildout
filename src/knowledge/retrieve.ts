@@ -19,6 +19,16 @@ const STOP = new Set([
   'is', 'it', 'its', 'me', 'my', 'of', 'on', 'or', 'that', 'the', 'their', 'them', 'there',
   'these', 'they', 'this', 'to', 'was', 'we', 'were', 'what', 'when', 'where', 'which',
   'will', 'with', 'would', 'you', 'your', 'am', 'any', 'about', 'please', 'tell', 'know',
+  /*
+   * Words that name the subject of every article rather than any one of them. A caller
+   * says "do the units have balconies" or "is there a place to wash my dog"; "units" and
+   * "place" appear in no article's title, so they carried full unseen-term weight and
+   * pulled a correct match under the confidence threshold. They distinguish nothing here.
+   */
+  'apartment', 'apartments', 'unit', 'units', 'residence', 'residences', 'place', 'here',
+  'like', 'want', 'wanted', 'need', 'looking', 'just', 'really', 'also', 'still', 'guys',
+  'hi', 'hello', 'hey', 'okay', 'ok', 'so', 'yeah', 'yes', 'some', 'lot', 'stuff', 'thing',
+  'things', 'gonna', 'wanna', 'kind', 'sort', 'curious', 'wondering', 'space', 'spaces',
 ])
 
 /** Light stemming: enough to tie "dogs" to "dog" and "heated" to "heat" without a library. */

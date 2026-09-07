@@ -118,3 +118,13 @@ describe('the store degrades honestly', () => {
     assert.deepEqual(state, emptyCalendar())
   })
 })
+
+describe('slot identity', () => {
+  test('a half-hour slot has its own id, not the hour\'s', () => {
+    const two = slotIdFor(new Date('2026-09-08T18:00:00Z'))
+    const half = slotIdFor(new Date('2026-09-08T18:30:00Z'))
+    assert.notEqual(two, half)
+    const ids = generateSlots(NOW, { days: 1 }).map((s) => s.slotId)
+    assert.equal(new Set(ids).size, ids.length, 'every generated slot id is distinct')
+  })
+})

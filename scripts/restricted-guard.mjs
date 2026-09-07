@@ -19,8 +19,27 @@ export const RESTRICTED_PATTERNS = [
 ]
 
 /** Returns why the body is restricted, or null when it is clean. */
-export function findRestrictedContent(answer) {
+export function findRestrictedContent(answer, topic) {
   const body = String(answer ?? '')
+
+  /*
+   * A pet-policy article MUST mention service and assistance animals: a breed list or a
+   * pet fee stated without the exemption is the Fair Housing exposure, not the other way
+   * round. What it may not do is adjudicate. It may say they are not pets, that the rules
+   * do not apply, and that the office handles it — routing language. A caller who brings
+   * up a service animal is escalated by the question guard before any article is read,
+   * so the article never answers the accommodation question itself.
+   */
+  if (topic === 'pet_policy') {
+    const routing = /(not pets|are not pets|do not apply|does not apply|none of the pet rules|handled by the (?:leasing )?office|office handles)/i
+    const mentions = /(service|assistance) animal|emotional support/i
+    if (mentions.test(body) && routing.test(body)) {
+      const scrubbed = body.replace(/[^.!?]*(?:service|assistance) animal[^.!?]*[.!?]/gi, '')
+                           .replace(/[^.!?]*emotional support[^.!?]*[.!?]/gi, '')
+      return findRestrictedContent(scrubbed)
+    }
+  }
+
   for (const [pattern, why] of RESTRICTED_PATTERNS) {
     if (pattern.test(body)) return { why, matched: (pattern.exec(body) ?? [''])[0] }
   }

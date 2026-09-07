@@ -1,4 +1,4 @@
-import type { InventorySnapshot } from '../inventory/types.ts'
+import type { InventorySnapshot, FloorPlan } from '../inventory/types.ts'
 import { findMatches } from '../inventory/match.ts'
 import type { QualificationState } from '../leasing/qualification.ts'
 import { mayQuote, nextSignalToAsk, captureCore } from '../leasing/qualification.ts'
@@ -8,7 +8,7 @@ import { decideAnswer } from '../knowledge/answer.ts'
 import { retrieve } from '../knowledge/retrieve.ts'
 import { guardTopic } from '../knowledge/guard.ts'
 import type { KnowledgeArticle } from '../knowledge/article.ts'
-import type { Topic } from '../knowledge/topics.ts'
+import { isPolicy, type Topic } from '../knowledge/topics.ts'
 import { detectEmergency, primaryEmergency, safetyInstruction } from '../escalation/emergency.ts'
 import type { PropertyId, InteractionId } from '../domain/ids.ts'
 import type { LossReason } from '../record/store.ts'
@@ -174,8 +174,51 @@ export function lookupUnit(unitId: string, ctx: ToolContext): ToolResult {
   }
 }
 
+/**
+ * "Is an A2 open?" names a floor plan, not a residence. Sending it through the residence
+ * lookup answered "there is no residence A2" — true, and the reason a caller who read the
+ * plan catalogue was told the building had nothing. A plan names a layout, so it is
+ * answered like one: what is open in that layout, from the verified snapshot.
+ */
+export function lookupPlan(plan: FloorPlan, ctx: ToolContext): ToolResult {
+  const open = ctx.inventory.units
+    .filter((u) => u.floorPlanId === plan.id && u.status === 'available')
+    .sort((a, b) => Date.parse(a.availableFrom) - Date.parse(b.availableFrom))
+  const size = plan.bedrooms === 0 ? 'studio' : `${plan.bedrooms} bed`
+
+  if (open.length === 0) {
+    return {
+      say: `No ${plan.name} (${plan.id}) residences are open right now. Say so plainly and offer to check the other ${size} layouts.`,
+      record: { kind: 'availability_checked', outcome: 'plan_none_open', floorPlanId: plan.id, unitsOffered: [] },
+    }
+  }
+
+  const shown = open.slice(0, 3)
+  const lines = shown.map((u) =>
+    `Unit ${u.unitId}: floor ${u.floor}, ${money(u.monthlyRent)}/month, available ${availDate(u.availableFrom)}${u.concession ? `. Concession: ${u.concession}` : ''}${u.view ? `. ${u.view}` : ''}`)
+  const rest = open.length - shown.length
+  const more = rest > 0 ? ` ${rest} more ${plan.name} residence${rest === 1 ? ' is' : 's are'} open — say more exist and offer to go through them.` : ''
+
+  return {
+    say: `${plan.name} (${plan.id}): ${size}, ${plan.bathrooms} bath, about ${plan.sqft} sq ft. Open now — quote exactly these:\n${lines.join('\n')}${more}`,
+    record: { kind: 'availability_checked', outcome: 'plan_lookup', floorPlanId: plan.id, unitsOffered: shown.map((u) => u.unitId) },
+  }
+}
+
 export function checkAvailability(ctx: ToolContext, args: AvailabilityArgs = {}): ToolResult {
-  if (args.unitId && /[0-9]/.test(args.unitId)) return lookupUnit(args.unitId, ctx)
+  if (args.unitId) {
+    // A residence first — it is the more specific name — then a plan by code or name.
+    const wanted = args.unitId.trim().toUpperCase()
+      .replace(/^(RESIDENCE|UNIT|APARTMENT|APT|THE|PLAN|FLOOR ?PLAN|LAYOUT)\s*/i, '')
+      .replace(/\s*(FLOOR ?PLAN|PLAN|LAYOUT|LINE|RESIDENCES?|UNITS?|APARTMENTS?)$/i, '')
+    const unit = ctx.inventory.units.find((u) => u.unitId.toUpperCase() === wanted)
+    if (unit) return lookupUnit(unit.unitId, ctx)
+    const plan = ctx.inventory.floorPlans.find(
+      (p) => p.id.toUpperCase() === wanted || p.name.toUpperCase() === wanted,
+    )
+    if (plan) return lookupPlan(plan, ctx)
+    if (/[0-9]/.test(wanted)) return lookupUnit(wanted, ctx)
+  }
 
   const gate = mayQuote(ctx.qualification)
   if (!gate.allowed) {
@@ -278,30 +321,59 @@ export function answerQuestion(args: AnswerArgs, ctx: ToolContext): ToolResult {
    * ranking a held draft lets it set ceiling confidence for whatever servable article
    * happens to rank next. Unpublishing text is not the same as removing it.
    */
-  const inTopic = ctx.articles.filter(
-    (a) => a.topic === topic && a.status === 'published' && a.approvedBy !== null,
-  )
-  const { ranked, confidence } = retrieve(args.question, inTopic)
+  const servable = (a: KnowledgeArticle) => a.status === 'published' && a.approvedBy !== null
+  const inTopic = ctx.articles.filter((a) => a.topic === topic && servable(a))
+  let { ranked, confidence } = retrieve(args.question, inTopic)
 
-  const decision = decideAnswer({
+  const decide = (t: Topic, cands: KnowledgeArticle[], conf: number) => decideAnswer({
     question: args.question,
-    topic,
+    topic: t,
     propertyId: ctx.propertyId,
     jurisdiction: ctx.jurisdiction,
-    candidates: ranked.map((r) => r.article),
-    confidence,
+    candidates: cands,
+    confidence: conf,
     confidenceThreshold: ctx.confidenceThreshold,
     now: ctx.now,
   })
+  let decision = decide(topic, ranked.map((r) => r.article), confidence)
+  let answeredUnder: Topic = topic
+
+  /*
+   * The topic is the model's guess, and the corpus files one subject under several. "Is
+   * there a broker fee?" labelled general_property_fact found nothing under that topic and
+   * refused, while the approved answer sat under application_requirements. A refusal for a
+   * policy question is retried across every policy article. Never wider than that: the
+   * question guard has already run, restricted topics escalated above, and volatile ones
+   * deferred — so the retry can only ever land on another ordinary policy article, and only
+   * one that clears the same confidence threshold.
+   */
+  if (decision.kind === 'refuse' && isPolicy(topic)) {
+    const everywhere = ctx.articles.filter((a) => isPolicy(a.topic) && servable(a))
+    const again = retrieve(args.question, everywhere)
+    const best = again.ranked[0]
+    if (best && best.article.topic !== topic && again.confidence >= ctx.confidenceThreshold) {
+      const retry = decide(
+        best.article.topic,
+        again.ranked.filter((r) => r.article.topic === best.article.topic).map((r) => r.article),
+        again.confidence,
+      )
+      if (retry.kind === 'answer') {
+        decision = retry
+        confidence = again.confidence
+        answeredUnder = best.article.topic
+      }
+    }
+  }
 
   switch (decision.kind) {
     case 'answer':
       return {
         say: decision.text,
         record: {
-          kind: 'question_answered', question: args.question, topic,
+          kind: 'question_answered', question: args.question, topic: answeredUnder,
           decision: 'answer', sources: decision.sources.slice(0, 3).map((s) => `${s.id}@v${s.version}`),
           confidence: Number(confidence.toFixed(2)),
+          ...(answeredUnder !== topic ? { topicAsked: topic } : {}),
         },
       }
 

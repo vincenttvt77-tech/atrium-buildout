@@ -35,7 +35,7 @@ export const TOOL_DEFINITIONS = [
         properties: {
           unitId: {
             type: 'string',
-            description: 'If the caller named a specific residence — "is 19A available?" — pass it here and it is looked up directly, no qualification needed.',
+            description: 'If the caller named a specific residence — "is 19A available?" — or a floor plan — "is an A2 open?", "the two bedroom with balcony" — pass it here and it is looked up directly, no qualification needed.',
           },
           reason: {
             type: 'string',
@@ -49,7 +49,7 @@ export const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'answer_question',
-      description: 'Answer a question about the building. Use this for anything about policies, amenities, pets, parking, application requirements, or building facts. It will tell you what you may say.',
+      description: 'Answer a question about the building: policies, amenities, pets, parking, fees and specials, application requirements, floor plans and layouts, balconies, finishes, or any building fact. Pick the closest topic — it searches every approved article, so a near-miss is fine. It will tell you what you may say.',
       parameters: {
         type: 'object',
         properties: {

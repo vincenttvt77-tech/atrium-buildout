@@ -83,3 +83,16 @@ describe('confidence reflects how much of the question was found', () => {
     assert.equal(confidence, 0)
   })
 })
+
+describe('words that name every article', () => {
+  test('"units", "place" and filler do not pull a correct match under the threshold', () => {
+    const corpus = [
+      art('Do the residences have balconies?', 'Some do — the A2 and B2 lines.', ['balcony', 'balconies']),
+      art('What floor plans do you have?', 'Ten plans, from a studio to a three bedroom.', ['floor plans', 'layouts']),
+    ]
+    const { ranked, confidence } = retrieve('so do the units have balconies?', corpus)
+    assert.equal(ranked[0]!.article.question, 'Do the residences have balconies?')
+    assert.ok(confidence >= 0.7, `confidence ${confidence}`)
+    assert.deepEqual(tokenize('is there a place to wash my dog'), ['wash', 'dog'])
+  })
+})

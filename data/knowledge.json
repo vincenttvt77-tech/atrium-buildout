@@ -3,7 +3,7 @@
     "id": "art-pets-allowed",
     "topic": "pet_policy",
     "question": "Are you pet friendly?",
-    "answer": "We are. Two pets per residence, dogs or cats, up to 50 pounds each. There is a one-time $350 fee per pet and no monthly pet rent.",
+    "answer": "Yes. Two pets per residence, dogs or cats, up to 50 pounds each. There is no pet fee, no pet deposit, and no monthly pet rent — New York does not permit them. Pets are registered at lease signing, and there is a restricted breed list from the building's insurer, so tell me the breed and I can check it.",
     "propertyScope": [
       "prop-demo"
     ],
@@ -891,7 +891,13 @@
       "exercise",
       "weights",
       "cardio",
-      "turf"
+      "turf",
+      "amenities",
+      "amenity",
+      "floor",
+      "where",
+      "located",
+      "location"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -920,7 +926,14 @@
       "exercise",
       "weights",
       "cardio",
-      "turf"
+      "turf",
+      "hours",
+      "open",
+      "close",
+      "closes",
+      "late",
+      "early",
+      "time"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -950,7 +963,13 @@
       "weights",
       "cardio",
       "yoga",
-      "pilates"
+      "pilates",
+      "amenities",
+      "amenity",
+      "floor",
+      "where",
+      "located",
+      "location"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -980,7 +999,14 @@
       "weights",
       "cardio",
       "yoga",
-      "pilates"
+      "pilates",
+      "hours",
+      "open",
+      "close",
+      "closes",
+      "late",
+      "early",
+      "time"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -1040,7 +1066,13 @@
       "weights",
       "cardio",
       "sauna",
-      "plunge"
+      "plunge",
+      "amenities",
+      "amenity",
+      "floor",
+      "where",
+      "located",
+      "location"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -1070,7 +1102,14 @@
       "weights",
       "cardio",
       "sauna",
-      "plunge"
+      "plunge",
+      "hours",
+      "open",
+      "close",
+      "closes",
+      "late",
+      "early",
+      "time"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -1129,7 +1168,13 @@
       "events",
       "social",
       "kitchen",
-      "dining"
+      "dining",
+      "amenities",
+      "amenity",
+      "floor",
+      "where",
+      "located",
+      "location"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -1158,7 +1203,14 @@
       "events",
       "social",
       "kitchen",
-      "dining"
+      "dining",
+      "hours",
+      "open",
+      "close",
+      "closes",
+      "late",
+      "early",
+      "time"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -1217,7 +1269,13 @@
       "zoom",
       "conference",
       "work",
-      "lounge"
+      "lounge",
+      "amenities",
+      "amenity",
+      "floor",
+      "where",
+      "located",
+      "location"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -1247,7 +1305,14 @@
       "zoom",
       "conference",
       "work",
-      "lounge"
+      "lounge",
+      "hours",
+      "open",
+      "close",
+      "closes",
+      "late",
+      "early",
+      "time"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -1303,7 +1368,13 @@
       "dog",
       "cat",
       "pet",
-      "puppy"
+      "puppy",
+      "amenities",
+      "amenity",
+      "floor",
+      "where",
+      "located",
+      "location"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -1329,7 +1400,14 @@
       "dog",
       "cat",
       "pet",
-      "puppy"
+      "puppy",
+      "hours",
+      "open",
+      "close",
+      "closes",
+      "late",
+      "early",
+      "time"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -1382,7 +1460,13 @@
       "delivery",
       "storage",
       "laundry",
-      "service"
+      "service",
+      "amenities",
+      "amenity",
+      "floor",
+      "where",
+      "located",
+      "location"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -1409,7 +1493,14 @@
       "delivery",
       "storage",
       "laundry",
-      "service"
+      "service",
+      "hours",
+      "open",
+      "close",
+      "closes",
+      "late",
+      "early",
+      "time"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -1439,7 +1530,13 @@
       "rooftop",
       "patio",
       "outdoor",
-      "pool"
+      "pool",
+      "amenities",
+      "amenity",
+      "floor",
+      "where",
+      "located",
+      "location"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -1469,7 +1566,14 @@
       "rooftop",
       "patio",
       "outdoor",
-      "pool"
+      "pool",
+      "hours",
+      "open",
+      "close",
+      "closes",
+      "late",
+      "early",
+      "time"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -1499,7 +1603,13 @@
       "rooftop",
       "patio",
       "outdoor",
-      "grill"
+      "grill",
+      "amenities",
+      "amenity",
+      "floor",
+      "where",
+      "located",
+      "location"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -1529,7 +1639,14 @@
       "rooftop",
       "patio",
       "outdoor",
-      "grill"
+      "grill",
+      "hours",
+      "open",
+      "close",
+      "closes",
+      "late",
+      "early",
+      "time"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -1587,7 +1704,13 @@
       "pet",
       "puppy",
       "dog run",
-      "turf"
+      "turf",
+      "amenities",
+      "amenity",
+      "floor",
+      "where",
+      "located",
+      "location"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -1615,7 +1738,14 @@
       "pet",
       "puppy",
       "dog run",
-      "turf"
+      "turf",
+      "hours",
+      "open",
+      "close",
+      "closes",
+      "late",
+      "early",
+      "time"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -1644,7 +1774,13 @@
       "events",
       "social",
       "playroom",
-      "deck"
+      "deck",
+      "amenities",
+      "amenity",
+      "floor",
+      "where",
+      "located",
+      "location"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -1673,7 +1809,14 @@
       "events",
       "social",
       "playroom",
-      "deck"
+      "deck",
+      "hours",
+      "open",
+      "close",
+      "closes",
+      "late",
+      "early",
+      "time"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -1731,7 +1874,13 @@
       "events",
       "social",
       "terrace",
-      "kitchen"
+      "kitchen",
+      "amenities",
+      "amenity",
+      "floor",
+      "where",
+      "located",
+      "location"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -1760,7 +1909,14 @@
       "events",
       "social",
       "terrace",
-      "kitchen"
+      "kitchen",
+      "hours",
+      "open",
+      "close",
+      "closes",
+      "late",
+      "early",
+      "time"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -1816,7 +1972,13 @@
       "party",
       "entertain",
       "events",
-      "social"
+      "social",
+      "amenities",
+      "amenity",
+      "floor",
+      "where",
+      "located",
+      "location"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -1843,7 +2005,14 @@
       "party",
       "entertain",
       "events",
-      "social"
+      "social",
+      "hours",
+      "open",
+      "close",
+      "closes",
+      "late",
+      "early",
+      "time"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -1897,7 +2066,13 @@
       "party",
       "entertain",
       "events",
-      "social"
+      "social",
+      "amenities",
+      "amenity",
+      "floor",
+      "where",
+      "located",
+      "location"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -1924,7 +2099,14 @@
       "party",
       "entertain",
       "events",
-      "social"
+      "social",
+      "hours",
+      "open",
+      "close",
+      "closes",
+      "late",
+      "early",
+      "time"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -1952,7 +2134,13 @@
       "storage",
       "laundry",
       "service",
-      "locker"
+      "locker",
+      "amenities",
+      "amenity",
+      "floor",
+      "where",
+      "located",
+      "location"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -1980,7 +2168,14 @@
       "storage",
       "laundry",
       "service",
-      "locker"
+      "locker",
+      "hours",
+      "open",
+      "close",
+      "closes",
+      "late",
+      "early",
+      "time"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -2008,7 +2203,13 @@
       "parking",
       "vehicle",
       "ev",
-      "charging"
+      "charging",
+      "amenities",
+      "amenity",
+      "floor",
+      "where",
+      "located",
+      "location"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -2036,7 +2237,14 @@
       "parking",
       "vehicle",
       "ev",
-      "charging"
+      "charging",
+      "hours",
+      "open",
+      "close",
+      "closes",
+      "late",
+      "early",
+      "time"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -2044,6 +2252,40 @@
   },
   {
     "id": "art-derived-042",
+    "topic": "pet_policy",
+    "question": "What is your pet policy?",
+    "answer": "Two pets per residence, fifty pounds each, dogs and cats. There is no pet fee, no pet deposit, and no monthly pet rent — New York does not permit them, and damage a pet causes is billed at cost after the fact instead. Register the pet at signing with a rabies certificate, a vet record, and the NYC dog license, and check the restricted breed list before you fall in love with a puppy. Your fob opens the Pet Spa on three and The Green on four, and dogs stay leashed everywhere else in the building. Service animals and assistance animals are not pets under the law, so none of the pet rules, fees or breed limits apply to them — if that is your situation, the leasing office handles it directly and will walk you through it.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "House Rules: pets",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "pet",
+      "pets",
+      "dog",
+      "dogs",
+      "cat",
+      "cats",
+      "pet fee",
+      "pet deposit",
+      "pet rent",
+      "breed",
+      "breeds",
+      "weight limit",
+      "how many pets"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-043",
     "topic": "parking",
     "question": "Do you have parking?",
     "answer": "The garage is 84 attended spaces under the building, entered from 5th Street, staffed around the clock. A space is $425 a month on a license that runs month to month with thirty days' notice, and twelve of the spaces have Level 2 charging at no extra cost. There is a waitlist right now of about two months, 19 households deep, ordered by the day you asked. Guests park for $45 a day when there is room, motorcycles are $195, and the bike room on three is free with one tagged space per residence.",
@@ -2069,7 +2311,7 @@
     "reviewBy": "2027-09-07T00:00:00.000Z"
   },
   {
-    "id": "art-derived-043",
+    "id": "art-derived-044",
     "topic": "building_access",
     "question": "What is the guest policy?",
     "answer": "Guests are welcome and they are yours to escort. Fourteen consecutive nights is the limit, and thirty nights in any six months, after which the person is an occupant and gets added to the lease at no cost. Register anyone coming up in the resident app or at the desk, and use the app's 24-hour QR pass rather than handing over your fob. In the amenity spaces a guest is with you the whole time: two at the pool, two in The Works, none in The Studio or The Green, and sixty-five people total in The Overlook.",
@@ -2091,7 +2333,7 @@
     "reviewBy": "2027-09-07T00:00:00.000Z"
   },
   {
-    "id": "art-derived-044",
+    "id": "art-derived-045",
     "topic": "move_logistics",
     "question": "How does move-in work?",
     "answer": "Reserve the freight elevator through the resident manager at least five business days out, in four-hour blocks, Monday through Saturday 9:00am to 5:00pm — no Sundays and no building holidays. Your mover sends a certificate of insurance five business days ahead naming 5-08 46th Avenue Owner LLC and Halbrook Residential Management as additional insureds, with a million per occurrence and statutory workers comp. There is no move fee and no move deposit. The resident manager photographs the corridor, the freight car, and the loading area before and after your block, and damage from a move is repaired and billed at cost with an itemized statement. Everything comes in through the service entrance on 5th Street, and staff hang the pads and lay the floor protection before your block starts.",
@@ -2113,7 +2355,7 @@
     "reviewBy": "2027-09-07T00:00:00.000Z"
   },
   {
-    "id": "art-derived-045",
+    "id": "art-derived-046",
     "topic": "general_property_fact",
     "question": "How does trash and recycling work?",
     "answer": "There is a chute closet on every residential floor next to the service elevator, and your fob opens it. Household trash goes down the chute between 6:00am and 11:00pm in a tied bag — no glass, no cardboard. The blue and green recycling bins and the brown compost bin are in the same closet and are open around the clock, and the compost bin is a city requirement, not a house preference. Bulk items get a tag from the front desk and go to the staging room on the cellar level, mattresses have to be bagged first, and anything left in a hallway is removed at $75 an item.",
@@ -2135,7 +2377,7 @@
     "reviewBy": "2027-09-07T00:00:00.000Z"
   },
   {
-    "id": "art-derived-046",
+    "id": "art-derived-047",
     "topic": "utilities",
     "question": "What utilities are included in the rent?",
     "answer": "Heat, hot water, cooling, water, cooking gas, and trash are included in your rent, and so is the WiFi in every amenity space. What you pay separately is electricity through Con Edison and internet in your own residence. Because heat and cooling come off the building's central system rather than your meter, the electric bill is small — figure $45 to $70 in a studio and $95 to $160 in a three-bedroom, with July and August at the top. The building is wired for both Verizon Fios and Spectrum with no bulk contract, so you choose. Open the Con Edison account at least three business days before you pick up keys, because the desk cannot release them without the account number.",
@@ -2157,7 +2399,7 @@
     "reviewBy": "2027-09-07T00:00:00.000Z"
   },
   {
-    "id": "art-derived-047",
+    "id": "art-derived-048",
     "topic": "general_property_fact",
     "question": "How do packages work?",
     "answer": "Luxer lockers behind the lobby are open 24 hours with your fob, and there is refrigerated and freezer storage for groceries. You get a text and an email the minute a package lands. Anything too big for a locker waits with the front desk, which is staffed around the clock, and everything is held for ten days before it goes back to the carrier — there is no storage fee. Cold storage holds for 24 hours. The desk cannot accept anything needing a signature, a COD, or an item declared over $2,500, and food couriers stop in the lobby unless you have turned on door delivery in the app.",
@@ -2179,7 +2421,7 @@
     "reviewBy": "2027-09-07T00:00:00.000Z"
   },
   {
-    "id": "art-derived-048",
+    "id": "art-derived-049",
     "topic": "building_access",
     "question": "How do I get into the building?",
     "answer": "Your fob opens the lobby, the elevator to your floor and the three amenity floors, and every amenity door, and the resident app does the same over Bluetooth. Two fobs come with the residence and a third or fourth is $50. Guests are announced at the desk or use a 24-hour QR pass you send from the app, and carriers get the lobby and the package room only. If you lock yourself out, the desk verifies you against the lease and lets you in — the first time in a lease year is free, after that it is $75, or $125 between 11:00pm and 7:00am.",
@@ -2201,7 +2443,7 @@
     "reviewBy": "2027-09-07T00:00:00.000Z"
   },
   {
-    "id": "art-derived-049",
+    "id": "art-derived-050",
     "topic": "general_property_fact",
     "question": "What is the smoking policy?",
     "answer": "The Larkin is smoke-free everywhere — inside your residence, on the terraces and balconies, in the garage and the bike room, on every amenity floor, and within fifteen feet of the entrance. That covers cigarettes, cigars, hookah, vaping, and cannabis, which is legal in New York and still not permitted here. No charcoal, no propane, and no candles outdoors; the gas grills on The Terrace are the exception. You sign a smoke-free rider with your lease, as New York City requires, and a violation runs from a written notice to $250 to $500 and a notice to cure.",
@@ -2223,7 +2465,7 @@
     "reviewBy": "2027-09-07T00:00:00.000Z"
   },
   {
-    "id": "art-derived-050",
+    "id": "art-derived-051",
     "topic": "general_property_fact",
     "question": "What are the quiet hours?",
     "answer": "Quiet hours are 10:00pm to 8:00am Sunday through Thursday and 11:00pm to 9:00am Friday and Saturday, and the rest of the day the standard is nothing a neighbor hears through a closed door. Your lease requires rugs over 80 percent of the floor in every room but the kitchen, baths, entry, and closets, which is what actually keeps a tower this size quiet. Outdoor amenity spaces have no amplified music at any hour and go quiet at 10:00pm. Report noise to the front desk while it is happening — it is staffed 24 hours, it logs the time, and it never tells your neighbor who called.",
@@ -2245,7 +2487,7 @@
     "reviewBy": "2027-09-07T00:00:00.000Z"
   },
   {
-    "id": "art-derived-051",
+    "id": "art-derived-052",
     "topic": "general_property_fact",
     "question": "Can I sublet or list on Airbnb?",
     "answer": "Short-term rentals are not permitted here in any form. A listing costs $1,000 and a notice to cure the first time. If you want to know how the city's short-term rental rules apply to your situation, the leasing office will put you in touch with someone who can answer that properly. Subletting is different and it is allowed: send a written request by certified mail thirty days out with the term, the subtenant's name and addresses, your reason, and where you will be living, and management answers in writing within thirty days. There is a $250 administrative fee and the subtenant applies like anyone else at $20 an adult. You stay on the lease and stay liable for the term.",
@@ -2267,7 +2509,7 @@
     "reviewBy": "2027-09-07T00:00:00.000Z"
   },
   {
-    "id": "art-derived-052",
+    "id": "art-derived-053",
     "topic": "application_requirements",
     "question": "Do I need renters insurance?",
     "answer": "Renters insurance is required for the whole lease term, with at least $300,000 in personal liability, and the certificate has to be on file before the desk hands you keys. Name 5-08 46th Avenue Owner LLC, care of Halbrook Residential Management at the building address, as additional interest. Coverage in this neighborhood runs about $15 to $30 a month. If it lapses, the building can place a policy that protects the owner and not your belongings and bill you $14.95 a month for it, so keep the certificate current — the app reminds you thirty days ahead. If you have a dog, make sure the liability coverage does not exclude the breed.",
@@ -2289,7 +2531,7 @@
     "reviewBy": "2027-09-07T00:00:00.000Z"
   },
   {
-    "id": "art-derived-053",
+    "id": "art-derived-054",
     "topic": "application_requirements",
     "question": "What lease terms do you offer?",
     "answer": "Leases here run one year or two years, and the term is your choice. Every residence in the building is rent stabilized for the term of the 421-a benefit, market-rate homes included, so the rent on your lease is a legal regulated rent and your renewal arrives on DHCR form RTP-8 at the Rent Guidelines Board increase, served 90 to 150 days before your lease ends with 60 days to accept. Rent is due on the first, the late fee is $50 and only after five days, which is the state cap, and you pay by ACH from the portal at no charge. Your lease carries the DHCR rent stabilization rider, the smoke-free rider, and a preferential rent rider if the rent you pay is below the legal regulated rent. Advertised rents and any concession come from the leasing team against live availability, never from this document.",
@@ -2312,7 +2554,7 @@
     "reviewNote": "Held out of the published set by derive-knowledge.mjs. The source block policies.json \"leaseTerms\" declares escalationTopic \"legal_question\": The legal regulated rent for a particular residence, the rent registration history, how the 421-a benefit applies to a specific tenancy, and any question about a rent overcharge go to the resident manager. The assistant does not answer them, and it does not quote a rent from this file. A derived summary cannot carry that flag, so this article is never auto-approved. Redact every sentence covering the escalation subject before publishing, and leave those subjects with no article at all so decideAnswer() falls through to escalate. To publish the redacted remainder, set status to published, approvedBy to person-manager-1, and approvedAt to a timestamp."
   },
   {
-    "id": "art-derived-054",
+    "id": "art-derived-055",
     "topic": "general_property_fact",
     "question": "How does renewal work?",
     "answer": "Your renewal arrives on DHCR form RTP-8, served 90 to 150 days before your lease ends, and you have sixty days to accept. You pick one year or two years, and the increase is the one the New York City Rent Guidelines Board ordered for a lease starting on your renewal date, applied to your legal regulated rent. There is no renewal fee, no new application, and no new deposit. There is no month-to-month option and no holdover premium, because a stabilized lease does not convert. If you would rather move within the building, you can transfer after nine months with a $500 fee and no second deposit. If you are not renewing, sixty days' written notice, take the pre-move-out walkthrough we offer two to four weeks ahead, and the deposit comes back within fourteen days with an itemized statement.",
@@ -2335,7 +2577,7 @@
     "reviewNote": "Held out of the published set by derive-knowledge.mjs. The source block policies.json \"renewal\" declares escalationTopic \"account_status\": A specific renewal rate, a ledger balance, or the status of a particular offer comes from the account system, not from this file. A derived summary cannot carry that flag, so this article is never auto-approved. Redact every sentence covering the escalation subject before publishing, and leave those subjects with no article at all so decideAnswer() falls through to escalate. To publish the redacted remainder, set status to published, approvedBy to person-manager-1, and approvedAt to a timestamp."
   },
   {
-    "id": "art-derived-055",
+    "id": "art-derived-056",
     "topic": "general_property_fact",
     "question": "Is there storage available?",
     "answer": "Private storage in the cellar starts at $95 a month for a 4-by-4-by-6 locker and runs to $240 for the largest, on a month-to-month agreement with thirty days' notice. Access is 24 hours with your fob. There is a waitlist of about six weeks right now. Nothing flammable, perishable, or alive goes in a locker, and the contents are covered by your renters policy, not by the building.",
@@ -2357,7 +2599,7 @@
     "reviewBy": "2027-09-07T00:00:00.000Z"
   },
   {
-    "id": "art-derived-056",
+    "id": "art-derived-057",
     "topic": "application_requirements",
     "question": "What fees should I expect?",
     "answer": "The charges you are most likely to meet are: $20 an adult to apply and one month's security. Those are the ones that apply to most applications. There is no broker fee, no hold deposit, no pet fee, no move-in or move-out deposit, and no amenity deposit, because New York caps what a building may hold to one month's rent. Parking is $425 a month with EV charging included, storage starts at $95, and the bike room, the amenity spaces, and pet rent are all zero. Everything posts to your resident ledger, the late fee is $50 and only after five days, and the front desk does not take money for anything. Damage is billed at cost after the fact with an itemized statement, never collected up front. Ask the leasing office for the current fee schedule in writing before you sign.",
@@ -2373,6 +2615,602 @@
     "ownerId": "person-manager-1",
     "keywords": [
       "fee schedule"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-058",
+    "topic": "general_property_fact",
+    "question": "Tell me about the Studio floor plan",
+    "answer": "The Studio is a studio, 1 bath, about 496 square feet. One room with the glass on the long wall, so the bed and the sofa both face out. The kitchen runs along one side with a full-size Bosch range and a vented hood, and the washer and dryer sit behind a door off the entry. Ceilings are 9 feet 4 inches. It comes with Floor-to-ceiling windows with solar shades, 7-inch white oak plank flooring, Quartz counters and full-height backsplash, Bosch appliance suite, gas cooking, vented hood. Want me to check which Studio residences are open right now?",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Floor plan record: S1",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "s1",
+      "Studio",
+      "floor plan",
+      "layout",
+      "plan",
+      "a studio",
+      "0 bed",
+      "496 sq ft"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-059",
+    "topic": "general_property_fact",
+    "question": "Tell me about the Alcove Studio floor plan",
+    "answer": "The Alcove Studio is a studio, 1 bath, about 578 square feet. The alcove sits off the main room, deep enough for a queen bed and a nightstand and squared off so a curtain or a bookcase actually closes it. The rest reads as one room, kitchen along the wall and living area at the window. You get 80 more square feet than the S1 and a place to put the bed. It comes with Sleeping alcove, 11 by 9 feet, Floor-to-ceiling windows with solar shades, 7-inch white oak plank flooring, Two-tone cabinetry with under-cabinet lighting. Want me to check which Alcove Studio residences are open right now?",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Floor plan record: S2",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "s2",
+      "Alcove Studio",
+      "floor plan",
+      "layout",
+      "plan",
+      "a studio",
+      "0 bed",
+      "578 sq ft"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-060",
+    "topic": "general_property_fact",
+    "question": "Tell me about the One Bedroom floor plan",
+    "answer": "The One Bedroom is 1 bedroom, 1 bath, about 688 square feet. The bedroom takes its own window wall and closes with a door. The living room keeps its glass, and the kitchen turns into the room with a peninsula that seats two. The C line faces west, which puts the Midtown skyline over Gantry Plaza State Park. It comes with Separate bedroom with a door and a fitted closet, Kitchen peninsula seating two, Floor-to-ceiling windows, blackout shades in the bedroom, 7-inch white oak plank flooring. Want me to check which One Bedroom residences are open right now?",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Floor plan record: A1",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "a1",
+      "One Bedroom",
+      "floor plan",
+      "layout",
+      "plan",
+      "1 bedroom",
+      "1 bed",
+      "688 sq ft"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-061",
+    "topic": "general_property_fact",
+    "question": "Tell me about the One Bedroom with Balcony floor plan",
+    "answer": "The One Bedroom with Balcony is 1 bedroom, 1 bath, about 731 square feet. The A1 layout with a balcony off the living room, 45 to 70 square feet, deep enough for two chairs and a small table. The H line faces north, which puts the Queensboro Bridge and Roosevelt Island in the frame. The balcony door is a full-height slider, not a window. It comes with Private balcony, 45 to 70 square feet, Full-height slider to the balcony, Separate bedroom with a door and a fitted closet, Floor-to-ceiling windows, blackout shades in the bedroom. Want me to check which One Bedroom with Balcony residences are open right now?",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Floor plan record: A2",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "a2",
+      "One Bedroom with Balcony",
+      "floor plan",
+      "layout",
+      "plan",
+      "1 bedroom",
+      "1 bed",
+      "731 sq ft"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-062",
+    "topic": "general_property_fact",
+    "question": "Tell me about the One Bedroom and Den floor plan",
+    "answer": "The One Bedroom and Den is 1 bedroom, 1.5 baths, about 848 square feet. The den sits between the entry and the living room, with a door and a half bath beside it. It works as an office most days and a guest room when someone visits; it has no window, which is why it is a den and not a second bedroom. The bedroom and the living room both take the window wall. It comes with Windowless den with a door, 9 by 8 feet, Half bath off the entry, Separate bedroom with a fitted walk-in closet, Floor-to-ceiling windows, blackout shades in the bedroom. Want me to check which One Bedroom and Den residences are open right now?",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Floor plan record: A3",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "a3",
+      "One Bedroom and Den",
+      "floor plan",
+      "layout",
+      "plan",
+      "1 bedroom",
+      "1 bed",
+      "848 sq ft"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-063",
+    "topic": "general_property_fact",
+    "question": "Tell me about the Two Bedroom floor plan",
+    "answer": "The Two Bedroom is 2 bedrooms, 2 baths, about 1012 square feet. Bedrooms at opposite ends of the plan with the living room between them, so no one shares a wall. Both bedrooms have their own bath and a fitted closet, and the kitchen opens to the dining area with an island that seats three. The L line is a corner, north and east, and takes the Queensboro Bridge. It comes with Split bedrooms, no shared wall, Two full baths, both en suite, Kitchen island seating three, Floor-to-ceiling windows, blackout shades in both bedrooms. Want me to check which Two Bedroom residences are open right now?",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Floor plan record: B1",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "b1",
+      "Two Bedroom",
+      "floor plan",
+      "layout",
+      "plan",
+      "2 bedrooms",
+      "2 bed",
+      "1012 sq ft"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-064",
+    "topic": "general_property_fact",
+    "question": "Tell me about the Two Bedroom with Balcony floor plan",
+    "answer": "The Two Bedroom with Balcony is 2 bedrooms, 2 baths, about 1046 square feet. The split-bedroom two bedroom with a balcony off the living room, 60 to 95 square feet. The D line is a corner and holds two exposures, west and south, so the living room takes the skyline and the light stays in the room until it goes down. Both baths are en suite and the laundry is its own closet. It comes with Private balcony, 60 to 95 square feet, Corner residence, two exposures, Split bedrooms, both baths en suite, Kitchen island seating three. Want me to check which Two Bedroom with Balcony residences are open right now?",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Floor plan record: B2",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "b2",
+      "Two Bedroom with Balcony",
+      "floor plan",
+      "layout",
+      "plan",
+      "2 bedrooms",
+      "2 bed",
+      "1046 sq ft"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-065",
+    "topic": "general_property_fact",
+    "question": "Tell me about the Two Bedroom, West Collection floor plan",
+    "answer": "The Two Bedroom, West Collection is 2 bedrooms, 2 baths, about 1148 square feet. The West Collection two bedroom sits on 28 through 33, above the setback. Ceilings are 10 feet 6 inches, the island is quartzite with a waterfall edge, and the kitchen carries Fisher & Paykel panel-ready refrigeration and a wine column. The D line here opens to a private terrace of 90 to 240 square feet. It comes with Ceilings 10 feet 6 inches, Quartzite waterfall island with integrated under-edge lighting, Fisher & Paykel panel-ready refrigeration and a wine column, Private terrace, 90 to 240 square feet, on the D line. Want me to check which Two Bedroom, West Collection residences are open right now?",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Floor plan record: B3",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "b3",
+      "Two Bedroom, West Collection",
+      "floor plan",
+      "layout",
+      "plan",
+      "2 bedrooms",
+      "2 bed",
+      "1148 sq ft"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-066",
+    "topic": "general_property_fact",
+    "question": "Tell me about the Three Bedroom floor plan",
+    "answer": "The Three Bedroom is 3 bedrooms, 2 baths, about 1332 square feet. Three bedrooms off a single hall, with the living room and the primary bedroom sharing the corner. The A line runs north and west, so the Queensboro Bridge sits on one side and Midtown on the other. The kitchen island seats four and the laundry has its own closet, not a corner of the bath. It comes with Corner residence, north and west, Primary bedroom with an en suite bath and a walk-in closet, Kitchen island seating four, Floor-to-ceiling windows, blackout shades in all three bedrooms. Want me to check which Three Bedroom residences are open right now?",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Floor plan record: C1",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "c1",
+      "Three Bedroom",
+      "floor plan",
+      "layout",
+      "plan",
+      "3 bedrooms",
+      "3 bed",
+      "1332 sq ft"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-067",
+    "topic": "general_property_fact",
+    "question": "Tell me about the Three Bedroom, West Collection floor plan",
+    "answer": "The Three Bedroom, West Collection is 3 bedrooms, 2.5 baths, about 1512 square feet. The largest plan in the building, on 28 through 33. Two exposures, north and west, ceilings at 10 feet 6 inches, a quartzite island, and a half bath off the entry so guests never walk past a bedroom. The A line on 33 opens to a private terrace one floor under The Overlook. It comes with Corner residence, north and west, Ceilings 10 feet 6 inches, Half bath off the entry, two full baths beyond, Quartzite waterfall island with integrated under-edge lighting. Want me to check which Three Bedroom, West Collection residences are open right now?",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Floor plan record: C2",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "c2",
+      "Three Bedroom, West Collection",
+      "floor plan",
+      "layout",
+      "plan",
+      "3 bedrooms",
+      "3 bed",
+      "1512 sq ft"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-068",
+    "topic": "general_property_fact",
+    "question": "What floor plans do you have?",
+    "answer": "We have 10 plans. studios: Studio, Alcove Studio; 1-bedrooms: One Bedroom, One Bedroom with Balcony, One Bedroom and Den; 2-bedrooms: Two Bedroom, Two Bedroom with Balcony, Two Bedroom, West Collection; 3-bedrooms: Three Bedroom, Three Bedroom, West Collection. Tell me how many bedrooms you're after and I'll pull up what's open in that size.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Floor plan catalogue",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "floor plans",
+      "layouts",
+      "plans",
+      "what layouts",
+      "unit types",
+      "floorplan"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-069",
+    "topic": "general_property_fact",
+    "question": "What finishes and appliances come in the residences?",
+    "answer": "Every residence has floor-to-ceiling windows with solar shades throughout, blackout shades in bedrooms; white oak plank flooring, 7-inch; quartz countertops and full-height backsplash, two-tone cabinetry with under-cabinet lighting; bosch appliance suite with a vented hood; gas cooking; bosch washer and vented dryer in every residence; honed porcelain baths with a niche, chrome fixtures, medicine cabinet with integrated lighting; custom-fitted closets, keyless entry, individually zoned heating and cooling; ceilings 9 feet 4 inches. The West Collection on floors 28 through 33 steps up from there — taller ceilings, a quartzite island, and Fisher & Paykel refrigeration.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Property record: residenceFinishes.standard",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "finishes",
+      "appliances",
+      "kitchen",
+      "washer",
+      "dryer",
+      "laundry in unit",
+      "in-unit laundry",
+      "windows",
+      "floor to ceiling",
+      "ceilings",
+      "ceiling height",
+      "flooring",
+      "floors",
+      "hardwood",
+      "oak",
+      "bosch",
+      "countertops",
+      "closets",
+      "dishwasher",
+      "stove",
+      "gas",
+      "air conditioning",
+      "heating",
+      "cooling",
+      "bathroom",
+      "shades"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-070",
+    "topic": "general_property_fact",
+    "question": "How big are the studios and how do they compare?",
+    "answer": "Studios run 496 to 578 square feet. There are 2 layouts: the Studio (S1) at about 496 square feet — floor-to-ceiling windows with solar shades; the Alcove Studio (S2) at about 578 square feet — sleeping alcove, 11 by 9 feet. Want me to check what's open in one of them?",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Floor plan catalogue",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "studio",
+      "studios",
+      "0 bedroom",
+      "0 bed",
+      "0br",
+      "how big",
+      "size",
+      "square feet",
+      "sqft",
+      "square footage",
+      "difference",
+      "compare",
+      "versus",
+      "vs",
+      "bigger",
+      "larger",
+      "smaller",
+      "layouts",
+      "s1",
+      "s2"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-071",
+    "topic": "general_property_fact",
+    "question": "How big are the one bedrooms and how do they compare?",
+    "answer": "One bedrooms run 688 to 848 square feet. There are 3 layouts: the One Bedroom (A1) at about 688 square feet — separate bedroom with a door and a fitted closet; the One Bedroom with Balcony (A2) at about 731 square feet — private balcony, 45 to 70 square feet; the One Bedroom and Den (A3) at about 848 square feet — windowless den with a door, 9 by 8 feet. Want me to check what's open in one of them?",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Floor plan catalogue",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "one bedroom",
+      "one bedrooms",
+      "1 bedroom",
+      "1 bed",
+      "1br",
+      "how big",
+      "size",
+      "square feet",
+      "sqft",
+      "square footage",
+      "difference",
+      "compare",
+      "versus",
+      "vs",
+      "bigger",
+      "larger",
+      "smaller",
+      "layouts",
+      "a1",
+      "a2",
+      "a3"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-072",
+    "topic": "general_property_fact",
+    "question": "How big are the two bedrooms and how do they compare?",
+    "answer": "Two bedrooms run 1012 to 1148 square feet. There are 3 layouts: the Two Bedroom (B1) at about 1012 square feet — split bedrooms, no shared wall; the Two Bedroom with Balcony (B2) at about 1046 square feet — private balcony, 60 to 95 square feet; the Two Bedroom, West Collection (B3) at about 1148 square feet — ceilings 10 feet 6 inches. Want me to check what's open in one of them?",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Floor plan catalogue",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "two bedroom",
+      "two bedrooms",
+      "2 bedroom",
+      "2 bed",
+      "2br",
+      "how big",
+      "size",
+      "square feet",
+      "sqft",
+      "square footage",
+      "difference",
+      "compare",
+      "versus",
+      "vs",
+      "bigger",
+      "larger",
+      "smaller",
+      "layouts",
+      "b1",
+      "b2",
+      "b3"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-073",
+    "topic": "general_property_fact",
+    "question": "How big are the three bedrooms and how do they compare?",
+    "answer": "Three bedrooms run 1332 to 1512 square feet. There are 2 layouts: the Three Bedroom (C1) at about 1332 square feet — corner residence, north and west; the Three Bedroom, West Collection (C2) at about 1512 square feet — corner residence, north and west. Want me to check what's open in one of them?",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Floor plan catalogue",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "three bedroom",
+      "three bedrooms",
+      "3 bedroom",
+      "3 bed",
+      "3br",
+      "how big",
+      "size",
+      "square feet",
+      "sqft",
+      "square footage",
+      "difference",
+      "compare",
+      "versus",
+      "vs",
+      "bigger",
+      "larger",
+      "smaller",
+      "layouts",
+      "c1",
+      "c2"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-074",
+    "topic": "general_property_fact",
+    "question": "Do the residences have balconies or terraces?",
+    "answer": "Yes — the One Bedroom with Balcony (A2), 45 to 70 square feet and the Two Bedroom with Balcony (B2), 60 to 95 square feet have a private balcony off the living room with a full-height slider. The West Collection on floors 28 through 33 has private terraces of 90 to 240 square feet on the D and A lines. The other layouts don't have private outdoor space, but The Terrace on four and the sky terrace on thirty-four are open to everyone. Want me to check what's open in one of the balcony layouts?",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Floor plan catalogue and property record: residenceFinishes.westCollection",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "balcony",
+      "balconies",
+      "terrace",
+      "terraces",
+      "patio",
+      "outdoor space",
+      "private outdoor",
+      "west collection",
+      "a2",
+      "b2"
+    ],
+    "approvedBy": "person-manager-1",
+    "approvedAt": "2026-09-01T00:00:00.000Z",
+    "reviewBy": "2027-09-07T00:00:00.000Z"
+  },
+  {
+    "id": "art-derived-075",
+    "topic": "application_requirements",
+    "question": "Do you have any specials or concessions right now?",
+    "answer": "Yes. Right now most residences come with one month free on a 14-month lease, and a few carry two months free, as long as you sign by December 31, 2026. There's no broker fee either — we lease in-house. It's set per residence, so when we look at what's open I'll tell you exactly what each one carries.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "published",
+    "version": 1,
+    "source": "Inventory concession terms",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "concession",
+      "special",
+      "promotion",
+      "promo",
+      "deal",
+      "month free",
+      "free month",
+      "offer",
+      "expire",
+      "expires",
+      "deadline",
+      "broker fee",
+      "no fee",
+      "incentive"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",

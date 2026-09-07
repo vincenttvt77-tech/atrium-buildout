@@ -185,3 +185,84 @@ describe('a caller can ask about a residence by name', () => {
     assert.ok(!/unavailable/i.test(r.say))
   })
 })
+
+describe('a floor plan named as if it were a residence', () => {
+  const plans: InventorySnapshot = {
+    ...inventory,
+    floorPlans: [
+      ...inventory.floorPlans,
+      { id: 'A2', name: 'One Bedroom with Balcony', bedrooms: 1, bathrooms: 1, sqft: 731, description: '', features: ['Private balcony'] },
+      { id: 'B1', name: 'Two Bedroom', bedrooms: 2, bathrooms: 2, sqft: 1100, description: '', features: [] },
+    ],
+    units: [
+      ...inventory.units,
+      { unitId: '12H', floorPlanId: 'A2', floor: 12, bedrooms: 1, bathrooms: 1, sqft: 731,
+        monthlyRent: 4650, availableFrom: '2026-10-15', status: 'available' },
+      { unitId: '15H', floorPlanId: 'A2', floor: 15, bedrooms: 1, bathrooms: 1, sqft: 731,
+        monthlyRent: 4700, availableFrom: '2026-12-01', status: 'leased' },
+    ],
+  }
+
+  test('"is an A2 open" lists what is open in that layout instead of "no residence A2"', () => {
+    const r = checkAvailability(ctx({ inventory: plans }), { unitId: 'A2' })
+    assert.equal(r.record.outcome, 'plan_lookup')
+    assert.match(r.say, /One Bedroom with Balcony/)
+    assert.match(r.say, /12H/)
+    assert.doesNotMatch(r.say, /15H/, 'a leased residence is not offered')
+    assert.doesNotMatch(r.say, /no residence/i)
+  })
+
+  test('the plan can be named by its name or with "the … floor plan" around it', () => {
+    for (const said of ['the A2 floor plan', 'one bedroom with balcony', 'A2 layout']) {
+      const r = checkAvailability(ctx({ inventory: plans }), { unitId: said })
+      assert.equal(r.record.outcome, 'plan_lookup', said)
+    }
+  })
+
+  test('a plan with nothing open says so and offers the size, never a rent', () => {
+    const r = checkAvailability(ctx({ inventory: plans }), { unitId: 'B1' })
+    assert.equal(r.record.outcome, 'plan_none_open')
+    assert.doesNotMatch(r.say, /\$/)
+  })
+
+  test('a real residence still wins over a plan, and an unknown code is still not found', () => {
+    assert.equal(checkAvailability(ctx({ inventory: plans }), { unitId: '21A' }).record.outcome, 'unit_lookup')
+    assert.equal(checkAvailability(ctx({ inventory: plans }), { unitId: 'Z9' }).record.outcome, 'unit_not_found')
+  })
+})
+
+describe('a question filed under the wrong policy topic', () => {
+  const broker: KnowledgeArticle = {
+    ...petArticle, id: articleId('art-broker'), topic: 'application_requirements',
+    question: 'Is there a broker fee?', answer: 'No. The building is leased in-house, so there is no broker fee.',
+    keywords: ['broker', 'fee'],
+  }
+  const packages: KnowledgeArticle = {
+    ...petArticle, id: articleId('art-packages'), topic: 'general_property_fact',
+    question: 'How do packages work?', answer: 'Lockers behind the lobby, open 24 hours with your fob.',
+  }
+
+  test('is answered from the article under the topic where it actually lives', () => {
+    const r = answerQuestion({ question: 'is there a broker fee?', topic: 'general_property_fact' },
+      ctx({ articles: [petArticle, broker, packages] }))
+    assert.equal(r.record.decision, 'answer')
+    assert.match(r.say, /no broker fee/i)
+    assert.equal(r.record.topic, 'application_requirements')
+    assert.equal(r.record.topicAsked, 'general_property_fact')
+  })
+
+  test('never widens into a restricted or volatile topic', () => {
+    const guarded = answerQuestion({ question: 'do you take section 8 vouchers?', topic: 'general_property_fact' },
+      ctx({ articles: [petArticle, broker, packages] }))
+    assert.equal(guarded.record.decision, 'escalate')
+    const live = answerQuestion({ question: 'is there a broker fee?', topic: 'pricing' },
+      ctx({ articles: [petArticle, broker, packages] }))
+    assert.equal(live.record.decision, 'defer')
+  })
+
+  test('still refuses when no article anywhere clears the threshold', () => {
+    const r = answerQuestion({ question: 'is there a helipad?', topic: 'general_property_fact' },
+      ctx({ articles: [petArticle, broker, packages] }))
+    assert.equal(r.record.kind, 'question_refused')
+  })
+})

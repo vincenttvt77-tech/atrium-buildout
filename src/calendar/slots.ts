@@ -20,7 +20,11 @@ export const DEFAULT_HOURS: BusinessHours = {
 
 const DAY = 86_400_000
 
-export const slotIdFor = (startsAt: Date) => `slot-${startsAt.toISOString().slice(0, 13)}`
+/**
+ * Minutes are part of the id. Truncating at the hour gave 2:00 and 2:30 the same id, so a
+ * block on one silently blocked the other and a booking on one showed on both.
+ */
+export const slotIdFor = (startsAt: Date) => `slot-${startsAt.toISOString().slice(0, 16)}`
 
 /** The ISO date a slot falls on in building time — what a day block matches against. */
 export function slotDate(startsAt: Date): string {
