@@ -88,15 +88,15 @@
   .cal-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;
            flex-wrap:wrap;padding:11px 16px;border-bottom:1px solid var(--line)}
   .cal-nav{display:inline-flex;align-items:center;gap:8px}
-  .cal-actions{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .cal-actions,.panel-actions{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
   .cal-range{font:500 12.5px JetBrains Mono,ui-monospace,monospace;min-width:190px;text-align:center}
-  .cal-btn{font:inherit;font-size:12.5px;color:var(--muted);background:none;
+  .cal-btn,.btn{font:inherit;font-size:12.5px;color:var(--muted);background:none;
            border:1px solid var(--line);border-radius:5px;padding:3px 9px;cursor:pointer}
-  .cal-btn:hover:not(:disabled){color:var(--ink);border-color:var(--muted)}
-  .cal-btn:disabled{opacity:.45;cursor:default}
+  .cal-btn:hover:not(:disabled),.btn:hover:not(:disabled){color:var(--ink);border-color:var(--muted)}
+  .cal-btn:disabled,.btn:disabled{opacity:.45;cursor:default}
   .cal-btn.danger{color:var(--danger)}
   .cal-btn.danger:hover:not(:disabled){color:var(--danger);border-color:var(--danger)}
-  .cal-tag{font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;
+  .cal-tag,.tag{font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;
            padding:1px 5px;border-radius:3px;margin-left:5px;
            background:rgba(138,90,26,.16);color:var(--warn)}
   .warn-banner{margin:12px 16px 0;padding:10px 14px;border-radius:8px;font-size:13px;
@@ -105,8 +105,7 @@
   .cal-scroll{overflow-x:auto}
   .cal-grid{display:grid;grid-template-columns:62px repeat(7,minmax(108px,1fr));
             grid-template-rows:auto;grid-auto-rows:24px;gap:2px;padding:12px;min-width:860px}
-  .cal-day,.cal-s{font:inherit;color:inherit;background:none;margin:0;width:100%;display:block;
-                  appearance:none;-webkit-appearance:none}
+  .cal-day,.cal-s{display:block;width:100%}
   .cal-day:focus-visible,.cal-s:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
   .cal-day{grid-row:1;padding:6px 4px;border:1px solid var(--line);border-radius:6px;
            text-align:center;font-size:12.5px;line-height:1.3;cursor:pointer;user-select:none}
@@ -127,7 +126,7 @@
                 font-weight:500;cursor:default}
   .cal-empty{padding:0 16px 12px;color:var(--muted);font-size:13px}
   .cal-empty:empty{display:none}
-  .cal-foot{display:flex;justify-content:space-between;align-items:center;gap:8px 18px;
+  .cal-foot,.panel-foot{display:flex;justify-content:space-between;align-items:center;gap:8px 18px;
             flex-wrap:wrap;padding:10px 16px;border-top:1px solid var(--line);
             font:400 11.5px JetBrains Mono,ui-monospace,monospace;color:var(--muted)}
   .cal-legend{display:inline-flex;gap:14px}
@@ -135,9 +134,61 @@
                 border:1px solid var(--line);background:var(--paper);vertical-align:-1px;margin-right:5px}
   .cal-legend i.blocked{background:rgba(155,44,44,.15);border-color:transparent}
   .cal-legend i.booked{background:rgba(47,93,80,.14);border-color:transparent}
-  .cal-hint,.cal-msg{font:400 12.5px Inter,system-ui,sans-serif}
-  .cal-msg.err{color:var(--danger)}
-  .cal-msg:empty{display:none}
+  .cal-hint,.cal-msg,.panel-hint,.panel-msg{font:400 12.5px Inter,system-ui,sans-serif}
+  .cal-msg.err,.panel-msg.err{color:var(--danger)}
+  .cal-msg:empty,.panel-msg:empty{display:none}
+
+  #leads .tiles{margin-bottom:14px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+         margin-bottom:24px;overflow:hidden}
+  .panel-bar{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
+             flex-wrap:wrap;padding:11px 16px;border-bottom:1px solid var(--line)}
+  .panel-title{font-weight:600;font-size:14px}
+  .fu-note{font-size:12.5px;color:var(--warn);margin-top:2px}
+  .fu-note:empty{display:none}
+  .fu-group{padding:8px 16px 5px;font-size:10.5px;font-weight:600;text-transform:uppercase;
+            letter-spacing:.07em;color:var(--muted);background:var(--paper);
+            border-bottom:1px solid var(--line)}
+  .fu-group.overdue{color:var(--danger)}
+  .fu{display:grid;grid-template-columns:150px 1fr auto;gap:14px;padding:11px 16px;
+      border-bottom:1px solid var(--line);font-size:13.5px;align-items:start}
+  .fu:last-child{border-bottom:0}
+  .fu-due{font:500 12px JetBrains Mono,ui-monospace,monospace;color:var(--muted);margin-bottom:4px}
+  .fu-due.overdue{color:var(--danger)}
+  .fu-kind{font-weight:600}
+  .fu-who{color:var(--accent);font-weight:500;text-decoration:none}
+  .fu-who:hover,.fu-who:focus-visible{text-decoration:underline}
+  .fu-reason{margin-top:2px}
+  .fu-act{display:inline-flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .fu-empty{padding:14px 16px;color:var(--muted);font-size:13px}
+  .lead{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+        margin-bottom:14px;overflow:hidden}
+  .lead summary{list-style:none;cursor:pointer;padding:12px 16px;display:flex;gap:6px 14px;
+                align-items:center;flex-wrap:wrap}
+  .lead summary::-webkit-details-marker{display:none}
+  .lead summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+  .lead summary .k{margin-bottom:0}
+  .lead-name{font-weight:600}
+  .lead-meta{font:400 11.5px JetBrains Mono,ui-monospace,monospace;color:var(--muted)}
+  .lead-chev{margin-left:auto;color:var(--muted);font-size:18px;line-height:1;transition:transform .15s}
+  .lead[open] .lead-chev{transform:rotate(90deg)}
+  .lead-body{border-top:1px solid var(--line)}
+  .lead-sec{padding:11px 16px;border-bottom:1px solid var(--line);font-size:13.5px}
+  .lead-sec:last-child{border-bottom:0}
+  .lead-sec h3{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);
+               font-weight:600;margin:0 0 7px}
+  .lead-none{color:var(--muted);font-style:italic}
+  .sig{margin-bottom:10px}
+  .sig:last-child{margin-bottom:0}
+  .sig-l{color:var(--muted)}
+  .lead-row{display:flex;gap:4px 12px;flex-wrap:wrap;align-items:baseline;padding:3px 0}
+  .lead-row .t{padding-top:0}
+  .lead-row .k,.lead-row .meta{margin:0}
+  .note-form{display:flex;gap:8px;margin-top:8px}
+  .note-form input{flex:1;min-width:0;font:inherit;font-size:13px;color:var(--ink);
+                   background:var(--paper);border:1px solid var(--line);border-radius:5px;padding:5px 9px}
+  .note-form input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  @media(max-width:600px){.fu{grid-template-columns:1fr}.fu-act{justify-content:flex-start}}
 </style>
 </head>
 <body>
@@ -156,6 +207,33 @@
     when you are done.</div>
 
   <div class="tiles" id="tiles"></div>
+
+  <section id="leads">
+    <h2>Leads</h2>
+    <div class="tiles" id="lead-tiles"></div>
+
+    <div class="panel">
+      <div class="panel-bar">
+        <div>
+          <div class="panel-title">Follow-up queue</div>
+          <div class="fu-note" id="fu-note"></div>
+        </div>
+        <div class="panel-actions">
+          <button type="button" class="btn" id="leads-clear"
+            title="Test control. Deletes every lead profile and follow-up in the store so a demo can be re-run. Not for real prospects.">Clear test leads <span class="tag">test control</span></button>
+        </div>
+      </div>
+      <div id="leads-banner"></div>
+      <div id="fu-list"></div>
+      <div class="panel-foot">
+        <span class="panel-hint">Done means a person did it; Skip means nobody will. Nothing on this page places a call. Times are New York.</span>
+        <span class="panel-msg" id="leads-msg"></span>
+        <span id="leads-store">Loading…</span>
+      </div>
+    </div>
+
+    <div id="lead-cards"></div>
+  </section>
 
   <h2>Tour calendar</h2>
   <div class="cal">
@@ -181,7 +259,7 @@
       <span class="cal-legend">
         <span><i class="open"></i>open</span><span><i class="blocked"></i>blocked</span><span><i class="booked"></i>booked</span>
       </span>
-      <span class="cal-hint">Click a slot — or Tab to it and press Enter — to block or unblock it; a day header does the whole day. Times are New York.</span>
+      <span class="cal-hint">Click a slot — or Tab to it and press Enter or Space — to block or unblock it; a day header does the whole day. Times are New York.</span>
       <span class="cal-msg" id="cal-msg"></span>
       <span id="cal-store">Loading…</span>
     </div>
@@ -197,6 +275,15 @@
 </div>
 
 <script>
+// Every timestamp on this page is shown in New York, where the building is; the viewer's
+// zone is ignored. The calendar section explains why.
+const NY_TZ = 'America/New_York'
+/**
+ * Own-property lookup for the style/label maps below. A stage or status the server sends
+ * that happens to be an inherited key ('constructor', '__proto__') must fall to the
+ * default, not paint Object.prototype's function source into a class attribute.
+ */
+const pick = (map, k, dflt) => Object.prototype.hasOwnProperty.call(map, k) ? map[k] : dflt
 const KIND_STYLE = {
   emergency:'danger', escalated:'danger', question_refused:'warn',
   tour_booked:'ok', availability_checked:'', signal_captured:'ok',
@@ -259,8 +346,7 @@ function renderCalls(d){
     return
   }
   el.innerHTML = calls.map(c => {
-    const when = c.startedAt ? new Date(c.startedAt).toLocaleString('en-US',
-      {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '—'
+    const when = c.startedAt ? fmtNy(c.startedAt) : '—'
     const tools = (c.toolCalls||[]).map(t => `<div class="tc">
         <span class="tc-name">${escapeHtml(t.name)}</span>
         <div class="tc-args">${escapeHtml(JSON.stringify(t.arguments))}</div>
@@ -309,9 +395,9 @@ function render(data){
   el.innerHTML = calls.reverse().map(id=>{
     const rows = byCall[id].map(e=>{
       const d = describe(e)
-      const t = new Date(e.at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'})
+      const t = new Date(e.at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:NY_TZ})
       return `<div class="ev"><div class="t">${t}</div><div>
-        <span class="k ${KIND_STYLE[e.kind]||''}">${LABEL[e.kind]||e.kind}</span>
+        <span class="k ${pick(KIND_STYLE, e.kind, '')}">${escapeHtml(pick(LABEL, e.kind, e.kind))}</span>
         <div class="body">${escapeHtml(d.body||'')}</div>
         ${d.excerpt?`<div class="ex">"${escapeHtml(d.excerpt)}"</div>`:''}
         ${d.meta?`<div class="meta">${escapeHtml(d.meta)}</div>`:''}
@@ -337,7 +423,6 @@ function escapeHtml(s){
  * the grid cannot flash back to a state the owner has already changed. Times are shown in
  * America/New_York because that is where the building is; the browser's zone is ignored.
  */
-const NY_TZ = 'America/New_York'
 const nyFormat = new Intl.DateTimeFormat('en-US', {
   timeZone:NY_TZ, hourCycle:'h23', year:'numeric', month:'2-digit', day:'2-digit',
   hour:'2-digit', minute:'2-digit',
@@ -441,9 +526,11 @@ function renderCalendar(){
     if(s.status === 'open') openByDay[s.date] = (openByDay[s.date] || 0) + 1
   }
 
-  // Day headers and open/blocked slots are real buttons: Tab reaches them, Enter and Space
-  // activate them through the same delegated click handler, and a screen reader gets the
-  // title as the name (an open slot has no visible text). Booked cells are not controls.
+  // Every cell is a button to assistive tech (role="button"), and every operable one is in
+  // the Tab order (tabindex="0"); Enter and Space go through the grid's keydown handler to
+  // the same delegated click handler the mouse uses. A screen reader gets the title as the
+  // name (an open slot has no visible text). Booked cells keep the role but are
+  // aria-disabled and out of the Tab order: there is nothing to do to one.
   let html = ''
   days.forEach((d, i) => {
     const lab = dayLabel(d), blk = dayBlocks.get(d)
@@ -451,11 +538,11 @@ function renderCalendar(){
     const title = blk
       ? `${lab.dn} ${lab.dd} — whole day blocked: ${blk.reason || 'blocked'}. Unblock the day.`
       : `${lab.dn} ${lab.dd} — ${count}. Block the whole day.`
-    html += `<button type="button" class="cal-day${blk ? ' blocked' : ''}${d === L.today ? ' today' : ''}"
+    html += `<div role="button" tabindex="0" class="cal-day${blk ? ' blocked' : ''}${d === L.today ? ' today' : ''}"
       style="grid-column:${i + 2}" data-date="${escapeHtml(d)}" aria-pressed="${blk ? 'true' : 'false'}"
       title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">
       <span class="cal-dn">${escapeHtml(lab.dn)}</span><span class="cal-dd">${escapeHtml(lab.dd)}</span>
-      <span class="cal-dc">${escapeHtml(count)}</span></button>`
+      <span class="cal-dc">${escapeHtml(count)}</span></div>`
   })
 
   const rows = Math.ceil((L.maxM - L.minM) / 30)
@@ -476,7 +563,7 @@ function renderCalendar(){
       const who = (s.booking && s.booking.prospectName) || 'booked'
       const unit = s.booking && s.booking.unitId
       const title = `${when} · booked — ${who}${unit ? `, unit ${unit}` : ''}`
-      html += `<div class="cal-s booked" style="${pos}" data-slot="${escapeHtml(s.slotId)}"
+      html += `<div role="button" aria-disabled="true" class="cal-s booked" style="${pos}" data-slot="${escapeHtml(s.slotId)}"
         title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">${escapeHtml(unit ? `${who} · ${unit}` : who)}</div>`
       continue
     }
@@ -490,10 +577,10 @@ function renderCalendar(){
     const title = blocked
       ? `${when} · blocked${whole ? ' (whole day)' : ''} — ${reason}. Unblock${whole ? ' the day' : ''}.`
       : `${when} · open. Block this slot.`
-    html += `<button type="button" class="cal-s ${escapeHtml(s.status)}" style="${pos}"
+    html += `<div role="button" tabindex="0" class="cal-s ${escapeHtml(s.status)}" style="${pos}"
       data-slot="${escapeHtml(s.slotId)}" data-date="${escapeHtml(s.date)}" data-status="${escapeHtml(s.status)}"
       data-whole="${whole ? '1' : ''}" data-when="${escapeHtml(when)}" aria-pressed="${blocked ? 'true' : 'false'}"
-      title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">${escapeHtml(blocked ? reason : '')}</button>`
+      title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">${escapeHtml(blocked ? reason : '')}</div>`
   }
 
   // Replacing the grid's HTML would drop a keyboard user's focus to the page body; put it
@@ -618,6 +705,17 @@ document.getElementById('cal-grid').addEventListener('click', ev => {
   }
 })
 
+// Enter and Space on a cell do what a click does, through the same handler. Space's default
+// (scroll the page) is suppressed; Enter has none on a div. aria-disabled cells — booked
+// slots — are left alone, as a disabled button would be.
+document.getElementById('cal-grid').addEventListener('keydown', ev => {
+  if(ev.key !== 'Enter' && ev.key !== ' ') return
+  const cell = ev.target.closest('[role="button"]')
+  if(!cell || cell.getAttribute('aria-disabled') === 'true') return
+  ev.preventDefault()
+  cell.click()
+})
+
 document.getElementById('cal-block-week').addEventListener('click', () => {
   if(!cal.state) return
   const days = visibleDays(calLayout(cal.state))
@@ -654,6 +752,432 @@ document.getElementById('cal-clear-bookings').addEventListener('click', () => {
 })
 
 /**
+ * Leads: one card per caller, and the follow-up queue derived from them. Reads and writes
+ * /api/leads, which sits behind the same session as this page. Same discipline as the
+ * calendar: poll every tick, drop a poll that lands while a write is in flight, re-render
+ * only when something changed, and paint what the server returned rather than what the
+ * click assumed. Every string here came out of a caller's mouth or a person's keyboard,
+ * so all of it goes through escapeHtml.
+ *
+ * The queue is honest about what it is. Outbound calling is not enabled, so "Done" means a
+ * person did it and "Skip" means nobody will. Nothing on this page places a call.
+ */
+const leads = { state:null, key:'', busy:false, seq:0, pollError:false, open:new Set() }
+
+const FU_KIND = {
+  confirm_tour:'Confirm tour', remind_tour:'Remind about tour', post_tour:'Post-tour check-in',
+  priced_out_watch:'Priced-out watch', nurture:'Nurture', callback:'Callback', collect_email:'Collect email',
+}
+const FU_CHANNEL = { call:'call', sms:'SMS', email:'email' }
+const STAGE = {
+  new:['New', ''], qualified:['Qualified', ''], tour_scheduled:['Tour scheduled', 'ok'],
+  toured:['Toured', 'ok'], lost:['Lost', 'danger'], escalated:['Escalated', 'warn'],
+}
+const BOOKING_STYLE = { confirmed:'ok', arranging:'warn', failed:'danger' }
+const FU_STATUS_STYLE = { scheduled:'', done:'ok', skipped:'warn' }
+const humanise = s => { const t = String(s || '').replace(/_/g, ' '); return t.charAt(0).toUpperCase() + t.slice(1) }
+const leadDomId = phone => 'lead-' + (String(phone).replace(/\D/g, '') || 'unknown')
+const leadName = p => (p && p.name) ? p.name : 'Unknown caller'
+const pct = c => `${Math.round((Number(c) || 0) * 100)}%`
+const fmtDuration = s => s == null ? '—' : s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`
+
+const nyStamps = {}
+/** "Tue Sep 8, 2:00 PM" in New York. The year appears only when it is not this year. */
+function fmtNy(iso, withWeekday){
+  const t = Date.parse(iso)
+  if(isNaN(t)) return '—'
+  const d = new Date(t)
+  const thisYear = nyParts(d).year === nyParts(new Date()).year
+  const k = (withWeekday ? 'w' : '') + (thisYear ? '' : 'y')
+  nyStamps[k] ||= new Intl.DateTimeFormat('en-US', {
+    timeZone:NY_TZ, month:'short', day:'numeric', hour:'numeric', minute:'2-digit',
+    ...(withWeekday ? {weekday:'short'} : {}), ...(thisYear ? {} : {year:'numeric'}),
+  })
+  return nyStamps[k].format(d)
+}
+/**
+ * A date-only value ("2026-10-01") or an instant, shown as a calendar day.
+ *
+ * The move-in parser encodes "October", "spring" and "2026-10-15" as UTC midnight of the
+ * day the caller meant, and UTC midnight is the previous evening in New York — rendered
+ * in the building's zone, "October" came out as "Sep 30 to Oct 31", contradicting the
+ * caller's own words on the same line. A UTC-midnight instant is therefore read as the
+ * calendar day it encodes. Relative windows ("in 2 months", "asap") are true instants and
+ * still land on their New York day.
+ */
+function fmtNyDay(v){
+  if(isDate(v)) return new Date(ymdToUtc(v)).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric', timeZone:'UTC'})
+  const s = String(v || '')
+  if(/^\d{4}-\d{2}-\d{2}T00:00:00(\.\d{3})?Z$/.test(s)) return fmtNyDay(s.slice(0, 10))
+  const t = Date.parse(v)
+  return isNaN(t) ? String(v || '—')
+    : new Date(t).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric', timeZone:NY_TZ})
+}
+
+/** Overdue / Today / Upcoming, judged on New York's calendar, not the browser's. */
+function fuGroup(f, now, today){
+  const t = Date.parse(f.dueAt)
+  if(isNaN(t)) return 'upcoming'
+  if(t <= now) return 'overdue'
+  return nyDate(new Date(t)) === today ? 'today' : 'upcoming'
+}
+const byDue = (a, b) => (Date.parse(a.dueAt) || 0) - (Date.parse(b.dueAt) || 0)
+const scheduledOf = d => (d.followUps || []).filter(f => f.status === 'scheduled').sort(byDue)
+
+/**
+ * What a repaint depends on. generatedAt is left out (it changes on every poll); the group
+ * each scheduled follow-up falls in is put in, so the queue repaints when a follow-up
+ * crosses from Today into Overdue even though the data has not changed.
+ */
+function leadsKey(d){
+  const now = Date.now(), today = nyDate(new Date(now))
+  return JSON.stringify([d.profiles, d.followUps, d.outboundEnabled, d.store,
+    scheduledOf(d).map(f => fuGroup(f, now, today))])
+}
+
+function leadsMessage(text, isError){
+  const el = document.getElementById('leads-msg')
+  el.textContent = text || ''
+  el.classList.toggle('err', !!isError)
+}
+
+/** Each captured signal as [label, value, evidence]; the evidence carries the excerpt. */
+function signalLines(p){
+  const s = p.signals || {}, out = []
+  const bedrooms = n => n === 0 ? 'studio or larger' : `${n}+ bedroom${n === 1 ? '' : 's'}`
+  const moveIn = v => {
+    if(!v || typeof v !== 'object') return String(v ?? '—')
+    const range = `${fmtNyDay(v.earliest)}${v.latest ? ` to ${fmtNyDay(v.latest)}` : ' or later'}`
+    return v.said ? `${v.said} — ${range}` : range
+  }
+  if(s.budget) out.push(['Budget', `up to ${money(s.budget.value)}/mo`, s.budget])
+  if(s.bedrooms) out.push(['Bedrooms', bedrooms(Number(s.bedrooms.value)), s.bedrooms])
+  if(s.moveIn) out.push(['Move-in', moveIn(s.moveIn.value), s.moveIn])
+  if(s.pets) out.push(['Pets', String(s.pets.value), s.pets])
+  if(s.parking) out.push(['Parking', String(s.parking.value), s.parking])
+  return out
+}
+
+/** The words that justified a conclusion are the point; their absence is said, not hidden. */
+const quote = q => `<div class="ex">${q ? `"${escapeHtml(q)}"` : 'no excerpt recorded'}</div>`
+
+function renderLeadCard(p, fus){
+  const phone = String(p.phone || 'unknown'), name = leadName(p)
+  const st = pick(STAGE, p.stage, [humanise(p.stage), ''])
+  const pill = `<span class="k ${st[1]}">${escapeHtml(st[0])}</span>`
+  const open = fus.filter(f => f.status === 'scheduled').length
+  const sec = (title, body) => body ? `<div class="lead-sec"><h3>${title}</h3>${body}</div>` : ''
+
+  const signals = signalLines(p).map(([l, v, e]) => `<div class="sig">
+      <div><span class="sig-l">${l}:</span> <b>${escapeHtml(v)}</b></div>
+      ${quote(e.excerpt)}
+      <div class="meta">confidence ${pct(e.confidence)} · ${escapeHtml(fmtNy(e.at))}</div>
+    </div>`).join('')
+
+  const units = (p.unitsDiscussed || []).map(u => `<span class="k">${escapeHtml(u)}</span>`).join(' ')
+
+  const bookings = (p.bookings || []).map(b => `<div class="lead-row">
+      <span class="t">${escapeHtml(fmtNy(b.startsAt, true))}</span>
+      <span>${b.unitId ? `unit ${escapeHtml(b.unitId)}` : 'no unit chosen'}</span>
+      <span class="k ${pick(BOOKING_STYLE, b.status, '')}">${escapeHtml(humanise(b.status))}</span>
+    </div>`).join('')
+
+  const losses = (p.lossReasons || []).map(l => `<div class="sig">
+      <div><b>${escapeHtml(humanise(l.kind))}</b>${l.detail ? ` — ${escapeHtml(l.detail)}` : ''}</div>
+      ${quote(l.evidence)}
+      <div class="meta">${l.confidence != null ? `confidence ${pct(l.confidence)} · ` : ''}${escapeHtml(fmtNy(l.at))}</div>
+    </div>`).join('')
+
+  const escalations = (p.escalations || []).map(e => `<div class="sig">
+      <div><b>${escapeHtml(humanise(e.trigger))}</b>${e.detail ? ` — ${escapeHtml(e.detail)}` : ''}</div>
+      <div class="meta">${escapeHtml(fmtNy(e.at))}${e.callId ? ` · call ${escapeHtml(e.callId)}` : ''}</div>
+    </div>`).join('')
+
+  // Done and skipped follow-ups stay on the card with a way back, so a wrong click is a
+  // click to undo rather than a lost intention.
+  const fuRows = [...fus].sort(byDue).map(f => `<div class="lead-row">
+      <span class="t">${escapeHtml(fmtNy(f.dueAt, true))}</span>
+      <span><b>${escapeHtml(pick(FU_KIND, f.kind, humanise(f.kind)))}</b> · ${escapeHtml(pick(FU_CHANNEL, f.channel, f.channel))}</span>
+      <span class="k ${pick(FU_STATUS_STYLE, f.status, '')}">${escapeHtml(f.status)}</span>
+      ${f.status === 'scheduled' ? '' : `<button type="button" class="btn" data-fu="${escapeHtml(f.id)}"
+        data-status="scheduled" data-fk="fu:${escapeHtml(f.id)}:reopen">Reopen</button>`}
+    </div>`).join('')
+
+  const calls = [...(p.calls || [])].sort((a, b) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0))
+    .map(c => `<div class="lead-row">
+      <span class="t">${escapeHtml(fmtNy(c.at, true))}</span>
+      <span class="t">${escapeHtml(fmtDuration(c.durationSeconds))}</span>
+      <span>${escapeHtml(c.outcome || '')}</span>
+      ${(c.toolsCalled || []).length ? `<span class="meta">tools: ${escapeHtml(c.toolsCalled.join(', '))}</span>` : ''}
+    </div>`).join('')
+
+  // The API stamps each note "<ISO time> <text>"; show the stamp as a New York time.
+  const notes = (p.notes || []).map(n => {
+    const m = /^(\d{4}-\d{2}-\d{2}T\S+)\s+([\s\S]*)$/.exec(String(n))
+    return `<div class="lead-row"><span class="t">${escapeHtml(m ? fmtNy(m[1], true) : '')}</span>
+      <span>${escapeHtml(m ? m[2] : n)}</span></div>`
+  }).join('')
+  // A caller whose number Vapi did not supply consolidates under 'unknown', and the API
+  // refuses to attach a note to that key — so say why there is no form rather than offer
+  // one whose every submit fails.
+  const noteForm = phone === 'unknown'
+    ? `<div class="lead-none">No number was captured for this caller, so notes cannot be attached.</div>`
+    : `<form class="note-form" data-phone="${escapeHtml(phone)}">
+      <input type="text" maxlength="500" placeholder="Add a note — called back, wants the corner unit, …"
+        aria-label="Add a note about ${escapeHtml(name)}" data-phone="${escapeHtml(phone)}" data-fk="note:${escapeHtml(phone)}">
+      <button type="submit" class="btn" data-fk="notebtn:${escapeHtml(phone)}">Add note</button>
+    </form>`
+
+  return `<details class="lead" id="${escapeHtml(leadDomId(phone))}" data-phone="${escapeHtml(phone)}"${leads.open.has(phone) ? ' open' : ''}>
+    <summary data-fk="sum:${escapeHtml(phone)}">
+      <span class="lead-name">${escapeHtml(name)}</span>
+      ${pill}
+      <span class="lead-meta">${escapeHtml(phone)}</span>
+      <span class="lead-meta">seen ${escapeHtml(fmtNy(p.lastSeenAt))}</span>
+      <span class="lead-meta">${open} open follow-up${open === 1 ? '' : 's'}</span>
+      <span class="lead-chev" aria-hidden="true">&rsaquo;</span>
+    </summary>
+    <div class="lead-body">
+      <div class="lead-sec lead-meta">${p.email ? escapeHtml(p.email) : 'no email'} · first seen ${escapeHtml(fmtNy(p.firstSeenAt))} · last seen ${escapeHtml(fmtNy(p.lastSeenAt))}</div>
+      ${sec('Signals', signals || '<span class="lead-none">Nothing captured yet.</span>')}
+      ${sec('Units discussed', units)}
+      ${sec('Bookings', bookings)}
+      ${sec('Loss reasons', losses)}
+      ${sec('Escalations', escalations)}
+      ${sec('Follow-ups', fuRows)}
+      ${sec('Calls', calls)}
+      <div class="lead-sec"><h3>Notes</h3>${notes}${noteForm}</div>
+    </div>
+  </details>`
+}
+
+function renderQueue(d, byPhone, now, today){
+  const el = document.getElementById('fu-list')
+  const list = scheduledOf(d)
+  if(!list.length){
+    el.innerHTML = `<div class="fu-empty">${(d.followUps || []).length
+      ? 'Nothing left to do — every follow-up is done or skipped.'
+      : 'Nothing scheduled. Follow-ups appear here as calls come in.'}</div>`
+    return
+  }
+  const groups = { overdue:[], today:[], upcoming:[] }
+  for(const f of list) groups[fuGroup(f, now, today)].push(f)
+  let html = ''
+  for(const [g, label] of [['overdue', 'Overdue'], ['today', 'Today'], ['upcoming', 'Upcoming']]){
+    const fs = groups[g]
+    if(!fs.length) continue
+    html += `<div class="fu-group ${g}">${label} · ${fs.length}</div>`
+    for(const f of fs){
+      const p = byPhone.get(f.phone)
+      html += `<div class="fu">
+        <div>
+          <div class="fu-due${g === 'overdue' ? ' overdue' : ''}">${escapeHtml(fmtNy(f.dueAt, true))}</div>
+          <span class="k">${escapeHtml(pick(FU_CHANNEL, f.channel, f.channel))}</span>
+        </div>
+        <div>
+          <div><span class="fu-kind">${escapeHtml(pick(FU_KIND, f.kind, humanise(f.kind)))}</span> ·
+            <a class="fu-who" href="#${escapeHtml(leadDomId(f.phone))}" data-phone="${escapeHtml(f.phone)}"
+              data-fk="who:${escapeHtml(f.id)}">${escapeHtml(p ? leadName(p) : 'Unknown caller')}</a>
+            ${p ? '' : `<span class="lead-meta">${escapeHtml(f.phone)}</span>`}</div>
+          <div class="fu-reason">${escapeHtml(f.reason || '')}</div>
+        </div>
+        <div class="fu-act">
+          <button type="button" class="btn" data-fu="${escapeHtml(f.id)}" data-status="done"
+            data-fk="fu:${escapeHtml(f.id)}:done" title="A person has done this. It leaves the queue.">Done</button>
+          <button type="button" class="btn" data-fu="${escapeHtml(f.id)}" data-status="skipped"
+            data-fk="fu:${escapeHtml(f.id)}:skip" title="Nobody will do this. It leaves the queue.">Skip</button>
+        </div>
+      </div>`
+    }
+  }
+  el.innerHTML = html
+}
+
+function renderLeads(){
+  const d = leads.state
+  if(!d) return
+  const now = Date.now(), today = nyDate(new Date(now))
+  const profiles = [...(d.profiles || [])]
+    .sort((a, b) => (Date.parse(b.lastSeenAt) || 0) - (Date.parse(a.lastSeenAt) || 0))
+  const followUps = d.followUps || []
+  const byPhone = new Map(profiles.map(p => [p.phone, p]))
+  const fusByPhone = new Map()
+  for(const f of followUps){ if(!fusByPhone.has(f.phone)) fusByPhone.set(f.phone, []); fusByPhone.get(f.phone).push(f) }
+
+  const scheduled = scheduledOf(d)
+  const overdue = scheduled.filter(f => fuGroup(f, now, today) === 'overdue').length
+  document.getElementById('lead-tiles').innerHTML = [
+    [profiles.length, 'Leads'], [scheduled.length, 'Open follow-ups'], [overdue, 'Overdue'],
+    [profiles.filter(p => p.stage === 'tour_scheduled').length, 'Tours scheduled'],
+    [profiles.filter(p => p.stage === 'lost').length, 'Lost'],
+  ].map(([n, l]) => `<div class="tile"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('')
+
+  // Tied to the flag the API sends, so the line disappears on its own the day outbound is
+  // switched on rather than waiting for someone to remember this page.
+  document.getElementById('fu-note').textContent = d.outboundEnabled === false
+    ? 'Scheduled intentions. Outbound calling is not enabled yet — these show what the system would do, not what it did.'
+    : ''
+
+  const store = d.store || {}
+  document.getElementById('leads-banner').innerHTML = store.durable === false
+    ? `<div class="warn-banner"><b>Leads will not persist.</b> ${escapeHtml(store.note || '')}</div>` : ''
+  document.getElementById('leads-store').textContent =
+    `store ${store.kind || '?'} · ${store.durable ? 'durable' : 'not durable'} · ` +
+    `${profiles.length} lead${profiles.length === 1 ? '' : 's'} · ` +
+    `${followUps.length} follow-up${followUps.length === 1 ? '' : 's'}`
+
+  // Replacing the HTML would drop a keyboard user's focus and any half-typed note. Keep both:
+  // every control carries a data-fk key, and drafts are read back into the new inputs.
+  const root = document.getElementById('leads')
+  const active = document.activeElement
+  const keep = active && root.contains(active) && active.dataset && active.dataset.fk
+    ? { fk:active.dataset.fk, sel:typeof active.selectionStart === 'number' ? active.selectionStart : null }
+    : null
+  const drafts = new Map()
+  for(const inp of root.querySelectorAll('input[data-phone]')) if(inp.value) drafts.set(inp.dataset.phone, inp.value)
+
+  renderQueue(d, byPhone, now, today)
+  document.getElementById('lead-cards').innerHTML = profiles.length
+    ? profiles.map(p => renderLeadCard(p, fusByPhone.get(p.phone) || [])).join('')
+    : `<div class="empty"><strong>No leads yet</strong>
+        Call <a class="tel" href="tel:+15169909252">(516) 990-9252</a> and the caller's card appears here when the call ends.</div>`
+
+  for(const [phone, text] of drafts){
+    const inp = root.querySelector(`input[data-phone="${cssq(phone)}"]`)
+    if(inp) inp.value = text
+  }
+  if(keep){
+    const el = root.querySelector(`[data-fk="${cssq(keep.fk)}"]`)
+    if(el){
+      el.focus({preventScroll:true})
+      if(keep.sel !== null && el.setSelectionRange){ try{ el.setSelectionRange(keep.sel, keep.sel) }catch(e){ /* not a text field */ } }
+    }
+  }
+}
+
+async function leadsPost(body){
+  const r = await fetch('/api/leads', {
+    method:'POST', credentials:'same-origin', cache:'no-store',
+    headers:{'content-type':'application/json', accept:'application/json'},
+    body:JSON.stringify(body),
+  })
+  if(r.status === 401 || r.status === 403){ toGate(); throw new Error('Signed out') }
+  const d = await r.json().catch(() => ({}))
+  if(!r.ok) throw new Error(d.error || ('HTTP ' + r.status))
+  return d
+}
+
+/**
+ * Folds what a write returned into the state and repaints from it. followup_status returns
+ * the one follow-up, note returns the one profile, clear_leads returns both lists empty.
+ */
+function applyLeadsResult(d){
+  leads.seq++ // any poll already in flight is stale now
+  const s = leads.state || {}
+  let profiles = s.profiles || [], followUps = s.followUps || []
+  if(Array.isArray(d.profiles)) profiles = d.profiles
+  if(Array.isArray(d.followUps)) followUps = d.followUps
+  if(d.followUp) followUps = followUps.some(f => f.id === d.followUp.id)
+    ? followUps.map(f => f.id === d.followUp.id ? d.followUp : f) : [...followUps, d.followUp]
+  if(d.profile) profiles = profiles.some(p => p.phone === d.profile.phone)
+    ? profiles.map(p => p.phone === d.profile.phone ? d.profile : p) : [...profiles, d.profile]
+  leads.state = { ...s, profiles, followUps }
+  leads.key = leadsKey(leads.state)
+  renderLeads()
+}
+
+/** Runs one owner action. `fn` does its own POSTs and returns the response, or null to cancel. */
+async function leadAct(fn){
+  if(leads.busy) return
+  leads.busy = true
+  let failed = false
+  try{
+    const last = await fn()
+    if(last) applyLeadsResult(last)
+    leadsMessage('')
+  }catch(err){
+    failed = true
+    leadsMessage(err && err.message ? err.message : String(err), true)
+  }finally{
+    leads.busy = false
+  }
+  // A failed write may still have landed; re-read rather than sit stale under the error.
+  if(failed && timer !== null) tickLeads()
+}
+
+async function tickLeads(){
+  if(leads.busy) return
+  const seq = ++leads.seq
+  try{
+    const r = await fetch('/api/leads', {
+      cache:'no-store', credentials:'same-origin', headers:{accept:'application/json'},
+    })
+    if(r.status === 401 || r.status === 403){ toGate(); return }
+    const d = await r.json().catch(() => ({}))
+    if(!r.ok) throw new Error(d.error || ('HTTP ' + r.status))
+    if(seq !== leads.seq || leads.busy) return // something newer landed meanwhile
+    if(leads.pollError){ leads.pollError = false; leadsMessage('') }
+    const key = leadsKey(d)
+    if(key === leads.key) return
+    leads.state = d; leads.key = key
+    renderLeads()
+  }catch(err){
+    leads.pollError = true
+    leadsMessage('Leads unavailable — ' + (err && err.message ? err.message : err), true)
+  }
+}
+
+/** Opens a lead's card and brings it into view; the name in the queue is a link here. */
+function showLead(phone){
+  leads.open.add(phone)
+  const det = document.getElementById(leadDomId(phone))
+  if(!det) return
+  det.open = true
+  det.scrollIntoView({behavior:'smooth', block:'start'})
+  const sum = det.querySelector('summary')
+  if(sum) sum.focus({preventScroll:true})
+}
+
+const leadsRoot = document.getElementById('leads')
+leadsRoot.addEventListener('click', ev => {
+  const fu = ev.target.closest('[data-fu]')
+  if(fu){
+    const { fu:id, status } = fu.dataset
+    leadAct(async () => leadsPost({action:'followup_status', id, status}))
+    return
+  }
+  const who = ev.target.closest('.fu-who')
+  if(who){ ev.preventDefault(); showLead(who.dataset.phone) }
+})
+leadsRoot.addEventListener('submit', ev => {
+  const form = ev.target.closest('form.note-form')
+  if(!form) return
+  ev.preventDefault()
+  const input = form.querySelector('input'), phone = form.dataset.phone
+  const text = (input.value || '').trim()
+  if(!text) return
+  leadAct(async () => {
+    const d = await leadsPost({action:'note', phone, text})
+    input.value = '' // only once the server has it — a failed post keeps the draft
+    return d
+  })
+})
+// A details element's toggle event does not bubble, so listen in the capture phase. This
+// keeps the open set in step with what the operator did, so a repaint does not fold a card
+// they were reading.
+leadsRoot.addEventListener('toggle', ev => {
+  const det = ev.target
+  if(!(det instanceof HTMLDetailsElement) || !det.dataset.phone) return
+  if(det.open) leads.open.add(det.dataset.phone); else leads.open.delete(det.dataset.phone)
+}, true)
+document.getElementById('leads-clear').addEventListener('click', () => {
+  leadAct(async () => confirm(
+    'TEST CONTROL: this deletes every lead profile and every follow-up in the store, including real prospects. ' +
+    'Only use it to reset between test calls. Continue?')
+    ? leadsPost({action:'clear_leads'}) : null)
+})
+
+/**
  * The log endpoint is gated by the same operations session that served this page, so the
  * poll sends the session cookie and treats a 401 as "the session ended", not as a blip. A
  * dashboard that keeps retrying a closed door looks broken; sending the operator back to
@@ -665,6 +1189,7 @@ function toGate(){ stopPolling(); location.assign('/api/dashboard') }
 
 async function tick(){
   tickCalendar() // never throws; it reports its own failures in the calendar footer
+  tickLeads()    // likewise, in the leads footer
   try{
     const r = await fetch('/api/vapi', {
       cache:'no-store', credentials:'same-origin', headers:{accept:'application/json'},
