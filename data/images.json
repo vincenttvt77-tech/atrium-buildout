@@ -1,0 +1,17 @@
+{
+  "note": "Generated demo imagery hosted on the generator's CDN. Referenced directly because the build environment's egress policy blocks that host, so the files could not be pulled into the repo. A visitor's browser reaches them fine. For anything beyond a demo these should be downloaded and served from the same origin as the site — a third-party CDN URL is not a dependency you want under a client's building.",
+  "images": {
+    "hero": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_145500_e6576246-13ef-4e2f-a969-6dbda18c3470.png",
+    "lobby": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_145458_7da20671-19d6-4146-8956-6f953670c1fc.png",
+    "rooftop-pool": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_145458_0ee0e85c-df3a-4541-b28d-07acfc32f770.png",
+    "fitness": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_145458_ba0d54c4-a49e-4377-aece-a67d1e4170d9.png",
+    "lounge": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_145458_6b872be5-86b6-43a5-a803-11cb74ab8cfc.png",
+    "coworking": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_145458_57e5ef6b-6510-4373-9142-c33c204a0012.png",
+    "studio-interior": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_145458_64c11084-d86e-419d-828c-ba768575eaa0.png",
+    "one-bed-interior": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_145459_d6b5ff77-4ff0-42b1-81c5-cb8ab7f8edfc.png",
+    "two-bed-interior": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_145459_780fa3af-8c08-4427-9bca-283416a62589.png",
+    "kitchen": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_145458_806002b6-8215-4c42-a5f1-1321a79a417c.png",
+    "bathroom": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_145458_37018f36-122d-405f-962f-e4aaba482c3b.png",
+    "neighborhood": "https://d8j0ntlcm91z4.cloudfront.net/user_3Bgs2ORcT6Frbqv7AKCyBALqQRm/hf_20260907_145458_a4039fac-515f-47ff-8246-659e8e851b6b.png"
+  }
+}
