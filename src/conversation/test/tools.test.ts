@@ -155,3 +155,33 @@ describe('captured signals carry their evidence forward', () => {
     assert.equal(r.qualificationPatch?.bedrooms?.value.min, 0)
   })
 })
+
+describe('a caller can ask about a residence by name', () => {
+  test('a named available unit is quoted directly, no qualification needed', () => {
+    const r = checkAvailability(ctx(), { unitId: '21A' })
+    assert.match(r.say, /Residence 21A is available/)
+    assert.match(r.say, /\$4,200/)
+    assert.equal(r.record.outcome, 'unit_lookup')
+  })
+
+  test('"unit 21A" and "21a" resolve the same residence', () => {
+    assert.match(checkAvailability(ctx(), { unitId: 'unit 21A' }).say, /Residence 21A/)
+    assert.match(checkAvailability(ctx(), { unitId: '21a' }).say, /Residence 21A/)
+  })
+
+  test('a residence that does not exist is said not to exist — never guessed at', () => {
+    const r = checkAvailability(ctx(), { unitId: '99Q' })
+    assert.match(r.say, /no residence 99Q/i)
+    assert.match(r.say, /do not guess/i)
+    assert.equal(r.record.outcome, 'unit_not_found')
+  })
+
+  test('a named unit later than the caller\'s date is quoted with the date, not called unavailable', () => {
+    const q = captureCore(emptyQualification(), 'moveInTiming',
+      extracted({ earliest: new Date('2026-09-15'), latest: null }, 0.9, CALL, 'mid September', NOW))
+    const r = checkAvailability(ctx({ qualification: q }), { unitId: '21A' }) // 21A frees Nov 1
+    assert.match(r.say, /Residence 21A is available/)
+    assert.match(r.say, /not free until November 1/)
+    assert.ok(!/unavailable/i.test(r.say))
+  })
+})

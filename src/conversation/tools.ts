@@ -129,7 +129,54 @@ export function captureSignal(args: CaptureArgs, ctx: ToolContext): ToolResult {
  * Availability and pricing. Gated on qualification, and answers only from the verified
  * snapshot — the agent may never name a unit or a rent that did not come through here.
  */
-export function checkAvailability(ctx: ToolContext): ToolResult {
+export interface AvailabilityArgs {
+  /** A specific residence the caller named — usually read off the website. */
+  unitId?: string
+  reason?: string
+}
+
+const availDate = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })
+
+/**
+ * A caller who has the website open asks about a residence by name. That question does
+ * not need qualification — they have already chosen — and answering it from the verified
+ * snapshot is the opposite of a hallucination risk. Without this the agent had no way to
+ * look a unit up and either improvised or said it was unavailable.
+ */
+export function lookupUnit(unitId: string, ctx: ToolContext): ToolResult {
+  const wanted = unitId.trim().toUpperCase().replace(/^(RESIDENCE|UNIT|APARTMENT|APT)\s*/i, '')
+  const u = ctx.inventory.units.find((x) => x.unitId.toUpperCase() === wanted)
+  const plan = u ? ctx.inventory.floorPlans.find((p) => p.id === u.floorPlanId) : undefined
+
+  if (!u) {
+    return {
+      say: `There is no residence ${wanted} on the current availability list. Say so plainly — do not guess at whether it exists or what it costs — and offer to check what is available in the size they want.`,
+      record: { kind: 'availability_checked', outcome: 'unit_not_found', unitId: wanted, unitsOffered: [] },
+    }
+  }
+
+  if (u.status !== 'available') {
+    return {
+      say: `Residence ${u.unitId} is ${u.status === 'pending' ? 'pending — someone has an application in on it' : 'not currently available'}. Say exactly that. Offer to check similar residences.`,
+      record: { kind: 'availability_checked', outcome: `unit_${u.status}`, unitId: u.unitId, unitsOffered: [] },
+    }
+  }
+
+  const moveIn = ctx.qualification.moveInTiming?.value.earliest
+  const timing = moveIn && Date.parse(u.availableFrom) > moveIn.getTime() + 42 * 86_400_000
+    ? ` NOTE: it is not free until ${availDate(u.availableFrom)}, which is later than the ${availDate(moveIn.toISOString())} they mentioned — say that and ask whether the date works.`
+    : ''
+
+  return {
+    say: `Residence ${u.unitId} is available: ${u.bedrooms === 0 ? 'studio' : `${u.bedrooms} bed`}, ${u.bathrooms} bath, ${u.sqft} sq ft${plan ? ` (${plan.name})` : ''}, ${money(u.monthlyRent)}/month, available ${availDate(u.availableFrom)}${u.concession ? `. ${u.concession}` : ''}${u.view ? `. ${u.view}` : ''}. Quote exactly this.${timing}`,
+    record: { kind: 'availability_checked', outcome: 'unit_lookup', unitId: u.unitId, unitsOffered: [u.unitId] },
+  }
+}
+
+export function checkAvailability(ctx: ToolContext, args: AvailabilityArgs = {}): ToolResult {
+  if (args.unitId && /[0-9]/.test(args.unitId)) return lookupUnit(args.unitId, ctx)
+
   const gate = mayQuote(ctx.qualification)
   if (!gate.allowed) {
     const next = nextSignalToAsk(ctx.qualification)
@@ -176,11 +223,28 @@ export function checkAvailability(ctx: ToolContext): ToolResult {
       })
       const stretchLines = out.stretch.map((m) =>
         `Slightly above their range: Unit ${m.unit.unitId} at ${money(m.unit.monthlyRent)} — offer this ONLY after acknowledging it is over what they said.`)
+      const laterLines = out.later.map((m) =>
+        `Coming up a bit later: Unit ${m.unit.unitId}, ${m.unit.bedrooms === 0 ? 'studio' : `${m.unit.bedrooms} bed`}, ${money(m.unit.monthlyRent)}/month, free ${availDate(m.unit.availableFrom)}.`)
+      const more = out.moreInTime.length
+        ? `There ${out.moreInTime.length === 1 ? 'is' : 'are'} also ${out.moreInTime.join(', ')} in their range and window — mention that more exist and offer to go through them. If they ask about one by name, look it up.`
+        : ''
+
+      /*
+       * The shape of this answer is the point. It is never a closed door: what fits now,
+       * then what is close on price, then what is coming a little later, then that more
+       * exist. A caller who asked about one residence and hears "not available" and
+       * nothing else has been shut out of a building with twenty-seven homes open.
+       */
+      const parts: string[] = []
+      if (lines.length) parts.push(`Available in their window and range — quote exactly these:\n${lines.join('\n')}`)
+      if (stretchLines.length) parts.push(stretchLines.join('\n'))
+      if (laterLines.length) parts.push(
+        `${lines.length ? 'Also, if they can wait a little' : 'Nothing frees up by their date, but if they can wait a little'}:\n${laterLines.join('\n')}\nSay it warmly — something like "we've got this by the time you're looking to move, and a couple more opening up after if you're able to wait." Do NOT call these unavailable.`)
+      if (more) parts.push(more)
+      if (parts.length === 0) parts.push('Nothing matches on any of size, date or budget. Say so plainly, then ask what they would be flexible on.')
 
       return {
-        say: lines.length > 0
-          ? `Verified availability — you may quote these exactly and nothing else:\n${lines.join('\n')}${stretchLines.length ? `\n${stretchLines.join('\n')}` : ''}`
-          : `Nothing within their stated range.${stretchLines.length ? ` ${stretchLines.join(' ')}` : ''}`,
+        say: parts.join('\n\n'),
         record: {
           kind: 'availability_checked', outcome: 'matches',
           unitsOffered: out.units.map((m) => m.unit.unitId),

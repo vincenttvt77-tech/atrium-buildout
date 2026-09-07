@@ -18,8 +18,18 @@ export interface ScoredUnit {
 }
 
 export type MatchOutcome =
-  /** Verified units the agent may name, price and offer. */
-  | { kind: 'matches'; units: ScoredUnit[]; stretch: ScoredUnit[] }
+  /**
+   * Verified units the agent may name, price and offer. `later` are units that fit
+   * everything except the move-in date — available after the caller's window. They are
+   * returned separately, not dropped: a caller who said "two months" and is told a unit
+   * "isn't available" when the website shows it free on December 1 hears a contradiction,
+   * not a filter. The right sentence is "there's one on 19 but not until December 1 —
+   * would that work?"
+   */
+  | { kind: 'matches'; units: ScoredUnit[]; stretch: ScoredUnit[]; later: ScoredUnit[];
+      /** In-time, in-budget units not shown because of the limit. Named so a caller who
+       *  asks about one is never contradicted. */
+      moreInTime: string[] }
   /**
    * Inventory has units but none the prospect can afford. This is not a failure — it is
    * the single most valuable signal the system captures, and it must be recorded as a
@@ -33,13 +43,29 @@ export type MatchOutcome =
 
 const DAY = 86_400_000
 
-function offerable(u: Unit, now: Date, moveIn: Date | null): boolean {
-  if (u.status !== 'available') return false
-  const from = Date.parse(u.availableFrom)
-  // A unit available in the past is available now.
+/** Available at all: on the market and not pending. Timing is judged separately. */
+function onMarket(u: Unit): boolean {
+  return u.status === 'available'
+}
+
+/**
+ * Whether the unit frees up in time for the caller. Six weeks of flex rather than three:
+ * someone who said "two months" is not going to walk over three and a half weeks, and a
+ * unit hidden for that reason reads as a lie when the website shows it.
+ */
+function inTime(u: Unit, moveIn: Date | null): boolean {
   if (moveIn === null) return true
-  // Allow a unit that frees up within three weeks of the desired date — real prospects flex.
-  return from <= moveIn.getTime() + 21 * DAY
+  return Date.parse(u.availableFrom) <= moveIn.getTime() + 42 * DAY
+}
+
+/**
+ * "A bit later than you wanted" has an edge. A unit three months past the target is worth
+ * a sentence; one six months out is a different search, and listing it makes the agent
+ * sound like it is reading the whole building.
+ */
+function withinLaterHorizon(u: Unit, moveIn: Date | null): boolean {
+  if (moveIn === null) return false
+  return Date.parse(u.availableFrom) <= moveIn.getTime() + 120 * DAY
 }
 
 /**
@@ -62,14 +88,19 @@ export function findMatches(
   const beds = qual.bedrooms?.value
   const budgetMax = qual.budget?.value.maxMonthly ?? null
 
-  let pool = snapshot.units.filter((u) => offerable(u, opts.now, moveIn))
-  if (pool.length === 0) return { kind: 'no_match', reason: 'no_availability' }
+  let market = snapshot.units.filter(onMarket)
+  if (market.length === 0) return { kind: 'no_match', reason: 'no_availability' }
 
   if (beds) {
-    const byBeds = pool.filter((u) => u.bedrooms >= beds.min && u.bedrooms <= beds.max)
+    const byBeds = market.filter((u) => u.bedrooms >= beds.min && u.bedrooms <= beds.max)
     if (byBeds.length === 0) return { kind: 'no_match', reason: 'bedroom_mismatch' }
-    pool = byBeds
+    market = byBeds
   }
+
+  // Split on timing rather than filtering on it, so the later ones can still be offered.
+  const pool = market.filter((u) => inTime(u, moveIn))
+  const laterPool = market.filter((u) => !inTime(u, moveIn) && withinLaterHorizon(u, moveIn))
+  if (pool.length === 0 && laterPool.length === 0) return { kind: 'no_match', reason: 'no_availability' }
 
   const score = (u: Unit): ScoredUnit => {
     const reasons: string[] = []
@@ -91,9 +122,18 @@ export function findMatches(
 
   const limit = opts.limit ?? 3
 
+  const later = laterPool
+    .filter((u) => budgetMax === null || u.monthlyRent <= budgetMax * (1 + (opts.stretchFraction ?? 0.08)))
+    .map(score)
+    .sort((a, b) => Date.parse(a.unit.availableFrom) - Date.parse(b.unit.availableFrom))
+    .slice(0, 2)
+
   if (budgetMax === null) {
     const all = pool.map(score).sort((a, b) => b.score - a.score)
-    return { kind: 'matches', units: all.slice(0, limit), stretch: [] }
+    return {
+      kind: 'matches', units: all.slice(0, limit), stretch: [], later,
+      moreInTime: all.slice(limit).map((m) => m.unit.unitId),
+    }
   }
 
   const stretchTo = budgetMax * (1 + (opts.stretchFraction ?? 0.08))
@@ -102,7 +142,14 @@ export function findMatches(
     .filter((u) => u.monthlyRent > budgetMax && u.monthlyRent <= stretchTo)
     .map(score)
 
+  if (within.length === 0 && stretch.length === 0 && later.length > 0) {
+    // Nothing in time, but something in budget later. That is a timing conversation,
+    // not a price one.
+    return { kind: 'matches', units: [], stretch: [], later, moreInTime: [] }
+  }
+
   if (within.length === 0 && stretch.length === 0) {
+    if (pool.length === 0) return { kind: 'no_match', reason: 'timing_mismatch' }
     const cheapest = Math.min(...pool.map((u) => u.monthlyRent))
     const nearest = pool
       .slice()
@@ -118,9 +165,12 @@ export function findMatches(
     }
   }
 
+  const rankedWithin = within.sort((a, b) => b.score - a.score)
   return {
     kind: 'matches',
-    units: within.sort((a, b) => b.score - a.score).slice(0, limit),
+    units: rankedWithin.slice(0, limit),
     stretch: stretch.sort((a, b) => a.unit.monthlyRent - b.unit.monthlyRent).slice(0, 2),
+    later,
+    moreInTime: rankedWithin.slice(limit).map((m) => m.unit.unitId),
   }
 }

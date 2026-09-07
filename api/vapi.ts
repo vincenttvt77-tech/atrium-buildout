@@ -163,7 +163,7 @@ async function runTool(
     }
 
     case 'check_availability': {
-      const r = checkAvailability(ctx)
+      const r = checkAvailability(ctx, { unitId: args.unitId ? String(args.unitId) : undefined, reason: args.reason ? String(args.reason) : undefined })
       logEvent(callId, r.record)
       const offered = (r.record.unitsOffered as string[] | undefined) ?? []
       state.unitsDiscussed = [...new Set([...state.unitsDiscussed, ...offered])]

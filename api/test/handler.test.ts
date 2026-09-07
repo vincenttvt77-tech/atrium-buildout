@@ -111,7 +111,7 @@ describe('per-call state does not leak between callers', () => {
     await toolCall('capture_signal', { signal: 'bedrooms', value: '1', excerpt: 'one bed' }, 'leak-a')
     await toolCall('capture_signal', { signal: 'budget', value: '5000', excerpt: 'five thousand' }, 'leak-a')
     const a = await toolCall('check_availability', {}, 'leak-a')
-    assert.match(String(a.result), /Verified availability/)
+    assert.match(String(a.result), /quote exactly these/)
 
     const b = await toolCall('check_availability', {}, 'leak-b')
     assert.match(String(b.result), /Do NOT state any rent/i,

@@ -144,3 +144,61 @@ describe('the loader refuses to invent data', () => {
     assert.equal(r.snapshot.units.length, 1)
   })
 })
+
+describe('a unit available after the move-in window is offered as later, not hidden', () => {
+  // The real call: caller said "2 months" (November 7), asked about 19A, which frees up
+  // December 1. The old 21-day filter dropped it and the agent said "not available" while
+  // the website showed it. Under the six-week window 19A is simply in time.
+  const s = snap([
+    unit({ unitId: '12A', floorPlanId: 'C1', monthlyRent: 7150, bedrooms: 3, availableFrom: '2026-11-03' }),
+    unit({ unitId: '19A', floorPlanId: 'C1', monthlyRent: 7615, bedrooms: 3, availableFrom: '2026-12-01' }),
+    unit({ unitId: '22C', floorPlanId: 'C1', monthlyRent: 7400, bedrooms: 3, availableFrom: '2027-01-15' }),
+    unit({ unitId: '40Z', floorPlanId: 'C1', monthlyRent: 7000, bedrooms: 3, availableFrom: '2027-06-01' }),
+  ], [plan('C1', 3, 1332)])
+
+  const q = captureCore(withBeds(3, 3)(withBudget(9000)), 'moveInTiming',
+    extracted({ earliest: new Date('2026-11-07'), latest: null }, 0.9, CALL, '2 months', NOW))
+
+  test('19A, free 24 days after the target, is in time — the old filter hid it', () => {
+    const out = findMatches(s, q, { now: NOW })
+    assert.equal(out.kind, 'matches')
+    if (out.kind !== 'matches') return
+    const shown = [...out.units.map((m) => m.unit.unitId), ...out.moreInTime]
+    assert.ok(shown.includes('19A'), '19A must be offered as available')
+  })
+
+  test('a January unit is offered as later, with its date, never dropped', () => {
+    const out = findMatches(s, q, { now: NOW })
+    assert.equal(out.kind, 'matches')
+    if (out.kind !== 'matches') return
+    assert.ok(!out.units.some((m) => m.unit.unitId === '22C'))
+    assert.ok(out.later.some((m) => m.unit.unitId === '22C'), 'January is "a bit later" than November')
+  })
+
+  test('a unit seven months out is past the horizon and not listed', () => {
+    const out = findMatches(s, q, { now: NOW })
+    assert.equal(out.kind, 'matches')
+    if (out.kind !== 'matches') return
+    assert.ok(!out.later.some((m) => m.unit.unitId === '40Z'), 'June is a different search, not "a bit later"')
+  })
+
+  test('nothing in time but something later is a timing conversation, not a refusal', () => {
+    const onlyLater = snap([
+      unit({ unitId: '22C', floorPlanId: 'C1', monthlyRent: 7400, bedrooms: 3, availableFrom: '2027-01-15' }),
+    ], [plan('C1', 3, 1332)])
+    const out = findMatches(onlyLater, q, { now: NOW })
+    assert.equal(out.kind, 'matches')
+    assert.equal(out.kind === 'matches' && out.later[0]?.unit.unitId, '22C')
+  })
+
+  test('in-time units cut by the limit are named so a caller is never contradicted', () => {
+    const many = snap(
+      ['A', 'B', 'C', 'D', 'E'].map((l, i) => unit({ unitId: `1${i}${l}`, floorPlanId: 'C1', monthlyRent: 7000 + i * 100, bedrooms: 3, availableFrom: '2026-11-10' })),
+      [plan('C1', 3, 1332)])
+    const out = findMatches(many, q, { now: NOW, limit: 3 })
+    assert.equal(out.kind, 'matches')
+    if (out.kind !== 'matches') return
+    assert.equal(out.units.length, 3)
+    assert.equal(out.moreInTime.length, 2, 'the two not shown must still be named')
+  })
+})

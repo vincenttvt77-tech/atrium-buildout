@@ -33,6 +33,10 @@ export const TOOL_DEFINITIONS = [
       parameters: {
         type: 'object',
         properties: {
+          unitId: {
+            type: 'string',
+            description: 'If the caller named a specific residence — "is 19A available?" — pass it here and it is looked up directly, no qualification needed.',
+          },
           reason: {
             type: 'string',
             description: 'Why you are checking now — for example "caller asked about one bedrooms".',
