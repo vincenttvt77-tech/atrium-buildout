@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 493.0 464.0" width="493.0" height="464.0" role="img" aria-label="S2 floor plan, Alcove Studio">
+<title>S2 — Alcove Studio floor plan, The Larkin</title>
+<rect width="493.0" height="464.0" fill="#F4F1EA"/>
+<g shape-rendering="geometricPrecision">
+<rect x="71.62" y="63.62" width="361.76" height="312.76" fill="#171A1C" opacity="0.035"/>
+<path d="M 60.0 52.0 H 445.0 V 388.0 H 60.0 Z M 71.62 63.62 H 433.38 V 376.38 H 71.62 Z" fill="#171A1C" fill-rule="evenodd"/>
+<rect x="148.06" y="63.62" width="5.88" height="77.98" fill="#171A1C"/>
+<rect x="71.62" y="138.66" width="79.38" height="5.88" fill="#171A1C"/>
+<rect x="115.86" y="141.6" width="5.88" height="44.8" fill="#171A1C"/>
+<rect x="71.62" y="183.46" width="47.18" height="5.88" fill="#171A1C"/>
+<rect x="71.62" y="329.06" width="47.18" height="5.88" fill="#171A1C"/>
+<rect x="115.86" y="332.0" width="5.88" height="44.38" fill="#171A1C"/>
+<rect x="275.46" y="63.62" width="5.88" height="69.58" fill="#171A1C"/>
+<rect x="278.4" y="187.66" width="154.98" height="5.88" fill="#171A1C"/>
+<rect x="433.38" y="74.4" width="11.62" height="291.2" fill="#F4F1EA"/>
+<rect x="60.0" y="290.0" width="11.62" height="42.0" fill="#F4F1EA"/>
+<rect x="88.0" y="138.38" width="36.4" height="6.44" fill="#F4F1EA"/>
+<rect x="115.58" y="148.6" width="6.44" height="30.8" fill="#F4F1EA"/>
+<rect x="115.58" y="339.0" width="6.44" height="30.8" fill="#F4F1EA"/>
+<line x1="435.55" y1="74.4" x2="435.55" y2="365.6" stroke="#171A1C" stroke-width="0.7"/>
+<line x1="439.19" y1="74.4" x2="439.19" y2="365.6" stroke="#171A1C" stroke-width="1.35"/>
+<line x1="442.83" y1="74.4" x2="442.83" y2="365.6" stroke="#171A1C" stroke-width="0.7"/>
+<line x1="433.38" y1="74.4" x2="445.0" y2="74.4" stroke="#171A1C" stroke-width="0.7"/>
+<line x1="433.38" y1="365.6" x2="445.0" y2="365.6" stroke="#171A1C" stroke-width="0.7"/>
+<path d="M 71.62 332.0 A 42.0 42.0 0 0 0 113.62 290.0" fill="none" stroke="#171A1C" stroke-width="0.75" opacity="0.85"/>
+<line x1="71.62" y1="290.0" x2="113.62" y2="290.0" stroke="#171A1C" stroke-width="1.7" stroke-linecap="round"/>
+<path d="M 124.4 141.6 A 36.4 36.4 0 0 0 88.0 105.2" fill="none" stroke="#171A1C" stroke-width="0.75" opacity="0.85"/>
+<line x1="88.0" y1="141.6" x2="88.0" y2="105.2" stroke="#171A1C" stroke-width="1.7" stroke-linecap="round"/>
+<line x1="118.8" y1="148.6" x2="131.4" y2="156.3" stroke="#171A1C" stroke-width="1.3"/>
+<line x1="131.4" y1="156.3" x2="118.8" y2="164.0" stroke="#171A1C" stroke-width="1.3"/>
+<line x1="118.8" y1="164.0" x2="131.4" y2="171.7" stroke="#171A1C" stroke-width="1.3"/>
+<line x1="131.4" y1="171.7" x2="118.8" y2="179.4" stroke="#171A1C" stroke-width="1.3"/>
+<line x1="118.8" y1="339.0" x2="131.4" y2="346.7" stroke="#171A1C" stroke-width="1.3"/>
+<line x1="131.4" y1="346.7" x2="118.8" y2="354.4" stroke="#171A1C" stroke-width="1.3"/>
+<line x1="118.8" y1="354.4" x2="131.4" y2="362.1" stroke="#171A1C" stroke-width="1.3"/>
+<line x1="131.4" y1="362.1" x2="118.8" y2="369.8" stroke="#171A1C" stroke-width="1.3"/>
+<rect x="156.6" y="63.62" width="36.4" height="36.4" fill="none" stroke="#171A1C" stroke-width="0.8"/>
+<line x1="182.81" y1="63.62" x2="182.81" y2="100.02" stroke="#171A1C" stroke-width="0.6"/>
+<rect x="195.8" y="63.62" width="77.0" height="30.8" fill="none" stroke="#171A1C" stroke-width="0.9"/>
+<rect x="197.9" y="69.57" width="23.8" height="18.9" fill="none" stroke="#171A1C" stroke-width="0.8" rx="1.68"/>
+<circle cx="209.8" cy="71.81" r="1.26" fill="#171A1C"/>
+<rect x="223.8" y="63.62" width="26.6" height="30.8" fill="none" stroke="#171A1C" stroke-width="0.7"/>
+<line x1="223.8" y1="63.62" x2="250.4" y2="94.42" stroke="#171A1C" stroke-width="0.5" opacity="0.55"/>
+<rect x="238.5" y="65.02" width="35.0" height="28.0" fill="none" stroke="#171A1C" stroke-width="0.8"/>
+<circle cx="249.0" cy="73.7" r="4.62" fill="none" stroke="#171A1C" stroke-width="0.65"/>
+<circle cx="249.0" cy="84.34" r="4.62" fill="none" stroke="#171A1C" stroke-width="0.65"/>
+<circle cx="263.0" cy="73.7" r="4.62" fill="none" stroke="#171A1C" stroke-width="0.65"/>
+<circle cx="263.0" cy="84.34" r="4.62" fill="none" stroke="#171A1C" stroke-width="0.65"/>
+<rect x="73.3" y="101.0" width="70.0" height="33.6" fill="none" stroke="#171A1C" stroke-width="0.85"/>
+<rect x="77.22" y="104.92" width="62.16" height="25.76" fill="none" stroke="#171A1C" stroke-width="0.6" rx="4.2"/>
+<circle cx="132.8" cy="117.8" r="1.54" fill="none" stroke="#171A1C" stroke-width="0.5"/>
+<rect x="114.6" y="66.7" width="32.2" height="25.2" fill="none" stroke="#171A1C" stroke-width="0.85"/>
+<ellipse cx="130.7" cy="79.3" rx="8.68" ry="5.88" fill="none" stroke="#171A1C" stroke-width="0.6"/>
+<g transform="translate(87.3,80.0) rotate(270)"><rect x="-10.5" y="-11.9" width="21.0" height="7.0" fill="none" stroke="#171A1C" stroke-width="0.7"/><ellipse cx="0" cy="2.1" rx="8.4" ry="10.08" fill="none" stroke="#171A1C" stroke-width="0.7"/></g>
+<rect x="76.8" y="148.6" width="35.0" height="32.2" fill="none" stroke="#171A1C" stroke-width="0.8"/>
+<line x1="94.3" y1="148.6" x2="94.3" y2="180.8" stroke="#171A1C" stroke-width="0.7"/>
+<circle cx="85.55" cy="164.7" r="5.88" fill="none" stroke="#171A1C" stroke-width="0.6"/>
+<circle cx="103.05" cy="164.7" r="5.88" fill="none" stroke="#171A1C" stroke-width="0.6"/>
+<line x1="110.4" y1="339.7" x2="110.4" y2="370.5" stroke="#171A1C" stroke-width="0.55" opacity="0.75"/>
+<g transform="translate(352.6,124.8) rotate(0)" opacity="0.9"><rect x="-35.0" y="-46.2" width="70.0" height="92.4" rx="2.1" fill="none" stroke="#6E6B64" stroke-width="0.75"/><line x1="-35.0" y1="-19.6" x2="35.0" y2="-19.6" stroke="#6E6B64" stroke-width="0.6"/><rect x="-29.12" y="-42.28" width="24.08" height="17.5" rx="2.8" fill="none" stroke="#6E6B64" stroke-width="0.55"/><rect x="2.52" y="-42.28" width="24.08" height="17.5" rx="2.8" fill="none" stroke="#6E6B64" stroke-width="0.55"/></g>
+<g transform="translate(194.4,264.8) rotate(270)" opacity="0.9"><rect x="-46.2" y="-20.3" width="92.4" height="40.6" rx="2.8" fill="none" stroke="#6E6B64" stroke-width="0.7"/><line x1="-36.400000000000006" y1="-9.8" x2="36.400000000000006" y2="-9.8" stroke="#6E6B64" stroke-width="0.55"/></g>
+<rect x="237.8" y="241.0" width="25.2" height="47.6" rx="2.1" fill="none" stroke="#6E6B64" stroke-width="0.7" opacity="0.9"/>
+<rect x="314.8" y="255.0" width="61.6" height="42.0" rx="2.1" fill="none" stroke="#6E6B64" stroke-width="0.7" opacity="0.9"/>
+<rect x="335.1" y="236.8" width="21.0" height="12.6" rx="1.68" fill="none" stroke="#6E6B64" stroke-width="0.55" opacity="0.8"/>
+<rect x="335.1" y="302.6" width="21.0" height="12.6" rx="1.68" fill="none" stroke="#6E6B64" stroke-width="0.55" opacity="0.8"/>
+<rect x="296.6" y="265.5" width="12.6" height="21.0" rx="1.68" fill="none" stroke="#6E6B64" stroke-width="0.55" opacity="0.8"/>
+<rect x="382.0" y="265.5" width="12.6" height="21.0" rx="1.68" fill="none" stroke="#6E6B64" stroke-width="0.55" opacity="0.8"/>
+<rect x="331.21" y="160.13" width="45.58" height="12.8" fill="#F4F1EA"/>
+<text x="354.0" y="169.6" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="7.8" fill="#171A1C" letter-spacing="1.7" text-anchor="middle" font-weight="500">ALCOVE</text>
+<rect x="315.55" y="172.22" width="76.9" height="12.0" fill="#F4F1EA"/>
+<text x="354.0" y="181.1" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="7" fill="#6E6B64" letter-spacing="0.7" text-anchor="middle" font-weight="400">11&#39;-0&quot; x 9&#39;-0&quot;</text>
+<rect x="164.5" y="218.34" width="110.2" height="13.6" fill="#F4F1EA"/>
+<text x="219.6" y="228.4" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="8.6" fill="#171A1C" letter-spacing="1.7" text-anchor="middle" font-weight="500">LIVING / DINING</text>
+<rect x="178.7" y="231.02" width="81.8" height="12.0" fill="#F4F1EA"/>
+<text x="219.6" y="239.9" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="7" fill="#6E6B64" letter-spacing="0.7" text-anchor="middle" font-weight="400">17&#39;-6&quot; x 13&#39;-0&quot;</text>
+<rect x="197.64" y="105.02" width="43.92" height="11.6" fill="#F4F1EA"/>
+<text x="219.6" y="113.6" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="6.6" fill="#6E6B64" letter-spacing="1.2" text-anchor="middle" font-weight="500">KITCHEN</text>
+<rect x="93.07" y="83.42" width="31.86" height="12.4" fill="#F4F1EA"/>
+<text x="109.0" y="92.6" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="7.4" fill="#171A1C" letter-spacing="1.7" text-anchor="middle" font-weight="500">BATH</text>
+<rect x="73.0" y="95.22" width="72.0" height="12.0" fill="#F4F1EA"/>
+<text x="109.0" y="104.1" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="7" fill="#6E6B64" letter-spacing="0.7" text-anchor="middle" font-weight="400">5&#39;-8&quot; x 5&#39;-6&quot;</text>
+<rect x="149.6" y="301.02" width="33.6" height="11.6" fill="#F4F1EA"/>
+<text x="166.4" y="309.6" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="6.6" fill="#6E6B64" letter-spacing="1.2" text-anchor="middle" font-weight="500">ENTRY</text>
+<rect x="76.8" y="158.22" width="33.6" height="11.6" fill="#F4F1EA"/>
+<text x="93.6" y="166.8" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="6.6" fill="#6E6B64" letter-spacing="1.2" text-anchor="middle" font-weight="500">W / D</text>
+<rect x="84.54" y="347.22" width="18.12" height="11.6" fill="#F4F1EA"/>
+<text x="93.6" y="355.8" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="6.6" fill="#6E6B64" letter-spacing="1.2" text-anchor="middle" font-weight="500">CL</text>
+<line x1="60.0" y1="414.0" x2="445.0" y2="414.0" stroke="#6E6B64" stroke-width="0.7"/>
+<line x1="56.75" y1="410.75" x2="63.25" y2="417.25" stroke="#6E6B64" stroke-width="0.9"/>
+<line x1="441.75" y1="410.75" x2="448.25" y2="417.25" stroke="#6E6B64" stroke-width="0.9"/>
+<line x1="60.0" y1="414.0" x2="60.0" y2="388.0" stroke="#6E6B64" stroke-width="0.5" opacity="0.5"/>
+<line x1="445.0" y1="414.0" x2="445.0" y2="388.0" stroke="#6E6B64" stroke-width="0.5" opacity="0.5"/>
+<rect x="226.5" y="408.5" width="52" height="10" fill="#F4F1EA"/>
+<text x="252.5" y="417.0" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="7.2" fill="#6E6B64" letter-spacing="0.9" text-anchor="middle" font-weight="400">27&#39;-6&quot;</text>
+<line x1="30.0" y1="52.0" x2="30.0" y2="388.0" stroke="#6E6B64" stroke-width="0.7"/>
+<line x1="26.75" y1="48.75" x2="33.25" y2="55.25" stroke="#6E6B64" stroke-width="0.9"/>
+<line x1="26.75" y1="384.75" x2="33.25" y2="391.25" stroke="#6E6B64" stroke-width="0.9"/>
+<line x1="30.0" y1="52.0" x2="60.0" y2="52.0" stroke="#6E6B64" stroke-width="0.5" opacity="0.5"/>
+<line x1="30.0" y1="388.0" x2="60.0" y2="388.0" stroke="#6E6B64" stroke-width="0.5" opacity="0.5"/>
+<rect x="24.5" y="194.0" width="10" height="52" fill="#F4F1EA"/>
+<text x="33.0" y="220.0" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="7.2" fill="#6E6B64" letter-spacing="0.9" text-anchor="middle" font-weight="400" transform="rotate(-90 33.0 220.0)">24&#39;-0&quot;</text>
+<g transform="translate(471.0,72)"><circle cx="0" cy="0" r="15" fill="none" stroke="#7F5E33" stroke-width="0.8" opacity="0.85"/><path d="M 0 -10.5 L 3.6 4.2 L 0 1.4 L -3.6 4.2 Z" fill="#7F5E33"/><text x="0" y="-17.5" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="7.6" fill="#7F5E33" letter-spacing="1.4" text-anchor="middle" font-weight="500">N</text></g>
+<text x="60" y="438.0" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" fill="#7F5E33" letter-spacing="3.4" font-weight="500">S2</text>
+<text x="60" y="451.0" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="7.4" fill="#6E6B64" letter-spacing="1.5">560 – 605 SF</text>
+<rect x="305.0" y="432.0" width="70.0" height="4.0" fill="#171A1C" stroke="#171A1C" stroke-width="0.6"/>
+<rect x="375.0" y="432.0" width="70.0" height="4.0" fill="#F4F1EA" stroke="#171A1C" stroke-width="0.6"/>
+<text x="305.0" y="445.0" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="6.4" fill="#6E6B64" letter-spacing="0.6" text-anchor="middle">0</text>
+<text x="375.0" y="445.0" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="6.4" fill="#6E6B64" letter-spacing="0.6" text-anchor="middle">5</text>
+<text x="445.0" y="445.0" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="6.4" fill="#6E6B64" letter-spacing="0.6" text-anchor="middle">10</text>
+<text x="454.0" y="445.0" font-family="Jost, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="6.4" fill="#6E6B64" letter-spacing="1.2">FEET</text>
+</g></svg>
