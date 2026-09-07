@@ -168,16 +168,16 @@
   },
 
   "floorPlanTypes": [
-    { "code": "S1", "name": "Studio", "beds": 0, "baths": 1, "sqftRange": "468-532", "startingRent": 3745 },
-    { "code": "S2", "name": "Alcove Studio", "beds": 0, "baths": 1, "sqftRange": "560-605", "startingRent": 4050 },
-    { "code": "A1", "name": "One Bedroom", "beds": 1, "baths": 1, "sqftRange": "640-735", "startingRent": 4695 },
-    { "code": "A2", "name": "One Bedroom with Balcony", "beds": 1, "baths": 1, "sqftRange": "690-760", "startingRent": 5185 },
-    { "code": "A3", "name": "One Bedroom and Den", "beds": 1, "baths": 1.5, "sqftRange": "810-880", "startingRent": 5540 },
-    { "code": "B1", "name": "Two Bedroom", "beds": 2, "baths": 2, "sqftRange": "940-1,085", "startingRent": 6825 },
-    { "code": "B2", "name": "Two Bedroom with Balcony", "beds": 2, "baths": 2, "sqftRange": "985-1,120", "startingRent": 7410 },
-    { "code": "B3", "name": "Two Bedroom, West Collection", "beds": 2, "baths": 2, "sqftRange": "1,090-1,190", "startingRent": 8150 },
-    { "code": "C1", "name": "Three Bedroom", "beds": 3, "baths": 2, "sqftRange": "1,285-1,410", "startingRent": 9240 },
-    { "code": "C2", "name": "Three Bedroom, West Collection", "beds": 3, "baths": 2.5, "sqftRange": "1,455-1,560", "startingRent": 11650 }
+    { "code": "S1", "name": "Studio", "beds": 0, "baths": 1, "sqftRange": "468-532", "startingRent": 3255 },
+    { "code": "S2", "name": "Alcove Studio", "beds": 0, "baths": 1, "sqftRange": "560-605", "startingRent": 3165 },
+    { "code": "A1", "name": "One Bedroom", "beds": 1, "baths": 1, "sqftRange": "640-735", "startingRent": 4475 },
+    { "code": "A2", "name": "One Bedroom with Balcony", "beds": 1, "baths": 1, "sqftRange": "690-760", "startingRent": 5070 },
+    { "code": "A3", "name": "One Bedroom and Den", "beds": 1, "baths": 1.5, "sqftRange": "810-880", "startingRent": 4585 },
+    { "code": "B1", "name": "Two Bedroom", "beds": 2, "baths": 2, "sqftRange": "940-1,085", "startingRent": 5875 },
+    { "code": "B2", "name": "Two Bedroom with Balcony", "beds": 2, "baths": 2, "sqftRange": "985-1,120", "startingRent": 7140 },
+    { "code": "B3", "name": "Two Bedroom, West Collection", "beds": 2, "baths": 2, "sqftRange": "1,090-1,190", "startingRent": 9580 },
+    { "code": "C1", "name": "Three Bedroom", "beds": 3, "baths": 2, "sqftRange": "1,285-1,410", "startingRent": 7150 },
+    { "code": "C2", "name": "Three Bedroom, West Collection", "beds": 3, "baths": 2.5, "sqftRange": "1,455-1,560", "startingRent": 10405 }
   ],
 
   "concession": {

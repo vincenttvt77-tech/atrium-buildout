@@ -10,7 +10,7 @@
     "collection": null,
     "lines": ["F", "G"],
     "floorRange": "5-27",
-    "startingRent": 3745,
+    "startingRent": 3255,
     "description": "One room with the glass on the long wall, so the bed and the sofa both face out. The kitchen runs along one side with a full-size Bosch range and a vented hood, and the washer and dryer sit behind a door off the entry. Ceilings are 9 feet 4 inches.",
     "features": [
       "Floor-to-ceiling windows with solar shades",
@@ -36,7 +36,7 @@
     "collection": null,
     "lines": ["K"],
     "floorRange": "5-27",
-    "startingRent": 4050,
+    "startingRent": 3165,
     "description": "The alcove sits off the main room, deep enough for a queen bed and a nightstand and squared off so a curtain or a bookcase actually closes it. The rest reads as one room, kitchen along the wall and living area at the window. You get 80 more square feet than the S1 and a place to put the bed.",
     "features": [
       "Sleeping alcove, 11 by 9 feet",
@@ -62,7 +62,7 @@
     "collection": null,
     "lines": ["C", "E"],
     "floorRange": "5-27",
-    "startingRent": 4695,
+    "startingRent": 4475,
     "description": "The bedroom takes its own window wall and closes with a door. The living room keeps its glass, and the kitchen turns into the room with a peninsula that seats two. The C line faces west, which puts the Midtown skyline over Gantry Plaza State Park.",
     "features": [
       "Separate bedroom with a door and a fitted closet",
@@ -88,7 +88,7 @@
     "collection": null,
     "lines": ["H"],
     "floorRange": "5-27",
-    "startingRent": 5185,
+    "startingRent": 5070,
     "description": "The A1 layout with a balcony off the living room, 45 to 70 square feet, deep enough for two chairs and a small table. The H line faces north, which puts the Queensboro Bridge and Roosevelt Island in the frame. The balcony door is a full-height slider, not a window.",
     "features": [
       "Private balcony, 45 to 70 square feet",
@@ -114,7 +114,7 @@
     "collection": null,
     "lines": ["J"],
     "floorRange": "5-27",
-    "startingRent": 5540,
+    "startingRent": 4585,
     "description": "The den sits between the entry and the living room, with a door and a half bath beside it. It works as an office most days and a guest room when someone visits; it has no window, which is why it is a den and not a second bedroom. The bedroom and the living room both take the window wall.",
     "features": [
       "Windowless den with a door, 9 by 8 feet",
@@ -140,7 +140,7 @@
     "collection": null,
     "lines": ["B", "L"],
     "floorRange": "5-27",
-    "startingRent": 6825,
+    "startingRent": 5875,
     "description": "Bedrooms at opposite ends of the plan with the living room between them, so no one shares a wall. Both bedrooms have their own bath and a fitted closet, and the kitchen opens to the dining area with an island that seats three. The L line is a corner, north and east, and takes the Queensboro Bridge.",
     "features": [
       "Split bedrooms, no shared wall",
@@ -166,7 +166,7 @@
     "collection": null,
     "lines": ["D"],
     "floorRange": "5-27",
-    "startingRent": 7410,
+    "startingRent": 7140,
     "description": "The split-bedroom two bedroom with a balcony off the living room, 60 to 95 square feet. The D line is a corner and holds two exposures, west and south, so the living room takes the skyline and the light stays in the room until it goes down. Both baths are en suite and the laundry is its own closet.",
     "features": [
       "Private balcony, 60 to 95 square feet",
@@ -192,7 +192,7 @@
     "collection": "West Collection",
     "lines": ["B", "C", "D"],
     "floorRange": "28-33",
-    "startingRent": 8150,
+    "startingRent": 9580,
     "description": "The West Collection two bedroom sits on 28 through 33, above the setback. Ceilings are 10 feet 6 inches, the island is quartzite with a waterfall edge, and the kitchen carries Fisher & Paykel panel-ready refrigeration and a wine column. The D line here opens to a private terrace of 90 to 240 square feet.",
     "features": [
       "Ceilings 10 feet 6 inches",
@@ -218,7 +218,7 @@
     "collection": null,
     "lines": ["A"],
     "floorRange": "5-27",
-    "startingRent": 9240,
+    "startingRent": 7150,
     "description": "Three bedrooms off a single hall, with the living room and the primary bedroom sharing the corner. The A line runs north and west, so the Queensboro Bridge sits on one side and Midtown on the other. The kitchen island seats four and the laundry has its own closet, not a corner of the bath.",
     "features": [
       "Corner residence, north and west",
@@ -244,7 +244,7 @@
     "collection": "West Collection",
     "lines": ["A", "E"],
     "floorRange": "28-33",
-    "startingRent": 11650,
+    "startingRent": 10405,
     "description": "The largest plan in the building, on 28 through 33. Two exposures, north and west, ceilings at 10 feet 6 inches, a quartzite island, and a half bath off the entry so guests never walk past a bedroom. The A line on 33 opens to a private terrace one floor under The Overlook.",
     "features": [
       "Corner residence, north and west",

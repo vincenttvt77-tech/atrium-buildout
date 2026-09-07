@@ -1,4 +1,5 @@
 import { render, type EmailTransport, type EmailMessage } from './render.ts'
+import { concessionTerms, leaseRent } from '../inventory/pricing.ts'
 import type { Booking } from '../booking/types.ts'
 
 export interface ConfirmationContext {
@@ -49,7 +50,7 @@ const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1)
  * a string is quoted verbatim, null says plainly that there is no concession, and
  * undefined promises nothing and points at the leasing office.
  */
-export function concessionCopy(concession: string | null | undefined): ConcessionCopy {
+export function concessionCopy(concession: string | null | undefined, monthlyRent?: number): ConcessionCopy {
   if (concession === undefined) {
     return {
       line: 'Ask the leasing office which concession applies to this residence.',
@@ -67,8 +68,11 @@ export function concessionCopy(concession: string | null | undefined): Concessio
     }
   }
 
+  // The figure on the lease itself, when the terms parse and the rent is known — the same
+  // arithmetic the website and the phone use, so all three say one number.
+  const lease = monthlyRent && concessionTerms(terms) ? leaseRent({ monthlyRent, concession: terms }) : null
   return {
-    line: `Net effective. ${terms}.`,
+    line: `Net effective. ${terms}.${lease ? ` $${lease.toLocaleString('en-US')} on the lease.` : ''}`,
     sentence: `The rent we quote you for this residence is net effective and reflects ${lowerFirst(terms)}. Ask for the gross figure and we will give you both, on the spot.`,
     disclaimer: `The advertised rent for this residence is net effective and reflects ${lowerFirst(terms)}. Gross rent is higher; ask the leasing office for both figures. Concessions vary by residence.`,
   }
@@ -105,7 +109,7 @@ export async function sendConfirmation(
   }
 
   const slot = booking.state.slot
-  const concession = concessionCopy(extras.concession)
+  const concession = concessionCopy(extras.concession, extras.monthlyRent)
   const { html, missing } = render(ctx.template, {
     prospectName: req.prospectName,
     buildingName: ctx.buildingName,

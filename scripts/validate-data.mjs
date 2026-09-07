@@ -116,6 +116,42 @@ for (const u of units ?? []) {
 const available = (units ?? []).filter((u) => u.status === 'available')
 if (available.length === 0) fail('inventory.json', 'nothing is available — the agent can never quote')
 
+/*
+ * Every other place a rent appears is derived from inventory.json by `npm run build:site`:
+ * the "starting" rent on each plan record, and the inventory the public site inlines. The
+ * phone quoted the recalibrated rents while the website showed the old ones for three
+ * hours, because those copies were typed once and never regenerated. They are checked here
+ * so the mismatch cannot ship again.
+ */
+const onBoard = (units ?? []).filter((u) => u.status === 'available' || u.status === 'pending')
+const startingFor = (id) => {
+  const mine = onBoard.filter((u) => u.floorPlanId === id).map((u) => u.monthlyRent)
+  return mine.length ? Math.min(...mine) : null
+}
+for (const p of plans ?? []) {
+  const want = startingFor(p.id)
+  if (want !== null && p.startingRent !== want)
+    fail(`floorplans.json ${p.id}`, `startingRent ${p.startingRent} but the lowest on the board is ${want} — run npm run build:site`)
+}
+for (const t of property?.floorPlanTypes ?? []) {
+  const want = startingFor(t.code)
+  if (want !== null && t.startingRent !== want)
+    fail(`property.json floorPlanTypes ${t.code}`, `startingRent ${t.startingRent} but the lowest on the board is ${want} — run npm run build:site`)
+}
+try {
+  const app = await readFile(new URL('../public/app.js', import.meta.url), 'utf8')
+  const block = /const INVENTORY = \[\n([\s\S]*?)\n\];/.exec(app)
+  const site = new Map((block ? block[1].split('\n') : []).map((l) => JSON.parse(l.trim().replace(/,$/, ''))).map((u) => [u.unitId, u]))
+  for (const u of units ?? []) {
+    const s = site.get(u.unitId)
+    if (!s) fail(`public/app.js ${u.unitId}`, 'missing from the site — run npm run build:site')
+    else if (s.monthlyRent !== u.monthlyRent || s.availableFrom !== u.availableFrom || s.status !== u.status || (s.concession ?? null) !== (u.concession ?? null))
+      fail(`public/app.js ${u.unitId}`, `differs from inventory.json (rent ${s.monthlyRent} vs ${u.monthlyRent}) — run npm run build:site`)
+  }
+} catch (err) {
+  warn('public/app.js', `could not check the inlined inventory: ${err.message}`)
+}
+
 // ---- knowledge base
 const seen = new Set()
 

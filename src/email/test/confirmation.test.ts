@@ -115,7 +115,7 @@ describe('the concession is never hardcoded into the confirmation', () => {
 
   test('a residence on other terms gets its own terms, not the house default', async () => {
     const { html } = await send({ monthlyRent: 7410, concession: 'Six weeks free on an 18-month lease' })
-    assert.match(html, /Net effective\. Six weeks free on an 18-month lease\./)
+    assert.match(html, /Net effective\. Six weeks free on an 18-month lease\. \$8,084 on the lease\./)
     assert.match(html, /reflects six weeks free on an 18-month lease/)
     assert.ok(!/14-month/.test(html), '15D is on eighteen months, not fourteen')
   })

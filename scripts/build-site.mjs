@@ -124,6 +124,17 @@ export async function renderSite(opts = {}) {
     }
     fp = fp.slice(0, start) + art + fp.slice(end)
   }
+  // The plan records carry a "starting" rent as well; it is derived, never typed. The old
+  // site was generated from those fields, which is how it kept the pre-recalibration rents.
+  // Edited in place by regex rather than re-serialised, so the hand-formatted records keep
+  // their layout and a diff shows only the numbers that changed.
+  let fpJson = await readFile(join(root, 'data', 'floorplans.json'), 'utf8')
+  let propJson = await readFile(join(root, 'data', 'property.json'), 'utf8')
+  for (const p of plans) {
+    fpJson = fpJson.replace(new RegExp(`("id":\\s*"${p.id}"[\\s\\S]*?"startingRent":\\s*)\\d+`), `$1${p.startingRent}`)
+    propJson = propJson.replace(new RegExp(`("code":\\s*"${p.id}"[^}]*"startingRent":\\s*)\\d+`), `$1${p.startingRent}`)
+  }
+
   const rents = board.map((u) => u.monthlyRent)
   const lo = money(Math.min(...rents)), hi = money(Math.max(...rents))
   const available = board.filter((u) => u.status === 'available').length
@@ -134,7 +145,11 @@ export async function renderSite(opts = {}) {
 
   const indexOut = index.replace(/\$[\d,]+ to \$[\d,]+\. Call the leasing office/, `${lo} to ${hi}. Call the leasing office`)
 
-  return { 'public/app.js': appOut, 'public/floorplans.html': fp, 'public/index.html': indexOut }
+  return {
+    'public/app.js': appOut, 'public/floorplans.html': fp, 'public/index.html': indexOut,
+    'data/floorplans.json': fpJson,
+    'data/property.json': propJson,
+  }
 }
 
 const invokedDirectly = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]
