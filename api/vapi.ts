@@ -163,7 +163,12 @@ async function runTool(
     }
 
     case 'check_availability': {
-      const r = checkAvailability(ctx, { unitId: args.unitId ? String(args.unitId) : undefined, reason: args.reason ? String(args.reason) : undefined })
+      // Under exactOptionalPropertyTypes an absent key and an explicit `undefined` are
+      // different types, so only include what the model actually sent.
+      const r = checkAvailability(ctx, {
+        ...(args.unitId ? { unitId: String(args.unitId) } : {}),
+        ...(args.reason ? { reason: String(args.reason) } : {}),
+      })
       logEvent(callId, r.record)
       const offered = (r.record.unitsOffered as string[] | undefined) ?? []
       state.unitsDiscussed = [...new Set([...state.unitsDiscussed, ...offered])]

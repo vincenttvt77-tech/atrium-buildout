@@ -13,5 +13,9 @@
     "bundle": "node scripts/build-api.mjs",
     "validate": "node scripts/validate-data.mjs",
     "build:ops": "node scripts/build-ops.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "typescript": "5.9.3"
   }
 }

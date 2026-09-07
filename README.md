@@ -120,9 +120,12 @@ Both halves are now gated by `OPS_DASHBOARD_PASSCODE` (`src/ops/session.ts`):
 
 ## Working in this repo
 
-Node runs the TypeScript in **strip-only mode** — no dependencies, but also no TypeScript
-syntax needing real transformation: no `enum`, no constructor parameter properties, no
-`namespace`, no decorators. Types, interfaces and `satisfies` are fine.
+Node runs the TypeScript in **strip-only mode** — no runtime dependencies, but also no
+TypeScript syntax needing real transformation: no `enum`, no constructor parameter
+properties, no `namespace`, no decorators. Types, interfaces and `satisfies` are fine.
+
+The only dependencies are dev-only: `typescript` and `@types/node`, so that
+`npm run typecheck` runs here and Vercel's build log stays clean. Run `npm install` once.
 
 Secrets are read in exactly one place, `src/config/env.ts`. It holds the credential
 inventory, throws by name when one is missing, and exposes `redact()` so a key cannot be
