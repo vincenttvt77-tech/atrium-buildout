@@ -1,0 +1,204 @@
+{
+  "id": "prop-demo",
+  "buildingName": "The Larkin",
+  "domain": "thelarkinlic.com",
+  "tagline": "The best view of Manhattan isn't in Manhattan.",
+  "address": "5-08 46th Avenue, Long Island City, NY 11101",
+  "neighborhood": "Hunters Point, Long Island City — one block from the East River",
+  "totalUnits": 318,
+  "floors": 34,
+  "yearBuilt": 2023,
+  "managementCompany": "Halbrook Residential Management",
+
+  "positioning": "The Larkin is a 34-story, 318-residence tower at the corner of 46th Avenue and 5th Street in Hunters Point — one block from the East River, two blocks from the 7 at Vernon Blvd-Jackson Ave, and one stop from Grand Central. Completed in 2023 by Halbrook Property Group, it is built around a single idea: the best view of Manhattan is the one you get from across the river. Twenty-nine residential floors are stacked so that nearly every home takes a western or northern exposure — the skyline, the Queensboro Bridge, the ferries working the East River — and 26,000 square feet of amenities on three levels are turned the same way: The Works on three, The Terrace and its 62-foot pool on four, The Overlook on thirty-four. The Larkin does not sell escape from the city. It sells the best seat in the house.",
+
+  "brandVoice": "Second person, present tense, plainspoken. Short declarative sentences, at most one em-dash aside per paragraph. Every claim is quantified or named: square feet, floor numbers, minutes to Grand Central, the actual name of the restaurant on the corner (Casa Enrique, Sweetleaf, LIC Landing, Gantry Plaza State Park, MoMA PS1, The Noguchi Museum). Homes are 'residences,' never 'units.' Amenity spaces are proper nouns with a floor number attached — The Works on three, not 'state-of-the-art fitness center.' The register is understated confidence: state the fact and let it land. No exclamation points, no rhetorical questions, no 'imagine.' Banned words: luxury, world-class, bespoke, curated, elevated, resort-style, oasis, sanctuary, unparalleled, iconic, nestled. Section headlines run two to six words in sentence case; body copy never runs past three sentences before a break or a link. The same voice holds on the phone: warm, unhurried, factual. The leasing team quotes real residence numbers and exact rents, volunteers that advertised rents are net effective before being asked, never oversells the concession, and offers a tour as the next step rather than asking for a commitment.",
+
+  "palette": {
+    "ink": "#171A1C",
+    "paper": "#F4F1EA",
+    "accent": "#7F5E33",
+    "muted": "#6E6B64"
+  },
+  "paletteNotes": "Warm bone paper against near-black graphite ink, with a single burnished-bronze accent used only for rules, small caps labels, and the primary CTA — never as a fill behind body text. #7F5E33 clears 4.5:1 on the paper for small text; #6E6B64 is for secondary and caption text only. Dark mode inverts to ink #12140F ground with paper as the type color and the bronze lightened to #C79A5E.",
+
+  "typography": {
+    "display": "Cormorant Garamond",
+    "body": "Jost"
+  },
+  "typographyNotes": "Cormorant Garamond 300/400 for the wordmark, hero line, and section headers — set large, tight leading, generous letter-spacing on small caps. Jost 300/400/500 for all body copy, nav, tables, and the availability grid; its geometric structure reads like the Futura most NYC leasing collateral is set in. Both are on fonts.googleapis.com. Fallbacks: 'Cormorant Garamond', Georgia, serif and 'Jost', 'Helvetica Neue', Arial, sans-serif. Numerals in tables should be tabular.",
+
+  "leasingPhone": "+1 (516) 990-9252",
+  "leasingEmail": "leasing@thelarkinlic.com",
+  "leasingHours": "Mon-Tue 10am-6pm | Wed-Thu 10am-7pm | Fri 10am-6pm | Sat 10am-5pm | Sun 11am-4pm",
+  "leasingHoursByDay": {
+    "monday": "10:00am - 6:00pm",
+    "tuesday": "10:00am - 6:00pm",
+    "wednesday": "10:00am - 7:00pm",
+    "thursday": "10:00am - 7:00pm",
+    "friday": "10:00am - 6:00pm",
+    "saturday": "10:00am - 5:00pm",
+    "sunday": "11:00am - 4:00pm"
+  },
+  "leasingOffice": "Leasing gallery on the ground floor, separate entrance on 5th Street. Two model residences open for tours. In-person, self-guided, and live video tours available; same-day appointments are usually possible.",
+
+  "buildingFacts": {
+    "height": "372 feet",
+    "residentialFloors": "5 through 33",
+    "amenityFloors": "3, 4, and 34",
+    "residencesPerTypicalFloor": 11,
+    "unitLines": "A through L",
+    "residenceNumbering": "Floor plus line letter — Residence 27C is line C on the 27th floor.",
+    "marketRateResidences": 246,
+    "affordableResidences": 72,
+    "affordableNote": "72 residences at 130% AMI were leased through NYC Housing Connect under the building's 421-a (Affordable New York) agreement. That inventory sits outside the market-rate funnel; the lottery closed in 2023 and the waitlist is administered by the city's designated marketing agent, not by the leasing office.",
+    "firstMoveIns": "March 2023",
+    "occupancy": "94% leased",
+    "amenitySquareFeet": 26000,
+    "parkingSpaces": 84,
+    "constructionNotes": "Glass and champagne-anodized aluminum curtain wall over a two-story cast-stone base, with a setback at 28 creating terraces on the West Collection floors."
+  },
+
+  "team": {
+    "developer": "Halbrook Property Group",
+    "owner": "5-08 46th Avenue Owner LLC",
+    "propertyManager": "Halbrook Residential Management",
+    "architect": "Faircloth Rossi Architects",
+    "interiors": "Studio Marlowe",
+    "landscape": "Bower & Field Landscape Architecture",
+    "leasing": "Leased in-house by the Halbrook Residential on-site team. No broker fee."
+  },
+
+  "amenities": {
+    "headline": "26,000 square feet on three floors, all of it facing the same direction you do.",
+    "levelThree": {
+      "name": "The Works",
+      "items": [
+        "4,200 sf fitness floor with Technogym strength and cardio, three Peloton bikes, and a turf sprint lane",
+        "Studio for yoga, mat pilates, and resident-led classes",
+        "Recovery suite: infrared sauna, cold plunge, two treatment rooms",
+        "The Larder — demonstration kitchen and 12-seat private dining room, reservable",
+        "Pet spa with a raised wash basin and dryer",
+        "Bicycle room, 220 spaces, complimentary"
+      ]
+    },
+    "levelFour": {
+      "name": "The Terrace",
+      "items": [
+        "62-foot outdoor pool with cabanas, open May through September",
+        "Landscaped deck with four gas grills, two firepits, and a 20-seat dining pergola",
+        "The Green — dog run, artificial turf, hosed daily",
+        "Children's playroom and a gated toddler yard off the deck"
+      ]
+    },
+    "levelThirtyFour": {
+      "name": "The Overlook",
+      "items": [
+        "Top-floor resident lounge, 3,100 sf, floor-to-ceiling west glass",
+        "Chef's kitchen and a 14-seat table for private events",
+        "Screening room with tiered seating for 18",
+        "The Reading Room — quiet lounge, no calls, no meetings",
+        "West-facing sky terrace at 372 feet"
+      ]
+    },
+    "workAndService": [
+      "The Study — co-working lounge on 3 with four bookable phone rooms and two conference rooms",
+      "Attended lobby, 24 hours, and a live-in resident manager",
+      "Package room with cold storage and Luxer lockers",
+      "84-space attended garage with EV charging, $425 per month",
+      "Private storage from $95 per month",
+      "Laundry room on 4 in addition to in-residence washers and dryers"
+    ]
+  },
+
+  "residenceFinishes": {
+    "standard": [
+      "Floor-to-ceiling windows with solar shades throughout, blackout shades in bedrooms",
+      "White oak plank flooring, 7-inch",
+      "Quartz countertops and full-height backsplash, two-tone cabinetry with under-cabinet lighting",
+      "Bosch appliance suite with a vented hood; gas cooking",
+      "Bosch washer and vented dryer in every residence",
+      "Honed porcelain baths with a niche, chrome fixtures, medicine cabinet with integrated lighting",
+      "Custom-fitted closets, keyless entry, individually zoned heating and cooling",
+      "Ceilings 9 feet 4 inches"
+    ],
+    "westCollection": [
+      "Floors 28 through 33, 28 residences",
+      "Ceilings 10 feet 6 inches",
+      "Fisher & Paykel panel-ready refrigeration and a wine column",
+      "Quartzite waterfall island, integrated lighting under the counter edge",
+      "Private terraces on the 28th floor setback, 90 to 240 square feet",
+      "West and north exposures only — skyline and Queensboro Bridge"
+    ]
+  },
+
+  "floorPlanTypes": [
+    { "code": "S1", "name": "Studio", "beds": 0, "baths": 1, "sqftRange": "468-532", "startingRent": 3745 },
+    { "code": "S2", "name": "Alcove Studio", "beds": 0, "baths": 1, "sqftRange": "560-605", "startingRent": 4050 },
+    { "code": "A1", "name": "One Bedroom", "beds": 1, "baths": 1, "sqftRange": "640-735", "startingRent": 4695 },
+    { "code": "A2", "name": "One Bedroom with Balcony", "beds": 1, "baths": 1, "sqftRange": "690-760", "startingRent": 5185 },
+    { "code": "A3", "name": "One Bedroom and Den", "beds": 1, "baths": 1.5, "sqftRange": "810-880", "startingRent": 5540 },
+    { "code": "B1", "name": "Two Bedroom", "beds": 2, "baths": 2, "sqftRange": "940-1,085", "startingRent": 6825 },
+    { "code": "B2", "name": "Two Bedroom with Balcony", "beds": 2, "baths": 2, "sqftRange": "985-1,120", "startingRent": 7410 },
+    { "code": "B3", "name": "Two Bedroom, West Collection", "beds": 2, "baths": 2, "sqftRange": "1,090-1,190", "startingRent": 8150 },
+    { "code": "C1", "name": "Three Bedroom", "beds": 3, "baths": 2, "sqftRange": "1,285-1,410", "startingRent": 9240 },
+    { "code": "C2", "name": "Three Bedroom, West Collection", "beds": 3, "baths": 2.5, "sqftRange": "1,455-1,560", "startingRent": 11650 }
+  ],
+
+  "concession": {
+    "offer": "One month free on a 14-month lease. No broker fee.",
+    "expires": "2026-10-31",
+    "disclosure": "Advertised rents are net effective and reflect one month free on a 14-month lease. Gross rent is higher. Ask the leasing office for both figures."
+  },
+
+  "policies": {
+    "pets": "Two pets per residence, 50 pounds each, dogs and cats. One-time non-refundable pet fee of $350 per pet; no monthly pet rent. Restricted breeds apply. Qualifying service animals and emotional support animals are exempt from pet fees and breed restrictions under New York law.",
+    "application": "Application fee $20 per adult, the New York State cap. Security deposit is one month's rent, the statutory maximum. Household income of 40x the monthly rent, or a guarantor at 80x who resides in NY, NJ, CT, or PA.",
+    "leaseTerms": "12 to 24 months, priced by term. Shorter terms are quoted case by case and price at a premium.",
+    "smoking": "Smoke-free building, including terraces and all outdoor amenity space.",
+    "movePolicy": "Move-ins Monday through Saturday, 9am to 5pm, elevator reserved through the resident manager. $500 refundable move-in deposit."
+  },
+
+  "neighborhood": {
+    "transit": [
+      "7 at Vernon Blvd-Jackson Ave, two blocks — one stop to Grand Central, about 9 minutes",
+      "E, M, and G at Court Square, about an 11-minute walk",
+      "NYC Ferry at LIC Landing in Gantry Plaza State Park, three blocks — Astoria, Wall Street, and Midtown East",
+      "LIRR at Hunterspoint Ave, six minutes to Penn Station",
+      "Citi Bike dock at 46th Avenue and Vernon Boulevard",
+      "LaGuardia about 20 minutes by car, JFK about 30"
+    ],
+    "nearby": [
+      "Gantry Plaza State Park and Hunter's Point South Park — the waterfront lawns and the Pepsi-Cola sign, one block west",
+      "Casa Enrique, the Michelin-starred Mexican restaurant on 49th Avenue",
+      "Sweetleaf on Jackson Avenue for coffee",
+      "MoMA PS1 and The Noguchi Museum",
+      "Court Square for the E, M, and G, plus the Long Island City Y",
+      "Silvercup Studios and the Queensboro Bridge to the north"
+    ]
+  },
+
+  "availabilitySample": {
+    "lastUpdated": "2026-09-07",
+    "note": "Net effective rents reflecting one month free on a 14-month lease. Twelve residences available.",
+    "residences": [
+      { "residence": "09F", "plan": "S1", "beds": 0, "baths": 1, "sqft": 496, "rent": 3795, "available": "Now", "exposure": "South" },
+      { "residence": "07K", "plan": "S2", "beds": 0, "baths": 1, "sqft": 578, "rent": 4105, "available": "Now", "exposure": "East" },
+      { "residence": "14C", "plan": "A1", "beds": 1, "baths": 1, "sqft": 688, "rent": 4860, "available": "2026-10-01", "exposure": "West" },
+      { "residence": "22H", "plan": "A2", "beds": 1, "baths": 1, "sqft": 731, "rent": 5325, "available": "2026-10-15", "exposure": "North" },
+      { "residence": "26B", "plan": "B1", "beds": 2, "baths": 2, "sqft": 1012, "rent": 7190, "available": "2026-11-01", "exposure": "West" },
+      { "residence": "31D", "plan": "B3", "beds": 2, "baths": 2, "sqft": 1104, "rent": 8340, "available": "2026-10-20", "exposure": "West, private terrace" },
+      { "residence": "19A", "plan": "C1", "beds": 3, "baths": 2, "sqft": 1332, "rent": 9485, "available": "2026-12-01", "exposure": "North and West" }
+    ]
+  },
+
+  "legal": {
+    "netEffective": "All advertised rents are net effective and reflect one month free on a 14-month lease.",
+    "listingDisclaimer": "Photographs reflect typical residence finishes and may not represent the actual residence. Each residence may vary. Dimensions are approximate and not to scale. All property information presented is subject to errors, omissions, price and offering changes, changed property conditions, and withdrawal of the property from the market, without notice. Any property information presented is for informational purposes only and shall not be binding upon the owner, landlord, leasing agent, or any employee. Equal Housing Opportunity.",
+    "equalHousing": "The Larkin is an equal housing opportunity provider. We are pledged to the letter and spirit of U.S. policy for the achievement of equal housing opportunity throughout the Nation. We encourage and support an affirmative advertising and marketing program in which there are no barriers to obtaining housing because of race, color, religion, sex, handicap, familial status, or national origin.",
+    "accessibility": "The Larkin strives to conform to Level AA of the W3C Web Content Accessibility Guidelines 2.1. If you have difficulty accessing any content on this site, call the leasing office at +1 (516) 990-9252 or email leasing@thelarkinlic.com and we will assist you.",
+    "copyright": "© 2026 5-08 46th Avenue Owner LLC. All rights reserved. Managed by Halbrook Residential Management."
+  },
+
+  "sourceNote": "DEMO PROPERTY — FICTIONAL. The Larkin does not exist. It was invented as the demo building for an AI leasing agent product so that a real property owner can browse a site and call the leasing line to test the assistant. The address (5-08 46th Avenue, Long Island City, NY 11101) is a plausible Queens hyphenated address on a real street grid but is not the address of any actual building; Halbrook Property Group, Halbrook Residential Management, Faircloth Rossi Architects, Studio Marlowe, and Bower & Field are invented entities. Rents, floor plans, availability, concessions, and occupancy are illustrative but calibrated to real 2026 Long Island City waterfront comps (The Orchard LIC, Jackson Park, Halo LIC) so the numbers survive a broker's sniff test. Neighborhood references — Gantry Plaza State Park, Casa Enrique, Sweetleaf, MoMA PS1, The Noguchi Museum, the 7 at Vernon Blvd-Jackson Ave, NYC Ferry at LIC Landing — are real places, used because a leasing conversation has to name real neighbors. The leasing phone number +1 (516) 990-9252 is the product's demo line. Nothing here should be presented as an actual rental offering."
+}

@@ -1,5 +1,7 @@
-import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import rawProperty from '../data/property.json' with { type: 'json' }
+import rawUnits from '../data/inventory.json' with { type: 'json' }
+import rawPlans from '../data/floorplans.json' with { type: 'json' }
+import rawArticles from '../data/knowledge.json' with { type: 'json' }
 import { loadInventory } from '../src/inventory/load.ts'
 import type { InventorySnapshot } from '../src/inventory/types.ts'
 import type { KnowledgeArticle } from '../src/knowledge/article.ts'
@@ -22,45 +24,35 @@ import { propertyId, interactionId } from '../src/domain/ids.ts'
  * boundary.
  */
 
-const DATA = join(process.cwd(), 'data')
+/**
+ * Property data is bundled at build time rather than read from disk.
+ *
+ * Serverless filesystems are a source of deployment-only surprises — the file that is
+ * plainly there locally is not necessarily traced into the function. Bundling means what
+ * ran in the tests is byte-for-byte what runs in production. The cost is that an inventory
+ * change needs a redeploy, which is the right trade until a real PMS is the source.
+ */
 
 let cache: {
   inventory: InventorySnapshot
   articles: KnowledgeArticle[]
   property: Record<string, unknown>
-  loadedAt: number
 } | null = null
 
-async function readJson<T>(name: string, fallback: T): Promise<T> {
-  try {
-    return JSON.parse(await readFile(join(DATA, name), 'utf8')) as T
-  } catch {
-    return fallback
-  }
-}
+function load(now: Date) {
+  if (cache) return cache
 
-async function load(now: Date) {
-  // Re-read every 60s so an inventory edit shows up without a redeploy.
-  if (cache && Date.now() - cache.loadedAt < 60_000) return cache
-
-  const [rawUnits, rawPlans, rawArticles, property] = await Promise.all([
-    readJson<unknown[]>('inventory.json', []),
-    readJson<unknown[]>('floorplans.json', []),
-    readJson<unknown[]>('knowledge.json', []),
-    readJson<Record<string, unknown>>('property.json', {}),
-  ])
-
-  const { snapshot, problems } = loadInventory(rawUnits, rawPlans, now, 'data/inventory.json')
+  const { snapshot, problems } = loadInventory(
+    rawUnits as unknown[], rawPlans as unknown[], now, 'data/inventory.json')
   if (problems.length > 0) console.warn('[inventory] excluded records:', problems)
 
-  const articles = (rawArticles as Record<string, unknown>[])
-    .map((a) => ({
-      ...a,
-      approvedAt: a.approvedAt ? new Date(a.approvedAt as string) : null,
-      reviewBy: new Date(a.reviewBy as string),
-    }) as unknown as KnowledgeArticle)
+  const articles = (rawArticles as unknown as Record<string, unknown>[]).map((a) => ({
+    ...a,
+    approvedAt: a.approvedAt ? new Date(a.approvedAt as string) : null,
+    reviewBy: new Date(a.reviewBy as string),
+  }) as unknown as KnowledgeArticle)
 
-  cache = { inventory: snapshot, articles, property, loadedAt: Date.now() }
+  cache = { inventory: snapshot, articles, property: rawProperty as Record<string, unknown> }
   return cache
 }
 
@@ -133,7 +125,7 @@ function logEvent(callId: string, e: Record<string, unknown>) {
 async function runTool(
   name: string, args: Record<string, unknown>, callId: string, now: Date,
 ): Promise<string> {
-  const { inventory, articles, property } = await load(now)
+  const { inventory, articles, property } = load(now)
   const state = callState(callId)
 
   const ctx: ToolContext = {
@@ -264,7 +256,7 @@ export default async function handler(req: any, res: any) {
 
     // Emergency screening on every caller turn, ahead of anything the model decides to do.
     if (message.type === 'transcript' && message.role === 'user' && message.transcript) {
-      const { inventory, articles, property } = await load(now)
+      const { inventory, articles, property } = load(now)
       const emergency = checkEmergency(String(message.transcript), {
         propertyId: propertyId(String(property.id ?? 'prop-demo')),
         interactionId: interactionId(callId),

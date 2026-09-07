@@ -29,6 +29,8 @@ const result = await build({
   outExtension: { '.js': '.mjs' },
   // Node builtins stay external; everything of ours is inlined.
   packages: 'bundle',
+  minify: process.env.MINIFY === '1',
+  keepNames: true,
   logLevel: 'info',
   metafile: true,
 })

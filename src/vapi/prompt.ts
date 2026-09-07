@@ -4,6 +4,13 @@ export interface PromptContext {
   neighborhood: string
   leasingHours: string
   managementCompany: string
+  /**
+   * Stable identity facts from the property record — floors, year built, transit, the
+   * leasing office. Safe in the prompt because they come from the property record itself
+   * and do not change between calls. Anything that DOES change (rent, availability, a
+   * policy that can be revised) stays out of here and goes through a tool.
+   */
+  facts?: string[]
 }
 
 /**
@@ -50,5 +57,11 @@ At the very start of every call, in your own words, tell the caller you are an A
 If a caller mentions gas, smoke, fire, carbon monoxide, flooding, no heat, an injury, blood, someone unconscious, a break-in or an intruder — stop everything. Say the exact safety instruction the tool gives you, word for word. Do not gather details first. Do not finish your previous sentence. Nothing else on this call matters.
 
 # Leasing hours
-${ctx.leasingHours}. If someone wants an in-person visit outside those hours, say so and offer the nearest time that works.`
+${ctx.leasingHours}. If someone wants an in-person visit outside those hours, say so and offer the nearest time that works.
+${ctx.facts && ctx.facts.length ? `
+# About the building
+These are settled facts you may state freely. Anything not on this list — rents, what is
+available, policies — goes through a tool.
+
+${ctx.facts.map((f) => `- ${f}`).join('\n')}` : ''}`
 }

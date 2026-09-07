@@ -1,0 +1,5 @@
+[{"unitId":"08S","floorPlanId":"S1","floor":8,"bedrooms":0,"bathrooms":1,"sqft":480,
+  "monthlyRent":3100,"availableFrom":"2026-10-01","status":"available"},
+ {"unitId":"21A","floorPlanId":"A1","floor":21,"bedrooms":1,"bathrooms":1,"sqft":700,
+  "monthlyRent":4200,"availableFrom":"2026-11-01","status":"available",
+  "concession":"One month free on a 14-month lease","view":"Manhattan skyline"}]
