@@ -1,0 +1,5 @@
+[{"id":"art-pets","topic":"pet_policy","question":"Do you allow dogs?",
+  "answer":"We do — two pets per home, 50 pound limit, and a $500 one-time pet fee.",
+  "propertyScope":["prop-demo"],"jurisdictionScope":["NY"],"status":"published","version":1,
+  "source":"House Rules rev 2026-03","ownerId":"person-manager-1","approvedBy":"person-manager-1",
+  "approvedAt":"2026-03-01T00:00:00Z","reviewBy":"2027-03-01T00:00:00Z"}]

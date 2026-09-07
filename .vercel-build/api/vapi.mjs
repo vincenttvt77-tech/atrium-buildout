@@ -813,10 +813,11 @@ async function handler(req, res) {
     }
   }
   const now = /* @__PURE__ */ new Date();
-  const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
-  const message = body?.message ?? {};
-  const callId = String(message?.call?.id ?? body?.call?.id ?? "unknown-call");
+  let callId = "unknown-call";
   try {
+    const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+    const message = body?.message ?? {};
+    callId = String(message?.call?.id ?? body?.call?.id ?? "unknown-call");
     if (message.type === "transcript" && message.role === "user" && message.transcript) {
       const { inventory, articles, property } = await load(now);
       const emergency = checkEmergency(String(message.transcript), {

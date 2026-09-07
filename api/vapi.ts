@@ -252,11 +252,16 @@ export default async function handler(req: any, res: any) {
   }
 
   const now = new Date()
-  const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body
-  const message = body?.message ?? {}
-  const callId = String(message?.call?.id ?? body?.call?.id ?? 'unknown-call')
+  let callId = 'unknown-call'
 
   try {
+    // Parsing lives inside the try deliberately. A malformed body thrown here would
+    // otherwise escape as a 500, and a 500 to Vapi drops the call on the caller — the one
+    // failure mode a leasing line cannot have.
+    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body
+    const message = body?.message ?? {}
+    callId = String(message?.call?.id ?? body?.call?.id ?? 'unknown-call')
+
     // Emergency screening on every caller turn, ahead of anything the model decides to do.
     if (message.type === 'transcript' && message.role === 'user' && message.transcript) {
       const { inventory, articles, property } = await load(now)
