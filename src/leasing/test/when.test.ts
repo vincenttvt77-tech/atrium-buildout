@@ -64,3 +64,17 @@ describe('genuinely no timing returns null so the agent asks once more', () => {
     })
   }
 })
+
+describe('what the transcriber actually hands over', () => {
+  const now = new Date('2026-09-07T19:00:00Z')
+  test('"within the next, uh, 2. Months." is between now and two months out', () => {
+    const w = parseMoveIn("I'm looking to move in within the next, uh, 2. Months. Hello?", now)
+    assert.ok(w)
+    assert.equal(w!.earliest.toISOString().slice(0, 10), '2026-09-07')
+    assert.equal(w!.latest?.toISOString().slice(0, 10), '2026-11-07')
+  })
+  test('"over the next couple of weeks" and "in a couple of months" both parse', () => {
+    assert.equal(parseMoveIn('over the next couple of weeks', now)?.latest?.toISOString().slice(0, 10), '2026-09-21')
+    assert.equal(parseMoveIn('in a couple of months', now)?.earliest.toISOString().slice(0, 10), '2026-11-07')
+  })
+})

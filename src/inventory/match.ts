@@ -35,7 +35,11 @@ export type MatchOutcome =
    * the single most valuable signal the system captures, and it must be recorded as a
    * priced-out event rather than papered over by offering something dearer.
    */
-  | { kind: 'priced_out'; budgetMax: number; cheapestAvailable: number; gap: number; nearest: ScoredUnit[] }
+  | {
+      kind: 'priced_out'; budgetMax: number; cheapestAvailable: number; gap: number; nearest: ScoredUnit[]
+      /** In budget and in time, one size down — what a good agent offers instead of "no". */
+      alternatives: ScoredUnit[]
+    }
   /** Nothing matches the stated need at all. */
   | { kind: 'no_match'; reason: 'no_availability' | 'bedroom_mismatch' | 'timing_mismatch' }
   /** The snapshot is too old to quote from. The agent must re-read before saying anything. */
@@ -156,12 +160,26 @@ export function findMatches(
       .sort((a, b) => a.monthlyRent - b.monthlyRent)
       .slice(0, limit)
       .map(score)
+    /*
+     * "Nothing in your budget" ends the call; "nothing in that size, but here is what your
+     * budget does buy" keeps it going. Smaller layouts that fit the money and the timing,
+     * largest first, so the agent can offer a real alternative instead of an apology.
+     */
+    const alternatives = beds
+      ? snapshot.units
+          .filter(onMarket)
+          .filter((u) => u.bedrooms < beds.min && u.monthlyRent <= budgetMax && inTime(u, moveIn))
+          .sort((a, b) => b.bedrooms - a.bedrooms || b.monthlyRent - a.monthlyRent)
+          .slice(0, limit)
+          .map(score)
+      : []
     return {
       kind: 'priced_out',
       budgetMax,
       cheapestAvailable: cheapest,
       gap: cheapest - budgetMax,
       nearest,
+      alternatives,
     }
   }
 

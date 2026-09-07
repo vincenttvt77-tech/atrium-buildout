@@ -43,7 +43,18 @@ const NUMBER_WORDS: Record<string, number> = {
 export function parseMoveIn(text: string, now: Date): MoveInWindow | null {
   const said = String(text ?? '').trim()
   if (said.length === 0) return null
+  /*
+   * Speech-to-text punctuates pauses: "within the next, uh, 2. Months." is what "two
+   * months" arrives as. A full stop between the number and its unit read as the end of a
+   * sentence, nothing parsed, and the caller was asked the same question twice. Strip
+   * fillers and the punctuation between a number and the word after it before matching.
+   */
   const s = said.toLowerCase()
+    .replace(/\b(uh|um|umm|er|like|you know)\b,?/g, ' ')
+    .replace(/,/g, ' ')
+    .replace(/(\d)\.\s+(?=[a-z])/g, '$1 ')
+    .replace(/\s+/g, ' ')
+    .trim()
 
   /*
    * An ISO date, checked first and anchored so a bare "2" in "2 months" is not read as a
@@ -73,18 +84,26 @@ export function parseMoveIn(text: string, now: Date): MoveInWindow | null {
     return { earliest: now, latest: addMonths(now, 6), said }
   }
 
-  // "in 2 months", "2-3 months", "60 days", "a couple weeks", "next month"
-  const rel = /\b(?:in\s+)?(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|couple|few|several)\s*(?:-|to|or)?\s*(\d+)?\s*(day|week|month)s?\b/.exec(s)
+  const count = (raw: string) => /^\d+$/.test(raw)
+    ? Number(raw)
+    : raw === 'couple' ? 2 : raw === 'few' ? 3 : raw === 'several' ? 4 : NUMBER_WORDS[raw] ?? 1
+  const after = (n: number, unit: string) =>
+    unit === 'day' ? addDays(now, n) : unit === 'week' ? addDays(now, n * 7) : addMonths(now, n)
+
+  // "within the next 2 months", "over the next couple of weeks" — between now and then,
+  // not two months from now: the caller would take something sooner.
+  const within = /\b(?:within|over|in|during|sometime in)?\s*the\s+next\s+(\d+|a|couple|few|several|two|three|four|five|six)\s*(?:of\s+)?(day|week|month)s?\b/.exec(s)
+  if (within) {
+    return { earliest: now, latest: after(count(within[1]!), within[2]!), said }
+  }
+
+  // "in 2 months", "2-3 months", "60 days", "a couple of weeks", "next month"
+  const rel = /\b(?:in\s+)?(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|couple|few|several)\s*(?:-|to|or)?\s*(\d+)?\s*(?:of\s+)?(day|week|month)s?\b/.exec(s)
   if (rel) {
-    const rawLow = rel[1]!
-    const low = /^\d+$/.test(rawLow)
-      ? Number(rawLow)
-      : rawLow === 'couple' ? 2 : rawLow === 'few' ? 3 : rawLow === 'several' ? 4
-      : NUMBER_WORDS[rawLow] ?? 1
+    const low = count(rel[1]!)
     const high = rel[2] ? Number(rel[2]) : low
     const unit = rel[3]!
-    const at = (n: number) =>
-      unit === 'day' ? addDays(now, n) : unit === 'week' ? addDays(now, n * 7) : addMonths(now, n)
+    const at = (n: number) => after(n, unit)
     return { earliest: at(low), latest: high > low ? at(high) : addDays(at(low), 30), said }
   }
 

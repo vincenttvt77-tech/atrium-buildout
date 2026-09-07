@@ -1,5 +1,5 @@
 {
-  "comment": "Demo call history for scripts/dev-ops.mjs. Each call has exactly the keys GET /api/vapi returns per call (src/ops/vapi-calls.ts VapiCall). startedAt is relative New York wall time ('-2d 11:05' = two days ago at 11:05am); endedAt null = startedAt + durationSeconds. A book_tour slotId of '$slot:+1@14:00' is replaced with a real open slot id from GET /api/calendar (tomorrow, 2pm NY, or the nearest later slot that day); {{tour_when}}, {{tour_day}}, {{tour_date}}, {{tour_time}} in any text become that slot's time. With --seed, every tool result is replaced by what the real handler returned. See README.md.",
+  "comment": "Demo call history for scripts/dev-ops.mjs. Each call has exactly the keys GET /api/vapi returns per call (src/ops/vapi-calls.ts VapiCall). startedAt is relative New York wall time ('-2d 11:05' = two days ago at 11:05am); endedAt null = startedAt + durationSeconds. A book_tour slotId of '$slot:+1@14:00' is replaced with a real open slot id from GET /api/calendar (tomorrow, 2pm NY, or the nearest later slot that day); {{tour_when}}, {{tour_day}}, {{tour_date}}, {{tour_time}}, {{tour_iso}} in any text become that slot's time. With --seed, every tool result is replaced by what the real handler returned. See README.md.",
   "blocks": [
     {
       "target": "+2",

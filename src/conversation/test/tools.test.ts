@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { checkEmergency, checkAvailability, answerQuestion, captureSignal } from '../tools.ts'
+import { checkEmergency, checkAvailability, answerQuestion, captureSignal, parseBudget } from '../tools.ts'
 import type { ToolContext } from '../tools.ts'
 import type { InventorySnapshot } from '../../inventory/types.ts'
 import type { KnowledgeArticle } from '../../knowledge/article.ts'
@@ -80,7 +80,7 @@ describe('the quote gate cannot be talked past', () => {
 
   test('the concession is surfaced because it is a real lever', () => {
     const r = checkAvailability(ctx({ qualification: qualified(4500, 1) }))
-    assert.match(r.say, /One month free/)
+    assert.match(r.say, /one month free/i)
   })
 })
 
@@ -88,7 +88,7 @@ describe('priced out is the branch that earns its keep', () => {
   test('a prospect under every rent is told the truth, not sold up', () => {
     const r = checkAvailability(ctx({ qualification: qualified(2500, 1) }))
     assert.equal(r.record.outcome, 'priced_out')
-    assert.match(r.say, /Do NOT pitch a more expensive unit/i)
+    assert.match(r.say, /Do NOT pitch it as though it met their budget/i)
   })
 
   test('the gap is recorded as a number, which is what makes it countable', () => {
@@ -264,5 +264,46 @@ describe('a question filed under the wrong policy topic', () => {
     const r = answerQuestion({ question: 'is there a helipad?', topic: 'general_property_fact' },
       ctx({ articles: [petArticle, broker, packages] }))
     assert.equal(r.record.kind, 'question_refused')
+  })
+})
+
+describe('a budget as the transcriber writes it', () => {
+  test('"$4. 000" is four thousand, not four', () => {
+    assert.equal(parseBudget('4', "I'm not looking to spend over. $4. 000."), 4000)
+    assert.equal(parseBudget('$4. 000', ''), 4000)
+    assert.equal(parseBudget('4k', ''), 4000)
+    assert.equal(parseBudget('four thousand', ''), 4000)
+    assert.equal(parseBudget('forty-two hundred', 'forty-two hundred a month'), null)
+    assert.equal(parseBudget('4,200', ''), 4200)
+    assert.equal(parseBudget('nothing', 'whatever it takes'), null)
+  })
+  test('captured through capture_signal it gates a real quote', () => {
+    const r = captureSignal({ signal: 'budget', value: '4', excerpt: 'not over $4. 000.' }, ctx())
+    assert.equal(r.record.captured, true)
+    assert.equal(r.qualificationPatch?.budget?.value.maxMonthly, 4000)
+  })
+})
+
+describe('quotes say the net effective figure and the lease figure', () => {
+  test('a match names both, in that order', () => {
+    const r = checkAvailability(ctx({ qualification: qualified(4500, 1) }))
+    assert.equal(r.record.outcome, 'matches')
+    assert.match(r.say, /\$4,200\/month net effective with one month free on a 14-month lease \(\$4,523\/month on the lease itself\)/)
+  })
+  test('priced out names the residence, the gap, and what the money does buy', () => {
+    const r = checkAvailability(ctx({ qualification: qualified(3500, 1) }))
+    assert.equal(r.record.outcome, 'priced_out')
+    assert.match(r.say, /Unit 21A/)
+    assert.match(r.say, /\$700\/month above/)
+    assert.match(r.say, /a size down[\s\S]*Unit 08S/)
+    assert.deepEqual(r.record.unitsOffered, ['21A', '08S'])
+  })
+  test('signals passed inline to check_availability are captured and used in one call', () => {
+    const r = checkAvailability(ctx(), { moveIn: 'within the next, uh, 2. Months.', bedrooms: '1', budget: 'not over $4. 500' })
+    assert.equal(r.record.outcome, 'matches')
+    assert.match(r.say, /Unit 21A/)
+    assert.equal(r.qualificationPatch?.budget?.value.maxMonthly, 4500)
+    assert.equal(r.qualificationPatch?.bedrooms?.value.min, 1)
+    assert.ok(r.qualificationPatch?.moveInTiming)
   })
 })

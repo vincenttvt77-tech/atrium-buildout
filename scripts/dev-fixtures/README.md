@@ -107,7 +107,8 @@ Three things are templated so the data never dates:
   Negative offsets are fine for a call replayed in the past (`-2` from a call at `-3d` is
   "tomorrow" for that caller).
 - `{{tour_when}}` (`Tuesday, September 8 at 2:00 PM`), `{{tour_day}}`, `{{tour_date}}`,
-  `{{tour_time}}` in any string become the booked slot's time.
+  `{{tour_time}}` and `{{tour_iso}}` (`2026-09-08`) in any string become the booked slot's
+  time.
 
 `transcript` uses Vapi's format: lines prefixed `AI: ` and `User: `, newline-separated.
 Every `User:` line is posted to the webhook as a `transcript` message before the tools,

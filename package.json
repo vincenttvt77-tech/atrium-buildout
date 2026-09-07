@@ -13,6 +13,7 @@
     "bundle": "node scripts/build-api.mjs",
     "validate": "node scripts/validate-data.mjs",
     "build:ops": "node scripts/build-ops.mjs",
+    "build:site": "node scripts/build-site.mjs",
     "dev:ops": "node scripts/dev-ops.mjs"
   },
   "devDependencies": {

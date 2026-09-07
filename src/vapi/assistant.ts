@@ -15,7 +15,7 @@ export const TOOL_DEFINITIONS = [
             description: 'Which signal the caller just gave you.',
             enum: ['moveInTiming', 'budget', 'bedrooms', 'pets', 'parking'],
           },
-          value: { type: 'string', description: 'Normalised value. For moveInTiming use an ISO date. For budget a number. For bedrooms a number or "studio".' },
+          value: { type: 'string', description: 'For moveInTiming, their words — "within the next 2 months", "November", "asap". For budget, the number as they said it — "4000", "$4k", "four thousand". For bedrooms a number or "studio".' },
           excerpt: { type: 'string', description: 'The words the caller actually used. Required.' },
         },
         required: ['signal', 'value', 'excerpt'],
@@ -26,7 +26,7 @@ export const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'check_availability',
-      description: 'Get the units you are allowed to quote. You may not name any unit, rent or availability date that did not come from this tool. Call it before discussing price.',
+      description: 'Get the units you are allowed to quote. You may not name any unit, rent or availability date that did not come from this tool. Call it before discussing price. Pass whatever they have told you about timing, bedrooms and budget in the same call — one call is faster than several and cannot lose an answer.',
       // A parameter-less tool would be an empty `properties: {}`, which several schema
       // validators reject. `reason` is genuinely useful anyway: it records what prompted
       // the lookup, which is one more signal on the call.
@@ -41,6 +41,9 @@ export const TOOL_DEFINITIONS = [
             type: 'string',
             description: 'Why you are checking now — for example "caller asked about one bedrooms".',
           },
+          moveIn: { type: 'string', description: 'When they want to move, in their words — "within the next 2 months", "November", "asap". Pass it here instead of a separate capture_signal call.' },
+          bedrooms: { type: 'string', description: 'How many bedrooms — a number or "studio".' },
+          budget: { type: 'string', description: 'The most they want to spend a month, as they said it — "4000", "$4k", "not over four thousand".' },
         },
       },
     },
@@ -133,6 +136,27 @@ export interface AssistantConfigOptions extends PromptContext {
 
 /** The JSON to paste into Vapi. Everything the assistant needs, in one object. */
 /** Strips `required: []`, which some schema validators reject outright. */
+/**
+ * Spoken the moment a tool starts, so the caller never hears dead air while the model
+ * waits on the lookup. Vapi reads these from the tool definition, not the prompt, and they
+ * sit beside `function`, not inside it. A tool that usually answers within a second gets
+ * only the delayed message, so it is not announced every time.
+ */
+export const TOOL_MESSAGES: Record<string, Array<Record<string, unknown>>> = {
+  check_availability: [
+    { type: 'request-start', content: 'Let me pull that up.' },
+    { type: 'request-response-delayed', content: 'One more second.', timingMilliseconds: 2500 },
+  ],
+  list_tour_slots: [{ type: 'request-start', content: 'Let me look at the calendar.' }],
+  book_tour: [{ type: 'request-start', content: 'Locking that in now.' }],
+  answer_question: [{ type: 'request-response-delayed', content: 'Let me check that for you.', timingMilliseconds: 1500 }],
+}
+
+export const toolsWithMessages = () => TOOL_DEFINITIONS.map((t) => {
+  const messages = TOOL_MESSAGES[t.function.name]
+  return messages ? { ...t, messages } : t
+})
+
 function pruneEmptyRequired(tools: unknown): unknown {
   return JSON.parse(JSON.stringify(tools, (key, value) => {
     if (key === 'required' && Array.isArray(value) && value.length === 0) return undefined
@@ -150,7 +174,7 @@ export function assistantConfig(opts: AssistantConfigOptions) {
       model: 'claude-sonnet-5',
       temperature: 0.4,
       messages: [{ role: 'system', content: systemPrompt(opts) }],
-      tools: pruneEmptyRequired(TOOL_DEFINITIONS),
+      tools: pruneEmptyRequired(toolsWithMessages()),
     },
     voice: {
       provider: opts.voiceProvider ?? '11labs',

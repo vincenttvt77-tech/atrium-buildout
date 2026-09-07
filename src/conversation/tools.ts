@@ -1,5 +1,6 @@
 import type { InventorySnapshot, FloorPlan } from '../inventory/types.ts'
 import { findMatches } from '../inventory/match.ts'
+import { rentPhrase } from '../inventory/pricing.ts'
 import type { QualificationState } from '../leasing/qualification.ts'
 import { mayQuote, nextSignalToAsk, captureCore } from '../leasing/qualification.ts'
 import { extracted } from '../leasing/captured.ts'
@@ -65,6 +66,36 @@ export interface CaptureArgs {
   confidence?: number
 }
 
+const SMALL: Record<string, number> = {
+  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  eleven: 11, twelve: 12, fifteen: 15, twenty: 20, thirty: 30, forty: 40, fifty: 50,
+}
+
+/**
+ * A monthly ceiling from what the caller said.
+ *
+ * Speech-to-text writes "four thousand" as "$4. 000." and the model, told to pass a number,
+ * passed 4 — a four-dollar budget, and every residence priced out by five thousand. The
+ * model's value is tried first; anything under a plausible rent falls through to the
+ * caller's own words, with the transcriber's punctuation between digit groups removed.
+ */
+export function parseBudget(value: unknown, excerpt: unknown): number | null {
+  for (const text of [value, excerpt]) {
+    const s = String(text ?? '').toLowerCase()
+      .replace(/(\d)[\s.,]+(?=\d{3}\b)/g, '$1')
+      .replace(/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|fifty)\s+(thousand|grand|k)\b/g,
+        (_, w: string) => String(SMALL[w]! * 1000))
+      .replace(/\b(\d+)\s+hundred\b/g, (_, d: string) => String(Number(d) * 100))
+    for (const m of s.matchAll(/\$?\s*(\d+(?:\.\d+)?)\s*(k|thousand|grand)?\b/g)) {
+      let n = Number(m[1])
+      if (!Number.isFinite(n)) continue
+      if (m[2]) n *= 1000
+      if (n >= 300 && n <= 50_000) return Math.round(n)
+    }
+  }
+  return null
+}
+
 /** Records something the prospect told us, with the words that justified it. */
 export function captureSignal(args: CaptureArgs, ctx: ToolContext): ToolResult {
   const conf = args.confidence ?? 0.85
@@ -72,8 +103,8 @@ export function captureSignal(args: CaptureArgs, ctx: ToolContext): ToolResult {
   let captured = false
 
   if (args.signal === 'budget') {
-    const n = Number(String(args.value).replace(/[^0-9.]/g, ''))
-    if (Number.isFinite(n) && n > 0) {
+    const n = parseBudget(args.value, args.excerpt)
+    if (n !== null) {
       q = captureCore(q, 'budget', extracted({ maxMonthly: n, stated: true }, conf, ctx.interactionId, args.excerpt, ctx.now))
       captured = true
     }
@@ -133,7 +164,21 @@ export interface AvailabilityArgs {
   /** A specific residence the caller named — usually read off the website. */
   unitId?: string
   reason?: string
+  /**
+   * What the caller has said about timing, size and money, in their words. Passing them
+   * here is one round trip instead of three capture_signal calls and a check — and it
+   * cannot race, because the capture and the lookup happen in the same call.
+   */
+  moveIn?: string
+  bedrooms?: string
+  budget?: string
 }
+
+const sizeOf = (u: { bedrooms: number }) => (u.bedrooms === 0 ? 'studio' : `${u.bedrooms} bed`)
+
+/** One residence, priced the way the website prints it. */
+const unitLine = (u: { unitId: string; bedrooms: number; bathrooms: number; sqft: number; floor: number; monthlyRent: number; concession?: string | null; availableFrom: string; view?: string }) =>
+  `Unit ${u.unitId} (${sizeOf(u)}, ${u.bathrooms} bath, ${u.sqft} sq ft, floor ${u.floor}): ${rentPhrase(u)}, available ${availDate(u.availableFrom)}${u.view ? `. ${u.view}` : ''}`
 
 const availDate = (iso: string) =>
   new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })
@@ -169,7 +214,7 @@ export function lookupUnit(unitId: string, ctx: ToolContext): ToolResult {
     : ''
 
   return {
-    say: `Residence ${u.unitId} is available: ${u.bedrooms === 0 ? 'studio' : `${u.bedrooms} bed`}, ${u.bathrooms} bath, ${u.sqft} sq ft${plan ? ` (${plan.name})` : ''}, ${money(u.monthlyRent)}/month, available ${availDate(u.availableFrom)}${u.concession ? `. ${u.concession}` : ''}${u.view ? `. ${u.view}` : ''}. Quote exactly this.${timing}`,
+    say: `Residence ${u.unitId} is available: ${sizeOf(u)}, ${u.bathrooms} bath, ${u.sqft} sq ft${plan ? ` (${plan.name})` : ''}, ${rentPhrase(u)}, available ${availDate(u.availableFrom)}${u.view ? `. ${u.view}` : ''}. Quote exactly this — the net effective figure first, then the lease figure.${timing}`,
     record: { kind: 'availability_checked', outcome: 'unit_lookup', unitId: u.unitId, unitsOffered: [u.unitId] },
   }
 }
@@ -194,8 +239,7 @@ export function lookupPlan(plan: FloorPlan, ctx: ToolContext): ToolResult {
   }
 
   const shown = open.slice(0, 3)
-  const lines = shown.map((u) =>
-    `Unit ${u.unitId}: floor ${u.floor}, ${money(u.monthlyRent)}/month, available ${availDate(u.availableFrom)}${u.concession ? `. Concession: ${u.concession}` : ''}${u.view ? `. ${u.view}` : ''}`)
+  const lines = shown.map(unitLine)
   const rest = open.length - shown.length
   const more = rest > 0 ? ` ${rest} more ${plan.name} residence${rest === 1 ? ' is' : 's are'} open — say more exist and offer to go through them.` : ''
 
@@ -206,6 +250,20 @@ export function lookupPlan(plan: FloorPlan, ctx: ToolContext): ToolResult {
 }
 
 export function checkAvailability(ctx: ToolContext, args: AvailabilityArgs = {}): ToolResult {
+  // Signals passed inline are captured first, against the same state the lookup then reads.
+  let inline: QualificationState | undefined
+  for (const [signal, value] of [['moveInTiming', args.moveIn], ['bedrooms', args.bedrooms], ['budget', args.budget]] as const) {
+    if (!value) continue
+    const r = captureSignal({ signal, value: String(value), excerpt: String(value) },
+      { ...ctx, qualification: inline ?? ctx.qualification })
+    if (r.qualificationPatch) inline = r.qualificationPatch
+  }
+  if (inline) {
+    const { moveIn: _m, bedrooms: _b, budget: _g, ...rest } = args
+    const out = checkAvailability({ ...ctx, qualification: inline }, rest)
+    return { ...out, qualificationPatch: inline }
+  }
+
   if (args.unitId) {
     // A residence first — it is the more specific name — then a plan by code or name.
     const wanted = args.unitId.trim().toUpperCase()
@@ -247,27 +305,38 @@ export function checkAvailability(ctx: ToolContext, args: AvailabilityArgs = {})
       }
 
     case 'priced_out': {
-      // The most valuable branch in the system. Do not offer something dearer and hope.
+      /*
+       * The most valuable branch in the system. Do not offer something dearer and hope —
+       * but do name the residence, and do say what the money buys. "It's not giving me the
+       * exact residence number" and a caller hanging up is what this text used to produce.
+       */
+      const size = ctx.qualification.bedrooms ? sizeOf({ bedrooms: ctx.qualification.bedrooms.value.min }) : 'residence'
+      const nearest = out.nearest.map((m) => unitLine(m.unit))
+      const alternatives = out.alternatives.map((m) => unitLine(m.unit))
       return {
-        say: `Nothing is available at or below ${money(out.budgetMax)}. The lowest available right now is ${money(out.cheapestAvailable)} — ${money(out.gap)} above what they said. Be straight with them about that. Do NOT pitch a more expensive unit as though it met their budget. Ask whether that gap is workable, or whether they would like to hear when something closer opens up.`,
+        say: [
+          `Nothing ${size === 'residence' ? '' : `${size} `}is available at or below ${money(out.budgetMax)}. The closest is ${money(out.gap)}/month above what they said:`,
+          nearest.join('\n'),
+          `Be straight about the gap and name the residence if they ask — that is real, current information. Do NOT pitch it as though it met their budget.`,
+          alternatives.length
+            ? `What DOES fit their budget is a size down — offer it plainly, as a real option, then ask which way they'd rather go:\n${alternatives.join('\n')}`
+            : 'Nothing smaller fits either. Offer to take their details so someone can call when something closer opens up.',
+          'If they walk, call capture_loss_reason with what they said.',
+        ].join('\n\n'),
         record: {
           kind: 'availability_checked', outcome: 'priced_out',
           budgetMax: out.budgetMax, cheapestAvailable: out.cheapestAvailable, gap: out.gap,
-          unitsOffered: out.nearest.map((n) => n.unit.unitId),
+          unitsOffered: [...out.nearest, ...out.alternatives].map((n) => n.unit.unitId),
         },
       }
     }
 
     case 'matches': {
-      const lines = out.units.map((m) => {
-        const u = m.unit
-        const avail = new Date(u.availableFrom).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })
-        return `Unit ${u.unitId}: ${u.bedrooms === 0 ? 'studio' : `${u.bedrooms} bed`}, ${u.bathrooms} bath, ${u.sqft} sq ft, ${money(u.monthlyRent)}/month, available ${avail}${u.concession ? `. Concession: ${u.concession}` : ''}${u.view ? `. ${u.view}` : ''}`
-      })
+      const lines = out.units.map((m) => unitLine(m.unit))
       const stretchLines = out.stretch.map((m) =>
-        `Slightly above their range: Unit ${m.unit.unitId} at ${money(m.unit.monthlyRent)} — offer this ONLY after acknowledging it is over what they said.`)
+        `Slightly above their range: ${unitLine(m.unit)} — offer this ONLY after acknowledging it is over what they said.`)
       const laterLines = out.later.map((m) =>
-        `Coming up a bit later: Unit ${m.unit.unitId}, ${m.unit.bedrooms === 0 ? 'studio' : `${m.unit.bedrooms} bed`}, ${money(m.unit.monthlyRent)}/month, free ${availDate(m.unit.availableFrom)}.`)
+        `Coming up a bit later: Unit ${m.unit.unitId}, ${sizeOf(m.unit)}, ${rentPhrase(m.unit)}, free ${availDate(m.unit.availableFrom)}.`)
       const more = out.moreInTime.length
         ? `There ${out.moreInTime.length === 1 ? 'is' : 'are'} also ${out.moreInTime.join(', ')} in their range and window — mention that more exist and offer to go through them. If they ask about one by name, look it up.`
         : ''
@@ -279,7 +348,7 @@ export function checkAvailability(ctx: ToolContext, args: AvailabilityArgs = {})
        * nothing else has been shut out of a building with twenty-seven homes open.
        */
       const parts: string[] = []
-      if (lines.length) parts.push(`Available in their window and range — quote exactly these:\n${lines.join('\n')}`)
+      if (lines.length) parts.push(`Available in their window and range — quote exactly these, net effective figure first, then the lease figure:\n${lines.join('\n')}`)
       if (stretchLines.length) parts.push(stretchLines.join('\n'))
       if (laterLines.length) parts.push(
         `${lines.length ? 'Also, if they can wait a little' : 'Nothing frees up by their date, but if they can wait a little'}:\n${laterLines.join('\n')}\nSay it warmly — something like "we've got this by the time you're looking to move, and a couple more opening up after if you're able to wait." Do NOT call these unavailable.`)

@@ -135,11 +135,14 @@ function logEvent(callId: string, e: Record<string, unknown>) {
   if (eventLog.length > 2000) eventLog.splice(0, eventLog.length - 2000)
 }
 
+/**
+ * Runs one tool against the call's state, mutating it. The caller loads the state once
+ * per webhook request, runs every tool in that request in order, and saves once.
+ */
 async function runTool(
-  name: string, args: Record<string, unknown>, callId: string, now: Date,
+  name: string, args: Record<string, unknown>, callId: string, now: Date, state: CallState,
 ): Promise<string> {
   const { inventory, articles, property } = load(now)
-  const state = await getCall(callId)
   state.toolsCalled.push(name)
 
   const ctx: ToolContext = {
@@ -158,7 +161,6 @@ async function runTool(
       const r = captureSignal(args as never, ctx)
       if (r.qualificationPatch) state.qualification = r.qualificationPatch
       logEvent(callId, r.record)
-      await saveCall(callId, state)
       return r.say
     }
 
@@ -168,11 +170,14 @@ async function runTool(
       const r = checkAvailability(ctx, {
         ...(args.unitId ? { unitId: String(args.unitId) } : {}),
         ...(args.reason ? { reason: String(args.reason) } : {}),
+        ...(args.moveIn ? { moveIn: String(args.moveIn) } : {}),
+        ...(args.bedrooms ? { bedrooms: String(args.bedrooms) } : {}),
+        ...(args.budget ? { budget: String(args.budget) } : {}),
       })
+      if (r.qualificationPatch) state.qualification = r.qualificationPatch
       logEvent(callId, r.record)
       const offered = (r.record.unitsOffered as string[] | undefined) ?? []
       state.unitsDiscussed = [...new Set([...state.unitsDiscussed, ...offered])]
-      await saveCall(callId, state)
       return r.say
     }
 
@@ -183,7 +188,6 @@ async function runTool(
         logEvent(callId, { kind: 'escalated', trigger: r.escalate.trigger, detail: r.escalate.detail })
         state.escalation = r.escalate
       }
-      await saveCall(callId, state)
       return r.say
     }
 
@@ -227,7 +231,6 @@ async function runTool(
         status: booking.state.status === 'confirmed' ? 'confirmed'
           : booking.state.status === 'arranging' ? 'arranging' : 'failed',
       }
-      await saveCall(callId, state)
       return sayableStatus(booking)
     }
 
@@ -240,7 +243,6 @@ async function runTool(
       }, ctx)
       logEvent(callId, r.record)
       state.lossReason = (r.record as { reason: LossReason }).reason
-      await saveCall(callId, state)
       return r.say
     }
 
@@ -327,14 +329,24 @@ export default async function handler(req: any, res: any) {
     const message = body?.message ?? {}
     callId = String(message?.call?.id ?? body?.call?.id ?? 'unknown-call')
 
-    // Emergency screening on every caller turn, ahead of anything the model decides to do.
+    /*
+     * Emergency screening on every finished caller turn, ahead of anything the model
+     * decides to do. Vapi also streams partial transcripts — several a second while
+     * someone is talking — and each one used to cost a function invocation and a store
+     * read. They are ignored: the final transcript of the same words follows within a
+     * second, and that is the one screened.
+     */
+    if (message.type === 'transcript' && message.transcriptType && message.transcriptType !== 'final') {
+      res.status(200).json({})
+      return
+    }
     if (message.type === 'transcript' && message.role === 'user' && message.transcript) {
       const { inventory, articles, property } = load(now)
       const emergency = checkEmergency(String(message.transcript), {
         propertyId: propertyId(String(property.id ?? 'prop-demo')),
         interactionId: interactionId(callId),
         inventory, articles,
-        qualification: (await getCall(callId)).qualification,
+        qualification: emptyQualification(),
         jurisdiction: 'NY', confidenceThreshold: 0.7, now,
       })
       if (emergency) {
@@ -346,14 +358,24 @@ export default async function handler(req: any, res: any) {
     }
 
     if (message.type === 'tool-calls') {
+      /*
+       * In order, against one copy of the state, saved once. The model emits several tool
+       * calls in one turn — capture the budget AND check availability — and running them
+       * concurrently had each read the same state, so the availability check never saw the
+       * budget, told the model to ask for it again, and whichever save landed last threw
+       * the other's away. That was the "just confirming…" loop on a real call.
+       */
       const list = message.toolCallList ?? message.toolCalls ?? []
-      const results = await Promise.all(list.map(async (tc: any) => {
+      const state = await getCall(callId)
+      const results: Array<{ toolCallId: unknown; result: string }> = []
+      for (const tc of list) {
         const name = tc.name ?? tc.function?.name
         const rawArgs = tc.arguments ?? tc.function?.arguments ?? {}
         const args = typeof rawArgs === 'string' ? JSON.parse(rawArgs) : rawArgs
-        const result = await runTool(String(name), args, callId, now)
-        return { toolCallId: tc.id ?? tc.toolCallId, result }
-      }))
+        const result = await runTool(String(name), args, callId, now, state)
+        results.push({ toolCallId: tc.id ?? tc.toolCallId, result })
+      }
+      await saveCall(callId, state)
       res.status(200).json({ results })
       return
     }

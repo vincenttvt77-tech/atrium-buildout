@@ -213,3 +213,34 @@ describe('failures never drop the call', () => {
     assert.match(String(res.body.results[0].result), /call them back/i)
   })
 })
+
+describe('several tool calls in one turn', () => {
+  test('run in order against one state, so the availability check sees the budget captured beside it', async () => {
+    const res = mockRes()
+    await handler({
+      method: 'POST', headers: {},
+      body: { message: { type: 'tool-calls', call: { id: 'batch-1' }, toolCallList: [
+        { id: 'a', name: 'capture_signal', arguments: { signal: 'bedrooms', value: '1', excerpt: 'one bedroom' } },
+        { id: 'b', name: 'capture_signal', arguments: { signal: 'budget', value: '4', excerpt: 'not over $4. 900.' } },
+        { id: 'c', name: 'check_availability', arguments: { reason: 'caller asked' } },
+      ] } },
+    }, res)
+    const results = res.body?.results as Array<{ toolCallId: string; result: string }>
+    assert.equal(results.length, 3)
+    assert.deepEqual(results.map((r) => r.toolCallId), ['a', 'b', 'c'])
+    assert.doesNotMatch(results[2]!.result, /Before I quote anything/, 'the check saw both captures')
+    assert.match(results[2]!.result, /net effective/)
+  })
+
+  test('a partial transcript is acknowledged and otherwise ignored', async () => {
+    const res = mockRes()
+    await handler({
+      method: 'POST', headers: {},
+      body: { message: { type: 'transcript', transcriptType: 'partial', role: 'user', transcript: 'I smell gas', call: { id: 'partial-1' } } },
+    }, res)
+    assert.equal(res.code, 200)
+    const log = await readLog()
+    const mine = (log.body?.events as Array<{ callId: string; kind: string }>).filter((e) => e.callId === 'partial-1')
+    assert.equal(mine.length, 0, 'nothing is logged for a partial')
+  })
+})

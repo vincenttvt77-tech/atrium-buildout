@@ -202,3 +202,25 @@ describe('a unit available after the move-in window is offered as later, not hid
     assert.equal(out.moreInTime.length, 2, 'the two not shown must still be named')
   })
 })
+
+describe('priced out still says what the money buys', () => {
+  test('a smaller layout in budget and in time is offered as an alternative', () => {
+    const s = snap([
+      unit({ unitId: '13L', floorPlanId: 'B1', bedrooms: 2, monthlyRent: 5875 }),
+      unit({ unitId: '08E', floorPlanId: 'A1', bedrooms: 1, monthlyRent: 3900 }),
+      unit({ unitId: '06F', floorPlanId: 'S1', bedrooms: 0, monthlyRent: 3255 }),
+      unit({ unitId: '30F', floorPlanId: 'S1', bedrooms: 0, monthlyRent: 3255, availableFrom: '2027-06-01' }),
+    ], [plan('B1', 2, 1000), plan('A1', 1, 700), plan('S1', 0, 500)])
+    const q = captureCore(withBeds(2, 2)(withBudget(4000)), 'moveInTiming',
+      extracted({ earliest: new Date('2026-10-01T00:00:00Z'), latest: null }, 0.9, CALL, 'october', NOW))
+    const out = findMatches(s, q, { now: NOW })
+    assert.equal(out.kind, 'priced_out')
+    if (out.kind === 'priced_out') assert.deepEqual(out.alternatives.map((a) => a.unit.unitId), ['08E', '06F'], 'largest first, in time only')
+    if (out.kind !== 'priced_out') return
+    assert.ok(out.alternatives.length > 0, 'an alternative is offered')
+    for (const a of out.alternatives) {
+      assert.ok(a.unit.bedrooms < 2)
+      assert.ok(a.unit.monthlyRent <= 4000)
+    }
+  })
+})
