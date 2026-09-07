@@ -345,7 +345,7 @@
     "id": "art-amenity-fee",
     "topic": "amenities",
     "question": "Is there an amenity fee on top of the rent?",
-    "answer": "No. Every amenity space is included with your lease, and so is the bike room. The garage at $425 a month and private storage from $95 a month are the only two things billed separately.",
+    "answer": "No. There is no amenity fee and no amenity deposit — amenity access and the bike room come with your lease. Parking at $425 a month and storage from $95 a month are billed separately, and so are a number of other one-time and situational charges. The fee schedule in the house rules lists every one of them, so tell me which charge you are asking about and I will read you the figure, or I can send you the schedule.",
     "propertyScope": [
       "prop-demo"
     ],
@@ -353,12 +353,13 @@
       "NY"
     ],
     "status": "published",
-    "version": 1,
-    "source": "Leasing Office Procedures, rev. 2026-02",
+    "version": 2,
+    "source": "House Rules: feeSchedule, rev 2026-09",
     "ownerId": "person-manager-1",
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-02-01T00:00:00Z",
-    "reviewBy": "2027-02-01T00:00:00Z"
+    "reviewBy": "2027-08-01T00:00:00Z",
+    "correctionNote": "Corrected 2026-09-07. The answer claimed the garage and storage were \"the only two things billed separately\". policies.json feeSchedule carries roughly twenty more: additional fob $50, lockout $75 or $125, sublet administration $250, transfer $500, hallway item removal $75 an item, mattress bag $10, motorcycle parking $195 a month, placed liability insurance $14.95 a month, late fee $50, returned payment $20, card processing 2.95 percent, guest parking $45 a day, smoking violation $250 then $500, and pet violation $100. The answer now states the amenity fee is zero and points at the full schedule instead of closing the list. Version bumped to 2; the resident manager should re-sign it."
   },
   {
     "id": "art-hours-leasing",
@@ -440,7 +441,7 @@
     "id": "art-access-lockout",
     "topic": "building_access",
     "question": "What happens if I lock myself out at two in the morning?",
-    "answer": "You go to the front desk — it is attended 24 hours. Show ID, the attendant confirms you against the resident list and lets you in, and there is no lockout charge at any hour.",
+    "answer": "You go to the front desk — it is attended 24 hours. Staff verifies you against the lease and a photo ID and lets you in, with no appointment. The first lockout in a lease year is free. After that it is $75, or $125 between 11:00pm and 7:00am, when the resident manager has to come down. Two in the morning falls inside that window, so it would be the $125 charge, and it posts to your resident ledger rather than being paid at the desk.",
     "propertyScope": [
       "prop-demo"
     ],
@@ -448,12 +449,13 @@
       "NY"
     ],
     "status": "published",
-    "version": 1,
-    "source": "Front Desk Standing Orders, rev. 2026-06",
+    "version": 2,
+    "source": "House Rules: buildingAccess, rev 2026-09",
     "ownerId": "person-manager-1",
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-06-01T00:00:00Z",
-    "reviewBy": "2027-06-01T00:00:00Z"
+    "reviewBy": "2027-08-01T00:00:00Z",
+    "correctionNote": "Corrected 2026-09-07. The answer read \"there is no lockout charge at any hour\", which contradicted policies.json buildingAccess.lockout and feeSchedule.oneTime — one free lockout per lease year, then $75, and $125 between 11:00pm and 7:00am. The article's own 2am hypothetical is the $125 case, so a caller was quoted free and billed $125. Reconciliation of the two cited documents: \"Front Desk Standing Orders, rev. 2026-06\" is not present in this repository and predates the House Rules rev 2026-09 (effective 2026-08-01), which declare themselves the source of truth and hold the fee schedule residents are billed from. The June standing orders are stale; the source line now points at the house rules. Figures are restated verbatim from that file. Version bumped to 2 and the existing approval carried over so the corrected answer serves instead of the wrong one; the resident manager should re-sign it."
   },
   {
     "id": "art-access-keys",
@@ -542,13 +544,15 @@
     "jurisdictionScope": [
       "NY"
     ],
-    "status": "published",
+    "status": "retired",
     "version": 1,
     "source": "Lease Rider - Utilities, rev. 2026-01",
     "ownerId": "person-manager-1",
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-01-15T00:00:00Z",
-    "reviewBy": "2027-01-15T00:00:00Z"
+    "reviewBy": "2027-01-15T00:00:00Z",
+    "supersededBy": "art-derived-047",
+    "reviewNote": "Retired 2026-09-07. The answer said heating and cooling are electric and land on the resident's Con Edison bill. policies.json wifiAndUtilities.heatAndCooling is a four-pipe central plant with heat and cooling included in rent, and art-derived-047 answers the same question from that block. This text is wrong and must not be republished; it is kept only as the record of what was served before the correction. Sourced to Lease Rider - Utilities, rev. 2026-01, which the House Rules rev 2026-09 supersede."
   },
   {
     "id": "art-utilities-ac",
@@ -561,13 +565,42 @@
     "jurisdictionScope": [
       "NY"
     ],
-    "status": "published",
+    "status": "retired",
     "version": 1,
     "source": "Lease Rider - Utilities, rev. 2026-01",
     "ownerId": "person-manager-1",
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-01-15T00:00:00Z",
-    "reviewBy": "2027-01-15T00:00:00Z"
+    "reviewBy": "2027-01-15T00:00:00Z",
+    "supersededBy": "art-utilities-cooling",
+    "reviewNote": "Retired 2026-09-07. \"It runs off your electric account\" is wrong for the same reason as art-utilities-included: cooling comes off the building's central plant and is included in rent. Replaced by art-utilities-cooling, which is held for approval. Do not republish this text."
+  },
+  {
+    "id": "art-utilities-cooling",
+    "topic": "utilities",
+    "question": "Is there air conditioning?",
+    "answer": "Yes. Every residence has a four-pipe fan coil system with its own thermostat in the living area and in each bedroom, so you set the temperature room by room. Heating and cooling both come off the building's central plant and are included in your rent, so neither one shows up on your Con Edison bill. The plant changes over between heating and cooling in April and again in October, and the resident manager posts the dates.",
+    "propertyScope": [
+      "prop-demo"
+    ],
+    "jurisdictionScope": [
+      "NY"
+    ],
+    "status": "in_review",
+    "version": 1,
+    "source": "House Rules: wifiAndUtilities, rev 2026-09",
+    "ownerId": "person-manager-1",
+    "keywords": [
+      "air conditioning",
+      "ac",
+      "cooling",
+      "heat",
+      "thermostat"
+    ],
+    "approvedBy": null,
+    "approvedAt": null,
+    "reviewBy": "2027-08-01T00:00:00Z",
+    "reviewNote": "Written 2026-09-07 to replace the retired art-utilities-ac, which said cooling runs off the resident's electric account. Every figure here is restated from policies.json wifiAndUtilities.heatAndCooling. Held in_review with approvedBy null because a script cannot approve policy; until a human signs off, \"is there air conditioning?\" refuses and offers the resident manager. To publish, set status to published, approvedBy to person-manager-1, and approvedAt to a timestamp."
   },
   {
     "id": "art-utilities-internet",
@@ -587,25 +620,6 @@
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-01-15T00:00:00Z",
     "reviewBy": "2027-01-15T00:00:00Z"
-  },
-  {
-    "id": "art-app-income",
-    "topic": "application_requirements",
-    "question": "What do I need to qualify?",
-    "answer": "Household income of 40 times the monthly rent, which is the standard across the market here, or a guarantor at 80 times. All adults who will live in the residence apply together and their income counts as one household.",
-    "propertyScope": [
-      "prop-demo"
-    ],
-    "jurisdictionScope": [
-      "NY"
-    ],
-    "status": "published",
-    "version": 1,
-    "source": "Rental Application Standards, rev. 2026-05",
-    "ownerId": "person-manager-1",
-    "approvedBy": "person-manager-1",
-    "approvedAt": "2026-05-01T00:00:00Z",
-    "reviewBy": "2027-05-01T00:00:00Z"
   },
   {
     "id": "art-app-fee",
@@ -2032,7 +2046,7 @@
     "id": "art-derived-042",
     "topic": "pet_policy",
     "question": "What is your pet policy?",
-    "answer": "Two pets per residence, fifty pounds each, dogs and cats. There is no pet fee, no pet deposit, and no monthly pet rent — New York does not permit them, and damage a pet causes is billed at cost after the fact instead. Register the pet at signing with a rabies certificate, a vet record, and the NYC dog license, and check the restricted breed list before you fall in love with a puppy. Your fob opens the Pet Spa on three and The Green on four, and dogs stay leashed everywhere else in the building. Service animals and approved emotional support animals are not pets under the law. They pay no fee, the breed and weight limits do not apply, and the resident manager handles those requests directly.",
+    "answer": "Two pets per residence, fifty pounds each, dogs and cats. There is no pet fee, no pet deposit, and no monthly pet rent — New York does not permit them, and damage a pet causes is billed at cost after the fact instead. Register the pet at signing with a rabies certificate, a vet record, and the NYC dog license, and check the restricted breed list before you fall in love with a puppy. Your fob opens the Pet Spa on three and The Green on four, and dogs stay leashed everywhere else in the building.",
     "propertyScope": [
       "prop-demo"
     ],
@@ -2040,7 +2054,7 @@
       "NY"
     ],
     "status": "published",
-    "version": 1,
+    "version": 2,
     "source": "House Rules: pets",
     "ownerId": "person-manager-1",
     "keywords": [
@@ -2048,7 +2062,8 @@
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
-    "reviewBy": "2027-09-07T00:00:00.000Z"
+    "reviewBy": "2027-09-07T00:00:00.000Z",
+    "correctionNote": "Truncated 2026-09-07. The answer closed with \"Service animals and approved emotional support animals are not pets under the law. They pay no fee, the breed and weight limits do not apply, and the resident manager handles those requests directly.\" That is a reasonable_accommodation ruling plus a legal assertion, delivered by the agent, and the hand-off at the end does not undo it. policies.json pets declares escalationTopic \"reasonable_accommodation\", which the derived article dropped. The sentence is gone, so no article contains emotional, support, or service animal and an accommodation question has no candidate to serve. Version bumped to 2; the resident manager should re-sign it."
   },
   {
     "id": "art-derived-043",
@@ -2300,7 +2315,7 @@
     "id": "art-derived-054",
     "topic": "application_requirements",
     "question": "What do I need to apply?",
-    "answer": "The application fee is $20 per adult, which is the New York cap, and it covers the credit and background check — you get a copy of both. There is no broker fee, because we lease in-house. Nothing is due before you sign. There is no hold deposit, and the first month's rent and the security deposit are collected at lease signing. The security deposit is one month's rent and cannot be more than that under state law, and it sits in an interest-bearing account with the bank disclosed to you at signing. We look for household income of 40 times the monthly rent, or a guarantor at 80 times who lives in New York, New Jersey, Connecticut, or Pennsylvania, and institutional guarantors are accepted. Bring photo ID, an employment letter, two pay stubs, last year's tax return, and two bank statements. We do not ask about criminal history, we do not use housing court records, and housing vouchers are accepted. Decisions take one to three business days.",
+    "answer": "The application fee is $20 per adult, which is the New York cap, and it covers the credit and background check — you get a copy of both. There is no broker fee, because we lease in-house. Nothing is due before you sign. There is no hold deposit, and the first month's rent and the security deposit are collected at lease signing. The security deposit is one month's rent and cannot be more than that under state law, and it sits in an interest-bearing account with the bank disclosed to you at signing. Bring photo ID, an employment letter, two pay stubs, last year's tax return, and two bank statements; if you are self-employed, bring two years of returns, a letter from your accountant, and three months of bank statements. Decisions take one to three business days. Anything specific to your own application goes to the resident manager.",
     "propertyScope": [
       "prop-demo"
     ],
@@ -2308,7 +2323,7 @@
       "NY"
     ],
     "status": "published",
-    "version": 1,
+    "version": 2,
     "source": "House Rules: applicationRequirements",
     "ownerId": "person-manager-1",
     "keywords": [
@@ -2316,7 +2331,8 @@
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
-    "reviewBy": "2027-09-07T00:00:00.000Z"
+    "reviewBy": "2027-09-07T00:00:00.000Z",
+    "correctionNote": "Split 2026-09-07. The answer was a verbatim copy of policies.json applicationRequirements.residentSummary, whose block declares escalationTopic \"eligibility_or_denial\". Removed: the 40x income and 80x guarantor test, the guarantor residency list, \"we do not ask about criminal history\", \"we do not use housing court records\", and \"housing vouchers are accepted\". Those four subjects — incomeRequirement, criminalHistory, housingCourtHistory, and sourceOfIncome — now have no article anywhere in the corpus, so decideAnswer() finds no candidate and falls through to escalate. What is left is fees, deposits, the document list, and the decision timeline. Version bumped to 2; the resident manager should re-sign it."
   },
   {
     "id": "art-derived-055",
@@ -2389,7 +2405,7 @@
     "id": "art-derived-058",
     "topic": "application_requirements",
     "question": "What fees should I expect?",
-    "answer": "The charges that exist here are short: $20 an adult to apply and one month's security, and that is everything due before you have keys. There is no broker fee, no hold deposit, no pet fee, no move-in or move-out deposit, and no amenity deposit, because New York caps what a building may hold to one month's rent. Parking is $425 a month with EV charging included, storage starts at $95, and the bike room, the amenity spaces, and pet rent are all zero. Everything posts to your resident ledger, the late fee is $50 and only after five days, and the front desk does not take money for anything. Damage is billed at cost after the fact with an itemized statement, never collected up front.",
+    "answer": "Before you have keys there is a $20 application fee for each adult and one month's rent as security. There is no broker fee, no hold deposit, no pet fee, and no move-in or move-out deposit, because New York caps what a building may hold to one month's rent. The recurring charges are parking at $425 a month with EV charging included, motorcycle parking at $195, storage from $95 to $240 by locker size, and placed liability insurance at $14.95 a month if your renters policy lapses; the bike room, the amenity spaces, and pet rent are all zero. The one-time charges are an additional fob at $50, a lockout at $75 or $125 between 11:00pm and 7:00am once you have used your free one for the lease year, a $250 sublet administrative fee, a $500 transfer fee, $75 an item for anything left in a corridor, and $10 for the mattress bag DSNY requires. The situational charges are a $50 late fee after rent is five days late, $20 for a returned payment, 2.95 percent to pay by card when ACH from the portal is free, $45 a day for guest parking, $250 and then $500 for a smoking violation, and $100 for a second pet violation. Everything posts to your resident ledger, the front desk does not take money, and damage is billed at cost after the fact with an itemized statement.",
     "propertyScope": [
       "prop-demo"
     ],
@@ -2397,14 +2413,15 @@
       "NY"
     ],
     "status": "published",
-    "version": 1,
-    "source": "House Rules: feeSchedule",
+    "version": 2,
+    "source": "House Rules: feeSchedule, rev 2026-09",
     "ownerId": "person-manager-1",
     "keywords": [
       "fee schedule"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
-    "reviewBy": "2027-09-07T00:00:00.000Z"
+    "reviewBy": "2027-09-07T00:00:00.000Z",
+    "correctionNote": "Regenerated 2026-09-07 from the whole of policies.json feeSchedule — oneTime, recurring, situational, and notCharged — instead of feeSchedule.residentSummary. The summary opened \"the charges that exist here are short\" and named five charges out of roughly twenty-five, which reinforced the exhaustive-list claim in art-amenity-fee. Version bumped to 2; the resident manager should re-sign it."
   }
 ]

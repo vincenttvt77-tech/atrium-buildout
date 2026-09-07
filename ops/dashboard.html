@@ -59,6 +59,11 @@
   .tel{font:600 15px Inter,sans-serif;color:var(--accent);text-decoration:none}
   .note{font-size:12.5px;color:var(--muted);margin-top:36px;padding-top:16px;
         border-top:1px solid var(--line)}
+  .privacy{font-size:12.5px;color:var(--muted);margin:-20px 0 28px}
+  .privacy b{color:var(--ink);font-weight:600}
+  .signout{font:inherit;font-size:12.5px;color:var(--muted);background:none;
+           border:1px solid var(--line);border-radius:5px;padding:3px 9px;cursor:pointer}
+  .signout:hover{color:var(--ink);border-color:var(--muted)}
   @media(max-width:600px){.ev{grid-template-columns:1fr;gap:4px}.t{padding-top:0}}
 </style>
 </head>
@@ -69,8 +74,13 @@
       <h1>Operations</h1>
       <div class="sub">Every call, what was extracted, and what the agent did about it.</div>
     </div>
-    <div class="live"><span class="dot"></span><span id="status">Live · refreshing every 5s</span></div>
+    <div class="live"><span class="dot"></span><span id="status">Live · refreshing every 5s</span>
+      <button type="button" class="signout" id="signout">Sign out</button></div>
   </header>
+
+  <div class="privacy"><b>Staff only.</b> This page carries prospect names, email addresses
+    and verbatim call excerpts. Do not screenshot it into a shared channel, and sign out
+    when you are done.</div>
 
   <div class="tiles" id="tiles"></div>
   <h2>Call activity</h2>
@@ -175,9 +185,23 @@ function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
 }
 
+/**
+ * The log endpoint is gated by the same operations session that served this page, so the
+ * poll sends the session cookie and treats a 401 as "the session ended", not as a blip. A
+ * dashboard that keeps retrying a closed door looks broken; sending the operator back to
+ * the gate is honest and takes one click to fix.
+ */
+let timer = null
+function stopPolling(){ if(timer !== null){ clearInterval(timer); timer = null } }
+function toGate(){ stopPolling(); location.assign('/api/dashboard') }
+
 async function tick(){
   try{
-    const r = await fetch('/api/vapi',{cache:'no-store'})
+    const r = await fetch('/api/vapi', {
+      cache:'no-store', credentials:'same-origin', headers:{accept:'application/json'},
+    })
+    if(r.status === 401 || r.status === 403){ toGate(); return }
+    if(!r.ok) throw new Error('HTTP ' + r.status)
     const d = await r.json()
     render(d)
     document.getElementById('status').textContent =
@@ -187,7 +211,19 @@ async function tick(){
     document.getElementById('status').textContent = 'Reconnecting…'
   }
 }
-tick(); setInterval(tick, 5000)
+
+document.getElementById('signout').addEventListener('click', async () => {
+  stopPolling()
+  try{
+    await fetch('/api/dashboard', {
+      method:'POST', credentials:'same-origin',
+      headers:{'content-type':'application/json'}, body:JSON.stringify({action:'logout'}),
+    })
+  }catch(err){ /* the cookie expires on its own; go back to the gate regardless */ }
+  location.assign('/api/dashboard')
+})
+
+tick(); timer = setInterval(tick, 5000)
 </script>
 </body>
 </html>

@@ -12,6 +12,8 @@ export type SecretName =
   | 'VAPI_PRIVATE_KEY'
   /** Shared secret used to verify inbound Vapi webhooks are genuine. */
   | 'VAPI_WEBHOOK_SECRET'
+  /** Passcode staff type to open the operations dashboard and read the call log. */
+  | 'OPS_DASHBOARD_PASSCODE'
   /** Model provider key for the conversation engine. */
   | 'ANTHROPIC_API_KEY'
 
@@ -36,6 +38,12 @@ export const SECRETS: readonly SecretSpec[] = [
     purpose: 'Verify inbound Vapi webhooks are genuine before acting on them',
     owner: 'atrium',
     requiredFor: ['voice.inbound_webhook'],
+  },
+  {
+    name: 'OPS_DASHBOARD_PASSCODE',
+    purpose: 'Gate the operations dashboard and the call log it reads',
+    owner: 'client',
+    requiredFor: ['ops.dashboard', 'ops.event_log'],
   },
   {
     name: 'ANTHROPIC_API_KEY',
