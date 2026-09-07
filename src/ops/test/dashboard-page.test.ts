@@ -3,20 +3,28 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
+import { composeOpsPage } from '../../../scripts/build-ops.mjs'
 
 /**
- * `ops/dashboard.page.json` is generated from `ops/dashboard.html` by
+ * `ops/dashboard.html` and `ops/dashboard.page.json` are generated from `ops/src/` by
  * `npm run build:ops`. Generated files rot silently, so this fails the build the moment
- * someone edits the page and ships the stale copy — which would look like the fix landing
+ * someone edits a source and ships the stale copy — which would look like the fix landing
  * and the page not changing.
  */
 const root = fileURLToPath(new URL('../../..', import.meta.url))
 
 describe('the embedded dashboard page', () => {
-  test('matches ops/dashboard.html exactly — run `npm run build:ops` if this fails', async () => {
-    const html = await readFile(join(root, 'ops', 'dashboard.html'), 'utf8')
+  test('matches the composed ops/src exactly — run `npm run build:ops` if this fails', async () => {
+    const { html } = await composeOpsPage()
+    const written = await readFile(join(root, 'ops', 'dashboard.html'), 'utf8')
     const embedded = JSON.parse(await readFile(join(root, 'ops', 'dashboard.page.json'), 'utf8'))
+    assert.equal(written, html)
     assert.equal(embedded.html, html)
+  })
+
+  test('every include directive was resolved', async () => {
+    const { html } = await composeOpsPage()
+    assert.doesNotMatch(html, /<!--\s*@include/)
   })
 
   test('the page is not served as a static file', async () => {

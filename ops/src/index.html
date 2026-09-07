@@ -1,0 +1,1223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Atrium — Operations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#14161a; --paper:#fbfaf8; --panel:#fff; --line:#e6e3de;
+    --muted:#6b6862; --accent:#2f5d50; --warn:#8a5a1a; --danger:#9b2c2c; --ok:#2f5d50;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{--ink:#eceae6;--paper:#101114;--panel:#181a1e;--line:#2a2d33;--muted:#9a968e;
+          --accent:#7fb3a2;--warn:#d8a45c;--danger:#e08585;--ok:#7fb3a2}
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);
+       font:15px/1.55 Inter,system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto;padding:32px 24px 80px}
+  header{display:flex;align-items:baseline;justify-content:space-between;gap:16px;
+         flex-wrap:wrap;margin-bottom:8px}
+  h1{font-size:22px;font-weight:600;letter-spacing:-.02em;margin:0}
+  .sub{color:var(--muted);font-size:13.5px;margin:4px 0 28px}
+  .live{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted)}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);
+       box-shadow:0 0 0 0 rgba(47,93,80,.5);animation:p 2s infinite}
+  @keyframes p{70%{box-shadow:0 0 0 7px rgba(47,93,80,0)}100%{box-shadow:0 0 0 0 rgba(47,93,80,0)}}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:12px;margin-bottom:32px}
+  .tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:15px 16px}
+  .tile .n{font-size:26px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  .tile .l{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-top:3px}
+  h2{font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);
+     font-weight:600;margin:0 0 12px;padding-bottom:9px;border-bottom:1px solid var(--line)}
+  .call{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+        margin-bottom:14px;overflow:hidden}
+  .call-h{padding:13px 16px;border-bottom:1px solid var(--line);display:flex;
+          justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+  .call-id{font:500 12.5px JetBrains Mono,ui-monospace,monospace;color:var(--muted)}
+  .ev{display:grid;grid-template-columns:74px 1fr;gap:14px;padding:11px 16px;
+      border-bottom:1px solid var(--line);font-size:13.5px;align-items:start}
+  .ev:last-child{border-bottom:0}
+  .t{font:400 11.5px JetBrains Mono,ui-monospace,monospace;color:var(--muted);padding-top:2px}
+  .k{display:inline-block;font-size:10.5px;font-weight:600;text-transform:uppercase;
+     letter-spacing:.06em;padding:2.5px 7px;border-radius:4px;margin-bottom:5px;
+     background:rgba(120,120,120,.13);color:var(--muted)}
+  .k.ok{background:rgba(47,93,80,.14);color:var(--ok)}
+  .k.warn{background:rgba(138,90,26,.16);color:var(--warn)}
+  .k.danger{background:rgba(155,44,44,.15);color:var(--danger)}
+  .body{white-space:pre-wrap;word-break:break-word}
+  .ex{border-left:2px solid var(--line);padding:2px 0 2px 11px;margin-top:6px;
+      color:var(--muted);font-style:italic}
+  .meta{font:400 11.5px JetBrains Mono,ui-monospace,monospace;color:var(--muted);margin-top:5px}
+  .empty{background:var(--panel);border:1px dashed var(--line);border-radius:10px;
+         padding:44px 24px;text-align:center;color:var(--muted)}
+  .empty strong{display:block;color:var(--ink);font-weight:600;margin-bottom:6px;font-size:15px}
+  .tel{font:600 15px Inter,sans-serif;color:var(--accent);text-decoration:none}
+  .note{font-size:12.5px;color:var(--muted);margin-top:36px;padding-top:16px;
+        border-top:1px solid var(--line)}
+  .privacy{font-size:12.5px;color:var(--muted);margin:-20px 0 28px}
+  .privacy b{color:var(--ink);font-weight:600}
+  .signout{font:inherit;font-size:12.5px;color:var(--muted);background:none;
+           border:1px solid var(--line);border-radius:5px;padding:3px 9px;cursor:pointer}
+  .signout:hover{color:var(--ink);border-color:var(--muted)}
+  @media(max-width:600px){.ev{grid-template-columns:1fr;gap:4px}.t{padding-top:0}}
+
+  .vcall{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+         margin-bottom:14px;overflow:hidden}
+  .vcall-h{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;
+           justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline}
+  .vcall-who{font-weight:600}
+  .vcall-meta{font:400 11.5px JetBrains Mono,ui-monospace,monospace;color:var(--muted)}
+  .tc{padding:9px 16px;border-bottom:1px solid var(--line);font-size:13px}
+  .tc:last-child{border-bottom:0}
+  .tc-name{font:500 12px JetBrains Mono,ui-monospace,monospace;color:var(--accent)}
+  .tc-args{color:var(--muted);font-size:12.5px;margin:3px 0}
+  .tc-res{white-space:pre-wrap;word-break:break-word;border-left:2px solid var(--line);
+          padding-left:10px;margin-top:4px;color:var(--ink)}
+  .tc-none{color:var(--danger);font-style:italic}
+  .tx{padding:11px 16px;white-space:pre-wrap;font-size:13px;line-height:1.55;
+      border-top:1px solid var(--line);max-height:280px;overflow:auto}
+  .tx summary{cursor:pointer;color:var(--muted);font-size:12.5px;padding:9px 16px}
+
+  .cal{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+       margin-bottom:32px;overflow:hidden}
+  .cal-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;
+           flex-wrap:wrap;padding:11px 16px;border-bottom:1px solid var(--line)}
+  .cal-nav{display:inline-flex;align-items:center;gap:8px}
+  .cal-actions,.panel-actions{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .cal-range{font:500 12.5px JetBrains Mono,ui-monospace,monospace;min-width:190px;text-align:center}
+  .cal-btn,.btn{font:inherit;font-size:12.5px;color:var(--muted);background:none;
+           border:1px solid var(--line);border-radius:5px;padding:3px 9px;cursor:pointer}
+  .cal-btn:hover:not(:disabled),.btn:hover:not(:disabled){color:var(--ink);border-color:var(--muted)}
+  .cal-btn:disabled,.btn:disabled{opacity:.45;cursor:default}
+  .cal-btn.danger{color:var(--danger)}
+  .cal-btn.danger:hover:not(:disabled){color:var(--danger);border-color:var(--danger)}
+  .cal-tag,.tag{font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;
+           padding:1px 5px;border-radius:3px;margin-left:5px;
+           background:rgba(138,90,26,.16);color:var(--warn)}
+  .warn-banner{margin:12px 16px 0;padding:10px 14px;border-radius:8px;font-size:13px;
+               background:rgba(138,90,26,.16);color:var(--warn);border:1px solid rgba(138,90,26,.28)}
+  .warn-banner b{font-weight:600}
+  .cal-scroll{overflow-x:auto}
+  .cal-grid{display:grid;grid-template-columns:62px repeat(7,minmax(108px,1fr));
+            grid-template-rows:auto;grid-auto-rows:24px;gap:2px;padding:12px;min-width:860px}
+  .cal-day,.cal-s{display:block;width:100%}
+  .cal-day:focus-visible,.cal-s:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  .cal-day{grid-row:1;padding:6px 4px;border:1px solid var(--line);border-radius:6px;
+           text-align:center;font-size:12.5px;line-height:1.3;cursor:pointer;user-select:none}
+  .cal-day:hover{border-color:var(--muted)}
+  .cal-day.today .cal-dn{color:var(--accent)}
+  .cal-day.blocked{background:rgba(155,44,44,.15);border-color:transparent;color:var(--danger)}
+  .cal-day.blocked .cal-dd,.cal-day.blocked .cal-dc{color:var(--danger)}
+  .cal-dn{display:block;font-weight:600}
+  .cal-dd,.cal-dc{display:block;font:400 11px JetBrains Mono,ui-monospace,monospace;color:var(--muted)}
+  .cal-t{grid-column:1;font:400 11px JetBrains Mono,ui-monospace,monospace;color:var(--muted);
+         text-align:right;padding-right:8px;line-height:24px;white-space:nowrap}
+  .cal-s{border:1px solid var(--line);border-radius:4px;padding:0 7px;font-size:11.5px;text-align:left;
+         line-height:22px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+  .cal-s.open{background:var(--paper)}
+  .cal-s.open:hover{border-color:var(--accent)}
+  .cal-s.blocked{background:rgba(155,44,44,.15);border-color:transparent;color:var(--danger)}
+  .cal-s.booked{background:rgba(47,93,80,.14);border-color:transparent;color:var(--ok);
+                font-weight:500;cursor:default}
+  .cal-empty{padding:0 16px 12px;color:var(--muted);font-size:13px}
+  .cal-empty:empty{display:none}
+  .cal-foot,.panel-foot{display:flex;justify-content:space-between;align-items:center;gap:8px 18px;
+            flex-wrap:wrap;padding:10px 16px;border-top:1px solid var(--line);
+            font:400 11.5px JetBrains Mono,ui-monospace,monospace;color:var(--muted)}
+  .cal-legend{display:inline-flex;gap:14px}
+  .cal-legend i{display:inline-block;width:11px;height:11px;border-radius:3px;
+                border:1px solid var(--line);background:var(--paper);vertical-align:-1px;margin-right:5px}
+  .cal-legend i.blocked{background:rgba(155,44,44,.15);border-color:transparent}
+  .cal-legend i.booked{background:rgba(47,93,80,.14);border-color:transparent}
+  .cal-hint,.cal-msg,.panel-hint,.panel-msg{font:400 12.5px Inter,system-ui,sans-serif}
+  .cal-msg.err,.panel-msg.err{color:var(--danger)}
+  .cal-msg:empty,.panel-msg:empty{display:none}
+
+  #leads .tiles{margin-bottom:14px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+         margin-bottom:24px;overflow:hidden}
+  .panel-bar{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
+             flex-wrap:wrap;padding:11px 16px;border-bottom:1px solid var(--line)}
+  .panel-title{font-weight:600;font-size:14px}
+  .fu-note{font-size:12.5px;color:var(--warn);margin-top:2px}
+  .fu-note:empty{display:none}
+  .fu-group{padding:8px 16px 5px;font-size:10.5px;font-weight:600;text-transform:uppercase;
+            letter-spacing:.07em;color:var(--muted);background:var(--paper);
+            border-bottom:1px solid var(--line)}
+  .fu-group.overdue{color:var(--danger)}
+  .fu{display:grid;grid-template-columns:150px 1fr auto;gap:14px;padding:11px 16px;
+      border-bottom:1px solid var(--line);font-size:13.5px;align-items:start}
+  .fu:last-child{border-bottom:0}
+  .fu-due{font:500 12px JetBrains Mono,ui-monospace,monospace;color:var(--muted);margin-bottom:4px}
+  .fu-due.overdue{color:var(--danger)}
+  .fu-kind{font-weight:600}
+  .fu-who{color:var(--accent);font-weight:500;text-decoration:none}
+  .fu-who:hover,.fu-who:focus-visible{text-decoration:underline}
+  .fu-reason{margin-top:2px}
+  .fu-act{display:inline-flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .fu-empty{padding:14px 16px;color:var(--muted);font-size:13px}
+  .lead{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+        margin-bottom:14px;overflow:hidden}
+  .lead summary{list-style:none;cursor:pointer;padding:12px 16px;display:flex;gap:6px 14px;
+                align-items:center;flex-wrap:wrap}
+  .lead summary::-webkit-details-marker{display:none}
+  .lead summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+  .lead summary .k{margin-bottom:0}
+  .lead-name{font-weight:600}
+  .lead-meta{font:400 11.5px JetBrains Mono,ui-monospace,monospace;color:var(--muted)}
+  .lead-chev{margin-left:auto;color:var(--muted);font-size:18px;line-height:1;transition:transform .15s}
+  .lead[open] .lead-chev{transform:rotate(90deg)}
+  .lead-body{border-top:1px solid var(--line)}
+  .lead-sec{padding:11px 16px;border-bottom:1px solid var(--line);font-size:13.5px}
+  .lead-sec:last-child{border-bottom:0}
+  .lead-sec h3{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);
+               font-weight:600;margin:0 0 7px}
+  .lead-none{color:var(--muted);font-style:italic}
+  .sig{margin-bottom:10px}
+  .sig:last-child{margin-bottom:0}
+  .sig-l{color:var(--muted)}
+  .lead-row{display:flex;gap:4px 12px;flex-wrap:wrap;align-items:baseline;padding:3px 0}
+  .lead-row .t{padding-top:0}
+  .lead-row .k,.lead-row .meta{margin:0}
+  .note-form{display:flex;gap:8px;margin-top:8px}
+  .note-form input{flex:1;min-width:0;font:inherit;font-size:13px;color:var(--ink);
+                   background:var(--paper);border:1px solid var(--line);border-radius:5px;padding:5px 9px}
+  .note-form input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  @media(max-width:600px){.fu{grid-template-columns:1fr}.fu-act{justify-content:flex-start}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Operations</h1>
+      <div class="sub">Every call, what was extracted, and what the agent did about it.</div>
+    </div>
+    <div class="live"><span class="dot"></span><span id="status">Live · refreshing every 5s</span>
+      <button type="button" class="signout" id="signout">Sign out</button></div>
+  </header>
+
+  <div class="privacy"><b>Staff only.</b> This page carries prospect names, email addresses
+    and verbatim call excerpts. Do not screenshot it into a shared channel, and sign out
+    when you are done.</div>
+
+  <div class="tiles" id="tiles"></div>
+
+  <section id="leads">
+    <h2>Leads</h2>
+    <div class="tiles" id="lead-tiles"></div>
+
+    <div class="panel">
+      <div class="panel-bar">
+        <div>
+          <div class="panel-title">Follow-up queue</div>
+          <div class="fu-note" id="fu-note"></div>
+        </div>
+        <div class="panel-actions">
+          <button type="button" class="btn" id="leads-clear"
+            title="Test control. Deletes every lead profile and follow-up in the store so a demo can be re-run. Not for real prospects.">Clear test leads <span class="tag">test control</span></button>
+        </div>
+      </div>
+      <div id="leads-banner"></div>
+      <div id="fu-list"></div>
+      <div class="panel-foot">
+        <span class="panel-hint">Done means a person did it; Skip means nobody will. Nothing on this page places a call. Times are New York.</span>
+        <span class="panel-msg" id="leads-msg"></span>
+        <span id="leads-store">Loading…</span>
+      </div>
+    </div>
+
+    <div id="lead-cards"></div>
+  </section>
+
+  <h2>Tour calendar</h2>
+  <div class="cal">
+    <div class="cal-bar">
+      <div class="cal-nav">
+        <button type="button" class="cal-btn" id="cal-prev">&lsaquo; Prev</button>
+        <span class="cal-range" id="cal-range">Loading…</span>
+        <button type="button" class="cal-btn" id="cal-next">Next &rsaquo;</button>
+      </div>
+      <div class="cal-actions">
+        <button type="button" class="cal-btn danger" id="cal-block-week"
+          title="Blocks every day shown in this week, so a caller asking for a time is told there is nothing.">Block everything this week</button>
+        <button type="button" class="cal-btn" id="cal-clear-blocks"
+          title="Removes every block. The agent offers all of these times again.">Clear all blocks</button>
+        <button type="button" class="cal-btn" id="cal-clear-bookings"
+          title="Test control. Deletes every booking in the calendar store so a demo can be re-run. Not for real tours.">Clear test bookings <span class="cal-tag">test control</span></button>
+      </div>
+    </div>
+    <div id="cal-banner"></div>
+    <div class="cal-scroll"><div class="cal-grid" id="cal-grid"></div></div>
+    <div class="cal-empty" id="cal-empty"></div>
+    <div class="cal-foot">
+      <span class="cal-legend">
+        <span><i class="open"></i>open</span><span><i class="blocked"></i>blocked</span><span><i class="booked"></i>booked</span>
+      </span>
+      <span class="cal-hint">Click a slot — or Tab to it and press Enter or Space — to block or unblock it; a day header does the whole day. Times are New York.</span>
+      <span class="cal-msg" id="cal-msg"></span>
+      <span id="cal-store">Loading…</span>
+    </div>
+  </div>
+
+  <h2>Calls</h2>
+  <div id="calls-vapi"></div>
+
+  <h2>Call activity</h2>
+  <div id="calls"></div>
+
+  <div class="note" id="note"></div>
+</div>
+
+<script>
+// Every timestamp on this page is shown in New York, where the building is; the viewer's
+// zone is ignored. The calendar section explains why.
+const NY_TZ = 'America/New_York'
+/**
+ * Own-property lookup for the style/label maps below. A stage or status the server sends
+ * that happens to be an inherited key ('constructor', '__proto__') must fall to the
+ * default, not paint Object.prototype's function source into a class attribute.
+ */
+const pick = (map, k, dflt) => Object.prototype.hasOwnProperty.call(map, k) ? map[k] : dflt
+const KIND_STYLE = {
+  emergency:'danger', escalated:'danger', question_refused:'warn',
+  tour_booked:'ok', availability_checked:'', signal_captured:'ok',
+  question_answered:'', loss_reason:'warn', quote_gate:'warn', error:'danger',
+}
+const LABEL = {
+  signal_captured:'captured', quote_gate:'quote gate', availability_checked:'availability',
+  question_answered:'answered', question_refused:'refused', tour_booked:'tour',
+  escalated:'escalated', emergency:'emergency', loss_reason:'loss reason',
+  slots_listed:'slots', call_status:'call', error:'error',
+}
+const money = n => '$' + Number(n).toLocaleString('en-US')
+
+function describe(e){
+  switch(e.kind){
+    case 'signal_captured':
+      return {body:`${e.signal} = ${e.value}`, excerpt:e.excerpt,
+              meta:`confidence ${Math.round((e.confidence??0)*100)}%`}
+    case 'quote_gate':
+      return {body: e.allowed ? 'Cleared to quote'
+        : `Blocked — has ${(e.captured||[]).join(', ')||'nothing'}, still needs ${(e.missing||[]).join(', ')}`}
+    case 'availability_checked':
+      if(e.outcome==='priced_out') return {
+        body:`Priced out — ceiling ${money(e.budgetMax)}, cheapest available ${money(e.cheapestAvailable)}`,
+        meta:`gap ${money(e.gap)} · this is the countable loss reason`}
+      if(e.outcome==='matches') return {body:`Offered ${(e.unitsOffered||[]).join(', ')}`}
+      return {body:`No match — ${e.outcome}`}
+    case 'question_answered':
+      return {body:`"${e.question}" → ${e.decision}`,
+              meta:(e.sources&&e.sources.length)?`sources ${e.sources.join(', ')}`:`topic ${e.topic}`}
+    case 'question_refused':
+      return {body:`"${e.question}" → refused, did not guess`,
+              meta:`${e.reason} · asked ${e.timesAsked||1}×`}
+    case 'tour_booked':
+      return {body:`${e.status.toUpperCase()} — ${e.slot}${e.unitId?` · unit ${e.unitId}`:''}`,
+              meta:[e.prospectName,e.prospectEmail].filter(Boolean).join(' · ')}
+    case 'escalated': return {body:`${e.trigger}`, meta:e.detail||''}
+    case 'emergency': return {body:`${e.emergencyKind} detected`, excerpt:e.matched}
+    case 'loss_reason':
+      return {body:`${e.reason?.kind} — ${e.reason?.detail}`, excerpt:e.reason?.evidence}
+    case 'slots_listed': return {body:`${e.count} tour times offered`}
+    case 'call_status': return {body:e.status}
+    case 'error': return {body:e.message}
+    default: return {body:JSON.stringify(e)}
+  }
+}
+
+function renderCalls(d){
+  const el = document.getElementById('calls-vapi')
+  if (!el) return
+  if (d.callsError) {
+    el.innerHTML = `<div class="empty"><strong>Call history unavailable</strong>${escapeHtml(d.callsError)}
+      ${d.callsConfigured === false ? '<br>Set <code>VAPI_PRIVATE_KEY</code> in the Vercel project and redeploy.' : ''}</div>`
+    return
+  }
+  const calls = d.calls || []
+  if (!calls.length) {
+    el.innerHTML = `<div class="empty"><strong>No calls yet</strong>
+      Call <a class="tel" href="tel:+15169909252">(516) 990-9252</a>.</div>`
+    return
+  }
+  el.innerHTML = calls.map(c => {
+    const when = c.startedAt ? fmtNy(c.startedAt) : '—'
+    const tools = (c.toolCalls||[]).map(t => `<div class="tc">
+        <span class="tc-name">${escapeHtml(t.name)}</span>
+        <div class="tc-args">${escapeHtml(JSON.stringify(t.arguments))}</div>
+        ${t.result
+          ? `<div class="tc-res">${escapeHtml(String(t.result).slice(0,600))}</div>`
+          : `<div class="tc-none">no result returned — this is what a hung call looks like</div>`}
+      </div>`).join('') || '<div class="tc tc-none">No tools were called on this call.</div>'
+    return `<div class="vcall">
+      <div class="vcall-h">
+        <span class="vcall-who">${escapeHtml(c.customerNumber || 'Unknown caller')}</span>
+        <span class="vcall-meta">${when} · ${c.durationSeconds!=null?c.durationSeconds+'s':'—'} · ${escapeHtml(c.endedReason||'')}</span>
+      </div>
+      ${tools}
+      ${c.transcript ? `<details><summary>Transcript</summary><div class="tx">${escapeHtml(c.transcript)}</div></details>` : ''}
+    </div>`
+  }).join('')
+}
+
+function render(data){
+  renderCalls(data)
+  const evs = data.events || []
+  const byCall = {}
+  for(const e of evs){ (byCall[e.callId] ||= []).push(e) }
+
+  const calls = Object.keys(byCall)
+  const booked = evs.filter(e=>e.kind==='tour_booked'&&e.status==='confirmed').length
+  const esc = evs.filter(e=>e.kind==='escalated').length
+  const refused = evs.filter(e=>e.kind==='question_refused').length
+  const pricedOut = evs.filter(e=>e.kind==='availability_checked'&&e.outcome==='priced_out')
+  const avgGap = pricedOut.length
+    ? Math.round(pricedOut.reduce((s,e)=>s+(e.gap||0),0)/pricedOut.length) : null
+
+  document.getElementById('tiles').innerHTML = [
+    [calls.length,'Calls'], [booked,'Tours booked'], [esc,'Escalations'],
+    [refused,'Refused to guess'], [pricedOut.length,'Priced out'],
+    [avgGap!==null?money(avgGap):'—','Avg gap'],
+  ].map(([n,l])=>`<div class="tile"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('')
+
+  const el = document.getElementById('calls')
+  if(calls.length===0){
+    el.innerHTML = `<div class="empty"><strong>No calls yet</strong>
+      Call <a class="tel" href="tel:+15169909252">(516) 990-9252</a> and this fills in as it happens.</div>`
+    return
+  }
+
+  el.innerHTML = calls.reverse().map(id=>{
+    const rows = byCall[id].map(e=>{
+      const d = describe(e)
+      const t = new Date(e.at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:NY_TZ})
+      return `<div class="ev"><div class="t">${t}</div><div>
+        <span class="k ${pick(KIND_STYLE, e.kind, '')}">${escapeHtml(pick(LABEL, e.kind, e.kind))}</span>
+        <div class="body">${escapeHtml(d.body||'')}</div>
+        ${d.excerpt?`<div class="ex">"${escapeHtml(d.excerpt)}"</div>`:''}
+        ${d.meta?`<div class="meta">${escapeHtml(d.meta)}</div>`:''}
+      </div></div>`
+    }).join('')
+    return `<div class="call"><div class="call-h">
+      <span class="call-id">${escapeHtml(id)}</span>
+      <span class="call-id">${byCall[id].length} events</span>
+    </div>${rows}</div>`
+  }).join('')
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
+}
+
+/**
+ * The tour calendar. Reads and writes /api/calendar, which sits behind the same session as
+ * this page, so a 401 there means what a 401 on the log means: back to the gate.
+ *
+ * Every write re-renders from the state the server returns, never from what the click
+ * assumed. A poll that lands while a write is in flight is dropped rather than painted, so
+ * the grid cannot flash back to a state the owner has already changed. Times are shown in
+ * America/New_York because that is where the building is; the browser's zone is ignored.
+ */
+const nyFormat = new Intl.DateTimeFormat('en-US', {
+  timeZone:NY_TZ, hourCycle:'h23', year:'numeric', month:'2-digit', day:'2-digit',
+  hour:'2-digit', minute:'2-digit',
+})
+function nyParts(d){
+  const o = {}
+  for(const p of nyFormat.formatToParts(d)) o[p.type] = p.value
+  return o
+}
+const nyDate = d => { const p = nyParts(d); return `${p.year}-${p.month}-${p.day}` }
+const nyMinutes = d => { const p = nyParts(d); return (Number(p.hour) % 24) * 60 + Number(p.minute) }
+const ymdToUtc = ymd => { const [y, m, d] = ymd.split('-').map(Number); return Date.UTC(y, m - 1, d, 12) }
+const addDays = (ymd, n) => new Date(ymdToUtc(ymd) + n * 86400000).toISOString().slice(0, 10)
+const daysBetween = (a, b) => Math.round((ymdToUtc(b) - ymdToUtc(a)) / 86400000)
+function dayLabel(ymd){
+  const t = new Date(ymdToUtc(ymd))
+  return {
+    dn: t.toLocaleDateString('en-US', {weekday:'short', timeZone:'UTC'}),
+    dd: t.toLocaleDateString('en-US', {month:'short', day:'numeric', timeZone:'UTC'}),
+  }
+}
+const fmtTime = mins => {
+  const h = Math.floor(mins / 60) % 24, m = mins % 60
+  return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')}${h < 12 ? 'a' : 'p'}`
+}
+const isDate = t => /^\d{4}-\d{2}-\d{2}$/.test(String(t))
+const cssq = s => (window.CSS && CSS.escape) ? CSS.escape(String(s)) : String(s).replace(/["\\]/g, '\\$&')
+
+const cal = { state:null, key:'', page:0, busy:false, seq:0, pollError:false }
+
+/** Where the visible window starts, how many pages it needs, and the union of business hours. */
+function calLayout(state){
+  const slots = state.slots || []
+  const today = nyDate(new Date())
+  let start = today, end = today
+  for(const s of slots){ if(s.date < start) start = s.date; if(s.date > end) end = s.date }
+  const pages = Math.max(2, Math.ceil((daysBetween(start, end) + 1) / 7))
+  let minM = Infinity, maxM = -Infinity
+  for(const s of slots){
+    const a = new Date(s.startsAt), b = new Date(s.endsAt)
+    const t0 = nyMinutes(a), t1 = t0 + Math.round((b - a) / 60000)
+    if(t0 < minM) minM = t0
+    if(t1 > maxM) maxM = t1
+  }
+  if(!(minM < maxM)){ minM = 10 * 60; maxM = 19 * 60 }
+  return { today, start, end, pages, minM, maxM }
+}
+function visibleDays(L){
+  const out = []
+  for(let i = 0; i < 7; i++) out.push(addDays(L.start, cal.page * 7 + i))
+  return out
+}
+
+function calMessage(text, isError){
+  const el = document.getElementById('cal-msg')
+  el.textContent = text || ''
+  el.classList.toggle('err', !!isError)
+}
+
+function renderCalendar(){
+  const state = cal.state
+  if(!state) return
+  const L = calLayout(state)
+  cal.page = Math.min(Math.max(cal.page, 0), L.pages - 1)
+  const days = visibleDays(L)
+  const first = dayLabel(days[0]), last = dayLabel(days[6])
+  document.getElementById('cal-range').textContent =
+    `Week ${cal.page + 1} of ${L.pages} · ${first.dd} – ${last.dd}`
+  document.getElementById('cal-prev').disabled = cal.page === 0
+  document.getElementById('cal-next').disabled = cal.page >= L.pages - 1
+
+  const store = state.store || {}
+  const blocks = state.blocks || [], bookings = state.bookings || [], slots = state.slots || []
+  // A store that reports it could not be reached (`store.error`, if the API ever sends it)
+  // must not be painted as an empty calendar the owner then believes.
+  const storeError = store.error ? String(store.error) : ''
+  document.getElementById('cal-banner').innerHTML = store.durable === false
+    ? `<div class="warn-banner"><b>Blocks will not persist.</b> ${escapeHtml(store.note || '')}</div>`
+    : storeError
+      ? `<div class="warn-banner"><b>The calendar store is not answering.</b> This is probably an empty calendar rather than the real one; wait for it to recover before changing anything. ${escapeHtml(storeError)}</div>`
+      : ''
+  // Blocks on slots that have passed, or on ids the calendar no longer generates, are
+  // invisible on the grid but still counted — say so, so "3 blocks" over an empty grid is
+  // not a mystery. "Clear all blocks" removes them.
+  const shownSlots = new Set(slots.map(s => s.slotId))
+  const unseen = blocks.filter(b => isDate(b.target)
+    ? (b.target < L.today || b.target > L.end) : !shownSlots.has(b.target)).length
+  document.getElementById('cal-store').textContent =
+    `store ${store.kind || '?'} · ${storeError ? 'unreachable' : store.durable ? 'durable' : 'not durable'} · ` +
+    `${blocks.length} block${blocks.length === 1 ? '' : 's'}${unseen ? ` (${unseen} on times not shown)` : ''} · ` +
+    `${bookings.length} booking${bookings.length === 1 ? '' : 's'}`
+
+  const dayBlocks = new Map(), slotBlocks = new Map()
+  for(const b of blocks){
+    const m = isDate(b.target) ? dayBlocks : slotBlocks
+    if(!m.has(b.target)) m.set(b.target, b)
+  }
+  const countByDay = {}, openByDay = {}
+  for(const s of slots){
+    countByDay[s.date] = (countByDay[s.date] || 0) + 1
+    if(s.status === 'open') openByDay[s.date] = (openByDay[s.date] || 0) + 1
+  }
+
+  // Every cell is a button to assistive tech (role="button"), and every operable one is in
+  // the Tab order (tabindex="0"); Enter and Space go through the grid's keydown handler to
+  // the same delegated click handler the mouse uses. A screen reader gets the title as the
+  // name (an open slot has no visible text). Booked cells keep the role but are
+  // aria-disabled and out of the Tab order: there is nothing to do to one.
+  let html = ''
+  days.forEach((d, i) => {
+    const lab = dayLabel(d), blk = dayBlocks.get(d)
+    const count = blk ? 'day blocked' : countByDay[d] ? `${openByDay[d] || 0} open` : 'no slots'
+    const title = blk
+      ? `${lab.dn} ${lab.dd} — whole day blocked: ${blk.reason || 'blocked'}. Unblock the day.`
+      : `${lab.dn} ${lab.dd} — ${count}. Block the whole day.`
+    html += `<div role="button" tabindex="0" class="cal-day${blk ? ' blocked' : ''}${d === L.today ? ' today' : ''}"
+      style="grid-column:${i + 2}" data-date="${escapeHtml(d)}" aria-pressed="${blk ? 'true' : 'false'}"
+      title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">
+      <span class="cal-dn">${escapeHtml(lab.dn)}</span><span class="cal-dd">${escapeHtml(lab.dd)}</span>
+      <span class="cal-dc">${escapeHtml(count)}</span></div>`
+  })
+
+  const rows = Math.ceil((L.maxM - L.minM) / 30)
+  for(let r = 0; r < rows; r++)
+    html += `<div class="cal-t" style="grid-row:${r + 2}">${escapeHtml(fmtTime(L.minM + r * 30))}</div>`
+
+  for(const s of slots){
+    const col = days.indexOf(s.date)
+    if(col < 0) continue
+    const a = new Date(s.startsAt), b = new Date(s.endsAt)
+    const t0 = nyMinutes(a), t1 = t0 + Math.round((b - a) / 60000)
+    const row = Math.round((t0 - L.minM) / 30)
+    if(row < 0 || row >= rows) continue
+    const lab = dayLabel(s.date)
+    const when = `${lab.dn} ${lab.dd}, ${fmtTime(t0)}–${fmtTime(t1)}`
+    const pos = `grid-column:${col + 2};grid-row:${row + 2}`
+    if(s.status === 'booked'){
+      const who = (s.booking && s.booking.prospectName) || 'booked'
+      const unit = s.booking && s.booking.unitId
+      const title = `${when} · booked — ${who}${unit ? `, unit ${unit}` : ''}`
+      html += `<div role="button" aria-disabled="true" class="cal-s booked" style="${pos}" data-slot="${escapeHtml(s.slotId)}"
+        title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">${escapeHtml(unit ? `${who} · ${unit}` : who)}</div>`
+      continue
+    }
+    // A slot under both its own block and a day block shows its own, so unblocking it
+    // removes that and leaves the day block in plain view — rather than a click that removes
+    // the day block and leaves the cell red. The blocks list decides; s.block is the fallback.
+    const own = slotBlocks.get(s.slotId), dayBlk = dayBlocks.get(s.date)
+    const whole = own ? false : dayBlk ? true : !!(s.block && s.block.wholeDay)
+    const reason = (own || dayBlk || s.block || {}).reason || 'blocked'
+    const blocked = s.status === 'blocked'
+    const title = blocked
+      ? `${when} · blocked${whole ? ' (whole day)' : ''} — ${reason}. Unblock${whole ? ' the day' : ''}.`
+      : `${when} · open. Block this slot.`
+    html += `<div role="button" tabindex="0" class="cal-s ${escapeHtml(s.status)}" style="${pos}"
+      data-slot="${escapeHtml(s.slotId)}" data-date="${escapeHtml(s.date)}" data-status="${escapeHtml(s.status)}"
+      data-whole="${whole ? '1' : ''}" data-when="${escapeHtml(when)}" aria-pressed="${blocked ? 'true' : 'false'}"
+      title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">${escapeHtml(blocked ? reason : '')}</div>`
+  }
+
+  // Replacing the grid's HTML would drop a keyboard user's focus to the page body; put it
+  // back on the same cell afterwards, where one still exists.
+  const grid = document.getElementById('cal-grid')
+  const active = document.activeElement
+  const keep = active && grid.contains(active) && active.dataset
+    ? (active.dataset.slot ? `.cal-s[data-slot="${cssq(active.dataset.slot)}"]`
+      : active.dataset.date ? `.cal-day[data-date="${cssq(active.dataset.date)}"]` : null)
+    : null
+  grid.innerHTML = html
+  if(keep){ const el = grid.querySelector(keep); if(el) el.focus({preventScroll:true}) }
+  document.getElementById('cal-empty').textContent = slots.length
+    ? '' : 'No tour slots in the window — everything is inside the notice period or outside business hours.'
+}
+
+async function calPost(body){
+  const r = await fetch('/api/calendar', {
+    method:'POST', credentials:'same-origin', cache:'no-store',
+    headers:{'content-type':'application/json', accept:'application/json'},
+    body:JSON.stringify(body),
+  })
+  if(r.status === 401 || r.status === 403){ toGate(); throw new Error('Signed out') }
+  const d = await r.json().catch(() => ({}))
+  if(!r.ok) throw new Error(d.error || ('HTTP ' + r.status))
+  return d
+}
+
+function applyCalendarState(d){
+  cal.seq++ // any poll already in flight is stale now
+  cal.state = d
+  cal.key = JSON.stringify([d.slots, d.blocks, d.bookings, d.store])
+  renderCalendar()
+}
+
+/** Runs one owner action. `fn` does its own POSTs and returns the last state, or null to cancel. */
+async function calAct(fn){
+  if(cal.busy) return
+  cal.busy = true
+  let failed = false
+  try{
+    const last = await fn()
+    if(last) applyCalendarState(last)
+    calMessage('')
+  }catch(err){
+    failed = true
+    calMessage(err && err.message ? err.message : String(err), true)
+  }finally{
+    cal.busy = false
+  }
+  // A write that failed may still have changed the store — a response lost in transit, or
+  // a multi-step action that stopped partway. Re-read now rather than show a stale grid
+  // under the error until the next poll. Not after a sign-out: polling has stopped.
+  if(failed && timer !== null) tickCalendar()
+}
+
+function askReason(msg){
+  const r = prompt(msg, 'blocked')
+  if(r === null) return null
+  return (r.trim() || 'blocked').slice(0, 120)
+}
+
+async function tickCalendar(){
+  if(cal.busy) return
+  const seq = ++cal.seq
+  try{
+    const r = await fetch('/api/calendar', {
+      cache:'no-store', credentials:'same-origin', headers:{accept:'application/json'},
+    })
+    if(r.status === 401 || r.status === 403){ toGate(); return }
+    const d = await r.json().catch(() => ({}))
+    if(!r.ok) throw new Error(d.error || ('HTTP ' + r.status))
+    if(seq !== cal.seq || cal.busy) return // something newer landed meanwhile
+    if(cal.pollError){ cal.pollError = false; calMessage('') }
+    const key = JSON.stringify([d.slots, d.blocks, d.bookings, d.store])
+    if(key === cal.key) return
+    cal.state = d; cal.key = key
+    renderCalendar()
+  }catch(err){
+    cal.pollError = true
+    calMessage('Calendar unavailable — ' + (err && err.message ? err.message : err), true)
+  }
+}
+
+document.getElementById('cal-prev').addEventListener('click', () => { cal.page--; renderCalendar() })
+document.getElementById('cal-next').addEventListener('click', () => { cal.page++; renderCalendar() })
+
+document.getElementById('cal-grid').addEventListener('click', ev => {
+  if(!cal.state) return
+  const slot = ev.target.closest('.cal-s')
+  if(slot){
+    const { slot:slotId, date, status, whole, when } = slot.dataset
+    if(status === 'open'){
+      calAct(async () => {
+        const reason = askReason(`Block ${when}?\nReason:`)
+        return reason === null ? null : calPost({action:'block', target:slotId, reason})
+      })
+    } else if(status === 'blocked'){
+      calAct(async () => {
+        if(whole){
+          if(!confirm(`${when} is blocked because the whole day is. Unblock the entire day?`)) return null
+          return calPost({action:'unblock', target:date})
+        }
+        return calPost({action:'unblock', target:slotId})
+      })
+    }
+    return // booked slots are not clickable
+  }
+  const day = ev.target.closest('.cal-day')
+  if(day){
+    const date = day.dataset.date
+    const lab = dayLabel(date)
+    const blocked = (cal.state.blocks || []).some(b => b.target === date)
+    calAct(async () => {
+      if(blocked){
+        return confirm(`Unblock the whole of ${lab.dn} ${lab.dd}?`)
+          ? calPost({action:'unblock', target:date}) : null
+      }
+      const reason = askReason(`Block the whole of ${lab.dn} ${lab.dd}?\nReason:`)
+      return reason === null ? null : calPost({action:'block', target:date, reason})
+    })
+  }
+})
+
+// Enter and Space on a cell do what a click does, through the same handler. Space's default
+// (scroll the page) is suppressed; Enter has none on a div. aria-disabled cells — booked
+// slots — are left alone, as a disabled button would be.
+document.getElementById('cal-grid').addEventListener('keydown', ev => {
+  if(ev.key !== 'Enter' && ev.key !== ' ') return
+  const cell = ev.target.closest('[role="button"]')
+  if(!cell || cell.getAttribute('aria-disabled') === 'true') return
+  ev.preventDefault()
+  cell.click()
+})
+
+document.getElementById('cal-block-week').addEventListener('click', () => {
+  if(!cal.state) return
+  const days = visibleDays(calLayout(cal.state))
+  calAct(async () => {
+    const reason = askReason(
+      `Block every day from ${dayLabel(days[0]).dd} to ${dayLabel(days[6]).dd}?\nReason:`)
+    if(reason === null) return null
+    let last = null, current = null
+    try{
+      for(const d of days){
+        current = d
+        calMessage(`Blocking ${d}…`)
+        last = await calPost({action:'block', target:d, reason})
+      }
+    }catch(err){
+      // The days before this one are blocked in the store. Paint that state now, then
+      // report the failure — otherwise the grid shows them open until the next poll.
+      if(last) applyCalendarState(last)
+      const why = err && err.message ? err.message : String(err)
+      throw new Error(`Blocking ${dayLabel(current).dd} failed — ${why}. Earlier days in the week are blocked.`)
+    }
+    return last
+  })
+})
+document.getElementById('cal-clear-blocks').addEventListener('click', () => {
+  calAct(async () => confirm('Remove every block from the calendar? The agent will offer all of these times again.')
+    ? calPost({action:'clear_blocks'}) : null)
+})
+document.getElementById('cal-clear-bookings').addEventListener('click', () => {
+  calAct(async () => confirm(
+    'TEST CONTROL: this deletes every booking in the calendar store, including any real tour. ' +
+    'Only use it to reset between test calls. Continue?')
+    ? calPost({action:'clear_bookings'}) : null)
+})
+
+/**
+ * Leads: one card per caller, and the follow-up queue derived from them. Reads and writes
+ * /api/leads, which sits behind the same session as this page. Same discipline as the
+ * calendar: poll every tick, drop a poll that lands while a write is in flight, re-render
+ * only when something changed, and paint what the server returned rather than what the
+ * click assumed. Every string here came out of a caller's mouth or a person's keyboard,
+ * so all of it goes through escapeHtml.
+ *
+ * The queue is honest about what it is. Outbound calling is not enabled, so "Done" means a
+ * person did it and "Skip" means nobody will. Nothing on this page places a call.
+ */
+const leads = { state:null, key:'', busy:false, seq:0, pollError:false, open:new Set() }
+
+const FU_KIND = {
+  confirm_tour:'Confirm tour', remind_tour:'Remind about tour', post_tour:'Post-tour check-in',
+  priced_out_watch:'Priced-out watch', nurture:'Nurture', callback:'Callback', collect_email:'Collect email',
+}
+const FU_CHANNEL = { call:'call', sms:'SMS', email:'email' }
+const STAGE = {
+  new:['New', ''], qualified:['Qualified', ''], tour_scheduled:['Tour scheduled', 'ok'],
+  toured:['Toured', 'ok'], lost:['Lost', 'danger'], escalated:['Escalated', 'warn'],
+}
+const BOOKING_STYLE = { confirmed:'ok', arranging:'warn', failed:'danger' }
+const FU_STATUS_STYLE = { scheduled:'', done:'ok', skipped:'warn' }
+const humanise = s => { const t = String(s || '').replace(/_/g, ' '); return t.charAt(0).toUpperCase() + t.slice(1) }
+const leadDomId = phone => 'lead-' + (String(phone).replace(/\D/g, '') || 'unknown')
+const leadName = p => (p && p.name) ? p.name : 'Unknown caller'
+const pct = c => `${Math.round((Number(c) || 0) * 100)}%`
+const fmtDuration = s => s == null ? '—' : s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`
+
+const nyStamps = {}
+/** "Tue Sep 8, 2:00 PM" in New York. The year appears only when it is not this year. */
+function fmtNy(iso, withWeekday){
+  const t = Date.parse(iso)
+  if(isNaN(t)) return '—'
+  const d = new Date(t)
+  const thisYear = nyParts(d).year === nyParts(new Date()).year
+  const k = (withWeekday ? 'w' : '') + (thisYear ? '' : 'y')
+  nyStamps[k] ||= new Intl.DateTimeFormat('en-US', {
+    timeZone:NY_TZ, month:'short', day:'numeric', hour:'numeric', minute:'2-digit',
+    ...(withWeekday ? {weekday:'short'} : {}), ...(thisYear ? {} : {year:'numeric'}),
+  })
+  return nyStamps[k].format(d)
+}
+/**
+ * A date-only value ("2026-10-01") or an instant, shown as a calendar day.
+ *
+ * The move-in parser encodes "October", "spring" and "2026-10-15" as UTC midnight of the
+ * day the caller meant, and UTC midnight is the previous evening in New York — rendered
+ * in the building's zone, "October" came out as "Sep 30 to Oct 31", contradicting the
+ * caller's own words on the same line. A UTC-midnight instant is therefore read as the
+ * calendar day it encodes. Relative windows ("in 2 months", "asap") are true instants and
+ * still land on their New York day.
+ */
+function fmtNyDay(v){
+  if(isDate(v)) return new Date(ymdToUtc(v)).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric', timeZone:'UTC'})
+  const s = String(v || '')
+  if(/^\d{4}-\d{2}-\d{2}T00:00:00(\.\d{3})?Z$/.test(s)) return fmtNyDay(s.slice(0, 10))
+  const t = Date.parse(v)
+  return isNaN(t) ? String(v || '—')
+    : new Date(t).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric', timeZone:NY_TZ})
+}
+
+/** Overdue / Today / Upcoming, judged on New York's calendar, not the browser's. */
+function fuGroup(f, now, today){
+  const t = Date.parse(f.dueAt)
+  if(isNaN(t)) return 'upcoming'
+  if(t <= now) return 'overdue'
+  return nyDate(new Date(t)) === today ? 'today' : 'upcoming'
+}
+const byDue = (a, b) => (Date.parse(a.dueAt) || 0) - (Date.parse(b.dueAt) || 0)
+const scheduledOf = d => (d.followUps || []).filter(f => f.status === 'scheduled').sort(byDue)
+
+/**
+ * What a repaint depends on. generatedAt is left out (it changes on every poll); the group
+ * each scheduled follow-up falls in is put in, so the queue repaints when a follow-up
+ * crosses from Today into Overdue even though the data has not changed.
+ */
+function leadsKey(d){
+  const now = Date.now(), today = nyDate(new Date(now))
+  return JSON.stringify([d.profiles, d.followUps, d.outboundEnabled, d.store,
+    scheduledOf(d).map(f => fuGroup(f, now, today))])
+}
+
+function leadsMessage(text, isError){
+  const el = document.getElementById('leads-msg')
+  el.textContent = text || ''
+  el.classList.toggle('err', !!isError)
+}
+
+/** Each captured signal as [label, value, evidence]; the evidence carries the excerpt. */
+function signalLines(p){
+  const s = p.signals || {}, out = []
+  const bedrooms = n => n === 0 ? 'studio or larger' : `${n}+ bedroom${n === 1 ? '' : 's'}`
+  const moveIn = v => {
+    if(!v || typeof v !== 'object') return String(v ?? '—')
+    const range = `${fmtNyDay(v.earliest)}${v.latest ? ` to ${fmtNyDay(v.latest)}` : ' or later'}`
+    return v.said ? `${v.said} — ${range}` : range
+  }
+  if(s.budget) out.push(['Budget', `up to ${money(s.budget.value)}/mo`, s.budget])
+  if(s.bedrooms) out.push(['Bedrooms', bedrooms(Number(s.bedrooms.value)), s.bedrooms])
+  if(s.moveIn) out.push(['Move-in', moveIn(s.moveIn.value), s.moveIn])
+  if(s.pets) out.push(['Pets', String(s.pets.value), s.pets])
+  if(s.parking) out.push(['Parking', String(s.parking.value), s.parking])
+  return out
+}
+
+/** The words that justified a conclusion are the point; their absence is said, not hidden. */
+const quote = q => `<div class="ex">${q ? `"${escapeHtml(q)}"` : 'no excerpt recorded'}</div>`
+
+function renderLeadCard(p, fus){
+  const phone = String(p.phone || 'unknown'), name = leadName(p)
+  const st = pick(STAGE, p.stage, [humanise(p.stage), ''])
+  const pill = `<span class="k ${st[1]}">${escapeHtml(st[0])}</span>`
+  const open = fus.filter(f => f.status === 'scheduled').length
+  const sec = (title, body) => body ? `<div class="lead-sec"><h3>${title}</h3>${body}</div>` : ''
+
+  const signals = signalLines(p).map(([l, v, e]) => `<div class="sig">
+      <div><span class="sig-l">${l}:</span> <b>${escapeHtml(v)}</b></div>
+      ${quote(e.excerpt)}
+      <div class="meta">confidence ${pct(e.confidence)} · ${escapeHtml(fmtNy(e.at))}</div>
+    </div>`).join('')
+
+  const units = (p.unitsDiscussed || []).map(u => `<span class="k">${escapeHtml(u)}</span>`).join(' ')
+
+  const bookings = (p.bookings || []).map(b => `<div class="lead-row">
+      <span class="t">${escapeHtml(fmtNy(b.startsAt, true))}</span>
+      <span>${b.unitId ? `unit ${escapeHtml(b.unitId)}` : 'no unit chosen'}</span>
+      <span class="k ${pick(BOOKING_STYLE, b.status, '')}">${escapeHtml(humanise(b.status))}</span>
+    </div>`).join('')
+
+  const losses = (p.lossReasons || []).map(l => `<div class="sig">
+      <div><b>${escapeHtml(humanise(l.kind))}</b>${l.detail ? ` — ${escapeHtml(l.detail)}` : ''}</div>
+      ${quote(l.evidence)}
+      <div class="meta">${l.confidence != null ? `confidence ${pct(l.confidence)} · ` : ''}${escapeHtml(fmtNy(l.at))}</div>
+    </div>`).join('')
+
+  const escalations = (p.escalations || []).map(e => `<div class="sig">
+      <div><b>${escapeHtml(humanise(e.trigger))}</b>${e.detail ? ` — ${escapeHtml(e.detail)}` : ''}</div>
+      <div class="meta">${escapeHtml(fmtNy(e.at))}${e.callId ? ` · call ${escapeHtml(e.callId)}` : ''}</div>
+    </div>`).join('')
+
+  // Done and skipped follow-ups stay on the card with a way back, so a wrong click is a
+  // click to undo rather than a lost intention.
+  const fuRows = [...fus].sort(byDue).map(f => `<div class="lead-row">
+      <span class="t">${escapeHtml(fmtNy(f.dueAt, true))}</span>
+      <span><b>${escapeHtml(pick(FU_KIND, f.kind, humanise(f.kind)))}</b> · ${escapeHtml(pick(FU_CHANNEL, f.channel, f.channel))}</span>
+      <span class="k ${pick(FU_STATUS_STYLE, f.status, '')}">${escapeHtml(f.status)}</span>
+      ${f.status === 'scheduled' ? '' : `<button type="button" class="btn" data-fu="${escapeHtml(f.id)}"
+        data-status="scheduled" data-fk="fu:${escapeHtml(f.id)}:reopen">Reopen</button>`}
+    </div>`).join('')
+
+  const calls = [...(p.calls || [])].sort((a, b) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0))
+    .map(c => `<div class="lead-row">
+      <span class="t">${escapeHtml(fmtNy(c.at, true))}</span>
+      <span class="t">${escapeHtml(fmtDuration(c.durationSeconds))}</span>
+      <span>${escapeHtml(c.outcome || '')}</span>
+      ${(c.toolsCalled || []).length ? `<span class="meta">tools: ${escapeHtml(c.toolsCalled.join(', '))}</span>` : ''}
+    </div>`).join('')
+
+  // The API stamps each note "<ISO time> <text>"; show the stamp as a New York time.
+  const notes = (p.notes || []).map(n => {
+    const m = /^(\d{4}-\d{2}-\d{2}T\S+)\s+([\s\S]*)$/.exec(String(n))
+    return `<div class="lead-row"><span class="t">${escapeHtml(m ? fmtNy(m[1], true) : '')}</span>
+      <span>${escapeHtml(m ? m[2] : n)}</span></div>`
+  }).join('')
+  // A caller whose number Vapi did not supply consolidates under 'unknown', and the API
+  // refuses to attach a note to that key — so say why there is no form rather than offer
+  // one whose every submit fails.
+  const noteForm = phone === 'unknown'
+    ? `<div class="lead-none">No number was captured for this caller, so notes cannot be attached.</div>`
+    : `<form class="note-form" data-phone="${escapeHtml(phone)}">
+      <input type="text" maxlength="500" placeholder="Add a note — called back, wants the corner unit, …"
+        aria-label="Add a note about ${escapeHtml(name)}" data-phone="${escapeHtml(phone)}" data-fk="note:${escapeHtml(phone)}">
+      <button type="submit" class="btn" data-fk="notebtn:${escapeHtml(phone)}">Add note</button>
+    </form>`
+
+  return `<details class="lead" id="${escapeHtml(leadDomId(phone))}" data-phone="${escapeHtml(phone)}"${leads.open.has(phone) ? ' open' : ''}>
+    <summary data-fk="sum:${escapeHtml(phone)}">
+      <span class="lead-name">${escapeHtml(name)}</span>
+      ${pill}
+      <span class="lead-meta">${escapeHtml(phone)}</span>
+      <span class="lead-meta">seen ${escapeHtml(fmtNy(p.lastSeenAt))}</span>
+      <span class="lead-meta">${open} open follow-up${open === 1 ? '' : 's'}</span>
+      <span class="lead-chev" aria-hidden="true">&rsaquo;</span>
+    </summary>
+    <div class="lead-body">
+      <div class="lead-sec lead-meta">${p.email ? escapeHtml(p.email) : 'no email'} · first seen ${escapeHtml(fmtNy(p.firstSeenAt))} · last seen ${escapeHtml(fmtNy(p.lastSeenAt))}</div>
+      ${sec('Signals', signals || '<span class="lead-none">Nothing captured yet.</span>')}
+      ${sec('Units discussed', units)}
+      ${sec('Bookings', bookings)}
+      ${sec('Loss reasons', losses)}
+      ${sec('Escalations', escalations)}
+      ${sec('Follow-ups', fuRows)}
+      ${sec('Calls', calls)}
+      <div class="lead-sec"><h3>Notes</h3>${notes}${noteForm}</div>
+    </div>
+  </details>`
+}
+
+function renderQueue(d, byPhone, now, today){
+  const el = document.getElementById('fu-list')
+  const list = scheduledOf(d)
+  if(!list.length){
+    el.innerHTML = `<div class="fu-empty">${(d.followUps || []).length
+      ? 'Nothing left to do — every follow-up is done or skipped.'
+      : 'Nothing scheduled. Follow-ups appear here as calls come in.'}</div>`
+    return
+  }
+  const groups = { overdue:[], today:[], upcoming:[] }
+  for(const f of list) groups[fuGroup(f, now, today)].push(f)
+  let html = ''
+  for(const [g, label] of [['overdue', 'Overdue'], ['today', 'Today'], ['upcoming', 'Upcoming']]){
+    const fs = groups[g]
+    if(!fs.length) continue
+    html += `<div class="fu-group ${g}">${label} · ${fs.length}</div>`
+    for(const f of fs){
+      const p = byPhone.get(f.phone)
+      html += `<div class="fu">
+        <div>
+          <div class="fu-due${g === 'overdue' ? ' overdue' : ''}">${escapeHtml(fmtNy(f.dueAt, true))}</div>
+          <span class="k">${escapeHtml(pick(FU_CHANNEL, f.channel, f.channel))}</span>
+        </div>
+        <div>
+          <div><span class="fu-kind">${escapeHtml(pick(FU_KIND, f.kind, humanise(f.kind)))}</span> ·
+            <a class="fu-who" href="#${escapeHtml(leadDomId(f.phone))}" data-phone="${escapeHtml(f.phone)}"
+              data-fk="who:${escapeHtml(f.id)}">${escapeHtml(p ? leadName(p) : 'Unknown caller')}</a>
+            ${p ? '' : `<span class="lead-meta">${escapeHtml(f.phone)}</span>`}</div>
+          <div class="fu-reason">${escapeHtml(f.reason || '')}</div>
+        </div>
+        <div class="fu-act">
+          <button type="button" class="btn" data-fu="${escapeHtml(f.id)}" data-status="done"
+            data-fk="fu:${escapeHtml(f.id)}:done" title="A person has done this. It leaves the queue.">Done</button>
+          <button type="button" class="btn" data-fu="${escapeHtml(f.id)}" data-status="skipped"
+            data-fk="fu:${escapeHtml(f.id)}:skip" title="Nobody will do this. It leaves the queue.">Skip</button>
+        </div>
+      </div>`
+    }
+  }
+  el.innerHTML = html
+}
+
+function renderLeads(){
+  const d = leads.state
+  if(!d) return
+  const now = Date.now(), today = nyDate(new Date(now))
+  const profiles = [...(d.profiles || [])]
+    .sort((a, b) => (Date.parse(b.lastSeenAt) || 0) - (Date.parse(a.lastSeenAt) || 0))
+  const followUps = d.followUps || []
+  const byPhone = new Map(profiles.map(p => [p.phone, p]))
+  const fusByPhone = new Map()
+  for(const f of followUps){ if(!fusByPhone.has(f.phone)) fusByPhone.set(f.phone, []); fusByPhone.get(f.phone).push(f) }
+
+  const scheduled = scheduledOf(d)
+  const overdue = scheduled.filter(f => fuGroup(f, now, today) === 'overdue').length
+  document.getElementById('lead-tiles').innerHTML = [
+    [profiles.length, 'Leads'], [scheduled.length, 'Open follow-ups'], [overdue, 'Overdue'],
+    [profiles.filter(p => p.stage === 'tour_scheduled').length, 'Tours scheduled'],
+    [profiles.filter(p => p.stage === 'lost').length, 'Lost'],
+  ].map(([n, l]) => `<div class="tile"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('')
+
+  // Tied to the flag the API sends, so the line disappears on its own the day outbound is
+  // switched on rather than waiting for someone to remember this page.
+  document.getElementById('fu-note').textContent = d.outboundEnabled === false
+    ? 'Scheduled intentions. Outbound calling is not enabled yet — these show what the system would do, not what it did.'
+    : ''
+
+  const store = d.store || {}
+  document.getElementById('leads-banner').innerHTML = store.durable === false
+    ? `<div class="warn-banner"><b>Leads will not persist.</b> ${escapeHtml(store.note || '')}</div>` : ''
+  document.getElementById('leads-store').textContent =
+    `store ${store.kind || '?'} · ${store.durable ? 'durable' : 'not durable'} · ` +
+    `${profiles.length} lead${profiles.length === 1 ? '' : 's'} · ` +
+    `${followUps.length} follow-up${followUps.length === 1 ? '' : 's'}`
+
+  // Replacing the HTML would drop a keyboard user's focus and any half-typed note. Keep both:
+  // every control carries a data-fk key, and drafts are read back into the new inputs.
+  const root = document.getElementById('leads')
+  const active = document.activeElement
+  const keep = active && root.contains(active) && active.dataset && active.dataset.fk
+    ? { fk:active.dataset.fk, sel:typeof active.selectionStart === 'number' ? active.selectionStart : null }
+    : null
+  const drafts = new Map()
+  for(const inp of root.querySelectorAll('input[data-phone]')) if(inp.value) drafts.set(inp.dataset.phone, inp.value)
+
+  renderQueue(d, byPhone, now, today)
+  document.getElementById('lead-cards').innerHTML = profiles.length
+    ? profiles.map(p => renderLeadCard(p, fusByPhone.get(p.phone) || [])).join('')
+    : `<div class="empty"><strong>No leads yet</strong>
+        Call <a class="tel" href="tel:+15169909252">(516) 990-9252</a> and the caller's card appears here when the call ends.</div>`
+
+  for(const [phone, text] of drafts){
+    const inp = root.querySelector(`input[data-phone="${cssq(phone)}"]`)
+    if(inp) inp.value = text
+  }
+  if(keep){
+    const el = root.querySelector(`[data-fk="${cssq(keep.fk)}"]`)
+    if(el){
+      el.focus({preventScroll:true})
+      if(keep.sel !== null && el.setSelectionRange){ try{ el.setSelectionRange(keep.sel, keep.sel) }catch(e){ /* not a text field */ } }
+    }
+  }
+}
+
+async function leadsPost(body){
+  const r = await fetch('/api/leads', {
+    method:'POST', credentials:'same-origin', cache:'no-store',
+    headers:{'content-type':'application/json', accept:'application/json'},
+    body:JSON.stringify(body),
+  })
+  if(r.status === 401 || r.status === 403){ toGate(); throw new Error('Signed out') }
+  const d = await r.json().catch(() => ({}))
+  if(!r.ok) throw new Error(d.error || ('HTTP ' + r.status))
+  return d
+}
+
+/**
+ * Folds what a write returned into the state and repaints from it. followup_status returns
+ * the one follow-up, note returns the one profile, clear_leads returns both lists empty.
+ */
+function applyLeadsResult(d){
+  leads.seq++ // any poll already in flight is stale now
+  const s = leads.state || {}
+  let profiles = s.profiles || [], followUps = s.followUps || []
+  if(Array.isArray(d.profiles)) profiles = d.profiles
+  if(Array.isArray(d.followUps)) followUps = d.followUps
+  if(d.followUp) followUps = followUps.some(f => f.id === d.followUp.id)
+    ? followUps.map(f => f.id === d.followUp.id ? d.followUp : f) : [...followUps, d.followUp]
+  if(d.profile) profiles = profiles.some(p => p.phone === d.profile.phone)
+    ? profiles.map(p => p.phone === d.profile.phone ? d.profile : p) : [...profiles, d.profile]
+  leads.state = { ...s, profiles, followUps }
+  leads.key = leadsKey(leads.state)
+  renderLeads()
+}
+
+/** Runs one owner action. `fn` does its own POSTs and returns the response, or null to cancel. */
+async function leadAct(fn){
+  if(leads.busy) return
+  leads.busy = true
+  let failed = false
+  try{
+    const last = await fn()
+    if(last) applyLeadsResult(last)
+    leadsMessage('')
+  }catch(err){
+    failed = true
+    leadsMessage(err && err.message ? err.message : String(err), true)
+  }finally{
+    leads.busy = false
+  }
+  // A failed write may still have landed; re-read rather than sit stale under the error.
+  if(failed && timer !== null) tickLeads()
+}
+
+async function tickLeads(){
+  if(leads.busy) return
+  const seq = ++leads.seq
+  try{
+    const r = await fetch('/api/leads', {
+      cache:'no-store', credentials:'same-origin', headers:{accept:'application/json'},
+    })
+    if(r.status === 401 || r.status === 403){ toGate(); return }
+    const d = await r.json().catch(() => ({}))
+    if(!r.ok) throw new Error(d.error || ('HTTP ' + r.status))
+    if(seq !== leads.seq || leads.busy) return // something newer landed meanwhile
+    if(leads.pollError){ leads.pollError = false; leadsMessage('') }
+    const key = leadsKey(d)
+    if(key === leads.key) return
+    leads.state = d; leads.key = key
+    renderLeads()
+  }catch(err){
+    leads.pollError = true
+    leadsMessage('Leads unavailable — ' + (err && err.message ? err.message : err), true)
+  }
+}
+
+/** Opens a lead's card and brings it into view; the name in the queue is a link here. */
+function showLead(phone){
+  leads.open.add(phone)
+  const det = document.getElementById(leadDomId(phone))
+  if(!det) return
+  det.open = true
+  det.scrollIntoView({behavior:'smooth', block:'start'})
+  const sum = det.querySelector('summary')
+  if(sum) sum.focus({preventScroll:true})
+}
+
+const leadsRoot = document.getElementById('leads')
+leadsRoot.addEventListener('click', ev => {
+  const fu = ev.target.closest('[data-fu]')
+  if(fu){
+    const { fu:id, status } = fu.dataset
+    leadAct(async () => leadsPost({action:'followup_status', id, status}))
+    return
+  }
+  const who = ev.target.closest('.fu-who')
+  if(who){ ev.preventDefault(); showLead(who.dataset.phone) }
+})
+leadsRoot.addEventListener('submit', ev => {
+  const form = ev.target.closest('form.note-form')
+  if(!form) return
+  ev.preventDefault()
+  const input = form.querySelector('input'), phone = form.dataset.phone
+  const text = (input.value || '').trim()
+  if(!text) return
+  leadAct(async () => {
+    const d = await leadsPost({action:'note', phone, text})
+    input.value = '' // only once the server has it — a failed post keeps the draft
+    return d
+  })
+})
+// A details element's toggle event does not bubble, so listen in the capture phase. This
+// keeps the open set in step with what the operator did, so a repaint does not fold a card
+// they were reading.
+leadsRoot.addEventListener('toggle', ev => {
+  const det = ev.target
+  if(!(det instanceof HTMLDetailsElement) || !det.dataset.phone) return
+  if(det.open) leads.open.add(det.dataset.phone); else leads.open.delete(det.dataset.phone)
+}, true)
+document.getElementById('leads-clear').addEventListener('click', () => {
+  leadAct(async () => confirm(
+    'TEST CONTROL: this deletes every lead profile and every follow-up in the store, including real prospects. ' +
+    'Only use it to reset between test calls. Continue?')
+    ? leadsPost({action:'clear_leads'}) : null)
+})
+
+/**
+ * The log endpoint is gated by the same operations session that served this page, so the
+ * poll sends the session cookie and treats a 401 as "the session ended", not as a blip. A
+ * dashboard that keeps retrying a closed door looks broken; sending the operator back to
+ * the gate is honest and takes one click to fix.
+ */
+let timer = null
+function stopPolling(){ if(timer !== null){ clearInterval(timer); timer = null } }
+function toGate(){ stopPolling(); location.assign('/api/dashboard') }
+
+async function tick(){
+  tickCalendar() // never throws; it reports its own failures in the calendar footer
+  tickLeads()    // likewise, in the leads footer
+  try{
+    const r = await fetch('/api/vapi', {
+      cache:'no-store', credentials:'same-origin', headers:{accept:'application/json'},
+    })
+    if(r.status === 401 || r.status === 403){ toGate(); return }
+    if(!r.ok) throw new Error('HTTP ' + r.status)
+    const d = await r.json()
+    render(d)
+    document.getElementById('status').textContent =
+      'Live · updated ' + new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})
+    document.getElementById('note').textContent = d.note || ''
+  }catch(err){
+    document.getElementById('status').textContent = 'Reconnecting…'
+  }
+}
+
+document.getElementById('signout').addEventListener('click', async () => {
+  stopPolling()
+  try{
+    await fetch('/api/dashboard', {
+      method:'POST', credentials:'same-origin',
+      headers:{'content-type':'application/json'}, body:JSON.stringify({action:'logout'}),
+    })
+  }catch(err){ /* the cookie expires on its own; go back to the gate regardless */ }
+  location.assign('/api/dashboard')
+})
+
+tick(); timer = setInterval(tick, 5000)
+</script>
+</body>
+</html>
