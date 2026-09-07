@@ -7,9 +7,9 @@
     "owner": "5-08 46th Avenue Owner LLC",
     "jurisdiction": "NY",
     "document": "The Larkin House Rules and Resident Policies",
-    "revision": "rev 2026-08",
+    "revision": "rev 2026-09",
     "effectiveDate": "2026-08-01",
-    "lastReviewed": "2026-08-15",
+    "lastReviewed": "2026-09-07",
     "nextReview": "2027-08-01",
     "approvedBy": "Halbrook Residential Management, Property Operations",
     "contact": {
@@ -50,6 +50,12 @@
         "protected_class_inquiry"
       ],
       "note": "Rents and availability live in the inventory feed, never here. Any request for an accommodation, any question about whether a specific person qualifies, and any dispute goes to the resident manager with full context."
+    },
+    "legalReview": {
+      "status": "pending",
+      "correctedOn": "2026-09-07",
+      "scope": "The regulatory status of the building and everything that follows from it were corrected on 2026-09-07. The file had described the market-rate residences as free-market and not stabilized, which is wrong under RPTL 421-a(16), and it had carried a forfeitable hold deposit, a non-refundable pet fee, move-in and move-out deposits, amenity deposits, and a two-month early termination fee that New York does not permit. Counsel reviews the stabilization language in leaseTerms.regulatoryStatus, the renewal mechanics, and the removal of each of those charges before any of it is quoted to a caller.",
+      "interim": "Until counsel signs off, the leasing team escalates every rent stabilization, renewal increase, and lease termination question to the resident manager instead of answering it. The derived knowledge article for lease terms is held out of the published set for the same reason."
     }
   },
   "policies": {
@@ -73,11 +79,11 @@
         "Any animal prohibited by the NYC Health Code Article 161",
         "Aquariums over 20 gallons"
       ],
-      "oneTimeFeePerPet": 350,
-      "oneTimeFeeRefundable": false,
+      "oneTimeFeePerPet": 0,
+      "petFeeNote": "There is no pet fee. General Obligations Law 7-108(1-a)(a) caps everything an owner may hold to one month's rent as security, and Real Property Law 238-a bars fees outside a short enumerated list, so a non-refundable charge for a pet is not permitted here. Damage a pet causes is repaired and billed at cost after the fact, with photographs and an itemized statement, the same as any other damage.",
       "monthlyPetRent": 0,
       "petDeposit": 0,
-      "depositNote": "There is no separate pet deposit. New York caps total security at one month's rent under General Obligations Law 7-108, so the only pet charge is the one-time $350 fee per pet.",
+      "depositNote": "There is no pet deposit, no pet fee, and no monthly pet rent. General Obligations Law 7-108(1-a)(a) is the reason those charges do not exist, not a justification for them: it caps the total an owner may hold to one month's rent, and Real Property Law 238-a does not list a pet charge among the fees an owner may collect. Pet damage is billed as documented damage after the fact.",
       "restrictedBreeds": [
         "Pit Bull Terrier",
         "American Staffordshire Terrier",
@@ -127,7 +133,7 @@
       "noiseAndNuisance": "A dog that barks for long stretches while you are out is handled the way any noise complaint is handled: a note from the resident manager, then a written notice, then a notice to cure.",
       "violations": "First incident is a written notice. A second within six months is $100. A third is a notice to cure the lease. An unregistered pet, a restricted breed, or a bite incident goes straight to the resident manager.",
       "nycNotes": "New York City's pet law, Administrative Code 27-2009.1, waives a no-pet clause when a pet is kept openly for three months and the landlord does nothing. The Larkin allows pets, so the clause is moot here, but it is the reason we register pets promptly rather than looking the other way.",
-      "residentSummary": "Two pets per residence, fifty pounds each, dogs and cats. The fee is $350 per pet, once, and there is no monthly pet rent. Register the pet at signing with a rabies certificate, a vet record, and the NYC dog license, and check the restricted breed list before you fall in love with a puppy. Your fob opens the Pet Spa on three and The Green on four, and dogs stay leashed everywhere else in the building. Service animals and approved emotional support animals are not pets under the law \u2014 they pay no fee and the breed and weight limits do not apply, and the resident manager handles those requests directly."
+      "residentSummary": "Two pets per residence, fifty pounds each, dogs and cats. There is no pet fee, no pet deposit, and no monthly pet rent \u2014 New York does not permit them, and damage a pet causes is billed at cost after the fact instead. Register the pet at signing with a rabies certificate, a vet record, and the NYC dog license, and check the restricted breed list before you fall in love with a puppy. Your fob opens the Pet Spa on three and The Green on four, and dogs stay leashed everywhere else in the building. Service animals and approved emotional support animals are not pets under the law. They pay no fee, the breed and weight limits do not apply, and the resident manager handles those requests directly."
     },
     "parking": {
       "topic": "parking",
@@ -205,7 +211,7 @@
         "theLarder": "The room seats twelve including you, so eleven guests.",
         "thePlayroom": "Twenty-five people in the room at once counting adults. A child under twelve has an adult with them.",
         "theScreeningRoom": "Eighteen seats, so seventeen guests plus you.",
-        "theOverlook": "Sixty-five people including residents, per the fire occupancy posted at the door. Private events run Friday, Saturday, and Sunday 6:00pm - 11:00pm with a $500 refundable deposit, and a certificate of insurance for any event with catering or bar service. The sky terrace stays open to other residents even during a private event.",
+        "theOverlook": "Sixty-five people including residents, per the fire occupancy posted at the door. Private events run Friday, Saturday, and Sunday 6:00pm - 11:00pm, with a certificate of insurance for any event with catering or bar service. There is no event deposit. Cleaning or damage beyond normal use is billed at cost after the event, with photographs and an itemized statement. The sky terrace stays open to other residents even during a private event.",
         "theStudy": "Six guests in a conference room. The lounge itself is for residents."
       },
       "partiesAndEvents": "Gatherings above ten people belong in a reserved amenity space, not in a residence. Amplified music is not permitted in outdoor amenity space at any hour.",
@@ -225,13 +231,13 @@
       "permittedHours": "Monday through Saturday, 9:00am - 5:00pm. No moves on Sundays and no moves on New Year's Day, Memorial Day, July 4th, Labor Day, Thanksgiving Day, or Christmas Day.",
       "entrance": "Service entrance on 5th Street, into the freight car. Nothing moves through the lobby.",
       "deposit": {
-        "amount": 500,
-        "refundable": true,
-        "appliesTo": "Both move-in and move-out",
-        "return": "Returned to your ledger within 10 business days after the resident manager walks the corridor, the freight car, and the loading area. Damage is deducted with photographs and an itemized statement."
+        "amount": 0,
+        "required": false,
+        "note": "There is no move-in deposit and no move-out deposit. General Obligations Law 7-108(1-a)(a) caps everything the owner may hold to the one-month security deposit, so the building does not take a separate advance to let you move.",
+        "damage": "The resident manager walks and photographs the corridor, the freight car, and the loading area before your block starts and again when it ends. Damage from your move is repaired and billed at cost afterward, with the photographs and an itemized statement."
       },
       "movingFee": 0,
-      "feeNote": "There is no non-refundable move fee. The $500 is a deposit and you get it back.",
+      "feeNote": "There is no move fee and no move deposit. Your mover's certificate of insurance is what stands behind damage during the move; anything past it is billed at cost after the work is done, never collected up front.",
       "certificateOfInsurance": {
         "required": true,
         "dueBy": "5 business days before the move",
@@ -256,7 +262,7 @@
       "largeItems": "Nothing goes up the stairs. The freight car is 4 feet 6 inches wide, 7 feet 8 inches deep, and 8 feet high, with a 4,000-pound capacity. Measure a sofa before you buy it.",
       "contractorsAndInstallers": "Anyone doing work in a residence \u2014 cable installers, closet companies, art hangers, movers \u2014 files the same certificate of insurance and works Monday through Friday 9:00am - 5:00pm.",
       "moveOutNotice": "Sixty days' written notice before your lease ends, and the move-out block booked the same way as the move-in.",
-      "residentSummary": "Reserve the freight elevator through the resident manager at least five business days out, in four-hour blocks, Monday through Saturday 9:00am to 5:00pm \u2014 no Sundays and no building holidays. Your mover sends a certificate of insurance five business days ahead naming 5-08 46th Avenue Owner LLC and Halbrook Residential Management as additional insureds, with a million per occurrence and statutory workers comp. There is a $500 deposit that is refundable and no move fee, and it comes back to your ledger within ten business days once the corridor and the freight car check out. Everything comes in through the service entrance on 5th Street, and staff hang the pads and lay the floor protection before your block starts."
+      "residentSummary": "Reserve the freight elevator through the resident manager at least five business days out, in four-hour blocks, Monday through Saturday 9:00am to 5:00pm \u2014 no Sundays and no building holidays. Your mover sends a certificate of insurance five business days ahead naming 5-08 46th Avenue Owner LLC and Halbrook Residential Management as additional insureds, with a million per occurrence and statutory workers comp. There is no move fee and no move deposit. The resident manager photographs the corridor, the freight car, and the loading area before and after your block, and damage from a move is repaired and billed at cost with an itemized statement. Everything comes in through the service entrance on 5th Street, and staff hang the pads and lay the floor protection before your block starts."
     },
     "trashAndRecycling": {
       "topic": "general_property_fact",
@@ -508,8 +514,12 @@
       "assignment": "Assigning the lease outright requires management's written consent, which may be withheld \u2014 that is the distinction Real Property Law 226-b draws between an assignment and a sublet. If consent is refused, you may be released from the lease on 30 days' notice.",
       "roommates": "New York Real Property Law 235-f lets you add one additional occupant plus that occupant's dependent children beyond the named tenants and immediate family. Tell the resident manager within 30 days so the person is on the access list. Adding a roommate to the lease itself requires the same application and income review.",
       "earlyTermination": {
-        "buyout": "Sixty days' written notice plus a termination fee of two months' rent, and the security deposit is still returned on the normal schedule if the residence is in good order.",
-        "dutyToMitigate": "New York Real Property Law 227-e requires the owner to make reasonable efforts to re-rent, and any rent collected from a new resident reduces what you owe.",
+        "notice": "Sixty days' written notice, to the resident manager in writing or to residents@thelarkinlic.com.",
+        "fee": 0,
+        "feeNote": "There is no early termination fee and no two-month buyout. A flat liquidated sum is not enforceable in New York, because Real Property Law 227-e measures what you owe by the owner's actual damages after reasonable efforts to re-rent.",
+        "liability": "You stay responsible for the rent until the residence is re-rented. That liability ends the day a new lease begins, and it never exceeds the rent that would have come due through the end of your term.",
+        "dutyToMitigate": "Real Property Law 227-e requires the owner to make reasonable efforts to re-rent. Ownership markets the residence immediately, on the same terms, and any rent collected from a new resident reduces what you owe.",
+        "securityDeposit": "Returned on the normal schedule, within 14 days of move-out with an itemized statement, if the residence is in good order.",
         "militaryAndSafety": "Servicemembers may terminate under the federal Servicemembers Civil Relief Act, and victims of domestic violence may terminate under Real Property Law 227-c. Neither carries a fee. Those requests go to the resident manager."
       },
       "corporateLeases": "Considered on a 12-month minimum, with the company as tenant, a named occupant on the lease, and a certificate of insurance. Rotating occupants are not permitted.",
@@ -559,7 +569,7 @@
       "incomeRequirement": {
         "multiple": 40,
         "basis": "Annual gross household income of at least 40 times the monthly rent. Roommates may combine incomes.",
-        "example": "A residence at $4,860 a month needs $194,400 in combined annual income, or a guarantor."
+        "example": "Multiply the monthly rent of the residence you are applying for by 40. That is the annual gross household income we look for, and roommates may combine incomes to reach it. The leasing team runs the number against the live rent for that residence; no rent figure lives in this document."
       },
       "guarantor": {
         "multiple": 80,
@@ -598,42 +608,27 @@
       "occupancyStandard": "Set by the New York City Housing Maintenance Code and the certificate of occupancy, not by a house rule. Questions about who may live in a residence go to the resident manager.",
       "decisionTimeline": "One to three business days once the file is complete.",
       "holdDeposit": {
-        "amount": "One month's rent",
-        "effect": "Takes the residence off the market while the application is reviewed and becomes the security deposit at signing",
-        "ifDeclined": "Refunded in full",
-        "ifYouWithdraw": "Refunded in full if you withdraw within 24 hours of applying; after that it is forfeited"
+        "amount": 0,
+        "required": false,
+        "policy": "There is no hold deposit. A signed application takes the residence off the market while we review it, and the building holds no money of yours before you sign a lease.",
+        "basis": "New York permits a $20 application fee and a security deposit of one month's rent, and essentially nothing else. General Obligations Law 7-108(1-a)(a) caps what an owner may hold and Real Property Law 238-a bars fees outside a short enumerated list, so a pre-lease advance that could be forfeited is not permitted.",
+        "atSigning": "The first month's rent and the one-month security deposit are due at lease signing. Nothing is due before it, and nothing you pay is forfeitable."
       },
       "approvalWindow": "An approval holds the residence for 48 hours. Leases are signed electronically and the first month's rent and the deposit are due at signing.",
       "escalationTopic": "eligibility_or_denial",
       "escalationNote": "Whether a specific applicant qualifies, why an application was declined, and any request for an accommodation are never answered by the assistant. They go to the resident manager.",
-      "residentSummary": "The application fee is $20 per adult, which is the New York cap, and it covers the credit and background check \u2014 you get a copy of both. There is no broker fee, because we lease in-house. The security deposit is one month's rent and cannot be more than that under state law, and it sits in an interest-bearing account with the bank disclosed to you at signing. We look for household income of 40 times the monthly rent, or a guarantor at 80 times who lives in New York, New Jersey, Connecticut, or Pennsylvania, and institutional guarantors are accepted. Bring photo ID, an employment letter, two pay stubs, last year's tax return, and two bank statements. We do not ask about criminal history, we do not use housing court records, and housing vouchers are accepted. Decisions take one to three business days."
+      "residentSummary": "The application fee is $20 per adult, which is the New York cap, and it covers the credit and background check \u2014 you get a copy of both. There is no broker fee, because we lease in-house. Nothing is due before you sign. There is no hold deposit, and the first month's rent and the security deposit are collected at lease signing. The security deposit is one month's rent and cannot be more than that under state law, and it sits in an interest-bearing account with the bank disclosed to you at signing. We look for household income of 40 times the monthly rent, or a guarantor at 80 times who lives in New York, New Jersey, Connecticut, or Pennsylvania, and institutional guarantors are accepted. Bring photo ID, an employment letter, two pay stubs, last year's tax return, and two bank statements. We do not ask about criminal history, we do not use housing court records, and housing vouchers are accepted. Decisions take one to three business days."
     },
     "leaseTerms": {
       "topic": "application_requirements",
+      "escalationTopic": "legal_question",
+      "escalationNote": "The legal regulated rent for a particular residence, the rent registration history, how the 421-a benefit applies to a specific tenancy, and any question about a rent overcharge go to the resident manager. The assistant does not answer them, and it does not quote a rent from this file.",
       "termsOffered": [
         12,
-        14,
-        16,
-        18,
-        20,
         24
       ],
-      "standardRange": "12 to 24 months",
-      "pricingByTerm": "Every term is priced separately. The 14-month term is the one carrying the current concession, so it usually prices best net effective.",
-      "shortTerms": "Terms under 12 months are quoted case by case and price at a premium. There is no month-to-month on an initial lease.",
+      "standardRange": "One year or two years, at your choice. Rent stabilization sets those two options, and the owner cannot refuse either one.",
       "startDates": "Any calendar day. A mid-month start is prorated on the actual days.",
-      "concession": {
-        "current": "One month free on a 14-month lease",
-        "expires": "2026-10-31",
-        "howApplied": "The free month is taken as the first full month of the lease. It is not amortized across the term.",
-        "brokerFee": "None"
-      },
-      "netEffectiveExplanation": {
-        "rule": "Advertised rents are net effective and reflect the concession. The gross rent \u2014 the number printed on the lease and the number your renewal is calculated from \u2014 is higher.",
-        "math": "Net effective = gross rent multiplied by 13 and divided by 14 on a 14-month lease with one month free.",
-        "example": "Residence 14C advertises at $4,860 net effective. The gross rent on the lease is $5,234, month one is free, and you pay $5,234 for the remaining thirteen months.",
-        "disclosureRule": "The leasing team states both numbers before being asked. Never quote the net effective figure alone."
-      },
       "rentDue": "The first of the month.",
       "lateFee": {
         "amount": 50,
@@ -642,10 +637,14 @@
       },
       "returnedPayment": 20,
       "paymentMethods": "ACH from the resident portal at no charge, or a card for a 2.95 percent processing fee. No cash, and the front desk does not take rent.",
-      "regulatoryStatus": "The 246 market-rate residences are free-market. They are not rent stabilized and not rent controlled. The 72 affordable residences were leased through NYC Housing Connect under the building's 421-a agreement and are regulated separately, outside the leasing office.",
+      "regulatoryStatus": "All 318 residences are rent stabilized for the term of the building's 421-a benefit, and that includes the 222 market-rate homes. Under RPTL 421-a(16) the tax benefit stabilizes every residence in the building for the whole 35-year exemption period, and the Housing Stability and Tenant Protection Act of 2019 ended high-rent deregulation, so a residence does not leave stabilization by crossing a rent threshold. The rent on your lease is a legal regulated rent registered with DHCR, and where the rent you actually pay is lower the lease carries a preferential rent rider stating both figures. Renewals are offered on DHCR form RTP-8 at one year or two years, at the increase the New York City Rent Guidelines Board has ordered for a lease beginning on your renewal date, served 90 to 150 days before your lease ends with 60 days to accept. The 96 income-restricted residences are the Option C set-aside at 130 percent of area median income; they were leased through NYC Housing Connect and are administered by the city's designated marketing agent, outside the leasing office.",
+      "regulatoryStatusNote": "Corrected 2026-09-07. This field previously read that the market-rate residences were free-market and neither rent stabilized nor rent controlled, which was wrong under 421-a(16), and it carried a residence count that no longer matches property.json. Counsel reviews the corrected language before it is quoted to a caller; until then a stabilization question goes to the resident manager.",
       "guarantorRider": "A guarantor signs the lease and a separate guaranty rider covering the initial term and any renewal.",
       "utilitiesRider": "Confirms what is included \u2014 heat, hot water, cooling, water, cooking gas \u2014 and that electricity and internet are yours.",
       "otherRiders": [
+        "DHCR Rider for Rent Stabilized Tenants, required with every vacancy lease and every renewal",
+        "421-a rider disclosing the tax benefit and the rent stabilization that comes with it",
+        "Preferential rent rider where the rent you pay is below the legal regulated rent",
         "Smoke-free rider, required by NYC Local Law 147",
         "Window guard rider, required by the NYC Health Code for any residence with a child under 11",
         "Bedbug disclosure, required annually by New York State",
@@ -654,22 +653,42 @@
         "Pet rider where applicable",
         "House rules, incorporated by reference"
       ],
-      "renewalNoticeLaw": "New York Real Property Law 226-c requires written notice before a renewal increase over 5 percent or a decision not to renew: 30 days if you have lived here under a year, 60 days between one and two years, and 90 days after two years.",
-      "residentSummary": "Terms run 12 to 24 months and each term is priced on its own, with 14 months carrying the current concession \u2014 one month free, no broker fee, through October 31, 2026. Advertised rents are net effective, so ask for the gross number too and we will give you both without being asked: we will show you both the net effective and the gross number for any residence you are considering. Rent is due on the first, the late fee is $50 and only after five days, which is the state cap, and you pay by ACH from the portal at no charge. Market-rate residences here are free-market, not stabilized."
+      "renewalNoticeLaw": "Renewals here follow the Rent Stabilization Code, not the market-rate notice rule. Section 2523.5 requires the owner to serve a renewal offer on DHCR form RTP-8 between 90 and 150 days before your lease ends, and you have 60 days to accept and to choose a one-year or two-year term. Real Property Law 226-c, the 30, 60, and 90-day notice rule, governs unregulated tenancies and does not displace that here.",
+      "residentSummary": "Leases here run one year or two years, and the term is your choice. Every residence in the building is rent stabilized for the term of the 421-a benefit, market-rate homes included, so the rent on your lease is a legal regulated rent and your renewal arrives on DHCR form RTP-8 at the Rent Guidelines Board increase, served 90 to 150 days before your lease ends with 60 days to accept. Rent is due on the first, the late fee is $50 and only after five days, which is the state cap, and you pay by ACH from the portal at no charge. Your lease carries the DHCR rent stabilization rider, the smoke-free rider, and a preferential rent rider if the rent you pay is below the legal regulated rent. Advertised rents and any concession come from the leasing team against live availability, never from this document."
+    },
+    "pricing": {
+      "topic": "pricing",
+      "answerFromThisFile": false,
+      "note": "Pricing is never answered from this file. Rents, concessions, and availability live in the inventory feed and are quoted by the leasing team against live data. No rent figure and no residence number belongs in this document, which is reviewed once a year and outlives every price in it.",
+      "pricingByTerm": "Each term available on a residence is priced separately. The actual rent for a term, and whether a concession is running on it, come from the inventory feed.",
+      "concession": {
+        "current": "Stated on the residence in the inventory feed, never here.",
+        "expiryHandling": "A concession carries its own expiration date on the residence record. This document does not restate it, because a date frozen in a policy file outlives the offer it describes.",
+        "howApplied": "A free month is taken as the first full month of the lease. It is not amortized across the term.",
+        "structure": "Every residence here is rent stabilized, so a concession is written against the legal regulated rent rather than reducing it. Where the rent you actually pay stays below that figure, the lease carries a preferential rent rider stating both numbers.",
+        "brokerFee": "None. The Larkin is leased in-house."
+      },
+      "netEffectiveExplanation": {
+        "rule": "Advertised rents are net effective and reflect the concession. The gross rent is the legal regulated rent printed on the lease, and it is the number every renewal increase is calculated from. It is the higher of the two.",
+        "math": "Net effective = gross rent multiplied by the number of months you pay, divided by the number of months in the term.",
+        "example": "On a twelve-month lease with one month free, the net effective rent is the gross rent times eleven, divided by twelve. Ask the leasing team for both figures on the residence you are considering; both come from live inventory.",
+        "disclosureRule": "The leasing team states both numbers before being asked. Never quote the net effective figure alone."
+      },
+      "shortTerms": "Not offered. A rent stabilized lease runs one year or two years at your choice, so there is no short term to price and no short-term premium to quote."
     },
     "renewal": {
       "topic": "application_requirements",
-      "offerTiming": "The renewal offer goes out 90 days before your lease ends, by email and on paper under your door.",
-      "responseWindow": "Thirty days to accept. After that the offer expires and the terms are requoted at whatever the market is then.",
-      "termsOffered": "12, 18, and 24 months, each priced separately.",
-      "increaseBasis": "Set against current market rents for the same line and floor band, not by a formula. The offer states the new rent as a gross figure.",
-      "statutoryNotice": "Under Real Property Law 226-c the owner gives written notice of an increase over 5 percent or of a decision not to renew: 30 days under one year of tenancy, 60 days between one and two years, 90 days after two years. The 90-day renewal offer satisfies that for most residents.",
+      "offerTiming": "The renewal offer comes on DHCR form RTP-8, served between 90 and 150 days before your lease ends, by mail or personal delivery, with a copy by email and on paper under your door.",
+      "responseWindow": "Sixty days to accept, running from the date the offer is served. The renewal takes effect on the later of your lease expiration date or 90 days after the offer is served. The terms are not requoted at market if you take the full window, because the increase is set by the Rent Guidelines Board and not by the leasing office.",
+      "termsOffered": "One year or two years. You choose the term and the owner cannot refuse either one.",
+      "increaseBasis": "The New York City Rent Guidelines Board order in effect for a lease beginning on your renewal date, applied to your legal regulated rent. The offer states the current legal regulated rent, the ordered percentage for the one-year and the two-year term, and the resulting rent for each. It is not set against market rents for the line or the floor band, and it is not negotiable.",
+      "statutoryNotice": "Rent Stabilization Code section 2523.5 governs this building: the RTP-8 offer is served 90 to 150 days before the lease ends and you have 60 days to accept. Real Property Law 226-c, the 30, 60, and 90-day rule, applies to unregulated tenancies and does not govern a renewal here.",
       "renewalFee": 0,
       "newApplication": "None. No new application, no new fee, no new credit check.",
       "securityDeposit": "Rides over untouched. New York does not permit topping it up when the rent goes up, because one month is the cap in the first place.",
       "concessionsAtRenewal": "A renewal concession is a separate decision and is never guaranteed. If one is offered it is stated on the renewal notice, not assumed from the original lease.",
-      "monthToMonth": "Available only by written agreement after the initial term, at 110 percent of the last monthly rent, with 30 days' notice on either side.",
-      "holdover": "Staying past the end of a lease without a signed renewal is a month-to-month tenancy by operation of law once rent is accepted, at the rate stated in the renewal notice.",
+      "monthToMonth": "Not available. A rent stabilized tenancy does not convert to month-to-month, and there is no 110 percent holdover rate. The owner must offer a one-year or two-year renewal at the Rent Guidelines Board increase, and until you sign one the terms of your existing lease continue.",
+      "holdover": "If you stay past the end of your lease without returning a signed renewal, the terms of your existing lease continue and the owner's remedy is a proceeding under the Rent Stabilization Code, not a higher rate. Accepting rent does not create a month-to-month tenancy in a stabilized residence.",
       "transfers": {
         "eligibility": "After 9 months of residency and a clean payment history",
         "term": "A new lease of at least 12 months on the new residence",
@@ -688,7 +707,7 @@
       ],
       "escalationTopic": "account_status",
       "escalationNote": "A specific renewal rate, a ledger balance, or the status of a particular offer comes from the account system, not from this file.",
-      "residentSummary": "Your renewal offer arrives 90 days before the lease ends, by email and under your door, with 12, 18, and 24-month terms each priced separately. You have thirty days to accept. There is no renewal fee, no new application, and no new deposit \u2014 the one you paid rides over, because New York caps it at one month either way. If you would rather move within the building, you can transfer after nine months with a $500 fee and no second deposit. If you are not renewing, sixty days' written notice, take the pre-move-out walkthrough we offer two to four weeks ahead so you know what would be deducted, and the deposit comes back within fourteen days with an itemized statement."
+      "residentSummary": "Your renewal arrives on DHCR form RTP-8, served 90 to 150 days before your lease ends, and you have sixty days to accept. You pick one year or two years, and the increase is the one the New York City Rent Guidelines Board ordered for a lease starting on your renewal date, applied to your legal regulated rent. There is no renewal fee, no new application, and no new deposit. There is no month-to-month option and no holdover premium, because a stabilized lease does not convert. If you would rather move within the building, you can transfer after nine months with a $500 fee and no second deposit. If you are not renewing, sixty days' written notice, take the pre-move-out walkthrough we offer two to four weeks ahead, and the deposit comes back within fourteen days with an itemized statement."
     },
     "storage": {
       "topic": "general_property_fact",
@@ -715,7 +734,7 @@
     },
     "feeSchedule": {
       "topic": "general_property_fact",
-      "note": "Every recurring and one-time charge in one place. Nothing else is charged without written notice. All charges post to your resident ledger; the front desk does not handle money.",
+      "note": "Every recurring and one-time charge in one place. Nothing else is charged without written notice, and nothing on this schedule is collected before a lease is signed. All charges post to your resident ledger; the front desk does not handle money.",
       "oneTime": [
         {
           "item": "Application fee",
@@ -731,21 +750,6 @@
           "item": "Security deposit",
           "amount": "One month's rent",
           "note": "Statutory maximum, held in an interest-bearing account"
-        },
-        {
-          "item": "Pet fee",
-          "amount": "$350 per pet",
-          "note": "One time, non-refundable, two pets maximum"
-        },
-        {
-          "item": "Move-in deposit",
-          "amount": "$500",
-          "note": "Refundable, returned within 10 business days"
-        },
-        {
-          "item": "Move-out deposit",
-          "amount": "$500",
-          "note": "Refundable, same terms"
         },
         {
           "item": "Additional fob",
@@ -766,11 +770,6 @@
           "item": "Transfer fee",
           "amount": "$500",
           "note": "After 9 months of residency"
-        },
-        {
-          "item": "Early termination",
-          "amount": "Two months' rent",
-          "note": "Plus 60 days' written notice"
         },
         {
           "item": "Hallway item removal",
@@ -852,17 +851,48 @@
           "note": "First is a written notice"
         },
         {
-          "item": "The Larder cleaning deposit",
-          "amount": "$150",
-          "note": "Refundable within 5 business days"
+          "item": "The Larder cleaning",
+          "amount": "At cost",
+          "note": "Only if the room is left needing cleaning beyond normal use, billed after the fact with an itemized statement. There is no deposit."
         },
         {
-          "item": "The Overlook event deposit",
-          "amount": "$500",
-          "note": "Refundable; COI required for catering or bar service"
+          "item": "The Overlook event damage",
+          "amount": "At cost",
+          "note": "Billed after the event with photographs and an itemized statement. There is no deposit. A certificate of insurance is still required for catering or bar service."
         }
       ],
-      "residentSummary": "The charges that exist here are short: $20 an adult to apply, one month's security, $350 once per pet, and a refundable $500 move-in deposit. Parking is $425 a month with EV charging included, storage starts at $95, and the bike room, the amenity spaces, and pet rent are all zero. There is no broker fee and no amenity fee. Everything posts to your resident ledger, the late fee is $50 and only after five days, and the front desk does not take money for anything."
+      "residentSummary": "The charges that exist here are short: $20 an adult to apply and one month's security, and that is everything due before you have keys. There is no broker fee, no hold deposit, no pet fee, no move-in or move-out deposit, and no amenity deposit, because New York caps what a building may hold to one month's rent. Parking is $425 a month with EV charging included, storage starts at $95, and the bike room, the amenity spaces, and pet rent are all zero. Everything posts to your resident ledger, the late fee is $50 and only after five days, and the front desk does not take money for anything. Damage is billed at cost after the fact with an itemized statement, never collected up front.",
+      "capNote": "General Obligations Law 7-108(1-a)(a) caps everything the owner may hold to one month's rent as security, and Real Property Law 238-a bars fees outside a short enumerated list. That is why the hold deposit, the pet fee, the move-in and move-out deposits, the amenity deposits, and the early termination fee are gone from this schedule. It is the statute, not a house courtesy.",
+      "notCharged": [
+        {
+          "item": "Hold deposit",
+          "note": "There is none. Nothing is due before lease signing, and no forfeitable pre-lease advance is permitted in New York."
+        },
+        {
+          "item": "Pet fee and pet deposit",
+          "note": "There is none, and there is no pet rent. Pet damage is billed at cost after the fact."
+        },
+        {
+          "item": "Move-in and move-out deposit",
+          "note": "There is none. Damage from a move is billed at cost with photographs and an itemized statement."
+        },
+        {
+          "item": "Early termination fee",
+          "note": "There is none. Sixty days' written notice, and you owe rent only until the residence is re-rented."
+        },
+        {
+          "item": "Amenity deposits",
+          "note": "There are none, including for The Larder and The Overlook. Cleaning or damage beyond normal use is billed at cost after the fact."
+        },
+        {
+          "item": "Broker fee",
+          "note": "There is none. The Larkin is leased in-house."
+        },
+        {
+          "item": "Amenity fee",
+          "note": "There is none. Amenity access is included in rent."
+        }
+      ]
     }
   }
 }

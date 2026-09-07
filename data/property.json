@@ -47,16 +47,51 @@
     "residentialFloors": "5 through 33",
     "amenityFloors": "3, 4, and 34",
     "residencesPerTypicalFloor": 11,
-    "unitLines": "A through L",
+    "unitLines": "A through L, no I line — eleven residences on a typical tower floor.",
+    "podiumLines": "M through T, no O line — seven additional lines that exist only on the podium floors, 5 through 9, where the plate is wider than the tower.",
     "residenceNumbering": "Floor plus line letter — Residence 27C is line C on the 27th floor.",
-    "marketRateResidences": 246,
-    "affordableResidences": 72,
-    "affordableNote": "72 residences at 130% AMI were leased through NYC Housing Connect under the building's 421-a (Affordable New York) agreement. That inventory sits outside the market-rate funnel; the lottery closed in 2023 and the waitlist is administered by the city's designated marketing agent, not by the leasing office.",
+    "stack": {
+      "note": "The residential stack in three tiers, 5 through 33. 5 x 18 + 18 x 11 + 6 x 5 = 90 + 198 + 30 = 318.",
+      "tiers": [
+        {
+          "name": "Podium",
+          "floors": "5 through 9",
+          "floorCount": 5,
+          "residencesPerFloor": 18,
+          "lines": "A through T, no I or O line",
+          "residences": 90,
+          "note": "The base plate is wider than the tower, so these five floors carry seven lines the tower does not — M through T, no O. They are studios and one-bedrooms on the east and south faces and they are the building's Housing Connect inventory, which is why they are not part of the ten-plan market collection."
+        },
+        {
+          "name": "Tower",
+          "floors": "10 through 27",
+          "floorCount": 18,
+          "residencesPerFloor": 11,
+          "lines": "A through L, no I line",
+          "residences": 198,
+          "note": "The typical floor. Eleven residences, lines A through L with no I line, which is the stack the ten published plans are drawn on."
+        },
+        {
+          "name": "West Collection",
+          "floors": "28 through 33",
+          "floorCount": 6,
+          "residencesPerFloor": 5,
+          "lines": "A through E",
+          "residences": 30,
+          "note": "Above the setback at 28 the plate narrows to five residences a floor — B3 on the B, C, and D lines, C2 on the A and E lines."
+        }
+      ]
+    },
+    "marketRateResidences": 222,
+    "affordableResidences": 96,
+    "affordableSetAside": "96 residences, 30 percent of 318, at 130% of area median income — the Option C set-aside under 421-a (Affordable New York). The tax exemption runs 35 years and the affordability restriction runs 40.",
+    "affordableNote": "96 residences at 130% AMI were leased through NYC Housing Connect under the building's 421-a (Affordable New York) agreement: the 35 podium-line residences on floors 5 through 9, plus 61 residences distributed through the A-L stack in the same bedroom mix as the market residences. That inventory sits outside the market-rate funnel; the lottery closed in 2023 and the waitlist is administered by the city's designated marketing agent, not by the leasing office.",
+    "prevailingWageNote": "Two wage rules ride with the 421-a benefit. The Larkin sits in the Queens waterfront enhanced affordability area, so as a project of 300 or more residences it carried the 421-a construction wage requirement — a $45 minimum average hourly wage for construction workers, certified by an independent monitor. And because a 421-a building of 30 or more residences owes its building service employees the prevailing wage for the life of the exemption, the porters, doormen, and handypersons here are paid at the prevailing rate through the end of the exemption in 2058. Both costs sit in the operating budget; neither is billed to a resident.",
     "firstMoveIns": "March 2023",
     "occupancy": "94% leased",
     "amenitySquareFeet": 26000,
     "parkingSpaces": 84,
-    "constructionNotes": "Glass and champagne-anodized aluminum curtain wall over a two-story cast-stone base, with a setback at 28 creating terraces on the West Collection floors."
+    "constructionNotes": "Glass and champagne-anodized aluminum curtain wall over a two-story cast-stone base. The plate steps back twice: at 10, where the podium ends and the tower stack begins, and at 28, where the tower narrows to five residences a floor for the West Collection. The West Collection terraces are recessed into the D and A lines on all six floors, 28 through 33 — they are not a product of the setback, and no other line carries one."
   },
 
   "team": {
@@ -123,11 +158,11 @@
       "Ceilings 9 feet 4 inches"
     ],
     "westCollection": [
-      "Floors 28 through 33, 28 residences",
+      "Floors 28 through 33 — 30 residences, five to a floor, lines A through E",
       "Ceilings 10 feet 6 inches",
       "Fisher & Paykel panel-ready refrigeration and a wine column",
       "Quartzite waterfall island, integrated lighting under the counter edge",
-      "Private terraces on the 28th floor setback, 90 to 240 square feet",
+      "Private terraces recessed into the D and A lines, every floor from 28 through 33, 90 to 240 square feet",
       "West and north exposures only — skyline and Queensboro Bridge"
     ]
   },
@@ -175,20 +210,6 @@
       "MoMA PS1 and The Noguchi Museum",
       "Court Square for the E, M, and G, plus the Long Island City Y",
       "Silvercup Studios and the Queensboro Bridge to the north"
-    ]
-  },
-
-  "availabilitySample": {
-    "lastUpdated": "2026-09-07",
-    "note": "Net effective rents reflecting one month free on a 14-month lease. Twelve residences available.",
-    "residences": [
-      { "residence": "09F", "plan": "S1", "beds": 0, "baths": 1, "sqft": 496, "rent": 3795, "available": "Now", "exposure": "South" },
-      { "residence": "07K", "plan": "S2", "beds": 0, "baths": 1, "sqft": 578, "rent": 4105, "available": "Now", "exposure": "East" },
-      { "residence": "14C", "plan": "A1", "beds": 1, "baths": 1, "sqft": 688, "rent": 4860, "available": "2026-10-01", "exposure": "West" },
-      { "residence": "22H", "plan": "A2", "beds": 1, "baths": 1, "sqft": 731, "rent": 5325, "available": "2026-10-15", "exposure": "North" },
-      { "residence": "26B", "plan": "B1", "beds": 2, "baths": 2, "sqft": 1012, "rent": 7190, "available": "2026-11-01", "exposure": "West" },
-      { "residence": "31D", "plan": "B3", "beds": 2, "baths": 2, "sqft": 1104, "rent": 8340, "available": "2026-10-20", "exposure": "West, private terrace" },
-      { "residence": "19A", "plan": "C1", "beds": 3, "baths": 2, "sqft": 1332, "rent": 9485, "available": "2026-12-01", "exposure": "North and West" }
     ]
   },
 
