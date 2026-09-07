@@ -98,7 +98,7 @@
     "id": "the-bike-room",
     "name": "The Bike Room",
     "category": "service",
-    "description": "Two hundred twenty tagged spaces on three, reached from the service elevator, at no charge. Every residence gets one space, and a second goes on a waitlist that runs about a month right now. There is a repair stand on the north wall with a floor pump and a hex set.",
+    "description": "Two hundred twenty tagged spaces on three for 318 residences, reached from the service elevator, at no charge. One space per residence when one is open, and the waitlist runs about a month right now. There is a repair stand on the north wall with a floor pump and a hex set.",
     "floor": "3",
     "hours": "24 hours, fob access. Tags are issued by the resident manager during office hours, Monday through Friday 9:00am - 5:00pm.",
     "bookable": false,

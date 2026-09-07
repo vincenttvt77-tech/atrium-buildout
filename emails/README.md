@@ -73,7 +73,8 @@ leasing line ever changes, change both. (`{{rescheduleUrl}}` is the exception: i
 arrives E.164-normalized.)
 
 **The concession is not the same on every residence, so the template states none.**
-Four residences are on six weeks free over eighteen months and two carry nothing at all,
+Two residences carry two months free where the rest carry one, and a residence may carry
+none at all,
 so `concessionCopy()` in `confirmation.ts` builds all three concession strings from the
 residence's own `concession` field and the template just prints them. Pass it:
 `concession: unit.concession` — the string verbatim, `null` when the residence has none.
