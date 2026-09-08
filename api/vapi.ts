@@ -165,6 +165,7 @@ const fmtSlot = (s: TourSlot) =>
  */
 const HISTORY_TTL_MS = 20_000
 let historyCache: { at: number; calls: ReturnType<typeof normaliseCallList>; configured: boolean } | null = null
+let historyFailure: { at: number; reason: string; configured: boolean } | null = null
 type NormalisedCalls = Awaited<ReturnType<typeof fetchCalls>> extends infer R ? R extends { ok: true; calls: infer C } ? C : never : never
 const normaliseCallList = (c: NormalisedCalls) => c
 
@@ -173,11 +174,18 @@ async function callHistory(): Promise<{ calls: NormalisedCalls; error: string | 
   if (historyCache && now - historyCache.at < HISTORY_TTL_MS) {
     return { calls: historyCache.calls, error: null, configured: true, stale: false }
   }
+  // A refusal is remembered for the same twenty seconds: a wrong key answered "401" to
+  // every five-second poll from every open tab, which helps nobody.
+  if (historyFailure && now - historyFailure.at < HISTORY_TTL_MS) {
+    return { calls: historyCache?.calls ?? [], error: historyFailure.reason, configured: historyFailure.configured, stale: Boolean(historyCache) }
+  }
   const result = await fetchCalls({ limit: 20 })
   if (result.ok) {
+    historyFailure = null
     historyCache = { at: now, calls: result.calls, configured: true }
     return { calls: result.calls, error: null, configured: true, stale: false }
   }
+  historyFailure = { at: now, reason: result.reason, configured: result.configured }
   console.warn('[vapi-history]', JSON.stringify({ reason: result.reason, configured: result.configured, cached: Boolean(historyCache) }))
   if (historyCache) {
     // Do not hammer a service that just said no: treat the failed read as a fresh one.
