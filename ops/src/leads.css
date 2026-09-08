@@ -1,0 +1,138 @@
+/* Leads view — the To do and Everyone tabs and the person panel (brief §9). Owner: leads.
+   Every colour, radius and control size comes from the shell's tokens and shared classes in
+   styles.css; this file only lays the view out. */
+
+/* ---------- top: tabs, banners, note, search + chips ---------- */
+.leads-top { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+.leads-banners:empty { display: none; }
+.leads-note { margin: 0; }
+.leads-tools { display: flex; flex-direction: column; gap: 12px; }
+
+/* ---------- the list column ---------- */
+.leads-list .group-head {
+  display: flex; align-items: center; gap: 6px; margin: 0; padding: 12px 16px 6px;
+  font-size: .929rem; font-weight: 600; color: var(--ink-2);
+}
+.leads-list .group-head .ico { width: 16px; height: 16px; }
+.leads-list .group-head .count { color: var(--ink-3); font-weight: 500; }
+.leads-list .group-head.overdue { color: var(--warn); }
+.leads-list .card.rows { margin-bottom: 8px; }
+@media (min-width: 1200px) {
+  .leads-list .group-head { position: sticky; top: 0; z-index: 1; background: var(--paper-2); }
+  .leads-list .card.rows { margin-bottom: 0; border-bottom: 1px solid var(--line); }
+  .leads-view[data-tab="todo"] .leads-split { height: calc(100vh - 210px); }
+  .leads-view[data-tab="all"] .leads-split { height: calc(100vh - 270px); }
+}
+
+/* To do rows: due phrase + channel icon lead (104 px), the action sentence, the buttons under it.
+   Below 600 px the shell's .row-stack puts the lead on its own line; in the 380 px list column
+   (split layout) the row stacks the same way so the sentence keeps its width. */
+@media (min-width: 600px) {
+  .todo-row .row-lead { width: 104px; }
+  .todo-row .row-actions { grid-column: 2 / -1; justify-content: flex-start; }
+}
+@media (min-width: 1200px) {
+  .leads-list .todo-row { grid-template-columns: minmax(0, 1fr); }
+  .leads-list .todo-row .row-lead { width: auto; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 0; }
+  .leads-list .todo-row .row-actions { grid-column: 1 / -1; }
+}
+.todo-row .row-lead .due { display: inline-flex; align-items: flex-start; gap: 4px; }
+.todo-row .row-lead .due.overdue { color: var(--warn); }
+.todo-row .row-lead .due .ico { width: 16px; height: 16px; flex: none; margin-top: 2px; }
+.todo-row.row-flag .row-lead-icon { color: var(--warn); }
+.todo-row .row-title .name, .done-row .row-title .name { font-weight: 600; }
+.todo-row .row-title .btn-link.name { font-weight: 600; }
+.todo-row .row-sub a { color: inherit; }
+.todo-row .row-chips, .done-row .row-chips, .lead-row .row-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.todo-row .btn-call .ico { color: var(--ink-2); }
+
+/* Done and not needed today (the recovery list) */
+.done-list { margin-top: 4px; }
+.done-list > summary {
+  display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px;
+  color: var(--ink-2); font-weight: 500; font-size: .929rem;
+}
+.done-list > summary .ico { width: 16px; height: 16px; transition: transform var(--motion) ease-out; }
+.done-list[open] > summary .ico { transform: rotate(180deg); }
+.done-list > summary .count { color: var(--ink-3); }
+.done-list .card.rows { margin-top: 4px; }
+.done-row, .row-2 { grid-template-columns: minmax(0, 1fr) auto; }
+.done-row .row-title { font-weight: 400; color: var(--ink-2); }
+.done-row .row-title .name { color: var(--ink); }
+
+/* Everyone rows */
+.lead-row { grid-template-columns: auto minmax(0, 1fr); }
+.lead-row .row-lead { padding-top: 3px; }
+.lead-row.row-flag .row-lead-icon { color: var(--warn); }
+.lead-row .row-title { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.lead-row .row-title .who { font-weight: 500; }
+.lead-row .row-title .last { margin-left: auto; color: var(--ink-3); font-weight: 400; font-size: .929rem; white-space: nowrap; }
+.lead-row .row-sub .quote { font-style: italic; }
+@media (max-width: 1199px) { .lead-row .row-title .last { flex-basis: auto; } }
+@media (min-width: 1200px) { .lead-row .row-title .last { flex-basis: 100%; margin-left: 0; } }
+
+/* ---------- the person panel ---------- */
+.lead-panel .panel-head .setname { flex: none; }
+.lead-panel .lead-head { margin-bottom: var(--s5); }
+.lead-panel .lead-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.lead-panel .lead-meta { color: var(--ink-2); font-size: .929rem; }
+.lead-panel .lead-meta a { color: inherit; }
+.lead-panel .lead-meta + .lead-meta { margin-top: 2px; }
+.lead-panel .lead-call { display: none; width: 100%; margin-top: 12px; }
+.lead-panel .suggest { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 10px; color: var(--ink-2); font-size: .929rem; }
+.lead-panel .quote { color: var(--ink-2); font-style: italic; }
+.lead-panel .panel-section h3 .count { color: var(--ink-3); font-weight: 500; }
+.lead-panel .panel-section > .muted { max-width: 68ch; }
+
+.lead-panel .np-card { padding: 12px 16px; }
+.lead-panel .np-card + .np-card { margin-top: 8px; }
+.lead-panel .np-card .np-title { max-width: 68ch; }
+.lead-panel .np-card .reassure, .lead-panel .np-card .meta { color: var(--ink-2); font-size: .929rem; margin-top: 4px; }
+.lead-panel .np-card .meta .overdue { color: var(--warn); }
+.lead-panel .np-card .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.lead-panel .np-history { margin-top: 8px; }
+.lead-panel .np-hist { padding: 8px 0; border-bottom: 1px solid var(--line); color: var(--ink-3); font-size: .929rem; }
+.lead-panel .np-hist:last-child { border-bottom: 0; }
+
+.lead-panel .tour-row .row-title { font-weight: 400; }
+.lead-panel .row-warn { background: var(--warn-soft); box-shadow: inset 3px 0 0 var(--warn); }
+.lead-panel .row-warn .row-sub { color: var(--warn); }
+
+.lead-panel .loss + .loss { margin-top: 10px; }
+.lead-panel .loss .when { color: var(--ink-3); font-size: .929rem; margin-top: 2px; }
+
+.lead-panel .lcall { padding: 8px 0; border-bottom: 1px solid var(--line); max-width: 68ch; }
+.lead-panel .lcall:last-child { border-bottom: 0; }
+.lead-panel .lcall .when { color: var(--ink-2); font-size: .929rem; }
+.lead-panel .lcall .see { margin-top: 2px; font-size: .929rem; }
+
+.lead-panel .notes { list-style: none; margin: 0 0 12px; padding: 0; max-width: 68ch; }
+.lead-panel .notes li { padding: 6px 0; border-bottom: 1px solid var(--line); }
+.lead-panel .notes li:last-child { border-bottom: 0; }
+.lead-panel .notes .stamp { color: var(--ink-2); font-size: .929rem; }
+.lead-panel .note-form { display: flex; gap: 8px; align-items: center; }
+.lead-panel .note-form .input { flex: 1; min-width: 0; }
+.lead-panel .note-form .btn { flex: none; }
+.lead-panel .field-hint { margin-top: 6px; }
+.lead-panel .panel-empty { display: flex; align-items: center; justify-content: center; min-height: 240px; }
+.lead-panel .gone { text-align: center; }
+.lead-panel .gone .btn { margin-top: 12px; }
+
+/* ---------- stacked layout (< 1200): the panel is a page of its own ---------- */
+@media (max-width: 1199px) {
+  .leads-view.has-panel .leads-top { display: none; }
+}
+
+/* ---------- mobile: Call is the primary, actions under the sentence ---------- */
+@media (max-width: 959px) {
+  .leads-view .btn-call { background: var(--accent); color: var(--on-accent); border-color: transparent; width: 100%; }
+  .leads-view .btn-call .ico { color: inherit; }
+  .leads-view .todo-row .row-actions { grid-column: 1 / -1; justify-content: flex-start; }
+  .lead-panel .lead-call { display: inline-flex; }
+}
+@media (max-width: 599px) {
+  .lead-panel .note-form { flex-direction: column; align-items: stretch; }
+  .lead-panel .note-form .btn { width: 100%; }
+  .lead-panel .np-card .actions .btn { flex: 1 1 auto; }
+  .lead-panel .panel-head .setname { padding: 0 8px; }
+}
