@@ -1677,6 +1677,8 @@ async function setFollowUpStatus(fu, status, opts) {
 const link = (name, params, txt, cls) => `<a class="${cls || 'btn btn-quiet'}" href="${esc(hashFor(name, params))}">${esc(txt)}</a>`
 const telBtn = (phone, txt, cls) => { const h = href.tel(phone); return h ? `<a class="${cls || 'btn btn-call'}" href="${esc(h)}">${esc(txt || 'Call')}</a>` : '' }
 const telLink = (phone) => { const h = href.tel(phone), shown = fmt.phone(phone); return h && shown ? `<a href="${esc(h)}">${esc(shown)}</a>` : esc(shown) }
+/** A person's name as the link to their lead (every person mention links onward, §2.6). */
+const personLink = (phone, name) => `<a class="name" href="${esc(hashFor('leads', { phone: phone || 'unknown' }))}">${esc(name)}</a>`
 const mailLink = (email) => { const h = href.mailto(email); return h ? `<a href="${esc(h)}">${esc(email)}</a>` : esc(email || '') }
 const chipHtml = (c) => html_.chip(c.cls, c.icon, c.text)
 const isAfterHours = (t) => { const p = nyParts(t); if (!p) return false; const h = property.hours[p.dayOfWeek]; if (!h) return true; const x = p.hour + p.minute / 60; return x < h[0] || x >= h[1] }
@@ -1779,7 +1781,7 @@ function followUpRowHtml(fu, s) {
   else primary = telBtn(fu.phone, 'Call')
   return `<div class="row row-stack" data-key="fu:${esc(fu.id)}">` +
     `<span class="row-lead"><span class="${overdue ? 'overdue' : ''}">${overdue ? ico('clock') : ''} ${esc(fmt.duePhrase(fu.dueAt))}</span><span class="row-lead-icon">${ico(label(labels.channelIcon, channel, 'phone'))}</span></span>` +
-    `<span class="row-body"><span class="row-title">${esc(sen.before)}<span class="name">${esc(sen.name)}</span>${esc(sen.after)}</span>` +
+    `<span class="row-body"><span class="row-title">${esc(sen.before)}${personLink(fu.phone, sen.name)}${esc(sen.after)}</span>` +
     `<span class="row-sub">${fmt.phone(fu.phone) ? `${telLink(fu.phone)} · ` : ''}${channel === 'email' && email ? `${mailLink(email)} · ` : ''}from their call ${esc(fmt.dateTime(from))}</span></span>` +
     `<span class="row-actions">${primary}` +
     `<button type="button" class="btn" data-action="done" data-fu="${esc(fu.id)}" data-key="fu:${esc(fu.id)}:done" data-write="leads">Done</button>` +
@@ -1794,7 +1796,7 @@ function tourRowHtml(t, s, today) {
   const chip = t.past ? html_.chip('chip-ok', 'check', 'Toured') : html_.chip('chip-ok', 'check', 'Confirmed')
   return `<div class="row row-stack${t.past ? ' row-muted' : ''}" data-key="tour:${esc(t.slotId)}">` +
     `<span class="row-lead"><span class="num strong">${esc(fmt.time(t.startsAt))}</span></span>` +
-    `<span class="row-body"><span class="row-title">${esc(t.name)} · ${t.unitId ? `apartment ${esc(t.unitId)}` : 'no apartment picked yet'}</span>` +
+    `<span class="row-body"><span class="row-title">${t.profile ? personLink(t.phone, t.name) : esc(t.name)} · ${t.unitId ? `apartment ${esc(t.unitId)}` : 'no apartment picked yet'}</span>` +
     `<span class="row-sub">${fmt.phone(t.phone) ? `${telLink(t.phone)} · Confirmed` : 'Confirmed · no phone on file'}</span></span>` +
     `<span class="row-actions">${chip}${actions.join('')}</span></div>`
 }
@@ -1938,6 +1940,7 @@ const statusView = {
     root.addEventListener('click', (e) => this.onClick(e))
     const repaint = () => { if (this.root && !this.root.hidden) this.render(state) }
     on('data', repaint); on('poll', repaint); on('minute', repaint)
+    on('route', () => { if (this.root && !this.root.hidden) this.focusDemo() })
   },
   render(s) {
     const root = this.root
@@ -1981,22 +1984,30 @@ const statusView = {
     support.push(['Last refresh', s.lastPollAt ? `${s.lastPollAt} · calls ${counts.calls} · slots ${counts.slots} · leads ${counts.leads} · to-dos ${counts.todos}` : 'not yet'])
     for (const [name, err] of Object.entries(s.errors)) support.push([`Can't load ${name}`, `"${err.message}"${err.status ? ` · HTTP ${err.status}` : ''} · ${fmt.dateTime(err.at)}`])
     if (s.health) support.push(['Health check', `${s.health.store} · ${s.health.durable ? 'durable' : 'not durable'} · call history ${s.health.callHistory ? 'on' : 'off'} · "${s.health.hint}"`])
-    out += `<details class="support status-section"><summary>${ico('chevron-down')}For support</summary><dl class="facts">${support.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl></details>`
+    out += `<details class="support status-section" data-key="support"><summary>${ico('chevron-down')}For support</summary><dl class="facts">${support.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl></details>`
     const weekN = model.weekDays
     out += `<section class="card card-demo status-section" id="demo-tools"><div class="demo-head" tabindex="-1" data-key="demo-head">${ico('warning')}<span>Demo tools</span></div><p class="demo-standing">These are for demos and testing. They change real data.</p>` +
       `<div class="demo-row"><p>Try it: call the leasing line and the call shows up on Today within a minute.</p><a class="btn" href="${esc(href.tel(property.leasingPhone))}">Call ${esc(property.leasingPhoneDisplay)}</a></div>` +
       `<div class="demo-row"><p>Blocks every remaining day of this week so a caller is told there's nothing available.</p><button type="button" class="btn" data-action="block-week" data-key="block-week" data-write="calendar"${model.calLoaded && weekN ? '' : ' aria-disabled="true"'}>Block the rest of this week</button><div class="demo-progress" hidden></div></div>` +
       `<div class="demo-row"><p>Removes every tour from the calendar, including real ones. Only for resetting a demo.</p><button type="button" class="btn btn-danger" data-action="clear-bookings" data-key="clear-bookings" data-write="calendar">Delete all tours</button></div>` +
       `<div class="demo-row"><p>Removes every caller and to-do so you can run a fresh demo. Don't use this with real callers.</p><button type="button" class="btn btn-danger" data-action="clear-leads" data-key="clear-leads" data-write="leads">Delete all callers</button></div></section></div>`
+    // an open "For support" and the focused control survive the re-render a poll causes
+    const wasOpen = new Set([...root.querySelectorAll('details[open]')].map((d) => d.dataset.key))
     root.innerHTML = out
+    for (const d of root.querySelectorAll('details')) if (wasOpen.has(d.dataset.key)) d.open = true
     if (focusKey) { const el = root.querySelector(`[data-key="${cssq(focusKey)}"]`); if (el) { try { el.focus({ preventScroll: true }) } catch (e) { /* ignore */ } } }
     paintBusy('leads'); paintBusy('calendar')
+    this.focusDemo()
+  },
+  /** #/status?section=demo scrolls to and focuses the Demo tools heading once per hash. */
+  focusDemo() {
     const r = route()
-    if (r.name === 'status' && r.params.section === 'demo' && this.demoFocused !== location.hash) {
-      this.demoFocused = location.hash
-      const head = root.querySelector('.demo-head')
-      if (head) { head.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); head.focus({ preventScroll: true }) }
-    }
+    if (!this.root || r.name !== 'status' || r.params.section !== 'demo' || this.demoFocused === location.hash) return
+    const head = this.root.querySelector('.demo-head')
+    if (!head) return
+    this.demoFocused = location.hash
+    head.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+    head.focus({ preventScroll: true })
   },
   /** NY dates from today through this Saturday that have slots. */
   weekDays(s) {

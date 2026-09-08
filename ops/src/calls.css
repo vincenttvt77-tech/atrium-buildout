@@ -54,3 +54,9 @@
   .call-row .when-desk { display: none; }
   .call-row .when-mobile { display: block; flex-basis: 100%; }
 }
+@media (max-width: 599px) {
+  /* "‹ Calls" and "Open lead" take the first line of the head; the name gets the whole second line (as Leads does). */
+  .call-panel .panel-head { flex-wrap: wrap; row-gap: 4px; padding-bottom: 12px; }
+  .call-panel .panel-head .panel-back { margin-right: auto; }
+  .call-panel .panel-head h2 { flex-basis: 100%; order: 3; }
+}

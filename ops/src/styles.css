@@ -520,6 +520,8 @@ body.has-dialog { overflow: hidden; }
 @media (prefers-color-scheme: dark) { .toast { background: var(--paper-3); } }
 @media (max-width: 959px) {
   .toast-stack { left: 16px; right: 16px; width: auto; bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
+  /* While a bottom sheet is open its primary button owns the bottom edge; toasts move to the top. */
+  body.has-dialog .toast-stack { bottom: auto; top: 60px; }
 }
 
 /* ---------- placeholder for a view that has not loaded its module ---------- */
@@ -538,6 +540,8 @@ body.has-dialog { overflow: hidden; }
 
 /* ---------- Today ---------- */
 .today-list .row-title .name { font-weight: 600; }
+.today-list .row-title a.name { color: inherit; text-decoration: none; }
+.today-list .row-title a.name:hover { text-decoration: underline; }
 .today-list .quote { color: var(--ink-2); font-style: italic; }
 .today-list .reassure { color: var(--ink-2); font-size: .929rem; }
 .today-list .meta { color: var(--ink-2); font-size: .929rem; }

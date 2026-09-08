@@ -572,7 +572,10 @@ function openSheet(preset) {
   closePopover(false)
   const p = preset || {}
   const m0 = cal.model || buildModel(A.state, {})
-  const st = { date: isYmd(p.date) ? p.date : m0.today, mode: p.mode === 'range' ? 'range' : 'day', from: p.from || null, to: p.to || null, only: p.only || null, fallback: false, reason: String(p.reason || '') }
+  // With no day preset, start on the first day from today that still has an open time (late in the
+  // day that is tomorrow), so the sheet never opens with nothing to block.
+  const firstOpenDay = (m) => { for (let d = m.today; d <= m.lastSlotDate; d = fmt.addDays(d, 1)) if ((m.byDate.get(d) || []).some((x) => x.status === 'open')) return d; return m.today }
+  const st = { date: isYmd(p.date) ? p.date : firstOpenDay(m0), mode: p.mode === 'range' ? 'range' : 'day', from: p.from || null, to: p.to || null, only: p.only || null, fallback: false, reason: String(p.reason || '') }
   const base = `cal-sheet-${Date.now()}`
   const model = () => cal.model || buildModel(A.state, {})
   const daySlots = () => model().byDate.get(st.date) || []
