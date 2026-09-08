@@ -14,9 +14,11 @@
     "validate": "node scripts/validate-data.mjs",
     "build:ops": "node scripts/build-ops.mjs",
     "build:site": "node scripts/build-site.mjs",
-    "dev:ops": "node scripts/dev-ops.mjs"
+    "dev:ops": "node scripts/dev-ops.mjs",
+    "simulate": "node scripts/simulate-calls.mjs"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "0.124.0",
     "@types/node": "22.20.1",
     "esbuild": "0.28.2",
     "typescript": "5.9.3"

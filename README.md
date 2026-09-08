@@ -137,8 +137,34 @@ Node runs the TypeScript in **strip-only mode** — no runtime dependencies, but
 TypeScript syntax needing real transformation: no `enum`, no constructor parameter
 properties, no `namespace`, no decorators. Types, interfaces and `satisfies` are fine.
 
-The only dependencies are dev-only: `typescript` and `@types/node`, so that
-`npm run typecheck` runs here and Vercel's build log stays clean. Run `npm install` once.
+The only dependencies are dev-only: `typescript`, `@types/node`, `esbuild` and
+`@anthropic-ai/sdk` (the simulator below), so that `npm run typecheck` runs here and
+Vercel's build log stays clean. Nothing under `api/` imports the SDK. Run `npm install` once.
+
+### Simulated calls
+
+`npm run simulate` plays scripted callers against the real webhook handler, in-process,
+with the assistant side answered by the same model the Vapi assistant is configured with
+(`src/vapi/assistant.ts` decides which), the same system prompt and the same tool schemas.
+Every tool call goes through `api/vapi.ts`, so the quote gate, the calendar and the
+knowledge guard are the real ones. The scenarios in `src/sim/scenarios.ts` are the calls
+that went badly: a two bedroom on a four thousand budget, a tour booking, a specific
+residence, a floor plan, pets and amenities, a service animal, a gas smell, a caller who
+wants a price first, a caller who hangs up.
+
+Each call is checked by rules (`src/sim/grade.ts` — money in words, no repeated line, no
+residence a tool did not return, no rent before a lookup, the booking or escalation the
+scenario expects) and then by a stronger model as a judge. The report is written to
+`sim-reports/` (git-ignored) and the command exits non-zero if anything failed.
+
+```
+ANTHROPIC_API_KEY=… npm run simulate                  # everything, judged
+npm run simulate -- --scenario evan --no-judge        # one call, rules only
+npm run simulate -- --list
+```
+
+The key is read by the SDK from the environment only. It is never an argument, never
+logged, and never in a report.
 
 Secrets are read in exactly one place, `src/config/env.ts`. It holds the credential
 inventory, throws by name when one is missing, and exposes `redact()` so a key cannot be
