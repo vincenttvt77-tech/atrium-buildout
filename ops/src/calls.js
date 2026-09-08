@@ -15,6 +15,8 @@ const cssq = (s) => (window.CSS && CSS.escape) ? CSS.escape(String(s)) : String(
 const FILTERS = [['all', 'All'], ['person', 'Needs a person'], ['booked', 'Tour booked'], ['priced', 'Priced out'], ['emergency', 'Emergency']]
 const isSplit = () => matchMedia('(min-width: 1200px)').matches
 const isDesktop = () => matchMedia('(min-width: 960px)').matches
+/* A shorter placeholder on a phone so it is not cut off at 390 px. */
+const searchPlaceholder = () => (isDesktop() ? 'Search calls by name, number or apartment' : 'Search name, number or apartment')
 const hasChip = (story, name) => story.chips.some((c) => c.text === name)
 const passes = (filter, story) => filter === 'person' ? story.needsPerson : filter === 'booked' ? hasChip(story, 'Tour booked') : filter === 'priced' ? hasChip(story, 'Priced out') : filter === 'emergency' ? story.emergency : true
 
@@ -94,7 +96,7 @@ function panelHtml(rec, story, s) {
     `<button type="button" class="btn-icon btn-quiet panel-close" aria-label="Close" data-action="close">${A.icon('x')}</button></div><div class="panel-body">`
   if (story.emergency) {
     const em = story.findings.emergency
-    out += A.html.banner('danger', '', { raw: `<strong>Emergency — ${esc(em.phrase)}</strong> reported by ${phone ? esc(phone) : 'a caller with a hidden number'}${rec.startedAt ? ` at ${esc(fmt.dateTime(rec.startedAt))}` : ''}.${em.matched ? ` They said "${esc(em.matched)}".` : ''} The assistant told them to leave and call 911.`, icon: 'siren' }) + '<div style="height:12px"></div>'
+    out += A.html.banner('danger', '', { raw: `<strong>Emergency — ${esc(em.phrase)}</strong> reported by ${phone ? esc(phone) : 'a caller with a hidden number'}${rec.startedAt ? ` ${esc(fmt.whenPhrase(rec.startedAt))}` : ''}.${em.matched ? ` They said "${esc(em.matched)}".` : ''} ${em.fromTranscript ? 'The assistant treated it as an emergency.' : 'The assistant told them to leave and call 911.'}`, icon: 'siren' }) + '<div style="height:12px"></div>'
   }
   out += `<div class="panel-meta">${meta}</div>`
   const rec_ = call ? href.recording(call.recordingUrl) : null
@@ -116,7 +118,7 @@ function panelHtml(rec, story, s) {
     if (!fu) handling = '<span>No call-back was created for this.</span>'
     else if (fu.status === 'scheduled') handling = `<span>Still waiting — ${esc(fmt.respondPhrase(fu.dueAt))}</span><button type="button" class="btn" data-action="handled" data-fu="${esc(fu.id)}" data-key="fu:${esc(fu.id)}:done" data-write="leads">Mark handled</button>`
     else handling = '<span>Handled — a person marked this done.</span>'
-    out += `<section class="panel-section"><h3>Needs a person</h3><div class="card card-warn needs-card">` +
+    out += `<section class="panel-section"><h3 data-key="panel-np" tabindex="-1">Needs a person</h3><div class="card card-warn needs-card">` +
       (t ? `<div class="${t.quote === null ? 'quote' : ''}">${t.quote === null ? esc(t.headline.replace(/^asked /, '')) : esc(text.capitalise(t.headline))}</div>${t.quote ? `<div class="quote">"${esc(t.quote)}"</div>` : ''}<div class="reassure">${esc(t.reassurance)}</div>`
         : `<div>They wanted a tour but it couldn't be booked.</div><div class="reassure">The assistant said someone would call back with times.</div>`) +
       `<div class="handling">${handling}</div></div></section>`
@@ -154,7 +156,7 @@ const view = {
   mount(root) {
     this.root = root
     root.innerHTML = `<div class="view-head"><h1 tabindex="-1">Calls</h1></div><div class="calls-banners"></div>` +
-      `<div class="calls-tools"><label class="search"><span class="vh">Search calls by name, number or apartment</span>${ico('search')}<input type="search" data-key="search" placeholder="Search calls by name, number or apartment" aria-label="Search calls by name, number or apartment" autocomplete="off"></label>` +
+      `<div class="calls-tools"><label class="search"><span class="vh">Search calls by name, number or apartment</span>${ico('search')}<input type="search" data-key="search" placeholder="${esc(searchPlaceholder())}" aria-label="Search calls by name, number or apartment" autocomplete="off"></label>` +
       `<div class="chips" role="group" aria-label="Filter calls">${FILTERS.map(([k, l]) => `<button type="button" class="chip-filter" data-filter="${k}" aria-pressed="${k === 'all' ? 'true' : 'false'}">${ico('check')}<span>${esc(l)} · 0</span></button>`).join('')}</div></div>` +
       `<div class="split calls-split"><div class="split-list calls-list" data-key="list"></div><div class="panel call-panel" data-key="panel"></div></div>`
     this.banners = root.querySelector('.calls-banners'); this.chipsEl = root.querySelector('.chips'); this.search = root.querySelector('input[data-key="search"]')
@@ -191,11 +193,13 @@ const view = {
         if (fu) A.setFollowUpStatus(fu, 'done', { verb: 'handled', button: btn })
       }
     })
-    A.escape.push(() => { if (this.openId && !isSplit() && !this.root.hidden) { this.close(); return true } return false })
+    // Esc closes the open panel when it is the page (stacked layout) or when focus is inside it (split);
+    // focus goes back to the row that opened it (the closing path in render()).
+    A.escape.push(() => { if (this.openId && !this.root.hidden && (!isSplit() || this.panel.contains(document.activeElement))) { this.close(); return true } return false })
     const repaint = () => { if (this.root && !this.root.hidden) this.render(A.state) }
     A.on('data', repaint); A.on('minute', repaint)
     let resizeTimer = null
-    window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { this.panelHtml = null; this.listHtml = null; repaint() }, 150) })
+    window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { this.search.placeholder = searchPlaceholder(); this.panelHtml = null; this.listHtml = null; repaint() }, 150) })
   },
   params() { return A.route().params },
   setParams(patch, replace) {

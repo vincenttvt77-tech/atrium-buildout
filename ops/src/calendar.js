@@ -42,8 +42,9 @@ const dayLabel = (ymd) => `${longDay(ymd)}, ${fmt.monthDay(ymd)}`
 const hourLabel = (h) => { h = ((h % 24) + 24) % 24; return h === 0 ? '12 AM' : h === 12 ? '12 PM' : h < 12 ? `${h} AM` : `${h - 12} PM` }
 const clock = (iso) => fmt.time(iso).replace(/ [AP]M$/, '')
 const toRange = (a, b) => fmt.timeRange(a, b).replace(' – ', ' to ')
-/** The server's default word 'blocked', or an empty reason, is treated as no reason. */
-function reasonOf(raw) { const r = String(raw ?? '').trim(); return !r || /^blocked$/i.test(r) ? '' : text.staff(r) }
+/** The server's default word 'blocked', or an empty reason, is treated as no reason. A reason is a
+ *  person's own words: shown as typed (escaped at render), never rewritten by text.staff(). */
+function reasonOf(raw) { const r = String(raw ?? '').trim(); return !r || /^blocked$/i.test(r) ? '' : r }
 function shortName(name) {
   const parts = String(name ?? '').trim().split(/\s+/).filter(Boolean)
   if (!parts.length) return 'Tour'
@@ -209,7 +210,7 @@ function rangeText(m) {
 /** Screen-reader label of a grid item. */
 function itemLabel(m, it) {
   const day = fmt.dayLong(it.ymd)
-  if (it.kind === 'open') return `${day}, ${fmt.time(it.slot.startsAt)}, open. Block this time`
+  if (it.kind === 'open') return `${day}, ${fmt.time(it.slot.startsAt)}, open. ${cal.slotBlocksFail ? 'Block this day' : 'Block this time'}`
   if (it.kind === 'tour') return `${day}, ${fmt.time(it.slot.startsAt)}, tour with ${it.slot.name || 'a caller'}${it.slot.unitId ? `, apartment ${it.slot.unitId}` : ''}, confirmed`
   if (it.kind === 'band') return `${day}, blocked ${it.slots.length > 1 ? toRange(it.first.startsAt, it.last.endsAt) : fmt.time(it.first.startsAt)}${it.reason ? `, ${it.reason}` : ''}. Reopen`
   return `${day}, blocked all day${it.reason ? `, ${it.reason}` : ''}. Reopen ${longDay(it.ymd)}`
@@ -223,6 +224,12 @@ const cal = {
   root: null, view: 'week', sel: null, pop: null, focusKey: null, focusDate: null, sig: null, model: null,
   scrolled: false, keysShown: false, pendingSlot: null, drag: null, warnedStale: new Set(), sheet: null,
   lastLive: 0, liveTimer: null, parts: {}, inert: false, kbd: false, lastView: null,
+  // slotBlocksFail: set for the rest of the session the first time the server answers a slot-level block
+  // with its known 400 (contract §5.1 — the handler only accepts whole days today). While set, the sheet
+  // opens on All day with the reason said inline, cells stop promising "+ Block", and a slot reopen
+  // offers no Undo it could not honour. picked: the ?date= a link arrived with, marked in the week header.
+  // focusBy: who last set the roving tab stop ('kbd' | 'mouse'), so Tab into the grid lands per §10.7.
+  slotBlocksFail: false, picked: null, pickedShown: null, wasCalendar: false, focusBy: null, entering: false,
 }
 try { const v = localStorage.getItem('atrium.calendar.view'); if (v === 'day' || v === 'week') cal.view = v } catch (e) { /* no local state */ }
 
@@ -289,7 +296,7 @@ function itemHtml(m, it, col) {
       const first = m.byId.get(cal.sel.slotIds[0]), last = m.byId.get(cal.sel.slotIds[cal.sel.slotIds.length - 1])
       if (first && last) caption = `<span class="cal-sel-caption" aria-hidden="true">${esc(fmt.timeRange(first.startsAt, last.endsAt))} · ${esc(plural(cal.sel.slotIds.length, 'time'))}</span>`
     }
-    return `<button type="button" class="cal-cell cal-open${isHour ? '' : ' is-half'}" role="gridcell" aria-colindex="${col}" ${common} data-slot="${esc(it.slot.id)}" tabindex="-1" aria-label="${esc(itemLabel(m, it))}" aria-selected="${sel ? 'true' : 'false'}" style="${place}">${caption}<span class="cal-plus" aria-hidden="true">+ Block</span></button>`
+    return `<button type="button" class="cal-cell cal-open${isHour ? '' : ' is-half'}" role="gridcell" aria-colindex="${col}" ${common} data-slot="${esc(it.slot.id)}" tabindex="-1" aria-label="${esc(itemLabel(m, it))}" aria-selected="${sel ? 'true' : 'false'}" style="${place}">${caption}${cal.slotBlocksFail ? '' : '<span class="cal-plus" aria-hidden="true">+ Block</span>'}</button>`
   }
   if (it.kind === 'tour') {
     const sl = it.slot, past = (Date.parse(sl.startsAt) || 0) < Date.now()
@@ -332,12 +339,14 @@ function gridHtml(m) {
   out += '<div role="row" aria-rowindex="1" style="display:contents"><div class="cal-corner" role="columnheader" aria-colindex="1" aria-label="Time" style="grid-row:1;grid-column:1"></div>'
   m.dayModels.forEach((d, i) => {
     const isToday = d.ymd === m.today, col = i + 2
+    const isPicked = cal.pickedShown === d.ymd
     const kindCls = d.status.kind === 'blocked' ? ' is-blocked' : (d.status.kind === 'open' && d.tours.length ? ' is-ok' : '')
     const inner = `<span class="cal-wd">${esc(shortDay(d.ymd))}</span><span class="cal-dn num">${Number(d.ymd.slice(8, 10))}</span><span class="cal-ds${kindCls}">${d.status.kind === 'blocked' ? ico('slash') : ''}${esc(d.status.text)}</span>`
-    const label_ = `${fmt.dayLong(d.ymd)}, ${d.status.sr}`
-    const common = `role="columnheader" aria-colindex="${col}" data-key="day:${esc(d.ymd)}" data-date="${esc(d.ymd)}" data-col="${i}" style="grid-row:1;grid-column:${col}"${isToday ? ' aria-current="date"' : ''}`
-    if (d.operable) out += `<button type="button" class="cal-dayhead" ${common} data-kind="head" data-op="${d.operable}" tabindex="-1" aria-label="${esc(`${label_}. ${d.operable === 'block' ? 'Block the whole day' : 'Open the details'}`)}">${inner}</button>`
-    else out += `<div class="cal-dayhead" ${common} aria-label="${esc(label_)}">${inner}</div>`
+    const label_ = `${fmt.dayLong(d.ymd)}, ${d.status.sr}${isPicked ? ', the day you picked' : ''}`
+    const common = `role="columnheader" aria-colindex="${col}" data-key="day:${esc(d.ymd)}" data-date="${esc(d.ymd)}" data-col="${i}" style="grid-row:1;grid-column:${col}"${isToday ? ' aria-current="date"' : ''}${isPicked ? ' aria-selected="true"' : ''}`
+    const cls = `cal-dayhead${isPicked ? ' is-picked' : ''}`
+    if (d.operable) out += `<button type="button" class="${cls}" ${common} data-kind="head" data-op="${d.operable}" tabindex="-1" aria-label="${esc(`${label_}. ${d.operable === 'block' ? 'Block the whole day' : 'Open the details'}`)}">${inner}</button>`
+    else out += `<div class="${cls}" ${common} aria-label="${esc(label_)}">${inner}</div>`
   })
   out += '</div>'
   const covered = m.dayModels.map((d) => { const c = new Array(m.rows).fill(false); for (const it of d.items) for (let r = it.row; r < Math.min(m.rows, it.row + it.span); r++) c[r] = true; return c })
@@ -387,7 +396,9 @@ function agendaHtml(m) {
   if (d.ymd < m.today) rows.push(inert('Past — not offered'))
   else if (d.ymd > m.lastSlotDate && !d.dayBlock) rows.push(inert(`Not open yet — the assistant offers tour times through ${fmt.day(m.lastSlotDate)}.`))
   else {
-    if (d.ymd === m.today) rows.push(inert(d.list.length ? 'Earlier today · Not offered' : 'No more times today'))
+    // "Earlier today" exists only once the day's first listed time has passed; before that (at
+    // midnight, say) nothing has been withheld and the row would claim otherwise.
+    if (d.ymd === m.today) { if (!d.list.length) rows.push(inert('No more times today')); else if (m.nowMin >= d.list[0].startMin) rows.push(inert('Earlier today · Not offered')) }
     else if (!d.list.length && !d.dayBlock) rows.push(inert('Closed'))
     if (d.dayBlock && !d.list.length) rows.push(arow('is-blocked', 'All day', `${ico('slash')}<span>Blocked all day${d.items.length && d.items[0].reason ? ` · ${esc(d.items[0].reason)}` : (reasonOf(d.dayBlock.reason) ? ` · ${esc(reasonOf(d.dayBlock.reason))}` : '')}</span>`, `data-action="agenda-day" data-date="${esc(d.ymd)}" data-key="dayband:${esc(d.ymd)}"`, `Blocked all day${reasonOf(d.dayBlock.reason) ? `, ${reasonOf(d.dayBlock.reason)}` : ''}. Open the details`))
     const items = d.items.slice().sort((a, b) => a.row - b.row)
@@ -402,7 +413,7 @@ function agendaHtml(m) {
         const times = run.map((x) => fmt.time(x.slot.startsAt)).join(', ')
         rows.push(arow('is-open', fmt.timeRange(first.startsAt, last.endsAt), `<span>Open</span><span class="cal-ar-count">· ${esc(plural(run.length, 'time'))}</span>`,
           `data-action="agenda-open" data-first="${esc(first.id)}" data-last="${esc(last.id)}" data-key="open:${esc(first.id)}"`,
-          `${fmt.timeRange(first.startsAt, last.endsAt)}, open, ${plural(run.length, 'time')}: ${times}. Block these times`))
+          `${fmt.timeRange(first.startsAt, last.endsAt)}, open, ${plural(run.length, 'time')}: ${times}. ${cal.slotBlocksFail ? 'Block this day' : 'Block these times'}`))
         i = j
       } else if (it.kind === 'tour') {
         const sl = it.slot
@@ -489,8 +500,9 @@ function reblock(targets, handle) {
       if (signedOut(e)) throw e
       reread()
       if (isKnown400(e)) {
+        cal.slotBlocksFail = true
         if (handle) handle.close()
-        A.toast("Couldn't put the block back. Block it again from Block time…", { kind: 'error' })
+        A.toast("Couldn't put the block back — individual times can't be blocked right now. Block the whole day from Block time… if you need to.", { kind: 'error' })
       }
       throw e
     }
@@ -531,7 +543,9 @@ async function runReopen(targets, toastText, focusKey, ymd) {
   }
   cal.focusKey = focusKey; cal.focusDate = ymd
   focusKeyNow()
-  const h = A.toast(toastText, { kind: 'ok', key: `cal:${ymd}`, actions: [{ label: 'Undo', fn: () => reblock(targets, h) }] })
+  // No Undo for a slot-level reopen once slot blocks are known to fail — the page never offers an action it cannot honour.
+  const canUndo = !(cal.slotBlocksFail && targets.some((t) => !isYmd(t.target)))
+  const h = A.toast(toastText, { kind: 'ok', key: `cal:${ymd}`, actions: canUndo ? [{ label: 'Undo', fn: () => reblock(targets, h) }] : [] })
 }
 
 // --- remove all / remove old -----------------------------------------------------------------
@@ -560,7 +574,8 @@ async function removeOld() {
   const targets = old.map((b) => ({ target: String(b.target), reason: b.reason }))
   const r = await A.busy('calendar', sequential(targets.map((t) => ({ action: 'unblock', target: t.target })), 'removing old blocks'))
   if (r.failed) { if (signedOut(r.failed.error)) return; A.toast("Couldn't do that. Nothing changed — try again.", { kind: 'error' }); reread(); return }
-  const h = A.toast(`Removed ${plural(targets.length, 'old block')}`, { kind: 'ok', actions: [{ label: 'Undo', fn: () => reblock(targets, h) }] })
+  const canUndo = !(cal.slotBlocksFail && targets.some((t) => !isYmd(t.target)))
+  const h = A.toast(`Removed ${plural(targets.length, 'old block')}`, { kind: 'ok', actions: canUndo ? [{ label: 'Undo', fn: () => reblock(targets, h) }] : [] })
 }
 
 // --- the Block sheet (§10.5) -----------------------------------------------------------------
@@ -575,7 +590,7 @@ function openSheet(preset) {
   // With no day preset, start on the first day from today that still has an open time (late in the
   // day that is tomorrow), so the sheet never opens with nothing to block.
   const firstOpenDay = (m) => { for (let d = m.today; d <= m.lastSlotDate; d = fmt.addDays(d, 1)) if ((m.byDate.get(d) || []).some((x) => x.status === 'open')) return d; return m.today }
-  const st = { date: isYmd(p.date) ? p.date : firstOpenDay(m0), mode: p.mode === 'range' ? 'range' : 'day', from: p.from || null, to: p.to || null, only: p.only || null, fallback: false, reason: String(p.reason || '') }
+  const st = { date: isYmd(p.date) ? p.date : firstOpenDay(m0), mode: p.mode === 'range' && !cal.slotBlocksFail ? 'range' : 'day', from: p.from || null, to: p.to || null, only: p.only || null, fallback: false, reason: String(p.reason || '') }
   const base = `cal-sheet-${Date.now()}`
   const model = () => cal.model || buildModel(A.state, {})
   const daySlots = () => model().byDate.get(st.date) || []
@@ -639,7 +654,8 @@ function openSheet(preset) {
     api = d
     body.innerHTML = `<div class="cal-sheet">` +
       `<div class="field"><label class="field-label" for="${base}-day">Day</label><select class="select" id="${base}-day">${dayList().map((x) => `<option value="${esc(x.ymd)}"${x.ymd === st.date ? ' selected' : ''}${x.disabled ? ' disabled' : ''}>${esc(x.label)}${x.disabled ? ' (closed)' : ''}</option>`).join('')}</select></div>` +
-      `<div class="cal-mode" role="radiogroup" aria-label="How much of the day"><label><input type="radio" name="${base}-mode" value="day"${st.mode === 'day' ? ' checked' : ''}> All day</label><label><input type="radio" name="${base}-mode" value="range"${st.mode === 'range' ? ' checked' : ''}${model().hasSlots ? '' : ' disabled'}> Part of the day</label></div>` +
+      `<div class="cal-mode" role="radiogroup" aria-label="How much of the day"><label><input type="radio" name="${base}-mode" value="day"${st.mode === 'day' ? ' checked' : ''}> All day</label><label><input type="radio" name="${base}-mode" value="range"${st.mode === 'range' ? ' checked' : ''}${model().hasSlots && !cal.slotBlocksFail ? '' : ' disabled'}${cal.slotBlocksFail ? ` aria-describedby="${base}-modenote"` : ''}> Part of the day</label>` +
+      (cal.slotBlocksFail ? `<p class="cal-mode-note" id="${base}-modenote">Individual times can't be blocked right now — only whole days.</p>` : '') + `</div>` +
       `<div class="cal-range-fields" hidden><div class="field"><label class="field-label" for="${base}-from">From</label><select class="select" id="${base}-from"></select></div><div class="field"><label class="field-label" for="${base}-to">To</label><select class="select" id="${base}-to"></select></div></div>` +
       `<div class="field"><label class="field-label" for="${base}-reason">Reason</label><input class="input" id="${base}-reason" type="text" maxlength="120" placeholder="e.g. painting, staff out" autocomplete="off" aria-describedby="${base}-hint" value="${esc(st.reason)}"><span class="field-hint" id="${base}-hint">optional · up to 120 characters</span>` +
       `<div class="chips cal-chips" role="group" aria-label="Quick reasons">${QUICK.map((q) => `<button type="button" class="chip-filter" data-reason="${esc(q)}" aria-pressed="false">${ico('check')}<span>${esc(q)}</span></button>`).join('')}</div></div>` +
@@ -693,9 +709,15 @@ function openSheet(preset) {
     if (r.failed.index === 0) {
       if (isKnown400(e)) {
         st.fallback = true
-        d.body.innerHTML = `<div class="cal-sheet"><p class="prose">Individual times can't be blocked right now — only whole days. Block ${esc(longDay(date))} all day instead?</p></div>`
+        cal.slotBlocksFail = true
+        // The sheet changes under the keyboard user: keep focus inside it (on the new primary) and
+        // say why through a live region, not only through the relabelled button.
+        const sentence = `Individual times can't be blocked right now — only whole days. Block ${longDay(date)} all day instead?`
+        d.body.innerHTML = `<div class="cal-sheet"><p class="prose" role="status">${esc(sentence)}</p></div>`
         els = {}
         d.setPrimary({ label: `Block ${longDay(date)} all day`, disabled: false })
+        const pb = d.el.querySelector('.dlg-primary'); if (pb) { try { pb.focus() } catch (e2) { /* ignore */ } }
+        A.announce(sentence)
         return
       }
       d.setError("Couldn't block that time. The calendar hasn't changed — try again.")
@@ -734,7 +756,8 @@ const keyOf = (el) => { const k = el && el.closest ? el.closest('[data-key]') : 
 function findItem(key) { const m = cal.model; if (!m) return null; for (const d of m.dayModels) for (const it of d.items) if (it.key === key) return it; return null }
 function itemForSlot(id) { const m = cal.model; if (!m) return null; for (const d of m.dayModels) for (const it of d.items) if (it.slots.some((x) => x.id === id)) return it; return null }
 function focusable(el) { if (!el) return null; return el.classList.contains('cal-band') ? el.querySelector('.cal-band-hit[role="gridcell"]') : el }
-function focusEl(el) { const f = focusable(el); if (!f) return false; try { f.focus({ preventScroll: true }) } catch (e) { /* ignore */ } return true }
+/** Every programmatic focus move goes through here; cal.entering tells the focusin handler not to redirect it. */
+function focusEl(el) { const f = focusable(el); if (!f) return false; cal.entering = true; try { f.focus({ preventScroll: true }) } catch (e) { /* ignore */ } cal.entering = false; return true }
 function focusKeyNow() {
   let el = byKey(cal.focusKey)
   if (!el && cal.focusKey && /^(cell|tour|band):/.test(cal.focusKey)) { const id = cal.focusKey.replace(/^[a-z]+:/, ''); el = q(`[data-slot="${cssq(id)}"], [data-slots~="${cssq(id)}"]`) }
@@ -746,7 +769,10 @@ function setRoving(el) {
   for (const x of grid.querySelectorAll('[tabindex="0"]')) x.setAttribute('tabindex', '-1')
   const f = focusable(el); if (f) f.setAttribute('tabindex', '0')
   cal.focusKey = keyOf(el); cal.focusDate = (el.closest('[data-date]') || {}).dataset ? el.closest('[data-date]').dataset.date : cal.focusDate
+  cal.focusBy = cal.kbd ? 'kbd' : 'mouse'
 }
+/** Bring a grid stop into view inside .cal-scroll (and the page) with the least movement. */
+function showEl(el) { if (el && el.scrollIntoView) { try { el.scrollIntoView({ block: 'nearest', inline: 'nearest' }) } catch (e) { /* ignore */ } } }
 
 // ---------------------------------------------------------------------------------------
 // Popovers (§10.6): a .popover on desktop, an Atrium.dialog bottom sheet on mobile
@@ -761,7 +787,16 @@ function closePopover(returnFocus) {
   cal.pop = null
   if (p.el) { p.el.remove(); document.removeEventListener('pointerdown', p.onDown, true); A.escape.remove(p.onEsc) }
   if (p.dialog) { try { p.dialog.close() } catch (e) { /* ignore */ } }
-  if (returnFocus && p.anchorKey) { const el = byKey(p.anchorKey); if (el) focusEl(el) }
+  if (returnFocus && p.anchorKey) {
+    const el = byKey(p.anchorKey)
+    if (el) focusEl(el)
+    else {
+      // the anchor was re-rendered away (a reopened band, a day that changed): the nearest stop on that day, else the heading
+      focusKeyNow()
+      const a = document.activeElement
+      if (!a || a === document.body || !(cal.root && cal.root.contains(a))) { const h1 = q('h1'); if (h1) { try { h1.focus({ preventScroll: true }) } catch (e) { /* ignore */ } } }
+    }
+  }
 }
 function position(el, anchor, host) {
   const hr = host.getBoundingClientRect(), ar = anchor.getBoundingClientRect()
@@ -929,13 +964,16 @@ async function goToDate() {
   if (!ymd) { A.toast('Try a date like "Sep 10".', { kind: 'warn' }); return }
   const m = cal.model || buildModel(A.state, {})
   if (ymd < m.firstWeek || ymd > m.lastDay) { A.toast('The calendar only shows the next two weeks.', { kind: 'info' }); return }
-  setParams({ date: ymd })
+  cal.picked = ymd
+  setParams({ date: ymd }, undefined, { keepPicked: true })
 }
 
 // --- navigation ---------------------------------------------------------------------------
 
 const params = () => A.route().params
-function setParams(patch, replace) {
+/** Every in-view navigation drops the picked-day mark (paging, Today, the strip); Go to date keeps it. */
+function setParams(patch, replace, opts) {
+  if (!(opts && opts.keepPicked)) cal.picked = null
   const p = { ...params(), ...patch }
   for (const k of Object.keys(p)) if (p[k] === undefined || p[k] === null || p[k] === '') delete p[k]
   A.navigate('calendar', p, { replace: replace !== false })
@@ -1153,7 +1191,16 @@ const view = {
     root.addEventListener('focusin', (e) => {
       const grid = e.target.closest && e.target.closest('.cal-grid')
       if (!grid) return
+      const entering = !(e.relatedTarget && grid.contains(e.relatedTarget))
+      // Tab into the grid lands on today's first open time (§10.7) unless the keyboard user left a
+      // spot of their own; a stop remembered from a mouse click is not that. Whatever gets focus is
+      // scrolled into view, so the ring is never off screen.
+      if (entering && !cal.entering && cal.kbd && cal.lastKey === 'Tab' && cal.focusBy !== 'kbd' && cal.model) {
+        const d = defaultStop(cal.model), f = d ? focusable(d) : null
+        if (f && f !== e.target) { setRoving(d); focusEl(d); showEl(f); return }
+      }
       const stop = currentStop(); if (stop) setRoving(stop)
+      if (entering) showEl(e.target)
       if (cal.kbd && !cal.keysShown && A.hint('calendar-keys')) { cal.keysShown = true; const h = q('.cal-hint'); if (h) h.classList.remove('vh') }
     })
     let tx = null, ty = null
@@ -1164,14 +1211,19 @@ const view = {
       tx = null; ty = null
       if (Math.abs(dx) >= 48 && Math.abs(dx) > 2 * Math.abs(dy)) page(dx < 0 ? 1 : -1)
     }, { passive: true })
-    document.addEventListener('keydown', () => { cal.kbd = true }, true)
+    document.addEventListener('keydown', (e) => { cal.kbd = true; cal.lastKey = e.key }, true)
     document.addEventListener('pointerdown', () => { cal.kbd = false }, true)
     A.escape.push(() => { if (cal.root && !cal.root.hidden && cal.sel && !cal.pop) { clearSel(); return true } return false })
     const repaint = () => { if (cal.root && !cal.root.hidden) this.render(A.state) }
     A.on('data', repaint)
     A.on('minute', () => { paintNow(); repaint() })
     A.on('busy', () => { paintBusy(); if (cal.sheet) cal.sheet.refresh() })
-    A.on('route', (r) => { if (r.name !== 'calendar') closePopover(false) })
+    A.on('route', (r) => {
+      if (r.name !== 'calendar') { closePopover(false); document.body.classList.remove('has-cal-fab'); cal.wasCalendar = false; return }
+      // arriving from another view (or a fresh load) with ?date= marks that day in the week header
+      if (!cal.wasCalendar && isYmd(r.params.date)) { cal.picked = r.params.date; if (cal.root && !cal.root.hidden) this.render(A.state) }
+      cal.wasCalendar = true
+    })
     let rt = null
     window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (cal.model && cal.model.mobile !== isMobile()) { cal.parts = {}; closePopover(false) } repaint() }, 150) })
   },
@@ -1244,6 +1296,7 @@ const view = {
       cal.sel = null
       if (changed && m.loaded) say('Some of those times changed — selection cleared')
     }
+    cal.pickedShown = cal.picked && m.view === 'week' && m.days.includes(cal.picked) && cal.picked !== m.today ? cal.picked : null
     const moreBtn = `<button type="button" class="btn-icon" data-action="more" data-key="more" aria-label="More calendar actions" aria-haspopup="dialog" data-write="calendar"${dis(A.busyNow('calendar') || cal.inert)}>${A.icon('more')}</button>`
     setPart('head', `<div class="view-head${m.mobile ? ' cal-head-mobile' : ''}"><div class="cal-head-main"><h1 tabindex="-1">Tour calendar</h1>${m.loaded || s.loaded.leads ? stripHtml(s, m) : ''}</div>${m.mobile ? `<div class="cal-head-tools">${moreBtn}</div>` : ''}</div>`)
     setPart('banners', bannersHtml(s, m))
@@ -1261,6 +1314,8 @@ const view = {
     const scrollEl = q('.cal-scroll'), scrollTop = scrollEl ? scrollEl.scrollTop : null
     const bodyChanged = setPart('body', body)
     setPart('foot', loading ? '' : footHtml(m))
+    // the floating Block time… button owns the bottom edge on mobile; toasts stack above it (calendar.css)
+    document.body.classList.toggle('has-cal-fab', Boolean(m.mobile && !loading && !cal.root.hidden))
     if (bodyChanged) {
       const grid = q('.cal-grid')
       if (grid) {
@@ -1277,7 +1332,10 @@ const view = {
         }
         let target = null
         if (cal.pendingFocus) { const pf = cal.pendingFocus; cal.pendingFocus = null; target = pf.head ? headIn(pf.col) : nearestStop(pf.col, pf.row) }
-        if (!target && (focusKey || cal.focusKey)) {
+        // the remembered stop is restored only while focus is in the grid; otherwise the tab stop
+        // returns to today's first open time so entering the grid behaves per §10.7 (writes that
+        // want a specific stop set cal.focusKey and call focusKeyNow() after this render)
+        if (!target && hadFocus && (focusKey || cal.focusKey)) {
           target = byKey(focusKey || cal.focusKey)
           if (!target && cal.focusDate) target = nearestStop(m.days.indexOf(cal.focusDate), 0)
         }

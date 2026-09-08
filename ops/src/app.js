@@ -232,6 +232,16 @@ const fmt = {
     if (diff === 1) return `Tomorrow ${time}`
     return `${fmt.day(p.ymd)}, ${time}`
   },
+  /** Mid-sentence form of dateTime: 'at 3:02 AM' | 'yesterday at 1:05 PM' | 'tomorrow at 10:00 AM' | 'on Tue, Sep 1 at 2:14 PM'. */
+  whenPhrase(iso) {
+    const p = nyParts(iso); if (!p) return ''
+    const diff = daysBetween(nyNow().ymd, p.ymd)
+    const time = fmt.time(iso)
+    if (diff === 0) return `at ${time}`
+    if (diff === -1) return `yesterday at ${time}`
+    if (diff === 1) return `tomorrow at ${time}`
+    return `on ${fmt.day(p.ymd)} at ${time}`
+  },
   timeRange(a, b) {
     const ta = fmt.time(a), tb = fmt.time(b)
     if (ta === '—' || tb === '—') return ta === '—' ? tb : ta
@@ -946,7 +956,12 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
 function dialog(spec) {
   const o = spec || {}
   const host = document.getElementById('dialogs') || document.body
+  // The opener is remembered by reference AND by its data-key + view: a view that repaints while
+  // the dialog is open (Status every poll, any list a colleague changes) replaces the button, and
+  // focus must still land on its successor, not on <body>.
   const opener = document.activeElement
+  const openerKey = opener && opener.dataset && opener.dataset.key ? opener.dataset.key : null
+  const openerView = opener && opener.closest ? opener.closest('.view') : null
   const id = `dlg-title-${++dialogSeq}`
   const backdrop = document.createElement('div')
   backdrop.className = 'dlg-backdrop'
@@ -976,7 +991,13 @@ function dialog(spec) {
       const i = dialogs.indexOf(api_); if (i >= 0) dialogs.splice(i, 1)
       backdrop.remove()
       if (!dialogs.length) document.body.classList.remove('has-dialog')
-      if (opener && typeof opener.focus === 'function' && opener.isConnected) { try { opener.focus({ preventScroll: true }) } catch (e) { /* ignore */ } }
+      let back = opener && typeof opener.focus === 'function' && opener.isConnected && opener !== document.body ? opener : null
+      if (!back && openerKey) {
+        const v = (openerView && openerView.isConnected && !openerView.hidden ? openerView : null) || document.querySelector('.view:not([hidden])')
+        back = v ? v.querySelector(`[data-key="${cssq(openerKey)}"]`) : null
+      }
+      if (!back) { const v = document.querySelector('.view:not([hidden])'); back = v ? v.querySelector('h1') : null }
+      if (back) { try { back.focus({ preventScroll: true }) } catch (e) { /* ignore */ } }
       if (typeof o.onClose === 'function') { try { o.onClose() } catch (e) { console.error(e) } }
     },
     setPrimary(p) {
@@ -1436,6 +1457,20 @@ function callStory(record, s) {
     }
   })
   if (f.booked) f.slotTaken = false
+  // Contract gap §5.3: after a cold start the decision events are gone, so an emergency call has no
+  // 'emergency' event. The transcript is the fallback — the assistant's own emergency wording marks
+  // the call, and the caller's words pick the kind and the quote.
+  if (!f.emergency && call && call.transcript) {
+    const lines = String(call.transcript).split('\n')
+    const assistant = lines.filter((l) => /^AI:/.test(l)).join('\n')
+    if (/\b911\b|as an emergency\b|this is an emergency|flagging this[^\n]{0,60}\bemergency\b|leave the (?:building|apartment) (?:now|right away)/i.test(assistant)) {
+      const KINDS = [['gas', /\bgas\b/i], ['carbon_monoxide', /carbon monoxide|\bCO\b/], ['smoke_or_fire', /\b(smoke|fire|burning)\b/i], ['flooding', /flood|water (?:coming|pouring|everywhere)|leak/i],
+        ['no_heat', /no heat|heat(?:ing)? (?:is )?(?:out|off|broken)/i], ['injury', /injur|hurt|bleeding|unconscious|fell/i], ['intruder', /intruder|break(?:ing)? in|burglar|someone in my/i], ['structural', /collaps|structural|ceiling (?:is )?(?:falling|caving)/i]]
+      let kind = null, matched = ''
+      for (const [k, re] of KINDS) { const line = lines.find((l) => /^User:/.test(l) && re.test(l)); if (line) { kind = k; matched = text.truncate(line.replace(/^User:\s?/, '').trim(), 90); break } }
+      f.emergency = { phrase: label(labels.emergency, kind, 'an emergency'), matched, fromTranscript: true, said911: /\b911\b/.test(assistant) }
+    }
+  }
 
   // who / wants
   const who = (() => {
@@ -1452,18 +1487,25 @@ function callStory(record, s) {
     const size = c.bedrooms ? sizeWord(c.bedrooms.value) : null
     const budget = c.budget ? fmt.money(c.budget.value) : null
     if (size || budget) parts.push(`looking for ${size || 'a place'}${budget ? ` under ${budget}` : ''}`)
-    const q = (x) => `"${(x.excerpt || String(x.value ?? '')).trim()}"`
-    if (c.moveInTiming) parts.push(`moving ${c.moveInTiming.excerpt ? q(c.moveInTiming) : (moveInText(String(c.moveInTiming.value ?? '')) || q(c.moveInTiming))}`)
-    if (c.pets) parts.push(`with ${q(c.pets)}`)
-    if (c.parking) parts.push(`parking ${q(c.parking)}`)
+    // Value phrases, not verbatim excerpts: the full quotes live in "What the assistant learned".
+    // When only an excerpt exists it is cut to its first clause so the sentence still scans.
+    const clause = (s) => { const t = String(s ?? '').trim(); const m = /^(.*?)[.!?](?:\s|$)/.exec(t); return text.truncate(m && m[1].trim() ? m[1].trim() : t, 40) }
+    const q = (x) => `"${clause(x.excerpt || x.value)}"`
+    const plainValue = (x) => { const v = String(x.value ?? '').trim(); return v && !/^(yes|no|true|false|y|n)$/i.test(v) ? v : '' }
+    if (c.moveInTiming) parts.push(`moving ${moveInText(typeof c.moveInTiming.value === 'object' && c.moveInTiming.value ? c.moveInTiming.value : String(c.moveInTiming.value ?? '')) || q(c.moveInTiming)}`)
+    if (c.pets) parts.push(`with ${plainValue(c.pets) || q(c.pets)}`)
+    if (c.parking) parts.push(`parking ${plainValue(c.parking) ? `(${plainValue(c.parking)})` : q(c.parking)}`)
     return parts.length ? `${text.capitalise(parts.join(', '))}.` : ''
   })()
 
   // the sentence — first rule that matches, then the Also clause
+  // An emergency known from the decision log followed the script (leave, call 911); one read off the
+  // transcript is described only as far as the transcript shows.
+  const emergencyAction = () => (f.emergency && f.emergency.fromTranscript && !f.emergency.said911 ? 'The assistant treated it as an emergency.' : 'The assistant told them to leave and call 911.')
   const bookedSentence = () => `The assistant booked a tour${f.booked.unitId ? ` of apartment ${f.booked.unitId}` : ''} for ${f.booked.when || 'a time on the calendar'}.`
   const askedSentence = () => `They asked "${text.truncate(f.restricted.question || label(labels.trigger, f.restricted.trigger, 'something only a person can answer'), 90)}" — that's for a person to answer, so the assistant took their details for a call back.`
   const rules = [
-    { id: 1, hit: () => Boolean(f.emergency), say: () => `They reported ${f.emergency.phrase}${f.emergency.matched ? ` — "${f.emergency.matched}"` : ''}. The assistant told them to leave and call 911.` },
+    { id: 1, hit: () => Boolean(f.emergency), say: () => `They reported ${f.emergency.phrase}${f.emergency.matched ? ` — "${f.emergency.matched}"` : ''}. ${emergencyAction()}` },
     { id: 2, hit: () => Boolean(f.restricted), say: askedSentence },
     { id: 3, hit: () => Boolean(f.booked), say: bookedSentence },
     { id: 4, hit: () => Boolean(f.arranging), say: () => `The assistant is arranging a tour${f.arranging.unitId ? ` of apartment ${f.arranging.unitId}` : ''} — it isn't confirmed yet.` },
@@ -1508,7 +1550,7 @@ function callStory(record, s) {
 
   // steps, one per tool call in order; consecutive captures collapse
   const steps = []
-  if (f.emergency) steps.push({ icon: 'siren', text: `Treated this as an emergency (${f.emergency.phrase}) and told them to leave and call 911.` })
+  if (f.emergency) steps.push({ icon: 'siren', text: `Treated this as an emergency (${f.emergency.phrase})${f.emergency.fromTranscript && !f.emergency.said911 ? '' : ' and told them to leave and call 911'}.` })
   let run = []
   const flushRun = () => {
     if (!run.length) return
@@ -1644,20 +1686,59 @@ function reread(resource) {
   if (!RESOURCES[resource] || gated) return Promise.resolve()
   return api.get(RESOURCES[resource]).then((d) => { apply(resource, d) }, () => { /* the poll will try again */ })
 }
+/**
+ * Where keyboard focus goes when the control that started a write leaves the list with its row:
+ * the same action on the next row, else on the previous row, else the group's heading or
+ * summary, else the section's heading (each carries data-key and, for headings, tabindex=-1).
+ * restoreFocus() tries them in order, then the toast's first action, then the view's H1 — focus
+ * never falls to <body> after a write.
+ */
+function focusFallbacks(btn) {
+  const keys = []
+  if (!btn || !btn.closest) return keys
+  const action = String(btn.dataset.action || '')
+  const row = btn.closest('.row')
+  const keyIn = (r) => { if (!r) return null; const b = r.querySelector(`[data-action="${cssq(action)}"][data-key]`) || r.querySelector('button[data-key], a[data-key]'); return b ? b.dataset.key : null }
+  if (row && row.parentElement) {
+    const rows = [...row.parentElement.children].filter((x) => x.classList.contains('row'))
+    const i = rows.indexOf(row)
+    keys.push(keyIn(rows[i + 1]), keyIn(rows[i - 1]))
+    const prev = row.parentElement.previousElementSibling
+    if (prev && prev.dataset && prev.dataset.key && /^(H2|H3|H4|SUMMARY)$/.test(prev.tagName)) keys.push(prev.dataset.key)
+  }
+  const det = btn.closest('details'), sm = det && det.querySelector('summary[data-key]')
+  if (sm) keys.push(sm.dataset.key)
+  const scope = btn.closest('section, .panel-section, .panel-body, .view')
+  const head = scope && scope.querySelector('h2[data-key], h3[data-key], summary[data-key]')
+  if (head) keys.push(head.dataset.key)
+  return keys.filter(Boolean)
+}
+function restoreFocus(keys, toastHandle) {
+  const a = document.activeElement
+  if (a && a !== document.body && a.isConnected) return
+  const view = document.querySelector('.view:not([hidden])')
+  const tryFocus = (el) => { if (!el) return false; try { el.focus({ preventScroll: true }) } catch (e) { return false } return document.activeElement === el }
+  for (const k of keys) { if (view) for (const el of view.querySelectorAll(`[data-key="${cssq(k)}"]`)) if (tryFocus(el)) return }
+  if (toastHandle && toastHandle.el && tryFocus(toastHandle.el.querySelector('.toast-action'))) return
+  if (view) tryFocus(view.querySelector('h1'))
+}
 async function setFollowUpStatus(fu, status, opts) {
   const o = opts || {}
   if (!fu || !fu.id || busyNow('leads')) return false
   const btn = o.button || null
   const row = btn ? btn.closest('.row') : null
   const verb = o.verb || (status === 'done' ? 'done' : status === 'skipped' ? 'not needed' : 'back')
+  const fallbacks = focusFallbacks(btn)
   if (btn) { btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true') }
   if (row) row.classList.add('row-busy')
   try {
     const res = await busy('leads', api.post('/api/leads', { action: 'followup_status', id: fu.id, status }, { doing: `marking a to-do ${verb}` }))
     if (row && row.isConnected && status !== 'scheduled') { row.classList.add('row-leaving'); await new Promise((r) => setTimeout(r, 120)) }
     apply('leads', res)
-    if (status === 'scheduled') toast('Put back on the list', { kind: 'ok', key: `fu:${fu.id}` })
-    else toast(`Marked ${verb}`, { kind: 'ok', key: `fu:${fu.id}`, actions: [{ label: 'Undo', fn: () => busy('leads', api.post('/api/leads', { action: 'followup_status', id: fu.id, status: 'scheduled' }, { doing: 'undoing a to-do change' })).then((r) => { apply('leads', r) }) }] })
+    let h
+    if (status === 'scheduled') h = toast('Put back on the list', { kind: 'ok', key: `fu:${fu.id}` })
+    else h = toast(`Marked ${verb}`, { kind: 'ok', key: `fu:${fu.id}`, actions: [{ label: 'Undo', fn: () => busy('leads', api.post('/api/leads', { action: 'followup_status', id: fu.id, status: 'scheduled' }, { doing: 'undoing a to-do change' })).then((r) => { apply('leads', r) }) }] })
+    restoreFocus(fallbacks, h)
     return true
   } catch (e) {
     if (e.signedOut) return false
@@ -1683,7 +1764,8 @@ const mailLink = (email) => { const h = href.mailto(email); return h ? `<a href=
 const chipHtml = (c) => html_.chip(c.cls, c.icon, c.text)
 const isAfterHours = (t) => { const p = nyParts(t); if (!p) return false; const h = property.hours[p.dayOfWeek]; if (!h) return true; const x = p.hour + p.minute / 60; return x < h[0] || x >= h[1] }
 function sectionHead(title, count, trailing) {
-  return `<div class="section-head"><h2>${esc(title)}${count != null ? ` <span class="count">· ${count}</span>` : ''}</h2>${trailing || ''}</div>`
+  // tabindex=-1 + data-key: where keyboard focus lands when the row it was on has just left the list
+  return `<div class="section-head"><h2 tabindex="-1" data-key="section:${esc(title)}">${esc(title)}${count != null ? ` <span class="count">· ${count}</span>` : ''}</h2>${trailing || ''}</div>`
 }
 
 function todayModel(s) {
@@ -1817,7 +1899,7 @@ function emergencyBannerHtml(item, announced) {
   const until = (toTime(item.at) ?? Date.now()) + DAY_MS
   const untilText = nyDate(until) === addDays(nyNow().ymd, 1) ? `${fmt.time(until)} tomorrow` : fmt.dateTime(until)
   const shown = fmt.phone(item.phone)
-  const raw = `<strong>Emergency — ${esc(item.phrase)}</strong> reported by ${shown ? esc(shown) : 'a caller with a hidden number'} at ${esc(when)}.` +
+  const raw = `<strong>Emergency — ${esc(item.phrase)}</strong> reported by ${shown ? esc(shown) : 'a caller with a hidden number'} ${esc(fmt.whenPhrase(item.at) || `at ${when}`)}.` +
     (item.matched ? ` They said "${esc(item.matched)}".` : '') + ' The assistant told them to leave and call 911.' +
     `<div class="small" style="margin-top:4px">Shown until ${esc(untilText)}.</div>`
   const actions = (shown ? telBtn(item.phone, `Call ${shown}`, 'btn') : '') + link('calls', { id: item.callId }, 'See the call', 'btn')
@@ -1883,6 +1965,8 @@ const todayView = {
     out += `<section class="section today-list" id="needs-a-person">${sectionHead('Needs a person', m.people.length)}`
     out += pollBanner(s, 'leads', 'callers')
     if (m.people.length) out += `<div class="card card-warn rows">${m.people.map((p) => personRowHtml(p, s)).join('')}</div>`
+    // The tile counts the emergency too; while its banner is on screen the empty state must not contradict it.
+    else if (s.loaded.leads && m.emergencies.length) out += `<div class="card">${html_.empty({ title: 'Nothing else needs a person right now.', text: 'The emergency above is still open — it stays on this page for a day.' })}</div>`
     else if (s.loaded.leads) out += `<div class="card">${html_.empty({ title: 'Nothing needs a person right now.', text: "When the assistant hands something off — an accommodation question, a dispute, a tour it couldn't book — it shows up here." })}</div>`
     out += '</section>'
     // Call back today
@@ -2038,7 +2122,7 @@ const statusView = {
     btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true')
     stopPolling(); gated = true
     try {
-      await fetch('/api/dashboard', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'logout' }) })
+      await fetch('/api/dashboard', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { ...JSON_HEADERS, 'content-type': 'application/json' }, body: JSON.stringify({ action: 'logout' }) })
     } catch (e) { /* the reload lands on the sign-in page either way */ }
     location.reload()
   },

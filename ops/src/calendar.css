@@ -63,7 +63,10 @@ button.cal-dayhead:hover { background: var(--paper-3); }
   border-radius: 999px; font-size: 1.286rem; font-weight: 600; line-height: 1;
 }
 .cal-dayhead[aria-current="date"] .cal-dn { background: var(--accent); color: var(--on-accent); }
-.cal-dayhead .cal-ds { font-size: .857rem; line-height: 1.15; color: var(--ink-3); font-weight: 500; max-width: 100%; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+/* One line, ellipsised: a long block reason is in the band and the popover; the header only says "Blocked · …". */
+.cal-dayhead .cal-ds { font-size: .857rem; line-height: 1.15; color: var(--ink-3); font-weight: 500; display: block; max-width: 100%; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-dayhead.is-picked { background: var(--accent-soft); }
+.cal-dayhead.is-picked:not([aria-current="date"]) .cal-dn { box-shadow: inset 0 0 0 2px var(--accent); color: var(--accent); }
 .cal-dayhead .cal-ds.is-blocked { color: var(--blocked); }
 .cal-dayhead .cal-ds.is-ok { color: var(--ok); }
 .cal-dayhead .cal-ds .ico { width: 12px; height: 12px; vertical-align: -1px; }
@@ -90,11 +93,14 @@ button.cal-dayhead:hover { background: var(--paper-3); }
 .cal-open[aria-selected="true"]::before { opacity: 1; }
 .cal-open[aria-selected="true"] { box-shadow: inset 0 0 0 2px var(--accent); z-index: 3; }
 .cal-open[aria-selected="true"] .cal-plus { display: none; }
+/* The caption is one line and may overflow its 30-minute cell; the selected cell sits above its
+   neighbours (z-index 3), so the overflow paints over the next column rather than under it. */
 .cal-sel-caption {
-  position: absolute; left: 4px; top: 3px; z-index: 5; pointer-events: none; width: max-content; max-width: calc(100% - 8px);
+  position: absolute; left: 4px; top: 3px; z-index: 5; pointer-events: none; width: max-content; max-width: none;
   font-size: .857rem; font-weight: 600; line-height: 1.2; color: var(--accent); background: var(--paper-2);
-  padding: 1px 6px; border-radius: 10px; border: 1px solid var(--accent); white-space: normal; overflow-wrap: anywhere;
+  padding: 1px 6px; border-radius: 10px; border: 1px solid var(--accent); white-space: nowrap;
 }
+.cal-open { overflow: visible; }
 .cal-view.is-inert .cal-open, .cal-view.is-inert .cal-tour, .cal-view.is-inert .cal-band, .cal-view.is-inert button.cal-dayhead { cursor: not-allowed; opacity: .7; }
 
 .cal-tour {
@@ -175,6 +181,8 @@ button.cal-dayhead:hover { background: var(--paper-3); }
 .cal-sheet .cal-mode { display: flex; gap: 16px; flex-wrap: wrap; }
 .cal-sheet .cal-mode label { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; cursor: pointer; }
 .cal-sheet .cal-mode input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+.cal-sheet .cal-mode label:has(input:disabled) { color: var(--ink-3); cursor: not-allowed; }
+.cal-sheet .cal-mode-note { flex-basis: 100%; margin: 0; font-size: .929rem; color: var(--ink-2); }
 .cal-sheet .cal-range-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .cal-sheet .cal-chips { margin-top: 8px; }
 .cal-sheet .cal-chips .chip-filter { height: 28px; padding: 0 8px; }
@@ -231,4 +239,9 @@ button.cal-dayhead:hover { background: var(--paper-3); }
 }
 .cal-fab .ico { width: 18px; height: 18px; }
 @media (max-width: 599px) { .cal-arow { grid-template-columns: 88px minmax(0, 1fr) auto; } .cal-arow .row-actions { grid-column: auto; } }
-@media (max-width: 959px) { .cal-foot { padding-bottom: 72px; } }
+@media (max-width: 959px) {
+  .cal-foot { padding-bottom: 72px; }
+  /* While the floating Block time… button is on screen (body.has-cal-fab, set by calendar.js), toasts
+     stack above it: tab bar 56 + gap 16 + button 44 + 12 clearance. A bottom sheet still wins (toasts go to the top). */
+  body.has-cal-fab:not(.has-dialog) .toast-stack { bottom: calc(128px + env(safe-area-inset-bottom, 0px)); }
+}

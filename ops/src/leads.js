@@ -26,6 +26,10 @@ const { fmt, derive, text, href, labels } = A
 const ico = (n) => `<span class="ico">${A.icon(n)}</span>`
 const cssq = (s) => (window.CSS && CSS.escape) ? CSS.escape(String(s)) : String(s).replace(/["\\]/g, (c) => '\\' + c)
 const isSplit = () => matchMedia('(min-width: 1200px)').matches
+const isMobile = () => matchMedia('(max-width: 959px)').matches
+/* Shorter placeholders on a phone so they are not cut off at 390 px; the hint line under the note field still says to start with initials. */
+const searchPlaceholder = () => (isMobile() ? 'Search name, number or apartment' : 'Search by name, number or apartment')
+const notePlaceholder = () => (isMobile() ? 'Add a note, e.g. "MR: left a voicemail"' : 'Add a note — start with your initials, e.g. "MR: left a voicemail"')
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches
 const arr = (v) => (Array.isArray(v) ? v : [])
 const toTime = (v) => { if (v == null || v === '') return null; const t = Date.parse(String(v)); return isNaN(t) ? null : t }
@@ -133,12 +137,12 @@ function todoListHtml(s) {
     for (const [key, label_, iconName] of GROUPS) {
       const items = groups[key]
       if (!items.length) continue
-      out += `<h3 class="group-head${key === 'overdue' ? ' overdue' : ''}">${iconName ? ico(iconName) : ''}<span>${esc(label_)}</span>${countHtml(items.length)}</h3>` +
+      out += `<h3 class="group-head${key === 'overdue' ? ' overdue' : ''}" data-key="group:${key}" tabindex="-1">${iconName ? ico(iconName) : ''}<span>${esc(label_)}</span>${countHtml(items.length)}</h3>` +
         `<div class="card rows">${items.map((f) => fuRowHtml(f, s, { nameLink: true })).join('')}</div>`
     }
   }
   if (done.length) {
-    out += `<details class="done-list" data-key="done-today"><summary>${ico('chevron-down')}<span>Done and not needed today</span>${countHtml(done.length)}</summary>` +
+    out += `<details class="done-list" data-key="done-today"><summary data-key="done-today-summary">${ico('chevron-down')}<span>Done and not needed today</span>${countHtml(done.length)}</summary>` +
       `<div class="card rows">${done.map((f) => doneRowHtml(f, s)).join('')}</div></details>`
   }
   return out
@@ -189,7 +193,7 @@ function leadRowHtml(p, s, open, tab) {
   const sig = p.signals || {}
   const facts = []
   if (hidden) facts.push(`${text.plural(arr(p.calls).length, 'call')} from numbers that weren't shared`)
-  else if (fmt.phone(p.phone)) facts.push(fmt.phone(p.phone))
+  else if (p.name && fmt.phone(p.phone)) facts.push(fmt.phone(p.phone)) // a nameless row's title is already the number
   const more = []
   if (sig.bedrooms) more.push(bedroomsFact(sig.bedrooms.value))
   if (sig.budget) more.push(`up to ${fmt.money(sig.budget.value)}/mo`)
@@ -270,7 +274,7 @@ function npCardHtml(it, recById) {
       `<div class="actions">${telBtn(it.phone, 'Call', 'btn')}${link('calendar', { date: fmt.nyDate(b.startsAt) || undefined }, 'Calendar')}</div></div>`
   }
   if (it.type === 'emergency') {
-    return `<div class="card card-danger np-card"><div class="np-title"><strong>Emergency — ${esc(it.phrase)}</strong> reported ${esc(fmt.dateTime(it.at))}.${it.matched ? ` They said "${esc(it.matched)}".` : ''} The assistant told them to leave and call 911.</div>` +
+    return `<div class="card card-danger np-card"><div class="np-title"><strong>Emergency — ${esc(it.phrase)}</strong> reported ${esc(fmt.whenPhrase(it.at) || fmt.dateTime(it.at))}.${it.matched ? ` They said "${esc(it.matched)}".` : ''} The assistant told them to leave and call 911.</div>` +
       (seeCall ? `<div class="actions">${seeCall}</div>` : '') + '</div>'
   }
   return ''
@@ -309,7 +313,7 @@ function leadPanelHtml(p, s) {
   const openCallIds = new Set(items.map((i) => String(i.callId)))
   const history = arr(p.escalations).filter((e) => e && !openCallIds.has(String(e.callId)))
   if (items.length || history.length) {
-    out += `<section class="panel-section"><h3>Needs a person</h3>${items.map((it) => npCardHtml(it, recById)).join('')}`
+    out += `<section class="panel-section"><h3 data-key="panel-np" tabindex="-1">Needs a person</h3>${items.map((it) => npCardHtml(it, recById)).join('')}`
     if (history.length) out += `<div class="np-history">${history.map((e) => { const t = derive.escalationText(e); return `<div class="np-hist">Handled — ${esc(t.headline)} · ${esc(fmt.monthDay(e.at))}</div>` }).join('')}</div>`
     out += '</section>'
   }
@@ -318,10 +322,10 @@ function leadPanelHtml(p, s) {
   const scheduled = mine.filter((f) => f.status === 'scheduled').sort(byDue)
   const finished = mine.filter((f) => f.status === 'done' || f.status === 'skipped').sort(byDueDesc)
   if (mine.length) {
-    out += `<section class="panel-section"><h3>To do ${countHtml(scheduled.length)}</h3>`
+    out += `<section class="panel-section"><h3 data-key="panel-todo" tabindex="-1">To do ${countHtml(scheduled.length)}</h3>`
     if (scheduled.length) out += `<div class="card rows">${scheduled.map((f) => fuRowHtml(f, s, { nameLink: false })).join('')}</div>`
     else out += `<p class="muted">Nothing to do for ${esc(first)} right now.</p>`
-    if (finished.length) out += `<details class="done-list" data-key="done-panel"><summary>${ico('chevron-down')}<span>Done and not needed</span>${countHtml(finished.length)}</summary><div class="card rows">${finished.map((f) => doneRowHtml(f, s)).join('')}</div></details>`
+    if (finished.length) out += `<details class="done-list" data-key="done-panel"><summary data-key="done-panel-summary">${ico('chevron-down')}<span>Done and not needed</span>${countHtml(finished.length)}</summary><div class="card rows">${finished.map((f) => doneRowHtml(f, s)).join('')}</div></details>`
     out += '</section>'
   }
   // 4. tours
@@ -382,7 +386,7 @@ function leadPanelHtml(p, s) {
   } else out += `<p class="muted" style="margin-bottom:12px">No notes yet.</p>`
   if (hidden) out += `<p class="muted small">These callers' numbers were hidden, so there's nowhere to save a note.</p>`
   else {
-    out += `<div class="note-form"><input class="input" type="text" maxlength="500" autocomplete="off" placeholder='Add a note — start with your initials, e.g. "MR: left a voicemail"' aria-label="Add a note about ${esc(name)}" data-key="note:${esc(p.phone)}" data-phone="${esc(p.phone)}">` +
+    out += `<div class="note-form"><input class="input" type="text" maxlength="500" autocomplete="off" placeholder="${esc(notePlaceholder())}" aria-label="Add a note about ${esc(name)}" data-key="note:${esc(p.phone)}" data-phone="${esc(p.phone)}">` +
       `<button type="button" class="btn" data-action="savenote" data-phone="${esc(p.phone)}" data-key="notebtn:${esc(p.phone)}" data-write="leads" aria-disabled="true">Save note</button></div>` +
       `<p class="field-hint">Start with your initials so the team knows who wrote it.</p>`
   }
@@ -415,7 +419,7 @@ const view = {
       TABS.map(([k, l], i) => `<button type="button" role="tab" class="tab" id="leads-tab-${k}" data-tab="${k}" data-key="tab:${k}" aria-selected="${i === 0 ? 'true' : 'false'}" aria-controls="leads-list" tabindex="${i === 0 ? '0' : '-1'}">${esc(l)}</button>`).join('') +
       `</div><div class="leads-banners"></div>` +
       `<p class="leads-note small muted" hidden>These are for you to do — the assistant doesn't make outgoing calls or send messages yet.</p>` +
-      `<div class="leads-tools" hidden><label class="search"><span class="vh">Search by name, number or apartment</span>${ico('search')}<input type="search" data-key="search" placeholder="Search by name, number or apartment" aria-label="Search by name, number or apartment" autocomplete="off"></label>` +
+      `<div class="leads-tools" hidden><label class="search"><span class="vh">Search by name, number or apartment</span>${ico('search')}<input type="search" data-key="search" placeholder="${esc(searchPlaceholder())}" aria-label="Search by name, number or apartment" autocomplete="off"></label>` +
       `<div class="chips" role="group" aria-label="Filter callers">${STAGES.map(([k, l]) => `<button type="button" class="chip-filter" data-stage="${k}" data-key="stage:${k}" aria-pressed="${k === 'all' ? 'true' : 'false'}">${ico('check')}<span>${esc(l)}</span></button>`).join('')}</div></div></div>` +
       `<div class="split leads-split"><div class="split-list leads-list" id="leads-list" role="tabpanel" aria-labelledby="leads-tab-todo" data-key="list"></div><div class="panel lead-panel" data-key="panel"></div></div></div>`
     this.wrap = root.querySelector('.leads-view'); this.tabsEl = root.querySelector('.tabs'); this.banners = root.querySelector('.leads-banners')
@@ -496,12 +500,14 @@ const view = {
       e.preventDefault()
       this.saveNote(inp.dataset.phone, this.noteBtn(inp.dataset.phone))
     })
-    A.escape.push(() => { if (this.openPhone && !isSplit() && !this.root.hidden) { this.close(); return true } return false })
+    // Esc closes the open panel when it is the page (stacked layout) or when focus is inside it (split);
+    // focus goes back to the row or name that opened it (the closing path in render()).
+    A.escape.push(() => { if (this.openPhone && !this.root.hidden && (!isSplit() || this.panel.contains(document.activeElement))) { this.close(); return true } return false })
     const repaint = () => { if (this.root && !this.root.hidden) this.render(A.state) }
     A.on('data', repaint); A.on('minute', repaint)
     A.on('busy', () => { if (this.root && !this.root.hidden) this.paintBusy() })
     let resizeTimer = null
-    window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { this.panelHtml = null; this.listHtml = null; repaint() }, 150) })
+    window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { this.search.placeholder = searchPlaceholder(); this.panelHtml = null; this.listHtml = null; repaint() }, 150) })
   },
   params() { return A.route().params },
   setParams(patch, replace) {

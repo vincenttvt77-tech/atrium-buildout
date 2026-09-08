@@ -6,7 +6,11 @@
 <meta name="robots" content="noindex, nofollow, noarchive">
 <meta name="referrer" content="no-referrer">
 <title>The Larkin — Front desk</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
+<!-- Inter loads without blocking first paint: a preload that becomes a stylesheet once it lands
+     (inline handler allowed by script-src 'unsafe-inline'); with scripts off the plain link applies.
+     The system stack in --font paints in the meantime, so a blocked fonts.googleapis.com costs nothing. -->
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap"></noscript>
 <!-- Front desk shell. Sources live in ops/src/ and are composed by `npm run build:ops`:
      each @include line becomes the file wrapped in <style> / <script>. The include order is
      the contract's: styles, calendar, leads, calls (CSS), then app, calls, calendar, leads (JS).
@@ -49,7 +53,7 @@
     <section class="view" data-view="status" hidden></section>
   </main>
 </div>
-<div class="toast-stack" id="toasts" role="region" aria-label="Notifications"></div>
+<div class="toast-stack" id="toasts" role="region" aria-label="Notifications" aria-live="polite" aria-relevant="additions text"></div>
 <div class="vh" id="live" aria-live="polite" aria-atomic="true"></div>
 <div id="dialogs"></div>
 <!-- @include app.js -->

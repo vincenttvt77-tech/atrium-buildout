@@ -6,7 +6,11 @@
 <meta name="robots" content="noindex, nofollow, noarchive">
 <meta name="referrer" content="no-referrer">
 <title>The Larkin — Front desk</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
+<!-- Inter loads without blocking first paint: a preload that becomes a stylesheet once it lands
+     (inline handler allowed by script-src 'unsafe-inline'); with scripts off the plain link applies.
+     The system stack in --font paints in the meantime, so a blocked fonts.googleapis.com costs nothing. -->
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap"></noscript>
 <!-- Front desk shell. Sources live in ops/src/ and are composed by `npm run build:ops`:
      each @include line becomes the file wrapped in <style> / <script>. The include order is
      the contract's: styles, calendar, leads, calls (CSS), then app, calls, calendar, leads (JS).
@@ -23,9 +27,10 @@
   --paper-3: #EEEAE0;
   --ink: #1C1B19;
   --ink-2: #5E5A52;
-  --ink-3: #726C63;
+  --ink-3: #68625A;
   --line: #E3DED2;
   --line-strong: #CFC8B8;
+  --line-ctrl: #948C7E;
   --accent: #7F5E33;
   --accent-strong: #6A4D27;
   --accent-soft: #F1E7D8;
@@ -62,9 +67,10 @@
     --paper-3: #1A1914;
     --ink: #EDE8DC;
     --ink-2: #B5AE9F;
-    --ink-3: #948E82;
+    --ink-3: #A8A295;
     --line: #2E2C25;
     --line-strong: #3D3A31;
+    --line-ctrl: #716B5E;
     --accent: #C79A5E;
     --accent-strong: #D9AE72;
     --accent-soft: #3A2E1E;
@@ -88,6 +94,9 @@
     --shadow-pop: 0 8px 24px rgba(0, 0, 0, .55), 0 1px 2px rgba(0, 0, 0, .4);
   }
 }
+/* The base size sits here, above the mobile block, so the 15 px mobile rule (same specificity,
+   later in the sheet) wins as the brief's §3.2 intends. */
+html { font-size: 14px; -webkit-text-size-adjust: 100%; }
 @media (max-width: 959px) {
   :root { --ctrl-h: 44px; --main-pad: 16px; }
   html { font-size: 15px; }
@@ -103,7 +112,6 @@
 
 /* ---------- reset and base ---------- */
 *, *::before, *::after { box-sizing: border-box; }
-html { font-size: 14px; -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
   background: var(--paper);
@@ -158,7 +166,7 @@ details > summary::-webkit-details-marker { display: none; }
 .skip {
   position: absolute; left: -999px; top: 8px; z-index: 100;
   padding: 8px 12px; background: var(--paper-2); color: var(--accent);
-  border: 1px solid var(--line-strong); border-radius: var(--r-ctrl); text-decoration: none;
+  border: 1px solid var(--line-ctrl); border-radius: var(--r-ctrl); text-decoration: none;
 }
 .skip:focus { left: 8px; }
 
@@ -252,6 +260,8 @@ main:focus { outline: none; }
   .nav-item .badge { position: absolute; top: 4px; left: calc(50% + 6px); }
   .nav-item .nav-dot { position: absolute; top: 8px; left: calc(50% + 8px); }
   .side-foot { margin: 0; padding: 0; border: 0; flex-direction: row; align-items: center; }
+  /* The status link in the top bar is a 44 px tall target; the bar is 52 px, so it fits. */
+  .cluster-link { display: inline-flex; align-items: center; min-height: 44px; }
   .staff-only { display: none; }
   .cluster-desk { display: none; }
   .cluster-mobile { display: inline-flex; }
@@ -259,10 +269,13 @@ main:focus { outline: none; }
 }
 
 /* ---------- buttons ---------- */
+/* Controls whose border is the only thing that marks them (buttons, fields, the segmented
+   control, filter chips) use --line-ctrl, which clears 3:1 on white and paper (WCAG 1.4.11);
+   --line and --line-strong stay for decorative hairlines: cards, grid lines, dividers. */
 .btn, .btn-icon {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   height: var(--ctrl-h); padding: 0 12px; border-radius: var(--r-ctrl);
-  background: var(--paper-2); color: var(--ink); border: 1px solid var(--line-strong);
+  background: var(--paper-2); color: var(--ink); border: 1px solid var(--line-ctrl);
   font-weight: 500; font-size: 1rem; line-height: 1; text-decoration: none; white-space: nowrap;
   transition: background var(--motion) ease-out, opacity var(--motion) ease-out;
 }
@@ -272,7 +285,8 @@ main:focus { outline: none; }
 .btn-primary:hover { background: var(--accent-strong); }
 .btn-quiet { background: transparent; border-color: transparent; color: var(--ink-2); }
 .btn-quiet:hover { background: var(--paper-3); color: var(--ink); }
-.btn-danger { background: var(--danger); color: #fff; border-color: transparent; }
+/* --on-accent on --danger reads in both themes (5.94 light, 7.13 dark); white on the dark salmon did not. */
+.btn-danger { background: var(--danger); color: var(--on-accent); border-color: transparent; }
 .btn-danger:hover { background: var(--danger); filter: brightness(.92); }
 .btn-link {
   display: inline; height: auto; padding: 0; border: 0; background: none;
@@ -291,7 +305,7 @@ main:focus { outline: none; }
   border-radius: 50%; border: 2px solid var(--line-strong); border-top-color: var(--ink-2);
   animation: spin .8s linear infinite;
 }
-.btn-primary.is-busy::after { border-color: rgba(255, 255, 255, .35); border-top-color: var(--on-accent); }
+.btn-primary.is-busy::after, .btn-danger.is-busy::after { border-color: rgba(255, 255, 255, .35); border-top-color: var(--on-accent); }
 @keyframes spin { to { transform: rotate(360deg); } }
 .spin svg { animation: spin 1s linear infinite; }
 
@@ -311,7 +325,7 @@ main:focus { outline: none; }
 .chip-neutral { background: var(--paper-3); color: var(--ink-2); }
 .chip-filter {
   display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px;
-  border-radius: var(--r-ctrl); background: var(--paper-2); border: 1px solid var(--line);
+  border-radius: var(--r-ctrl); background: var(--paper-2); border: 1px solid var(--line-ctrl);
   color: var(--ink); font-size: .929rem; font-weight: 500; white-space: nowrap;
   transition: background var(--motion) ease-out;
 }
@@ -416,7 +430,7 @@ button.row { border-left: 0; border-right: 0; border-top: 0; font: inherit; }
 .field-error { display: flex; align-items: center; gap: 6px; font-size: .929rem; color: var(--danger); }
 .input, .select, .search input {
   height: var(--ctrl-h); padding: 0 10px; border-radius: var(--r-ctrl); width: 100%;
-  background: var(--paper-2); border: 1px solid var(--line-strong); color: var(--ink);
+  background: var(--paper-2); border: 1px solid var(--line-ctrl); color: var(--ink);
 }
 .input::placeholder, .search input::placeholder { color: var(--ink-3); }
 .select { padding-right: 28px; }
@@ -427,7 +441,7 @@ button.row { border-left: 0; border-right: 0; border-top: 0; font: inherit; }
 
 /* ---------- tabs ---------- */
 .tabs, .seg { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
-.seg { border: 1px solid var(--line-strong); border-radius: var(--r-ctrl); padding: 2px; gap: 2px; }
+.seg { border: 1px solid var(--line-ctrl); border-radius: var(--r-ctrl); padding: 2px; gap: 2px; }
 .tab {
   height: 40px; padding: 0 12px; background: none; border: 0; border-bottom: 2px solid transparent;
   font-weight: 500; color: var(--ink-2); margin-bottom: -1px;
@@ -582,7 +596,7 @@ body.has-dialog { overflow: hidden; }
 .status-row { display: flex; align-items: flex-start; gap: 8px; padding: 4px 0; }
 .status-row .dot { flex: none; width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; background: var(--ok); }
 .status-row .dot-warn { background: var(--warn); }
-.status-row .dot-neutral { background: transparent; border: 2px solid var(--line-strong); }
+.status-row .dot-neutral { background: transparent; border: 2px solid var(--line-ctrl); }
 .status-row .ico { width: 16px; height: 16px; margin-top: 2px; }
 .status-row .ok-text .ico { color: var(--ok); }
 .status-p { max-width: 68ch; }
@@ -601,6 +615,9 @@ body.has-dialog { overflow: hidden; }
 @media (max-width: 959px) {
   .today-list .btn-call, .call-panel .btn-call { background: var(--accent); color: var(--on-accent); border-color: transparent; width: 100%; }
   .today-list .link-action { background: none; border: 0; color: var(--accent); height: auto; min-height: 44px; padding: 0 4px; width: auto; }
+  /* Inline links keep their place in the sentence but get a 44 px tall hit area (padding an
+     inline box does not move the line; the negative margin cancels it in flex/grid parents). */
+  .btn-link, .today-list .meta a, .today-list .row-sub a, .today-list .row-title a.name { padding: 15px 0; margin: -15px 0; }
 }
 
 /* ---------- narrow screens: rows whose leading column is text stack it above the body ---------- */
@@ -676,7 +693,10 @@ button.cal-dayhead:hover { background: var(--paper-3); }
   border-radius: 999px; font-size: 1.286rem; font-weight: 600; line-height: 1;
 }
 .cal-dayhead[aria-current="date"] .cal-dn { background: var(--accent); color: var(--on-accent); }
-.cal-dayhead .cal-ds { font-size: .857rem; line-height: 1.15; color: var(--ink-3); font-weight: 500; max-width: 100%; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+/* One line, ellipsised: a long block reason is in the band and the popover; the header only says "Blocked · …". */
+.cal-dayhead .cal-ds { font-size: .857rem; line-height: 1.15; color: var(--ink-3); font-weight: 500; display: block; max-width: 100%; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-dayhead.is-picked { background: var(--accent-soft); }
+.cal-dayhead.is-picked:not([aria-current="date"]) .cal-dn { box-shadow: inset 0 0 0 2px var(--accent); color: var(--accent); }
 .cal-dayhead .cal-ds.is-blocked { color: var(--blocked); }
 .cal-dayhead .cal-ds.is-ok { color: var(--ok); }
 .cal-dayhead .cal-ds .ico { width: 12px; height: 12px; vertical-align: -1px; }
@@ -703,11 +723,14 @@ button.cal-dayhead:hover { background: var(--paper-3); }
 .cal-open[aria-selected="true"]::before { opacity: 1; }
 .cal-open[aria-selected="true"] { box-shadow: inset 0 0 0 2px var(--accent); z-index: 3; }
 .cal-open[aria-selected="true"] .cal-plus { display: none; }
+/* The caption is one line and may overflow its 30-minute cell; the selected cell sits above its
+   neighbours (z-index 3), so the overflow paints over the next column rather than under it. */
 .cal-sel-caption {
-  position: absolute; left: 4px; top: 3px; z-index: 5; pointer-events: none; width: max-content; max-width: calc(100% - 8px);
+  position: absolute; left: 4px; top: 3px; z-index: 5; pointer-events: none; width: max-content; max-width: none;
   font-size: .857rem; font-weight: 600; line-height: 1.2; color: var(--accent); background: var(--paper-2);
-  padding: 1px 6px; border-radius: 10px; border: 1px solid var(--accent); white-space: normal; overflow-wrap: anywhere;
+  padding: 1px 6px; border-radius: 10px; border: 1px solid var(--accent); white-space: nowrap;
 }
+.cal-open { overflow: visible; }
 .cal-view.is-inert .cal-open, .cal-view.is-inert .cal-tour, .cal-view.is-inert .cal-band, .cal-view.is-inert button.cal-dayhead { cursor: not-allowed; opacity: .7; }
 
 .cal-tour {
@@ -788,6 +811,8 @@ button.cal-dayhead:hover { background: var(--paper-3); }
 .cal-sheet .cal-mode { display: flex; gap: 16px; flex-wrap: wrap; }
 .cal-sheet .cal-mode label { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; cursor: pointer; }
 .cal-sheet .cal-mode input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+.cal-sheet .cal-mode label:has(input:disabled) { color: var(--ink-3); cursor: not-allowed; }
+.cal-sheet .cal-mode-note { flex-basis: 100%; margin: 0; font-size: .929rem; color: var(--ink-2); }
 .cal-sheet .cal-range-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .cal-sheet .cal-chips { margin-top: 8px; }
 .cal-sheet .cal-chips .chip-filter { height: 28px; padding: 0 8px; }
@@ -844,7 +869,12 @@ button.cal-dayhead:hover { background: var(--paper-3); }
 }
 .cal-fab .ico { width: 18px; height: 18px; }
 @media (max-width: 599px) { .cal-arow { grid-template-columns: 88px minmax(0, 1fr) auto; } .cal-arow .row-actions { grid-column: auto; } }
-@media (max-width: 959px) { .cal-foot { padding-bottom: 72px; } }
+@media (max-width: 959px) {
+  .cal-foot { padding-bottom: 72px; }
+  /* While the floating Block time… button is on screen (body.has-cal-fab, set by calendar.js), toasts
+     stack above it: tab bar 56 + gap 16 + button 44 + 12 clearance. A bottom sheet still wins (toasts go to the top). */
+  body.has-cal-fab:not(.has-dialog) .toast-stack { bottom: calc(128px + env(safe-area-inset-bottom, 0px)); }
+}
 </style>
 <style>
 /* Leads view — the To do and Everyone tabs and the person panel (brief §9). Owner: leads.
@@ -1092,7 +1122,7 @@ button.cal-dayhead:hover { background: var(--paper-3); }
     <section class="view" data-view="status" hidden></section>
   </main>
 </div>
-<div class="toast-stack" id="toasts" role="region" aria-label="Notifications"></div>
+<div class="toast-stack" id="toasts" role="region" aria-label="Notifications" aria-live="polite" aria-relevant="additions text"></div>
 <div class="vh" id="live" aria-live="polite" aria-atomic="true"></div>
 <div id="dialogs"></div>
 <script>
@@ -1329,6 +1359,16 @@ const fmt = {
     if (diff === -1) return `Yesterday ${time}`
     if (diff === 1) return `Tomorrow ${time}`
     return `${fmt.day(p.ymd)}, ${time}`
+  },
+  /** Mid-sentence form of dateTime: 'at 3:02 AM' | 'yesterday at 1:05 PM' | 'tomorrow at 10:00 AM' | 'on Tue, Sep 1 at 2:14 PM'. */
+  whenPhrase(iso) {
+    const p = nyParts(iso); if (!p) return ''
+    const diff = daysBetween(nyNow().ymd, p.ymd)
+    const time = fmt.time(iso)
+    if (diff === 0) return `at ${time}`
+    if (diff === -1) return `yesterday at ${time}`
+    if (diff === 1) return `tomorrow at ${time}`
+    return `on ${fmt.day(p.ymd)} at ${time}`
   },
   timeRange(a, b) {
     const ta = fmt.time(a), tb = fmt.time(b)
@@ -2044,7 +2084,12 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
 function dialog(spec) {
   const o = spec || {}
   const host = document.getElementById('dialogs') || document.body
+  // The opener is remembered by reference AND by its data-key + view: a view that repaints while
+  // the dialog is open (Status every poll, any list a colleague changes) replaces the button, and
+  // focus must still land on its successor, not on <body>.
   const opener = document.activeElement
+  const openerKey = opener && opener.dataset && opener.dataset.key ? opener.dataset.key : null
+  const openerView = opener && opener.closest ? opener.closest('.view') : null
   const id = `dlg-title-${++dialogSeq}`
   const backdrop = document.createElement('div')
   backdrop.className = 'dlg-backdrop'
@@ -2074,7 +2119,13 @@ function dialog(spec) {
       const i = dialogs.indexOf(api_); if (i >= 0) dialogs.splice(i, 1)
       backdrop.remove()
       if (!dialogs.length) document.body.classList.remove('has-dialog')
-      if (opener && typeof opener.focus === 'function' && opener.isConnected) { try { opener.focus({ preventScroll: true }) } catch (e) { /* ignore */ } }
+      let back = opener && typeof opener.focus === 'function' && opener.isConnected && opener !== document.body ? opener : null
+      if (!back && openerKey) {
+        const v = (openerView && openerView.isConnected && !openerView.hidden ? openerView : null) || document.querySelector('.view:not([hidden])')
+        back = v ? v.querySelector(`[data-key="${cssq(openerKey)}"]`) : null
+      }
+      if (!back) { const v = document.querySelector('.view:not([hidden])'); back = v ? v.querySelector('h1') : null }
+      if (back) { try { back.focus({ preventScroll: true }) } catch (e) { /* ignore */ } }
       if (typeof o.onClose === 'function') { try { o.onClose() } catch (e) { console.error(e) } }
     },
     setPrimary(p) {
@@ -2534,6 +2585,20 @@ function callStory(record, s) {
     }
   })
   if (f.booked) f.slotTaken = false
+  // Contract gap §5.3: after a cold start the decision events are gone, so an emergency call has no
+  // 'emergency' event. The transcript is the fallback — the assistant's own emergency wording marks
+  // the call, and the caller's words pick the kind and the quote.
+  if (!f.emergency && call && call.transcript) {
+    const lines = String(call.transcript).split('\n')
+    const assistant = lines.filter((l) => /^AI:/.test(l)).join('\n')
+    if (/\b911\b|as an emergency\b|this is an emergency|flagging this[^\n]{0,60}\bemergency\b|leave the (?:building|apartment) (?:now|right away)/i.test(assistant)) {
+      const KINDS = [['gas', /\bgas\b/i], ['carbon_monoxide', /carbon monoxide|\bCO\b/], ['smoke_or_fire', /\b(smoke|fire|burning)\b/i], ['flooding', /flood|water (?:coming|pouring|everywhere)|leak/i],
+        ['no_heat', /no heat|heat(?:ing)? (?:is )?(?:out|off|broken)/i], ['injury', /injur|hurt|bleeding|unconscious|fell/i], ['intruder', /intruder|break(?:ing)? in|burglar|someone in my/i], ['structural', /collaps|structural|ceiling (?:is )?(?:falling|caving)/i]]
+      let kind = null, matched = ''
+      for (const [k, re] of KINDS) { const line = lines.find((l) => /^User:/.test(l) && re.test(l)); if (line) { kind = k; matched = text.truncate(line.replace(/^User:\s?/, '').trim(), 90); break } }
+      f.emergency = { phrase: label(labels.emergency, kind, 'an emergency'), matched, fromTranscript: true, said911: /\b911\b/.test(assistant) }
+    }
+  }
 
   // who / wants
   const who = (() => {
@@ -2550,18 +2615,25 @@ function callStory(record, s) {
     const size = c.bedrooms ? sizeWord(c.bedrooms.value) : null
     const budget = c.budget ? fmt.money(c.budget.value) : null
     if (size || budget) parts.push(`looking for ${size || 'a place'}${budget ? ` under ${budget}` : ''}`)
-    const q = (x) => `"${(x.excerpt || String(x.value ?? '')).trim()}"`
-    if (c.moveInTiming) parts.push(`moving ${c.moveInTiming.excerpt ? q(c.moveInTiming) : (moveInText(String(c.moveInTiming.value ?? '')) || q(c.moveInTiming))}`)
-    if (c.pets) parts.push(`with ${q(c.pets)}`)
-    if (c.parking) parts.push(`parking ${q(c.parking)}`)
+    // Value phrases, not verbatim excerpts: the full quotes live in "What the assistant learned".
+    // When only an excerpt exists it is cut to its first clause so the sentence still scans.
+    const clause = (s) => { const t = String(s ?? '').trim(); const m = /^(.*?)[.!?](?:\s|$)/.exec(t); return text.truncate(m && m[1].trim() ? m[1].trim() : t, 40) }
+    const q = (x) => `"${clause(x.excerpt || x.value)}"`
+    const plainValue = (x) => { const v = String(x.value ?? '').trim(); return v && !/^(yes|no|true|false|y|n)$/i.test(v) ? v : '' }
+    if (c.moveInTiming) parts.push(`moving ${moveInText(typeof c.moveInTiming.value === 'object' && c.moveInTiming.value ? c.moveInTiming.value : String(c.moveInTiming.value ?? '')) || q(c.moveInTiming)}`)
+    if (c.pets) parts.push(`with ${plainValue(c.pets) || q(c.pets)}`)
+    if (c.parking) parts.push(`parking ${plainValue(c.parking) ? `(${plainValue(c.parking)})` : q(c.parking)}`)
     return parts.length ? `${text.capitalise(parts.join(', '))}.` : ''
   })()
 
   // the sentence — first rule that matches, then the Also clause
+  // An emergency known from the decision log followed the script (leave, call 911); one read off the
+  // transcript is described only as far as the transcript shows.
+  const emergencyAction = () => (f.emergency && f.emergency.fromTranscript && !f.emergency.said911 ? 'The assistant treated it as an emergency.' : 'The assistant told them to leave and call 911.')
   const bookedSentence = () => `The assistant booked a tour${f.booked.unitId ? ` of apartment ${f.booked.unitId}` : ''} for ${f.booked.when || 'a time on the calendar'}.`
   const askedSentence = () => `They asked "${text.truncate(f.restricted.question || label(labels.trigger, f.restricted.trigger, 'something only a person can answer'), 90)}" — that's for a person to answer, so the assistant took their details for a call back.`
   const rules = [
-    { id: 1, hit: () => Boolean(f.emergency), say: () => `They reported ${f.emergency.phrase}${f.emergency.matched ? ` — "${f.emergency.matched}"` : ''}. The assistant told them to leave and call 911.` },
+    { id: 1, hit: () => Boolean(f.emergency), say: () => `They reported ${f.emergency.phrase}${f.emergency.matched ? ` — "${f.emergency.matched}"` : ''}. ${emergencyAction()}` },
     { id: 2, hit: () => Boolean(f.restricted), say: askedSentence },
     { id: 3, hit: () => Boolean(f.booked), say: bookedSentence },
     { id: 4, hit: () => Boolean(f.arranging), say: () => `The assistant is arranging a tour${f.arranging.unitId ? ` of apartment ${f.arranging.unitId}` : ''} — it isn't confirmed yet.` },
@@ -2606,7 +2678,7 @@ function callStory(record, s) {
 
   // steps, one per tool call in order; consecutive captures collapse
   const steps = []
-  if (f.emergency) steps.push({ icon: 'siren', text: `Treated this as an emergency (${f.emergency.phrase}) and told them to leave and call 911.` })
+  if (f.emergency) steps.push({ icon: 'siren', text: `Treated this as an emergency (${f.emergency.phrase})${f.emergency.fromTranscript && !f.emergency.said911 ? '' : ' and told them to leave and call 911'}.` })
   let run = []
   const flushRun = () => {
     if (!run.length) return
@@ -2742,20 +2814,59 @@ function reread(resource) {
   if (!RESOURCES[resource] || gated) return Promise.resolve()
   return api.get(RESOURCES[resource]).then((d) => { apply(resource, d) }, () => { /* the poll will try again */ })
 }
+/**
+ * Where keyboard focus goes when the control that started a write leaves the list with its row:
+ * the same action on the next row, else on the previous row, else the group's heading or
+ * summary, else the section's heading (each carries data-key and, for headings, tabindex=-1).
+ * restoreFocus() tries them in order, then the toast's first action, then the view's H1 — focus
+ * never falls to <body> after a write.
+ */
+function focusFallbacks(btn) {
+  const keys = []
+  if (!btn || !btn.closest) return keys
+  const action = String(btn.dataset.action || '')
+  const row = btn.closest('.row')
+  const keyIn = (r) => { if (!r) return null; const b = r.querySelector(`[data-action="${cssq(action)}"][data-key]`) || r.querySelector('button[data-key], a[data-key]'); return b ? b.dataset.key : null }
+  if (row && row.parentElement) {
+    const rows = [...row.parentElement.children].filter((x) => x.classList.contains('row'))
+    const i = rows.indexOf(row)
+    keys.push(keyIn(rows[i + 1]), keyIn(rows[i - 1]))
+    const prev = row.parentElement.previousElementSibling
+    if (prev && prev.dataset && prev.dataset.key && /^(H2|H3|H4|SUMMARY)$/.test(prev.tagName)) keys.push(prev.dataset.key)
+  }
+  const det = btn.closest('details'), sm = det && det.querySelector('summary[data-key]')
+  if (sm) keys.push(sm.dataset.key)
+  const scope = btn.closest('section, .panel-section, .panel-body, .view')
+  const head = scope && scope.querySelector('h2[data-key], h3[data-key], summary[data-key]')
+  if (head) keys.push(head.dataset.key)
+  return keys.filter(Boolean)
+}
+function restoreFocus(keys, toastHandle) {
+  const a = document.activeElement
+  if (a && a !== document.body && a.isConnected) return
+  const view = document.querySelector('.view:not([hidden])')
+  const tryFocus = (el) => { if (!el) return false; try { el.focus({ preventScroll: true }) } catch (e) { return false } return document.activeElement === el }
+  for (const k of keys) { if (view) for (const el of view.querySelectorAll(`[data-key="${cssq(k)}"]`)) if (tryFocus(el)) return }
+  if (toastHandle && toastHandle.el && tryFocus(toastHandle.el.querySelector('.toast-action'))) return
+  if (view) tryFocus(view.querySelector('h1'))
+}
 async function setFollowUpStatus(fu, status, opts) {
   const o = opts || {}
   if (!fu || !fu.id || busyNow('leads')) return false
   const btn = o.button || null
   const row = btn ? btn.closest('.row') : null
   const verb = o.verb || (status === 'done' ? 'done' : status === 'skipped' ? 'not needed' : 'back')
+  const fallbacks = focusFallbacks(btn)
   if (btn) { btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true') }
   if (row) row.classList.add('row-busy')
   try {
     const res = await busy('leads', api.post('/api/leads', { action: 'followup_status', id: fu.id, status }, { doing: `marking a to-do ${verb}` }))
     if (row && row.isConnected && status !== 'scheduled') { row.classList.add('row-leaving'); await new Promise((r) => setTimeout(r, 120)) }
     apply('leads', res)
-    if (status === 'scheduled') toast('Put back on the list', { kind: 'ok', key: `fu:${fu.id}` })
-    else toast(`Marked ${verb}`, { kind: 'ok', key: `fu:${fu.id}`, actions: [{ label: 'Undo', fn: () => busy('leads', api.post('/api/leads', { action: 'followup_status', id: fu.id, status: 'scheduled' }, { doing: 'undoing a to-do change' })).then((r) => { apply('leads', r) }) }] })
+    let h
+    if (status === 'scheduled') h = toast('Put back on the list', { kind: 'ok', key: `fu:${fu.id}` })
+    else h = toast(`Marked ${verb}`, { kind: 'ok', key: `fu:${fu.id}`, actions: [{ label: 'Undo', fn: () => busy('leads', api.post('/api/leads', { action: 'followup_status', id: fu.id, status: 'scheduled' }, { doing: 'undoing a to-do change' })).then((r) => { apply('leads', r) }) }] })
+    restoreFocus(fallbacks, h)
     return true
   } catch (e) {
     if (e.signedOut) return false
@@ -2781,7 +2892,8 @@ const mailLink = (email) => { const h = href.mailto(email); return h ? `<a href=
 const chipHtml = (c) => html_.chip(c.cls, c.icon, c.text)
 const isAfterHours = (t) => { const p = nyParts(t); if (!p) return false; const h = property.hours[p.dayOfWeek]; if (!h) return true; const x = p.hour + p.minute / 60; return x < h[0] || x >= h[1] }
 function sectionHead(title, count, trailing) {
-  return `<div class="section-head"><h2>${esc(title)}${count != null ? ` <span class="count">· ${count}</span>` : ''}</h2>${trailing || ''}</div>`
+  // tabindex=-1 + data-key: where keyboard focus lands when the row it was on has just left the list
+  return `<div class="section-head"><h2 tabindex="-1" data-key="section:${esc(title)}">${esc(title)}${count != null ? ` <span class="count">· ${count}</span>` : ''}</h2>${trailing || ''}</div>`
 }
 
 function todayModel(s) {
@@ -2915,7 +3027,7 @@ function emergencyBannerHtml(item, announced) {
   const until = (toTime(item.at) ?? Date.now()) + DAY_MS
   const untilText = nyDate(until) === addDays(nyNow().ymd, 1) ? `${fmt.time(until)} tomorrow` : fmt.dateTime(until)
   const shown = fmt.phone(item.phone)
-  const raw = `<strong>Emergency — ${esc(item.phrase)}</strong> reported by ${shown ? esc(shown) : 'a caller with a hidden number'} at ${esc(when)}.` +
+  const raw = `<strong>Emergency — ${esc(item.phrase)}</strong> reported by ${shown ? esc(shown) : 'a caller with a hidden number'} ${esc(fmt.whenPhrase(item.at) || `at ${when}`)}.` +
     (item.matched ? ` They said "${esc(item.matched)}".` : '') + ' The assistant told them to leave and call 911.' +
     `<div class="small" style="margin-top:4px">Shown until ${esc(untilText)}.</div>`
   const actions = (shown ? telBtn(item.phone, `Call ${shown}`, 'btn') : '') + link('calls', { id: item.callId }, 'See the call', 'btn')
@@ -2981,6 +3093,8 @@ const todayView = {
     out += `<section class="section today-list" id="needs-a-person">${sectionHead('Needs a person', m.people.length)}`
     out += pollBanner(s, 'leads', 'callers')
     if (m.people.length) out += `<div class="card card-warn rows">${m.people.map((p) => personRowHtml(p, s)).join('')}</div>`
+    // The tile counts the emergency too; while its banner is on screen the empty state must not contradict it.
+    else if (s.loaded.leads && m.emergencies.length) out += `<div class="card">${html_.empty({ title: 'Nothing else needs a person right now.', text: 'The emergency above is still open — it stays on this page for a day.' })}</div>`
     else if (s.loaded.leads) out += `<div class="card">${html_.empty({ title: 'Nothing needs a person right now.', text: "When the assistant hands something off — an accommodation question, a dispute, a tour it couldn't book — it shows up here." })}</div>`
     out += '</section>'
     // Call back today
@@ -3136,7 +3250,7 @@ const statusView = {
     btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true')
     stopPolling(); gated = true
     try {
-      await fetch('/api/dashboard', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'logout' }) })
+      await fetch('/api/dashboard', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { ...JSON_HEADERS, 'content-type': 'application/json' }, body: JSON.stringify({ action: 'logout' }) })
     } catch (e) { /* the reload lands on the sign-in page either way */ }
     location.reload()
   },
@@ -3258,6 +3372,8 @@ const cssq = (s) => (window.CSS && CSS.escape) ? CSS.escape(String(s)) : String(
 const FILTERS = [['all', 'All'], ['person', 'Needs a person'], ['booked', 'Tour booked'], ['priced', 'Priced out'], ['emergency', 'Emergency']]
 const isSplit = () => matchMedia('(min-width: 1200px)').matches
 const isDesktop = () => matchMedia('(min-width: 960px)').matches
+/* A shorter placeholder on a phone so it is not cut off at 390 px. */
+const searchPlaceholder = () => (isDesktop() ? 'Search calls by name, number or apartment' : 'Search name, number or apartment')
 const hasChip = (story, name) => story.chips.some((c) => c.text === name)
 const passes = (filter, story) => filter === 'person' ? story.needsPerson : filter === 'booked' ? hasChip(story, 'Tour booked') : filter === 'priced' ? hasChip(story, 'Priced out') : filter === 'emergency' ? story.emergency : true
 
@@ -3337,7 +3453,7 @@ function panelHtml(rec, story, s) {
     `<button type="button" class="btn-icon btn-quiet panel-close" aria-label="Close" data-action="close">${A.icon('x')}</button></div><div class="panel-body">`
   if (story.emergency) {
     const em = story.findings.emergency
-    out += A.html.banner('danger', '', { raw: `<strong>Emergency — ${esc(em.phrase)}</strong> reported by ${phone ? esc(phone) : 'a caller with a hidden number'}${rec.startedAt ? ` at ${esc(fmt.dateTime(rec.startedAt))}` : ''}.${em.matched ? ` They said "${esc(em.matched)}".` : ''} The assistant told them to leave and call 911.`, icon: 'siren' }) + '<div style="height:12px"></div>'
+    out += A.html.banner('danger', '', { raw: `<strong>Emergency — ${esc(em.phrase)}</strong> reported by ${phone ? esc(phone) : 'a caller with a hidden number'}${rec.startedAt ? ` ${esc(fmt.whenPhrase(rec.startedAt))}` : ''}.${em.matched ? ` They said "${esc(em.matched)}".` : ''} ${em.fromTranscript ? 'The assistant treated it as an emergency.' : 'The assistant told them to leave and call 911.'}`, icon: 'siren' }) + '<div style="height:12px"></div>'
   }
   out += `<div class="panel-meta">${meta}</div>`
   const rec_ = call ? href.recording(call.recordingUrl) : null
@@ -3359,7 +3475,7 @@ function panelHtml(rec, story, s) {
     if (!fu) handling = '<span>No call-back was created for this.</span>'
     else if (fu.status === 'scheduled') handling = `<span>Still waiting — ${esc(fmt.respondPhrase(fu.dueAt))}</span><button type="button" class="btn" data-action="handled" data-fu="${esc(fu.id)}" data-key="fu:${esc(fu.id)}:done" data-write="leads">Mark handled</button>`
     else handling = '<span>Handled — a person marked this done.</span>'
-    out += `<section class="panel-section"><h3>Needs a person</h3><div class="card card-warn needs-card">` +
+    out += `<section class="panel-section"><h3 data-key="panel-np" tabindex="-1">Needs a person</h3><div class="card card-warn needs-card">` +
       (t ? `<div class="${t.quote === null ? 'quote' : ''}">${t.quote === null ? esc(t.headline.replace(/^asked /, '')) : esc(text.capitalise(t.headline))}</div>${t.quote ? `<div class="quote">"${esc(t.quote)}"</div>` : ''}<div class="reassure">${esc(t.reassurance)}</div>`
         : `<div>They wanted a tour but it couldn't be booked.</div><div class="reassure">The assistant said someone would call back with times.</div>`) +
       `<div class="handling">${handling}</div></div></section>`
@@ -3397,7 +3513,7 @@ const view = {
   mount(root) {
     this.root = root
     root.innerHTML = `<div class="view-head"><h1 tabindex="-1">Calls</h1></div><div class="calls-banners"></div>` +
-      `<div class="calls-tools"><label class="search"><span class="vh">Search calls by name, number or apartment</span>${ico('search')}<input type="search" data-key="search" placeholder="Search calls by name, number or apartment" aria-label="Search calls by name, number or apartment" autocomplete="off"></label>` +
+      `<div class="calls-tools"><label class="search"><span class="vh">Search calls by name, number or apartment</span>${ico('search')}<input type="search" data-key="search" placeholder="${esc(searchPlaceholder())}" aria-label="Search calls by name, number or apartment" autocomplete="off"></label>` +
       `<div class="chips" role="group" aria-label="Filter calls">${FILTERS.map(([k, l]) => `<button type="button" class="chip-filter" data-filter="${k}" aria-pressed="${k === 'all' ? 'true' : 'false'}">${ico('check')}<span>${esc(l)} · 0</span></button>`).join('')}</div></div>` +
       `<div class="split calls-split"><div class="split-list calls-list" data-key="list"></div><div class="panel call-panel" data-key="panel"></div></div>`
     this.banners = root.querySelector('.calls-banners'); this.chipsEl = root.querySelector('.chips'); this.search = root.querySelector('input[data-key="search"]')
@@ -3434,11 +3550,13 @@ const view = {
         if (fu) A.setFollowUpStatus(fu, 'done', { verb: 'handled', button: btn })
       }
     })
-    A.escape.push(() => { if (this.openId && !isSplit() && !this.root.hidden) { this.close(); return true } return false })
+    // Esc closes the open panel when it is the page (stacked layout) or when focus is inside it (split);
+    // focus goes back to the row that opened it (the closing path in render()).
+    A.escape.push(() => { if (this.openId && !this.root.hidden && (!isSplit() || this.panel.contains(document.activeElement))) { this.close(); return true } return false })
     const repaint = () => { if (this.root && !this.root.hidden) this.render(A.state) }
     A.on('data', repaint); A.on('minute', repaint)
     let resizeTimer = null
-    window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { this.panelHtml = null; this.listHtml = null; repaint() }, 150) })
+    window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { this.search.placeholder = searchPlaceholder(); this.panelHtml = null; this.listHtml = null; repaint() }, 150) })
   },
   params() { return A.route().params },
   setParams(patch, replace) {
@@ -3600,8 +3718,9 @@ const dayLabel = (ymd) => `${longDay(ymd)}, ${fmt.monthDay(ymd)}`
 const hourLabel = (h) => { h = ((h % 24) + 24) % 24; return h === 0 ? '12 AM' : h === 12 ? '12 PM' : h < 12 ? `${h} AM` : `${h - 12} PM` }
 const clock = (iso) => fmt.time(iso).replace(/ [AP]M$/, '')
 const toRange = (a, b) => fmt.timeRange(a, b).replace(' – ', ' to ')
-/** The server's default word 'blocked', or an empty reason, is treated as no reason. */
-function reasonOf(raw) { const r = String(raw ?? '').trim(); return !r || /^blocked$/i.test(r) ? '' : text.staff(r) }
+/** The server's default word 'blocked', or an empty reason, is treated as no reason. A reason is a
+ *  person's own words: shown as typed (escaped at render), never rewritten by text.staff(). */
+function reasonOf(raw) { const r = String(raw ?? '').trim(); return !r || /^blocked$/i.test(r) ? '' : r }
 function shortName(name) {
   const parts = String(name ?? '').trim().split(/\s+/).filter(Boolean)
   if (!parts.length) return 'Tour'
@@ -3767,7 +3886,7 @@ function rangeText(m) {
 /** Screen-reader label of a grid item. */
 function itemLabel(m, it) {
   const day = fmt.dayLong(it.ymd)
-  if (it.kind === 'open') return `${day}, ${fmt.time(it.slot.startsAt)}, open. Block this time`
+  if (it.kind === 'open') return `${day}, ${fmt.time(it.slot.startsAt)}, open. ${cal.slotBlocksFail ? 'Block this day' : 'Block this time'}`
   if (it.kind === 'tour') return `${day}, ${fmt.time(it.slot.startsAt)}, tour with ${it.slot.name || 'a caller'}${it.slot.unitId ? `, apartment ${it.slot.unitId}` : ''}, confirmed`
   if (it.kind === 'band') return `${day}, blocked ${it.slots.length > 1 ? toRange(it.first.startsAt, it.last.endsAt) : fmt.time(it.first.startsAt)}${it.reason ? `, ${it.reason}` : ''}. Reopen`
   return `${day}, blocked all day${it.reason ? `, ${it.reason}` : ''}. Reopen ${longDay(it.ymd)}`
@@ -3781,6 +3900,12 @@ const cal = {
   root: null, view: 'week', sel: null, pop: null, focusKey: null, focusDate: null, sig: null, model: null,
   scrolled: false, keysShown: false, pendingSlot: null, drag: null, warnedStale: new Set(), sheet: null,
   lastLive: 0, liveTimer: null, parts: {}, inert: false, kbd: false, lastView: null,
+  // slotBlocksFail: set for the rest of the session the first time the server answers a slot-level block
+  // with its known 400 (contract §5.1 — the handler only accepts whole days today). While set, the sheet
+  // opens on All day with the reason said inline, cells stop promising "+ Block", and a slot reopen
+  // offers no Undo it could not honour. picked: the ?date= a link arrived with, marked in the week header.
+  // focusBy: who last set the roving tab stop ('kbd' | 'mouse'), so Tab into the grid lands per §10.7.
+  slotBlocksFail: false, picked: null, pickedShown: null, wasCalendar: false, focusBy: null, entering: false,
 }
 try { const v = localStorage.getItem('atrium.calendar.view'); if (v === 'day' || v === 'week') cal.view = v } catch (e) { /* no local state */ }
 
@@ -3847,7 +3972,7 @@ function itemHtml(m, it, col) {
       const first = m.byId.get(cal.sel.slotIds[0]), last = m.byId.get(cal.sel.slotIds[cal.sel.slotIds.length - 1])
       if (first && last) caption = `<span class="cal-sel-caption" aria-hidden="true">${esc(fmt.timeRange(first.startsAt, last.endsAt))} · ${esc(plural(cal.sel.slotIds.length, 'time'))}</span>`
     }
-    return `<button type="button" class="cal-cell cal-open${isHour ? '' : ' is-half'}" role="gridcell" aria-colindex="${col}" ${common} data-slot="${esc(it.slot.id)}" tabindex="-1" aria-label="${esc(itemLabel(m, it))}" aria-selected="${sel ? 'true' : 'false'}" style="${place}">${caption}<span class="cal-plus" aria-hidden="true">+ Block</span></button>`
+    return `<button type="button" class="cal-cell cal-open${isHour ? '' : ' is-half'}" role="gridcell" aria-colindex="${col}" ${common} data-slot="${esc(it.slot.id)}" tabindex="-1" aria-label="${esc(itemLabel(m, it))}" aria-selected="${sel ? 'true' : 'false'}" style="${place}">${caption}${cal.slotBlocksFail ? '' : '<span class="cal-plus" aria-hidden="true">+ Block</span>'}</button>`
   }
   if (it.kind === 'tour') {
     const sl = it.slot, past = (Date.parse(sl.startsAt) || 0) < Date.now()
@@ -3890,12 +4015,14 @@ function gridHtml(m) {
   out += '<div role="row" aria-rowindex="1" style="display:contents"><div class="cal-corner" role="columnheader" aria-colindex="1" aria-label="Time" style="grid-row:1;grid-column:1"></div>'
   m.dayModels.forEach((d, i) => {
     const isToday = d.ymd === m.today, col = i + 2
+    const isPicked = cal.pickedShown === d.ymd
     const kindCls = d.status.kind === 'blocked' ? ' is-blocked' : (d.status.kind === 'open' && d.tours.length ? ' is-ok' : '')
     const inner = `<span class="cal-wd">${esc(shortDay(d.ymd))}</span><span class="cal-dn num">${Number(d.ymd.slice(8, 10))}</span><span class="cal-ds${kindCls}">${d.status.kind === 'blocked' ? ico('slash') : ''}${esc(d.status.text)}</span>`
-    const label_ = `${fmt.dayLong(d.ymd)}, ${d.status.sr}`
-    const common = `role="columnheader" aria-colindex="${col}" data-key="day:${esc(d.ymd)}" data-date="${esc(d.ymd)}" data-col="${i}" style="grid-row:1;grid-column:${col}"${isToday ? ' aria-current="date"' : ''}`
-    if (d.operable) out += `<button type="button" class="cal-dayhead" ${common} data-kind="head" data-op="${d.operable}" tabindex="-1" aria-label="${esc(`${label_}. ${d.operable === 'block' ? 'Block the whole day' : 'Open the details'}`)}">${inner}</button>`
-    else out += `<div class="cal-dayhead" ${common} aria-label="${esc(label_)}">${inner}</div>`
+    const label_ = `${fmt.dayLong(d.ymd)}, ${d.status.sr}${isPicked ? ', the day you picked' : ''}`
+    const common = `role="columnheader" aria-colindex="${col}" data-key="day:${esc(d.ymd)}" data-date="${esc(d.ymd)}" data-col="${i}" style="grid-row:1;grid-column:${col}"${isToday ? ' aria-current="date"' : ''}${isPicked ? ' aria-selected="true"' : ''}`
+    const cls = `cal-dayhead${isPicked ? ' is-picked' : ''}`
+    if (d.operable) out += `<button type="button" class="${cls}" ${common} data-kind="head" data-op="${d.operable}" tabindex="-1" aria-label="${esc(`${label_}. ${d.operable === 'block' ? 'Block the whole day' : 'Open the details'}`)}">${inner}</button>`
+    else out += `<div class="${cls}" ${common} aria-label="${esc(label_)}">${inner}</div>`
   })
   out += '</div>'
   const covered = m.dayModels.map((d) => { const c = new Array(m.rows).fill(false); for (const it of d.items) for (let r = it.row; r < Math.min(m.rows, it.row + it.span); r++) c[r] = true; return c })
@@ -3945,7 +4072,9 @@ function agendaHtml(m) {
   if (d.ymd < m.today) rows.push(inert('Past — not offered'))
   else if (d.ymd > m.lastSlotDate && !d.dayBlock) rows.push(inert(`Not open yet — the assistant offers tour times through ${fmt.day(m.lastSlotDate)}.`))
   else {
-    if (d.ymd === m.today) rows.push(inert(d.list.length ? 'Earlier today · Not offered' : 'No more times today'))
+    // "Earlier today" exists only once the day's first listed time has passed; before that (at
+    // midnight, say) nothing has been withheld and the row would claim otherwise.
+    if (d.ymd === m.today) { if (!d.list.length) rows.push(inert('No more times today')); else if (m.nowMin >= d.list[0].startMin) rows.push(inert('Earlier today · Not offered')) }
     else if (!d.list.length && !d.dayBlock) rows.push(inert('Closed'))
     if (d.dayBlock && !d.list.length) rows.push(arow('is-blocked', 'All day', `${ico('slash')}<span>Blocked all day${d.items.length && d.items[0].reason ? ` · ${esc(d.items[0].reason)}` : (reasonOf(d.dayBlock.reason) ? ` · ${esc(reasonOf(d.dayBlock.reason))}` : '')}</span>`, `data-action="agenda-day" data-date="${esc(d.ymd)}" data-key="dayband:${esc(d.ymd)}"`, `Blocked all day${reasonOf(d.dayBlock.reason) ? `, ${reasonOf(d.dayBlock.reason)}` : ''}. Open the details`))
     const items = d.items.slice().sort((a, b) => a.row - b.row)
@@ -3960,7 +4089,7 @@ function agendaHtml(m) {
         const times = run.map((x) => fmt.time(x.slot.startsAt)).join(', ')
         rows.push(arow('is-open', fmt.timeRange(first.startsAt, last.endsAt), `<span>Open</span><span class="cal-ar-count">· ${esc(plural(run.length, 'time'))}</span>`,
           `data-action="agenda-open" data-first="${esc(first.id)}" data-last="${esc(last.id)}" data-key="open:${esc(first.id)}"`,
-          `${fmt.timeRange(first.startsAt, last.endsAt)}, open, ${plural(run.length, 'time')}: ${times}. Block these times`))
+          `${fmt.timeRange(first.startsAt, last.endsAt)}, open, ${plural(run.length, 'time')}: ${times}. ${cal.slotBlocksFail ? 'Block this day' : 'Block these times'}`))
         i = j
       } else if (it.kind === 'tour') {
         const sl = it.slot
@@ -4047,8 +4176,9 @@ function reblock(targets, handle) {
       if (signedOut(e)) throw e
       reread()
       if (isKnown400(e)) {
+        cal.slotBlocksFail = true
         if (handle) handle.close()
-        A.toast("Couldn't put the block back. Block it again from Block time…", { kind: 'error' })
+        A.toast("Couldn't put the block back — individual times can't be blocked right now. Block the whole day from Block time… if you need to.", { kind: 'error' })
       }
       throw e
     }
@@ -4089,7 +4219,9 @@ async function runReopen(targets, toastText, focusKey, ymd) {
   }
   cal.focusKey = focusKey; cal.focusDate = ymd
   focusKeyNow()
-  const h = A.toast(toastText, { kind: 'ok', key: `cal:${ymd}`, actions: [{ label: 'Undo', fn: () => reblock(targets, h) }] })
+  // No Undo for a slot-level reopen once slot blocks are known to fail — the page never offers an action it cannot honour.
+  const canUndo = !(cal.slotBlocksFail && targets.some((t) => !isYmd(t.target)))
+  const h = A.toast(toastText, { kind: 'ok', key: `cal:${ymd}`, actions: canUndo ? [{ label: 'Undo', fn: () => reblock(targets, h) }] : [] })
 }
 
 // --- remove all / remove old -----------------------------------------------------------------
@@ -4118,7 +4250,8 @@ async function removeOld() {
   const targets = old.map((b) => ({ target: String(b.target), reason: b.reason }))
   const r = await A.busy('calendar', sequential(targets.map((t) => ({ action: 'unblock', target: t.target })), 'removing old blocks'))
   if (r.failed) { if (signedOut(r.failed.error)) return; A.toast("Couldn't do that. Nothing changed — try again.", { kind: 'error' }); reread(); return }
-  const h = A.toast(`Removed ${plural(targets.length, 'old block')}`, { kind: 'ok', actions: [{ label: 'Undo', fn: () => reblock(targets, h) }] })
+  const canUndo = !(cal.slotBlocksFail && targets.some((t) => !isYmd(t.target)))
+  const h = A.toast(`Removed ${plural(targets.length, 'old block')}`, { kind: 'ok', actions: canUndo ? [{ label: 'Undo', fn: () => reblock(targets, h) }] : [] })
 }
 
 // --- the Block sheet (§10.5) -----------------------------------------------------------------
@@ -4133,7 +4266,7 @@ function openSheet(preset) {
   // With no day preset, start on the first day from today that still has an open time (late in the
   // day that is tomorrow), so the sheet never opens with nothing to block.
   const firstOpenDay = (m) => { for (let d = m.today; d <= m.lastSlotDate; d = fmt.addDays(d, 1)) if ((m.byDate.get(d) || []).some((x) => x.status === 'open')) return d; return m.today }
-  const st = { date: isYmd(p.date) ? p.date : firstOpenDay(m0), mode: p.mode === 'range' ? 'range' : 'day', from: p.from || null, to: p.to || null, only: p.only || null, fallback: false, reason: String(p.reason || '') }
+  const st = { date: isYmd(p.date) ? p.date : firstOpenDay(m0), mode: p.mode === 'range' && !cal.slotBlocksFail ? 'range' : 'day', from: p.from || null, to: p.to || null, only: p.only || null, fallback: false, reason: String(p.reason || '') }
   const base = `cal-sheet-${Date.now()}`
   const model = () => cal.model || buildModel(A.state, {})
   const daySlots = () => model().byDate.get(st.date) || []
@@ -4197,7 +4330,8 @@ function openSheet(preset) {
     api = d
     body.innerHTML = `<div class="cal-sheet">` +
       `<div class="field"><label class="field-label" for="${base}-day">Day</label><select class="select" id="${base}-day">${dayList().map((x) => `<option value="${esc(x.ymd)}"${x.ymd === st.date ? ' selected' : ''}${x.disabled ? ' disabled' : ''}>${esc(x.label)}${x.disabled ? ' (closed)' : ''}</option>`).join('')}</select></div>` +
-      `<div class="cal-mode" role="radiogroup" aria-label="How much of the day"><label><input type="radio" name="${base}-mode" value="day"${st.mode === 'day' ? ' checked' : ''}> All day</label><label><input type="radio" name="${base}-mode" value="range"${st.mode === 'range' ? ' checked' : ''}${model().hasSlots ? '' : ' disabled'}> Part of the day</label></div>` +
+      `<div class="cal-mode" role="radiogroup" aria-label="How much of the day"><label><input type="radio" name="${base}-mode" value="day"${st.mode === 'day' ? ' checked' : ''}> All day</label><label><input type="radio" name="${base}-mode" value="range"${st.mode === 'range' ? ' checked' : ''}${model().hasSlots && !cal.slotBlocksFail ? '' : ' disabled'}${cal.slotBlocksFail ? ` aria-describedby="${base}-modenote"` : ''}> Part of the day</label>` +
+      (cal.slotBlocksFail ? `<p class="cal-mode-note" id="${base}-modenote">Individual times can't be blocked right now — only whole days.</p>` : '') + `</div>` +
       `<div class="cal-range-fields" hidden><div class="field"><label class="field-label" for="${base}-from">From</label><select class="select" id="${base}-from"></select></div><div class="field"><label class="field-label" for="${base}-to">To</label><select class="select" id="${base}-to"></select></div></div>` +
       `<div class="field"><label class="field-label" for="${base}-reason">Reason</label><input class="input" id="${base}-reason" type="text" maxlength="120" placeholder="e.g. painting, staff out" autocomplete="off" aria-describedby="${base}-hint" value="${esc(st.reason)}"><span class="field-hint" id="${base}-hint">optional · up to 120 characters</span>` +
       `<div class="chips cal-chips" role="group" aria-label="Quick reasons">${QUICK.map((q) => `<button type="button" class="chip-filter" data-reason="${esc(q)}" aria-pressed="false">${ico('check')}<span>${esc(q)}</span></button>`).join('')}</div></div>` +
@@ -4251,9 +4385,15 @@ function openSheet(preset) {
     if (r.failed.index === 0) {
       if (isKnown400(e)) {
         st.fallback = true
-        d.body.innerHTML = `<div class="cal-sheet"><p class="prose">Individual times can't be blocked right now — only whole days. Block ${esc(longDay(date))} all day instead?</p></div>`
+        cal.slotBlocksFail = true
+        // The sheet changes under the keyboard user: keep focus inside it (on the new primary) and
+        // say why through a live region, not only through the relabelled button.
+        const sentence = `Individual times can't be blocked right now — only whole days. Block ${longDay(date)} all day instead?`
+        d.body.innerHTML = `<div class="cal-sheet"><p class="prose" role="status">${esc(sentence)}</p></div>`
         els = {}
         d.setPrimary({ label: `Block ${longDay(date)} all day`, disabled: false })
+        const pb = d.el.querySelector('.dlg-primary'); if (pb) { try { pb.focus() } catch (e2) { /* ignore */ } }
+        A.announce(sentence)
         return
       }
       d.setError("Couldn't block that time. The calendar hasn't changed — try again.")
@@ -4292,7 +4432,8 @@ const keyOf = (el) => { const k = el && el.closest ? el.closest('[data-key]') : 
 function findItem(key) { const m = cal.model; if (!m) return null; for (const d of m.dayModels) for (const it of d.items) if (it.key === key) return it; return null }
 function itemForSlot(id) { const m = cal.model; if (!m) return null; for (const d of m.dayModels) for (const it of d.items) if (it.slots.some((x) => x.id === id)) return it; return null }
 function focusable(el) { if (!el) return null; return el.classList.contains('cal-band') ? el.querySelector('.cal-band-hit[role="gridcell"]') : el }
-function focusEl(el) { const f = focusable(el); if (!f) return false; try { f.focus({ preventScroll: true }) } catch (e) { /* ignore */ } return true }
+/** Every programmatic focus move goes through here; cal.entering tells the focusin handler not to redirect it. */
+function focusEl(el) { const f = focusable(el); if (!f) return false; cal.entering = true; try { f.focus({ preventScroll: true }) } catch (e) { /* ignore */ } cal.entering = false; return true }
 function focusKeyNow() {
   let el = byKey(cal.focusKey)
   if (!el && cal.focusKey && /^(cell|tour|band):/.test(cal.focusKey)) { const id = cal.focusKey.replace(/^[a-z]+:/, ''); el = q(`[data-slot="${cssq(id)}"], [data-slots~="${cssq(id)}"]`) }
@@ -4304,7 +4445,10 @@ function setRoving(el) {
   for (const x of grid.querySelectorAll('[tabindex="0"]')) x.setAttribute('tabindex', '-1')
   const f = focusable(el); if (f) f.setAttribute('tabindex', '0')
   cal.focusKey = keyOf(el); cal.focusDate = (el.closest('[data-date]') || {}).dataset ? el.closest('[data-date]').dataset.date : cal.focusDate
+  cal.focusBy = cal.kbd ? 'kbd' : 'mouse'
 }
+/** Bring a grid stop into view inside .cal-scroll (and the page) with the least movement. */
+function showEl(el) { if (el && el.scrollIntoView) { try { el.scrollIntoView({ block: 'nearest', inline: 'nearest' }) } catch (e) { /* ignore */ } } }
 
 // ---------------------------------------------------------------------------------------
 // Popovers (§10.6): a .popover on desktop, an Atrium.dialog bottom sheet on mobile
@@ -4319,7 +4463,16 @@ function closePopover(returnFocus) {
   cal.pop = null
   if (p.el) { p.el.remove(); document.removeEventListener('pointerdown', p.onDown, true); A.escape.remove(p.onEsc) }
   if (p.dialog) { try { p.dialog.close() } catch (e) { /* ignore */ } }
-  if (returnFocus && p.anchorKey) { const el = byKey(p.anchorKey); if (el) focusEl(el) }
+  if (returnFocus && p.anchorKey) {
+    const el = byKey(p.anchorKey)
+    if (el) focusEl(el)
+    else {
+      // the anchor was re-rendered away (a reopened band, a day that changed): the nearest stop on that day, else the heading
+      focusKeyNow()
+      const a = document.activeElement
+      if (!a || a === document.body || !(cal.root && cal.root.contains(a))) { const h1 = q('h1'); if (h1) { try { h1.focus({ preventScroll: true }) } catch (e) { /* ignore */ } } }
+    }
+  }
 }
 function position(el, anchor, host) {
   const hr = host.getBoundingClientRect(), ar = anchor.getBoundingClientRect()
@@ -4487,13 +4640,16 @@ async function goToDate() {
   if (!ymd) { A.toast('Try a date like "Sep 10".', { kind: 'warn' }); return }
   const m = cal.model || buildModel(A.state, {})
   if (ymd < m.firstWeek || ymd > m.lastDay) { A.toast('The calendar only shows the next two weeks.', { kind: 'info' }); return }
-  setParams({ date: ymd })
+  cal.picked = ymd
+  setParams({ date: ymd }, undefined, { keepPicked: true })
 }
 
 // --- navigation ---------------------------------------------------------------------------
 
 const params = () => A.route().params
-function setParams(patch, replace) {
+/** Every in-view navigation drops the picked-day mark (paging, Today, the strip); Go to date keeps it. */
+function setParams(patch, replace, opts) {
+  if (!(opts && opts.keepPicked)) cal.picked = null
   const p = { ...params(), ...patch }
   for (const k of Object.keys(p)) if (p[k] === undefined || p[k] === null || p[k] === '') delete p[k]
   A.navigate('calendar', p, { replace: replace !== false })
@@ -4711,7 +4867,16 @@ const view = {
     root.addEventListener('focusin', (e) => {
       const grid = e.target.closest && e.target.closest('.cal-grid')
       if (!grid) return
+      const entering = !(e.relatedTarget && grid.contains(e.relatedTarget))
+      // Tab into the grid lands on today's first open time (§10.7) unless the keyboard user left a
+      // spot of their own; a stop remembered from a mouse click is not that. Whatever gets focus is
+      // scrolled into view, so the ring is never off screen.
+      if (entering && !cal.entering && cal.kbd && cal.lastKey === 'Tab' && cal.focusBy !== 'kbd' && cal.model) {
+        const d = defaultStop(cal.model), f = d ? focusable(d) : null
+        if (f && f !== e.target) { setRoving(d); focusEl(d); showEl(f); return }
+      }
       const stop = currentStop(); if (stop) setRoving(stop)
+      if (entering) showEl(e.target)
       if (cal.kbd && !cal.keysShown && A.hint('calendar-keys')) { cal.keysShown = true; const h = q('.cal-hint'); if (h) h.classList.remove('vh') }
     })
     let tx = null, ty = null
@@ -4722,14 +4887,19 @@ const view = {
       tx = null; ty = null
       if (Math.abs(dx) >= 48 && Math.abs(dx) > 2 * Math.abs(dy)) page(dx < 0 ? 1 : -1)
     }, { passive: true })
-    document.addEventListener('keydown', () => { cal.kbd = true }, true)
+    document.addEventListener('keydown', (e) => { cal.kbd = true; cal.lastKey = e.key }, true)
     document.addEventListener('pointerdown', () => { cal.kbd = false }, true)
     A.escape.push(() => { if (cal.root && !cal.root.hidden && cal.sel && !cal.pop) { clearSel(); return true } return false })
     const repaint = () => { if (cal.root && !cal.root.hidden) this.render(A.state) }
     A.on('data', repaint)
     A.on('minute', () => { paintNow(); repaint() })
     A.on('busy', () => { paintBusy(); if (cal.sheet) cal.sheet.refresh() })
-    A.on('route', (r) => { if (r.name !== 'calendar') closePopover(false) })
+    A.on('route', (r) => {
+      if (r.name !== 'calendar') { closePopover(false); document.body.classList.remove('has-cal-fab'); cal.wasCalendar = false; return }
+      // arriving from another view (or a fresh load) with ?date= marks that day in the week header
+      if (!cal.wasCalendar && isYmd(r.params.date)) { cal.picked = r.params.date; if (cal.root && !cal.root.hidden) this.render(A.state) }
+      cal.wasCalendar = true
+    })
     let rt = null
     window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (cal.model && cal.model.mobile !== isMobile()) { cal.parts = {}; closePopover(false) } repaint() }, 150) })
   },
@@ -4802,6 +4972,7 @@ const view = {
       cal.sel = null
       if (changed && m.loaded) say('Some of those times changed — selection cleared')
     }
+    cal.pickedShown = cal.picked && m.view === 'week' && m.days.includes(cal.picked) && cal.picked !== m.today ? cal.picked : null
     const moreBtn = `<button type="button" class="btn-icon" data-action="more" data-key="more" aria-label="More calendar actions" aria-haspopup="dialog" data-write="calendar"${dis(A.busyNow('calendar') || cal.inert)}>${A.icon('more')}</button>`
     setPart('head', `<div class="view-head${m.mobile ? ' cal-head-mobile' : ''}"><div class="cal-head-main"><h1 tabindex="-1">Tour calendar</h1>${m.loaded || s.loaded.leads ? stripHtml(s, m) : ''}</div>${m.mobile ? `<div class="cal-head-tools">${moreBtn}</div>` : ''}</div>`)
     setPart('banners', bannersHtml(s, m))
@@ -4819,6 +4990,8 @@ const view = {
     const scrollEl = q('.cal-scroll'), scrollTop = scrollEl ? scrollEl.scrollTop : null
     const bodyChanged = setPart('body', body)
     setPart('foot', loading ? '' : footHtml(m))
+    // the floating Block time… button owns the bottom edge on mobile; toasts stack above it (calendar.css)
+    document.body.classList.toggle('has-cal-fab', Boolean(m.mobile && !loading && !cal.root.hidden))
     if (bodyChanged) {
       const grid = q('.cal-grid')
       if (grid) {
@@ -4835,7 +5008,10 @@ const view = {
         }
         let target = null
         if (cal.pendingFocus) { const pf = cal.pendingFocus; cal.pendingFocus = null; target = pf.head ? headIn(pf.col) : nearestStop(pf.col, pf.row) }
-        if (!target && (focusKey || cal.focusKey)) {
+        // the remembered stop is restored only while focus is in the grid; otherwise the tab stop
+        // returns to today's first open time so entering the grid behaves per §10.7 (writes that
+        // want a specific stop set cal.focusKey and call focusKeyNow() after this render)
+        if (!target && hadFocus && (focusKey || cal.focusKey)) {
           target = byKey(focusKey || cal.focusKey)
           if (!target && cal.focusDate) target = nearestStop(m.days.indexOf(cal.focusDate), 0)
         }
@@ -4905,6 +5081,10 @@ const { fmt, derive, text, href, labels } = A
 const ico = (n) => `<span class="ico">${A.icon(n)}</span>`
 const cssq = (s) => (window.CSS && CSS.escape) ? CSS.escape(String(s)) : String(s).replace(/["\\]/g, (c) => '\\' + c)
 const isSplit = () => matchMedia('(min-width: 1200px)').matches
+const isMobile = () => matchMedia('(max-width: 959px)').matches
+/* Shorter placeholders on a phone so they are not cut off at 390 px; the hint line under the note field still says to start with initials. */
+const searchPlaceholder = () => (isMobile() ? 'Search name, number or apartment' : 'Search by name, number or apartment')
+const notePlaceholder = () => (isMobile() ? 'Add a note, e.g. "MR: left a voicemail"' : 'Add a note — start with your initials, e.g. "MR: left a voicemail"')
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches
 const arr = (v) => (Array.isArray(v) ? v : [])
 const toTime = (v) => { if (v == null || v === '') return null; const t = Date.parse(String(v)); return isNaN(t) ? null : t }
@@ -5012,12 +5192,12 @@ function todoListHtml(s) {
     for (const [key, label_, iconName] of GROUPS) {
       const items = groups[key]
       if (!items.length) continue
-      out += `<h3 class="group-head${key === 'overdue' ? ' overdue' : ''}">${iconName ? ico(iconName) : ''}<span>${esc(label_)}</span>${countHtml(items.length)}</h3>` +
+      out += `<h3 class="group-head${key === 'overdue' ? ' overdue' : ''}" data-key="group:${key}" tabindex="-1">${iconName ? ico(iconName) : ''}<span>${esc(label_)}</span>${countHtml(items.length)}</h3>` +
         `<div class="card rows">${items.map((f) => fuRowHtml(f, s, { nameLink: true })).join('')}</div>`
     }
   }
   if (done.length) {
-    out += `<details class="done-list" data-key="done-today"><summary>${ico('chevron-down')}<span>Done and not needed today</span>${countHtml(done.length)}</summary>` +
+    out += `<details class="done-list" data-key="done-today"><summary data-key="done-today-summary">${ico('chevron-down')}<span>Done and not needed today</span>${countHtml(done.length)}</summary>` +
       `<div class="card rows">${done.map((f) => doneRowHtml(f, s)).join('')}</div></details>`
   }
   return out
@@ -5068,7 +5248,7 @@ function leadRowHtml(p, s, open, tab) {
   const sig = p.signals || {}
   const facts = []
   if (hidden) facts.push(`${text.plural(arr(p.calls).length, 'call')} from numbers that weren't shared`)
-  else if (fmt.phone(p.phone)) facts.push(fmt.phone(p.phone))
+  else if (p.name && fmt.phone(p.phone)) facts.push(fmt.phone(p.phone)) // a nameless row's title is already the number
   const more = []
   if (sig.bedrooms) more.push(bedroomsFact(sig.bedrooms.value))
   if (sig.budget) more.push(`up to ${fmt.money(sig.budget.value)}/mo`)
@@ -5149,7 +5329,7 @@ function npCardHtml(it, recById) {
       `<div class="actions">${telBtn(it.phone, 'Call', 'btn')}${link('calendar', { date: fmt.nyDate(b.startsAt) || undefined }, 'Calendar')}</div></div>`
   }
   if (it.type === 'emergency') {
-    return `<div class="card card-danger np-card"><div class="np-title"><strong>Emergency — ${esc(it.phrase)}</strong> reported ${esc(fmt.dateTime(it.at))}.${it.matched ? ` They said "${esc(it.matched)}".` : ''} The assistant told them to leave and call 911.</div>` +
+    return `<div class="card card-danger np-card"><div class="np-title"><strong>Emergency — ${esc(it.phrase)}</strong> reported ${esc(fmt.whenPhrase(it.at) || fmt.dateTime(it.at))}.${it.matched ? ` They said "${esc(it.matched)}".` : ''} The assistant told them to leave and call 911.</div>` +
       (seeCall ? `<div class="actions">${seeCall}</div>` : '') + '</div>'
   }
   return ''
@@ -5188,7 +5368,7 @@ function leadPanelHtml(p, s) {
   const openCallIds = new Set(items.map((i) => String(i.callId)))
   const history = arr(p.escalations).filter((e) => e && !openCallIds.has(String(e.callId)))
   if (items.length || history.length) {
-    out += `<section class="panel-section"><h3>Needs a person</h3>${items.map((it) => npCardHtml(it, recById)).join('')}`
+    out += `<section class="panel-section"><h3 data-key="panel-np" tabindex="-1">Needs a person</h3>${items.map((it) => npCardHtml(it, recById)).join('')}`
     if (history.length) out += `<div class="np-history">${history.map((e) => { const t = derive.escalationText(e); return `<div class="np-hist">Handled — ${esc(t.headline)} · ${esc(fmt.monthDay(e.at))}</div>` }).join('')}</div>`
     out += '</section>'
   }
@@ -5197,10 +5377,10 @@ function leadPanelHtml(p, s) {
   const scheduled = mine.filter((f) => f.status === 'scheduled').sort(byDue)
   const finished = mine.filter((f) => f.status === 'done' || f.status === 'skipped').sort(byDueDesc)
   if (mine.length) {
-    out += `<section class="panel-section"><h3>To do ${countHtml(scheduled.length)}</h3>`
+    out += `<section class="panel-section"><h3 data-key="panel-todo" tabindex="-1">To do ${countHtml(scheduled.length)}</h3>`
     if (scheduled.length) out += `<div class="card rows">${scheduled.map((f) => fuRowHtml(f, s, { nameLink: false })).join('')}</div>`
     else out += `<p class="muted">Nothing to do for ${esc(first)} right now.</p>`
-    if (finished.length) out += `<details class="done-list" data-key="done-panel"><summary>${ico('chevron-down')}<span>Done and not needed</span>${countHtml(finished.length)}</summary><div class="card rows">${finished.map((f) => doneRowHtml(f, s)).join('')}</div></details>`
+    if (finished.length) out += `<details class="done-list" data-key="done-panel"><summary data-key="done-panel-summary">${ico('chevron-down')}<span>Done and not needed</span>${countHtml(finished.length)}</summary><div class="card rows">${finished.map((f) => doneRowHtml(f, s)).join('')}</div></details>`
     out += '</section>'
   }
   // 4. tours
@@ -5261,7 +5441,7 @@ function leadPanelHtml(p, s) {
   } else out += `<p class="muted" style="margin-bottom:12px">No notes yet.</p>`
   if (hidden) out += `<p class="muted small">These callers' numbers were hidden, so there's nowhere to save a note.</p>`
   else {
-    out += `<div class="note-form"><input class="input" type="text" maxlength="500" autocomplete="off" placeholder='Add a note — start with your initials, e.g. "MR: left a voicemail"' aria-label="Add a note about ${esc(name)}" data-key="note:${esc(p.phone)}" data-phone="${esc(p.phone)}">` +
+    out += `<div class="note-form"><input class="input" type="text" maxlength="500" autocomplete="off" placeholder="${esc(notePlaceholder())}" aria-label="Add a note about ${esc(name)}" data-key="note:${esc(p.phone)}" data-phone="${esc(p.phone)}">` +
       `<button type="button" class="btn" data-action="savenote" data-phone="${esc(p.phone)}" data-key="notebtn:${esc(p.phone)}" data-write="leads" aria-disabled="true">Save note</button></div>` +
       `<p class="field-hint">Start with your initials so the team knows who wrote it.</p>`
   }
@@ -5294,7 +5474,7 @@ const view = {
       TABS.map(([k, l], i) => `<button type="button" role="tab" class="tab" id="leads-tab-${k}" data-tab="${k}" data-key="tab:${k}" aria-selected="${i === 0 ? 'true' : 'false'}" aria-controls="leads-list" tabindex="${i === 0 ? '0' : '-1'}">${esc(l)}</button>`).join('') +
       `</div><div class="leads-banners"></div>` +
       `<p class="leads-note small muted" hidden>These are for you to do — the assistant doesn't make outgoing calls or send messages yet.</p>` +
-      `<div class="leads-tools" hidden><label class="search"><span class="vh">Search by name, number or apartment</span>${ico('search')}<input type="search" data-key="search" placeholder="Search by name, number or apartment" aria-label="Search by name, number or apartment" autocomplete="off"></label>` +
+      `<div class="leads-tools" hidden><label class="search"><span class="vh">Search by name, number or apartment</span>${ico('search')}<input type="search" data-key="search" placeholder="${esc(searchPlaceholder())}" aria-label="Search by name, number or apartment" autocomplete="off"></label>` +
       `<div class="chips" role="group" aria-label="Filter callers">${STAGES.map(([k, l]) => `<button type="button" class="chip-filter" data-stage="${k}" data-key="stage:${k}" aria-pressed="${k === 'all' ? 'true' : 'false'}">${ico('check')}<span>${esc(l)}</span></button>`).join('')}</div></div></div>` +
       `<div class="split leads-split"><div class="split-list leads-list" id="leads-list" role="tabpanel" aria-labelledby="leads-tab-todo" data-key="list"></div><div class="panel lead-panel" data-key="panel"></div></div></div>`
     this.wrap = root.querySelector('.leads-view'); this.tabsEl = root.querySelector('.tabs'); this.banners = root.querySelector('.leads-banners')
@@ -5375,12 +5555,14 @@ const view = {
       e.preventDefault()
       this.saveNote(inp.dataset.phone, this.noteBtn(inp.dataset.phone))
     })
-    A.escape.push(() => { if (this.openPhone && !isSplit() && !this.root.hidden) { this.close(); return true } return false })
+    // Esc closes the open panel when it is the page (stacked layout) or when focus is inside it (split);
+    // focus goes back to the row or name that opened it (the closing path in render()).
+    A.escape.push(() => { if (this.openPhone && !this.root.hidden && (!isSplit() || this.panel.contains(document.activeElement))) { this.close(); return true } return false })
     const repaint = () => { if (this.root && !this.root.hidden) this.render(A.state) }
     A.on('data', repaint); A.on('minute', repaint)
     A.on('busy', () => { if (this.root && !this.root.hidden) this.paintBusy() })
     let resizeTimer = null
-    window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { this.panelHtml = null; this.listHtml = null; repaint() }, 150) })
+    window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { this.search.placeholder = searchPlaceholder(); this.panelHtml = null; this.listHtml = null; repaint() }, 150) })
   },
   params() { return A.route().params },
   setParams(patch, replace) {

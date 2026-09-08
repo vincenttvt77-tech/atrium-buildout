@@ -9,9 +9,10 @@
   --paper-3: #EEEAE0;
   --ink: #1C1B19;
   --ink-2: #5E5A52;
-  --ink-3: #726C63;
+  --ink-3: #68625A;
   --line: #E3DED2;
   --line-strong: #CFC8B8;
+  --line-ctrl: #948C7E;
   --accent: #7F5E33;
   --accent-strong: #6A4D27;
   --accent-soft: #F1E7D8;
@@ -48,9 +49,10 @@
     --paper-3: #1A1914;
     --ink: #EDE8DC;
     --ink-2: #B5AE9F;
-    --ink-3: #948E82;
+    --ink-3: #A8A295;
     --line: #2E2C25;
     --line-strong: #3D3A31;
+    --line-ctrl: #716B5E;
     --accent: #C79A5E;
     --accent-strong: #D9AE72;
     --accent-soft: #3A2E1E;
@@ -74,6 +76,9 @@
     --shadow-pop: 0 8px 24px rgba(0, 0, 0, .55), 0 1px 2px rgba(0, 0, 0, .4);
   }
 }
+/* The base size sits here, above the mobile block, so the 15 px mobile rule (same specificity,
+   later in the sheet) wins as the brief's §3.2 intends. */
+html { font-size: 14px; -webkit-text-size-adjust: 100%; }
 @media (max-width: 959px) {
   :root { --ctrl-h: 44px; --main-pad: 16px; }
   html { font-size: 15px; }
@@ -89,7 +94,6 @@
 
 /* ---------- reset and base ---------- */
 *, *::before, *::after { box-sizing: border-box; }
-html { font-size: 14px; -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
   background: var(--paper);
@@ -144,7 +148,7 @@ details > summary::-webkit-details-marker { display: none; }
 .skip {
   position: absolute; left: -999px; top: 8px; z-index: 100;
   padding: 8px 12px; background: var(--paper-2); color: var(--accent);
-  border: 1px solid var(--line-strong); border-radius: var(--r-ctrl); text-decoration: none;
+  border: 1px solid var(--line-ctrl); border-radius: var(--r-ctrl); text-decoration: none;
 }
 .skip:focus { left: 8px; }
 
@@ -238,6 +242,8 @@ main:focus { outline: none; }
   .nav-item .badge { position: absolute; top: 4px; left: calc(50% + 6px); }
   .nav-item .nav-dot { position: absolute; top: 8px; left: calc(50% + 8px); }
   .side-foot { margin: 0; padding: 0; border: 0; flex-direction: row; align-items: center; }
+  /* The status link in the top bar is a 44 px tall target; the bar is 52 px, so it fits. */
+  .cluster-link { display: inline-flex; align-items: center; min-height: 44px; }
   .staff-only { display: none; }
   .cluster-desk { display: none; }
   .cluster-mobile { display: inline-flex; }
@@ -245,10 +251,13 @@ main:focus { outline: none; }
 }
 
 /* ---------- buttons ---------- */
+/* Controls whose border is the only thing that marks them (buttons, fields, the segmented
+   control, filter chips) use --line-ctrl, which clears 3:1 on white and paper (WCAG 1.4.11);
+   --line and --line-strong stay for decorative hairlines: cards, grid lines, dividers. */
 .btn, .btn-icon {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   height: var(--ctrl-h); padding: 0 12px; border-radius: var(--r-ctrl);
-  background: var(--paper-2); color: var(--ink); border: 1px solid var(--line-strong);
+  background: var(--paper-2); color: var(--ink); border: 1px solid var(--line-ctrl);
   font-weight: 500; font-size: 1rem; line-height: 1; text-decoration: none; white-space: nowrap;
   transition: background var(--motion) ease-out, opacity var(--motion) ease-out;
 }
@@ -258,7 +267,8 @@ main:focus { outline: none; }
 .btn-primary:hover { background: var(--accent-strong); }
 .btn-quiet { background: transparent; border-color: transparent; color: var(--ink-2); }
 .btn-quiet:hover { background: var(--paper-3); color: var(--ink); }
-.btn-danger { background: var(--danger); color: #fff; border-color: transparent; }
+/* --on-accent on --danger reads in both themes (5.94 light, 7.13 dark); white on the dark salmon did not. */
+.btn-danger { background: var(--danger); color: var(--on-accent); border-color: transparent; }
 .btn-danger:hover { background: var(--danger); filter: brightness(.92); }
 .btn-link {
   display: inline; height: auto; padding: 0; border: 0; background: none;
@@ -277,7 +287,7 @@ main:focus { outline: none; }
   border-radius: 50%; border: 2px solid var(--line-strong); border-top-color: var(--ink-2);
   animation: spin .8s linear infinite;
 }
-.btn-primary.is-busy::after { border-color: rgba(255, 255, 255, .35); border-top-color: var(--on-accent); }
+.btn-primary.is-busy::after, .btn-danger.is-busy::after { border-color: rgba(255, 255, 255, .35); border-top-color: var(--on-accent); }
 @keyframes spin { to { transform: rotate(360deg); } }
 .spin svg { animation: spin 1s linear infinite; }
 
@@ -297,7 +307,7 @@ main:focus { outline: none; }
 .chip-neutral { background: var(--paper-3); color: var(--ink-2); }
 .chip-filter {
   display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px;
-  border-radius: var(--r-ctrl); background: var(--paper-2); border: 1px solid var(--line);
+  border-radius: var(--r-ctrl); background: var(--paper-2); border: 1px solid var(--line-ctrl);
   color: var(--ink); font-size: .929rem; font-weight: 500; white-space: nowrap;
   transition: background var(--motion) ease-out;
 }
@@ -402,7 +412,7 @@ button.row { border-left: 0; border-right: 0; border-top: 0; font: inherit; }
 .field-error { display: flex; align-items: center; gap: 6px; font-size: .929rem; color: var(--danger); }
 .input, .select, .search input {
   height: var(--ctrl-h); padding: 0 10px; border-radius: var(--r-ctrl); width: 100%;
-  background: var(--paper-2); border: 1px solid var(--line-strong); color: var(--ink);
+  background: var(--paper-2); border: 1px solid var(--line-ctrl); color: var(--ink);
 }
 .input::placeholder, .search input::placeholder { color: var(--ink-3); }
 .select { padding-right: 28px; }
@@ -413,7 +423,7 @@ button.row { border-left: 0; border-right: 0; border-top: 0; font: inherit; }
 
 /* ---------- tabs ---------- */
 .tabs, .seg { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
-.seg { border: 1px solid var(--line-strong); border-radius: var(--r-ctrl); padding: 2px; gap: 2px; }
+.seg { border: 1px solid var(--line-ctrl); border-radius: var(--r-ctrl); padding: 2px; gap: 2px; }
 .tab {
   height: 40px; padding: 0 12px; background: none; border: 0; border-bottom: 2px solid transparent;
   font-weight: 500; color: var(--ink-2); margin-bottom: -1px;
@@ -568,7 +578,7 @@ body.has-dialog { overflow: hidden; }
 .status-row { display: flex; align-items: flex-start; gap: 8px; padding: 4px 0; }
 .status-row .dot { flex: none; width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; background: var(--ok); }
 .status-row .dot-warn { background: var(--warn); }
-.status-row .dot-neutral { background: transparent; border: 2px solid var(--line-strong); }
+.status-row .dot-neutral { background: transparent; border: 2px solid var(--line-ctrl); }
 .status-row .ico { width: 16px; height: 16px; margin-top: 2px; }
 .status-row .ok-text .ico { color: var(--ok); }
 .status-p { max-width: 68ch; }
@@ -587,6 +597,9 @@ body.has-dialog { overflow: hidden; }
 @media (max-width: 959px) {
   .today-list .btn-call, .call-panel .btn-call { background: var(--accent); color: var(--on-accent); border-color: transparent; width: 100%; }
   .today-list .link-action { background: none; border: 0; color: var(--accent); height: auto; min-height: 44px; padding: 0 4px; width: auto; }
+  /* Inline links keep their place in the sentence but get a 44 px tall hit area (padding an
+     inline box does not move the line; the negative margin cancels it in flex/grid parents). */
+  .btn-link, .today-list .meta a, .today-list .row-sub a, .today-list .row-title a.name { padding: 15px 0; margin: -15px 0; }
 }
 
 /* ---------- narrow screens: rows whose leading column is text stack it above the body ---------- */
