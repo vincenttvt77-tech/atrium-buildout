@@ -60,20 +60,16 @@ const below1000 = (n: number) => {
  * hundred, forty" for 5,440 — so every figure the tool hands the model carries its spoken
  * form, and the prompt tells the model to say that form and never the digits.
  */
+/** Plain full words — "five thousand four hundred forty dollars" — the form nobody mishears. */
 export function spokenMoney(n: number): string {
   n = Math.round(Math.abs(n))
-  if (n < 1000) return below1000(n)
-  if (n < 10_000) {
-    if (n % 1000 === 0) return `${ONES[n / 1000]} thousand`
-    const hundreds = Math.floor(n / 100), rest = n % 100
-    if (rest === 0) return `${below100(hundreds)} hundred`
-    return `${below100(hundreds)} ${rest < 10 ? `oh-${ONES[rest]}` : below100(rest)}`
-  }
-  const thousands = Math.floor(n / 1000), rest = n % 1000
-  return `${below100(thousands)} thousand${rest ? ` ${below1000(rest)}` : ''}`
+  const words = n < 1000
+    ? below1000(n)
+    : `${below1000(Math.floor(n / 1000))} thousand${n % 1000 ? ` ${below1000(n % 1000)}` : ''}`
+  return `${words} dollars`
 }
 
-/** "$5,440/month — say "fifty-four forty a month"". */
+/** "$5,440/month — say "five thousand four hundred forty dollars a month"". */
 export const sayableRent = (n: number) => `${money(n)}/month — say "${spokenMoney(n)} a month"`
 
 /** One phrase that prices a residence the way the website does: net first, lease after. */

@@ -292,7 +292,7 @@ describe('quotes say the net effective figure and the lease figure', () => {
   test('a match names both, in that order', () => {
     const r = checkAvailability(ctx({ qualification: qualified(4500, 1) }))
     assert.equal(r.record.outcome, 'matches')
-    assert.match(r.say, /\$4,200\/month — say "forty-two hundred a month" net effective with one month free on a 14-month lease \(\$4,523\/month on the lease itself — say "forty-five twenty-three"\)/)
+    assert.match(r.say, /\$4,200\/month — say "four thousand two hundred dollars a month" net effective with one month free on a 14-month lease \(\$4,523\/month on the lease itself — say "four thousand five hundred twenty-three dollars"\)/)
   })
   test('priced out names the residence, the gap, and what the money does buy', () => {
     const r = checkAvailability(ctx({ qualification: qualified(3500, 1) }))
