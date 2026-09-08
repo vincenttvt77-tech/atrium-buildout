@@ -154,6 +154,39 @@ const fmtSlot = (s: TourSlot) =>
     timeZone: 'America/New_York',
   })
 
+/**
+ * Call history from Vapi, read at most once every twenty seconds per instance.
+ *
+ * Every open dashboard tab polls this function every few seconds, and each poll used to be
+ * its own request to Vapi's API — a handful of tabs was enough to be rate-limited, and the
+ * page then said the connection was "not answering". One read per instance per twenty
+ * seconds is plenty for a page that refreshes itself, the last good list is kept when a
+ * refresh fails so the page never goes empty, and the reason is written to the log.
+ */
+const HISTORY_TTL_MS = 20_000
+let historyCache: { at: number; calls: ReturnType<typeof normaliseCallList>; configured: boolean } | null = null
+type NormalisedCalls = Awaited<ReturnType<typeof fetchCalls>> extends infer R ? R extends { ok: true; calls: infer C } ? C : never : never
+const normaliseCallList = (c: NormalisedCalls) => c
+
+async function callHistory(): Promise<{ calls: NormalisedCalls; error: string | null; configured: boolean; stale: boolean }> {
+  const now = Date.now()
+  if (historyCache && now - historyCache.at < HISTORY_TTL_MS) {
+    return { calls: historyCache.calls, error: null, configured: true, stale: false }
+  }
+  const result = await fetchCalls({ limit: 20 })
+  if (result.ok) {
+    historyCache = { at: now, calls: result.calls, configured: true }
+    return { calls: result.calls, error: null, configured: true, stale: false }
+  }
+  console.warn('[vapi-history]', JSON.stringify({ reason: result.reason, configured: result.configured, cached: Boolean(historyCache) }))
+  if (historyCache) {
+    // Do not hammer a service that just said no: treat the failed read as a fresh one.
+    historyCache = { ...historyCache, at: now }
+    return { calls: historyCache.calls, error: result.reason, configured: true, stale: true }
+  }
+  return { calls: [], error: result.reason, configured: result.configured, stale: false }
+}
+
 /** Everything that happened, for the dashboard. */
 export const eventLog: Array<Record<string, unknown>> = []
 
@@ -315,17 +348,18 @@ export default async function handler(req: any, res: any) {
      * gate, the priced-out gap, which article answered — that Vapi has no view of. It is
      * supplementary now, not the source.
      */
-    const history = await fetchCalls({ limit: 20 })
+    const history = await callHistory()
 
     res.status(200).json({
-      calls: history.ok ? history.calls : [],
-      callsError: history.ok ? null : history.reason,
-      callsConfigured: history.ok ? true : history.configured,
+      calls: history.calls,
+      callsError: history.error,
+      callsConfigured: history.configured,
+      callsStale: history.stale,
       events: eventLog,
       generatedAt: new Date().toISOString(),
-      note: history.ok
-        ? 'Calls from Vapi. Decision events are in-process and reset on cold start.'
-        : 'Call history unavailable — see callsError.',
+      note: history.error
+        ? (history.stale ? 'Call history is the last good read; Vapi did not answer this time.' : 'Call history unavailable — see callsError.')
+        : 'Calls from Vapi. Decision events are in-process and reset on cold start.',
     })
     return
   }
