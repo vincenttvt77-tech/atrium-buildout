@@ -44,7 +44,7 @@ function rowHtml(rec, story, open, tab, isNew) {
   const phone = rec.name ? fmt.phone(rec.phone) : ''
   const time = rec.startedAt ? fmt.time(rec.startedAt) : ''
   const whenDesk = [time, dur !== '—' ? dur : ''].filter(Boolean).join(' · ')
-  const whenMobile = [rec.startedAt ? fmt.dateTime(rec.startedAt) : '', dur !== '—' ? dur : ''].filter(Boolean).join(' · ')
+  const whenMobile = [rec.startedAt ? fmt.dateTime(rec.startedAt, { inSentence: true }) : '', dur !== '—' ? dur : ''].filter(Boolean).join(' · ')
   return `<button type="button" class="row row-click call-row ${cls}${isNew ? ' row-new' : ''}" data-key="row:${esc(rec.id)}" data-id="${esc(rec.id)}" aria-current="${open ? 'true' : 'false'}" tabindex="${tab ? '0' : '-1'}">` +
     `<span class="row-lead"><span class="row-lead-icon">${ico(iconName)}</span></span>` +
     `<span class="row-body"><span class="row-title"><span class="who">${esc(rec.displayName)}</span>${phone ? `<span class="phone">· ${esc(phone)}</span>` : ''}` +
@@ -89,14 +89,14 @@ function panelHtml(rec, story, s) {
   const call = rec.call
   const phone = fmt.phone(rec.phone)
   const dur = rec.durationSeconds != null ? fmt.duration(rec.durationSeconds) : '—'
-  const meta = [phone ? (href.tel(rec.phone) ? `<a href="${esc(href.tel(rec.phone))}">${esc(phone)}</a>` : esc(phone)) : '', rec.startedAt ? esc(fmt.dateTime(rec.startedAt)) : '', dur !== '—' ? esc(dur) : '', story.ended ? esc(story.ended) : ''].filter(Boolean).join(' · ')
+  const meta = [phone ? (href.tel(rec.phone) ? `<a href="${esc(href.tel(rec.phone))}">${esc(phone)}</a>` : esc(phone)) : '', rec.startedAt ? esc(fmt.dateTime(rec.startedAt, { inSentence: true })) : '', dur !== '—' ? esc(dur) : '', story.ended ? esc(story.ended) : ''].filter(Boolean).join(' · ')
   let out = `<div class="panel-head"><button type="button" class="btn btn-quiet panel-back" data-action="close">${ico('chevron-left')}Calls</button>` +
     `<h2 tabindex="-1" data-key="panel-title">${esc(rec.displayName)}</h2>` +
     (rec.profile ? `<a class="btn btn-quiet" href="${esc(A.hashFor('leads', { phone: rec.profile.phone }))}">Open lead</a>` : '') +
     `<button type="button" class="btn-icon btn-quiet panel-close" aria-label="Close" data-action="close">${A.icon('x')}</button></div><div class="panel-body">`
   if (story.emergency) {
     const em = story.findings.emergency
-    out += A.html.banner('danger', '', { raw: `<strong>Emergency — ${esc(em.phrase)}</strong> reported by ${phone ? esc(phone) : 'a caller with a hidden number'}${rec.startedAt ? ` ${esc(fmt.whenPhrase(rec.startedAt))}` : ''}.${em.matched ? ` They said "${esc(em.matched)}".` : ''} ${em.fromTranscript ? 'The assistant treated it as an emergency.' : 'The assistant told them to leave and call 911.'}`, icon: 'siren' }) + '<div style="height:12px"></div>'
+    out += A.html.banner('danger', '', { raw: `<strong>Emergency — ${esc(em.phrase)}</strong> reported by ${phone ? esc(phone) : 'a caller with a hidden number'}${rec.startedAt ? ` ${esc(fmt.whenPhrase(rec.startedAt))}` : ''}.${em.matched ? ` They said "${esc(em.matched)}".` : ''} ${esc(em.action)}`, icon: 'siren' }) + '<div style="height:12px"></div>'
   }
   out += `<div class="panel-meta">${meta}</div>`
   const rec_ = call ? href.recording(call.recordingUrl) : null
@@ -269,7 +269,7 @@ const view = {
       }
       const firstId = (wantId && shown.some((r) => r.id === wantId)) ? wantId : shown[0].id
       for (const g of groups) {
-        listHtml += `<h3 class="day-head">${esc(dayLabel(g.ymd, today))}</h3><div class="card rows">` +
+        listHtml += `<h2 class="day-head">${esc(dayLabel(g.ymd, today))}</h2><div class="card rows">` +
           g.items.map((r) => rowHtml(r, stories.get(r.id), r.id === wantId, r.id === firstId, Boolean(this.prevIds) && !this.prevIds.has(r.id))).join('') + '</div>'
       }
       listHtml += `<p class="calls-end">${records.some((r) => !r.call && r.summary) ? 'Older calls show only what was kept about them — no transcript or recording.' : "That's the last 20 calls."}</p>`

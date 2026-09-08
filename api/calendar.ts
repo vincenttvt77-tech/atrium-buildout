@@ -69,7 +69,10 @@ export default async function handler(req: any, res: any) {
       switch (action) {
         case 'block': {
           const target = String(body.target ?? '').trim()
-          if (!/^(slot-\d{4}-\d{2}-\d{2}T\d{2}|\d{4}-\d{2}-\d{2})$/.test(target)) {
+          // A slot id carries minutes since 2:00 and 2:30 stopped sharing one; the hour-only
+          // pattern here rejected every id the calendar itself hands out, so only whole days
+          // could be blocked. Accept exactly what generateSlots() emits.
+          if (!/^(slot-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}|\d{4}-\d{2}-\d{2})$/.test(target)) {
             res.status(400).json({ error: 'target must be a slot id or a YYYY-MM-DD date' })
             return
           }

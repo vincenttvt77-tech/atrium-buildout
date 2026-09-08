@@ -7,11 +7,11 @@
     },
     {
       "target": "+1@10:00",
-      "reason": "Residence 13L being photographed"
+      "reason": "Apartment 13L being photographed"
     },
     {
       "target": "+1@10:30",
-      "reason": "Residence 13L being photographed"
+      "reason": "Apartment 13L being photographed"
     },
     {
       "target": "+4@15:00",
@@ -559,7 +559,7 @@
       "durationSeconds": 150,
       "endedReason": "customer-ended-call",
       "customerNumber": "+17185550166",
-      "transcript": "AI: Thanks for calling The Larkin. I'm an AI assistant for the building and this call is recorded — how can I help?\nUser: Hi, I live in 12G and there's water coming through the ceiling — my kitchen is flooding.\nAI: I'm sorry — let's deal with that right away. If it's safe to do so, switch off the power to the kitchen at the breaker and move anything electrical away from the water. I'm flagging this to the building team as an emergency now. Are you safe where you are?\nUser: Yeah, I'm fine, it's just coming down fast.\nAI: Okay. The 24-hour maintenance line on your resident portal is the fastest way to get someone up to you — please call that now, or the front desk. I've logged this as urgent for the team as well.\nUser: Okay, calling them now.\nAI: Please do. Thanks for calling.",
+      "transcript": "AI: Thanks for calling The Larkin. I'm an AI assistant for the building and this call is recorded — how can I help?\nUser: Hi, I live in 12G and there's water coming through the ceiling — my kitchen is flooding.\nAI: If you can do it safely, shut off the water at the valve and move anything electrical away from the water. I'm dispatching emergency maintenance right now and alerting the building's emergency contact. Are you safe where you are?\nUser: Yeah, I'm fine, it's just coming down fast.\nAI: Okay. Someone from emergency maintenance is on the way up to you now, and the building's emergency contact has been alerted.\nUser: Okay, thanks.\nAI: Thanks for calling.",
       "recordingUrl": null,
       "toolCalls": [],
       "cost": 0.17

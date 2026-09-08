@@ -102,7 +102,7 @@ function fuRowHtml(fu, s, o) {
   if (channel === 'email' && href.mailto(email)) primary = `<a class="btn btn-quiet btn-call" href="${esc(href.mailto(email))}">${ico('mail')}Email</a>`
   else if (channel === 'sms' && href.sms(fu.phone)) primary = `<a class="btn btn-quiet btn-call" href="${esc(href.sms(fu.phone))}">${ico('message')}Text</a>`
   else primary = telBtn(fu.phone, 'Call', 'btn btn-quiet btn-call')
-  const sub = [shown ? telLink(fu.phone) : '', channel === 'email' && email ? mailLink(email) : '', `from their call ${esc(fmt.dateTime(from))}`].filter(Boolean).join(' · ')
+  const sub = [shown ? telLink(fu.phone) : '', channel === 'email' && email ? mailLink(email) : '', `from their call ${esc(fmt.dateTime(from, { inSentence: true }))}`].filter(Boolean).join(' · ')
   return `<div class="row row-stack todo-row${sen.needsPerson ? ' row-flag' : ''}" data-key="fu:${esc(fu.id)}">` +
     `<span class="row-lead"><span class="due${overdue ? ' overdue' : ''}">${overdue ? ico('clock') : ''}<span>${esc(fmt.duePhrase(fu.dueAt))}</span></span>` +
     `<span class="row-lead-icon">${ico(sen.needsPerson ? 'hand' : A.label(labels.channelIcon, channel, 'phone'))}</span></span>` +
@@ -137,7 +137,7 @@ function todoListHtml(s) {
     for (const [key, label_, iconName] of GROUPS) {
       const items = groups[key]
       if (!items.length) continue
-      out += `<h3 class="group-head${key === 'overdue' ? ' overdue' : ''}" data-key="group:${key}" tabindex="-1">${iconName ? ico(iconName) : ''}<span>${esc(label_)}</span>${countHtml(items.length)}</h3>` +
+      out += `<h2 class="group-head${key === 'overdue' ? ' overdue' : ''}" data-key="group:${key}" tabindex="-1">${iconName ? ico(iconName) : ''}<span>${esc(label_)}</span>${countHtml(items.length)}</h2>` +
         `<div class="card rows">${items.map((f) => fuRowHtml(f, s, { nameLink: true })).join('')}</div>`
     }
   }
@@ -263,18 +263,18 @@ function npCardHtml(it, recById) {
     return `<div class="card card-warn np-card"><div class="np-title"><strong>Call ${esc(derive.personName(it.profile || { phone: it.phone, name: null }))} back</strong> — ${esc(t.headline)}</div>` +
       (t.quote ? `<div class="quote">"${esc(t.quote)}"</div>` : '') +
       `<div class="reassure">${esc(t.reassurance)}</div>` +
-      `<div class="meta">called ${esc(fmt.dateTime(it.calledAt))} · <span class="${overdue ? 'overdue' : ''}">${esc(fmt.respondPhrase(it.respondBy))}</span></div>` +
+      `<div class="meta">called ${esc(fmt.dateTime(it.calledAt, { inSentence: true }))} · <span class="${overdue ? 'overdue' : ''}">${esc(fmt.respondPhrase(it.respondBy))}</span></div>` +
       `<div class="actions"><button type="button" class="btn" data-action="handled" data-fu="${esc(it.fu.id)}" data-key="fu:${esc(it.fu.id)}:done" data-write="leads">Mark handled</button>${seeCall}</div></div>`
   }
   if (it.type === 'stuckTour') {
     const b = it.booking, failed = b.status === 'failed'
     return `<div class="card card-warn np-card"><div class="np-title"><strong>${failed ? "Tour wasn't booked" : "Tour isn't confirmed yet"}</strong> — ${failed ? "the assistant couldn't reach the calendar" : 'the assistant is still arranging it'}</div>` +
-      `<div class="meta">called ${esc(fmt.dateTime(it.calledAt))} · wanted ${esc(fmt.day(b.startsAt))} at ${esc(fmt.time(b.startsAt))}${b.unitId ? ` (${esc(b.unitId)})` : ''}</div>` +
+      `<div class="meta">called ${esc(fmt.dateTime(it.calledAt, { inSentence: true }))} · wanted ${esc(fmt.day(b.startsAt))} at ${esc(fmt.time(b.startsAt))}${b.unitId ? ` (${esc(b.unitId)})` : ''}</div>` +
       `<div class="reassure">Call to set a time.</div>` +
       `<div class="actions">${telBtn(it.phone, 'Call', 'btn')}${link('calendar', { date: fmt.nyDate(b.startsAt) || undefined }, 'Calendar')}</div></div>`
   }
   if (it.type === 'emergency') {
-    return `<div class="card card-danger np-card"><div class="np-title"><strong>Emergency — ${esc(it.phrase)}</strong> reported ${esc(fmt.whenPhrase(it.at) || fmt.dateTime(it.at))}.${it.matched ? ` They said "${esc(it.matched)}".` : ''} The assistant told them to leave and call 911.</div>` +
+    return `<div class="card card-danger np-card"><div class="np-title"><strong>Emergency — ${esc(it.phrase)}</strong> reported ${esc(fmt.whenPhrase(it.at) || fmt.dateTime(it.at, { inSentence: true }))}.${it.matched ? ` They said "${esc(it.matched)}".` : ''} ${esc(it.action)}</div>` +
       (seeCall ? `<div class="actions">${seeCall}</div>` : '') + '</div>'
   }
   return ''
@@ -302,7 +302,7 @@ function leadPanelHtml(p, s) {
   out += `<div class="lead-chips">${chip(stage.chipClass, stage.icon, stage.label)}${items.length && stage.key !== 'escalated' ? chip('chip-warn', 'hand', 'Needs a person') : ''}</div>`
   if (hidden) out += `<div class="lead-meta">${esc(text.plural(arr(p.calls).length, 'call'))} from numbers that weren't shared</div>`
   else out += `<div class="lead-meta">${shown ? `${telLink(p.phone)} · ` : ''}${p.email ? mailLink(p.email) : 'No email yet'}</div>`
-  out += `<div class="lead-meta">First called ${esc(fmt.monthDay(p.firstSeenAt))} · Last call ${esc(fmt.dateTime(p.lastSeenAt))}</div>`
+  out += `<div class="lead-meta">First called ${esc(fmt.monthDay(p.firstSeenAt))} · Last call ${esc(fmt.dateTime(p.lastSeenAt, { inSentence: true }))}</div>`
   if (shown && href.tel(p.phone)) out += `<a class="btn btn-primary lead-call" href="${esc(href.tel(p.phone))}">${ico('phone')}Call ${esc(shown)}</a>`
   if (!hidden && !p.name) {
     const sug = calendarName(p, s)
@@ -350,7 +350,7 @@ function leadPanelHtml(p, s) {
   if (facts.length) {
     out += `<dl class="facts">${facts.map((f) => `<dt>${esc(f.label)}</dt><dd>${esc(f.value)}${f.unsure ? ' <span class="warn-text small">(not sure)</span>' : ''} — ` +
       (f.excerpt ? `<span class="quote">"${esc(f.excerpt)}"</span>` : '<span class="faint">(no quote saved)</span>') +
-      (f.from ? ` <span class="faint small">(from the call ${esc(fmt.dateTime(f.from))})</span>` : '') + '</dd>').join('')}</dl>`
+      (f.from ? ` <span class="faint small">(from the call ${esc(fmt.dateTime(f.from, { inSentence: true }))})</span>` : '') + '</dd>').join('')}</dl>`
   } else out += `<p class="muted">The assistant hasn't learned what they want yet.</p>`
   out += '</section>'
   // 6. apartments they were told about
@@ -463,7 +463,11 @@ const view = {
         return
       }
       const row = e.target.closest('.lead-row')
-      if (row) this.open(row.dataset.phone, row)
+      if (row) { this.open(row.dataset.phone, row); return }
+      // To do rows: the sentence (row body) opens the person too, not only the bold name — a click on a
+      // link inside it (the phone, the email) keeps its own job.
+      const body = e.target.closest('.todo-row .row-body')
+      if (body && !e.target.closest('a')) { const nameBtn = body.querySelector('[data-action="open"]'); if (nameBtn) this.open(nameBtn.dataset.phone, nameBtn) }
     })
     this.list.addEventListener('keydown', (e) => {
       if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
@@ -681,7 +685,11 @@ const view = {
     let panelHtml_
     if (gone) panelHtml_ = gonePanelHtml()
     else if (openRec) panelHtml_ = leadPanelHtml(openRec, s)
-    else panelHtml_ = isSplit() ? `<div class="panel-empty">${A.html.empty({ icon: 'leads', title: "Pick someone to see what they're looking for." })}</div>` : ''
+    else if (isSplit()) {
+      // The placeholder names the gesture the tab offers, and says nothing when there is nobody to pick.
+      const anyone = this.tab === 'todo' ? fus.some((f) => f.status === 'scheduled') : Boolean(this.list.querySelector('.lead-row'))
+      panelHtml_ = anyone ? `<div class="panel-empty">${A.html.empty({ icon: 'leads', title: this.tab === 'todo' ? "Click a name to see what they're looking for." : "Pick someone to see what they're looking for." })}</div>` : ''
+    } else panelHtml_ = ''
     this.split.classList.toggle('has-panel', hasPanel)
     this.wrap.classList.toggle('has-panel', hasPanel)
     if (panelHtml_ !== this.panelHtml) {

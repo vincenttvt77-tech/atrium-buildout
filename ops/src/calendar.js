@@ -314,16 +314,19 @@ function itemHtml(m, it, col) {
   const topSegs = it.kind === 'dayband' ? it.segs.filter((sg) => sg.row === 0) : []
   const nextSeg = it.kind === 'dayband' ? it.segs.find((sg) => sg.row > 0) : null
   const linesFor = (rows) => Math.max(2, Math.min(6, Math.floor((rows * ROW_H - 8) / 15)))
-  const lines = nextSeg ? Math.max(1, Math.min(linesFor(n), linesFor(nextSeg.row))) : linesFor(n)
+  // A segment on the band's first row takes the second line, so the day's own label keeps to one.
+  const lines = topSegs.length ? 1 : (nextSeg ? Math.max(1, Math.min(linesFor(n), linesFor(nextSeg.row))) : linesFor(n))
   let words
-  if (it.kind === 'dayband') words = `Blocked all day${it.reason ? ` · ${it.reason}` : ''}${topSegs.map((sg) => `\n· ${sg.slot.reason || 'Blocked'}`).join('')}`
+  if (it.kind === 'dayband') words = `Blocked all day${it.reason ? ` · ${it.reason}` : ''}`
   else if (it.slots.length > 1) words = `Blocked ${fmt.timeRange(it.first.startsAt, it.last.endsAt)}${it.reason ? (n >= 2 ? '\n' : ' · ') + it.reason : ''}`
   else words = `Blocked${it.reason ? ` · ${it.reason}` : ''}`
+  // A slot's own block inside a day band is its own line — its time, then its own reason — never the day's.
+  const segWords = (sg) => { const a = sg.slots[0], b = sg.slots[sg.slots.length - 1]; return `${sg.slots.length > 1 ? fmt.timeRange(a.startsAt, b.endsAt) : fmt.time(a.startsAt)} · ${sg.slot.reason || 'Blocked'}` }
   let hits = ''
   for (let i = 0; i < n; i++) hits += i === 0
     ? `<div class="cal-band-hit" role="gridcell" aria-colindex="${col}" aria-rowspan="${n}" tabindex="-1" aria-label="${esc(itemLabel(m, it))}" style="top:0"></div>`
     : `<div class="cal-band-hit" aria-hidden="true" style="top:${i * ROW_H}px"></div>`
-  const segs = it.kind === 'dayband' ? it.segs.map((sg) => `<div class="cal-band-seg" aria-hidden="true" style="top:${sg.row * ROW_H}px;height:${sg.span * ROW_H}px" data-seg="${esc(sg.slot.id)}">${sg.row === 0 ? '' : `<span class="cal-band-words">· ${esc(sg.slot.reason || 'Blocked')}</span>`}</div>`).join('') : ''
+  const segs = it.kind === 'dayband' ? it.segs.map((sg) => `<div class="cal-band-seg" aria-hidden="true" style="top:${sg.row * ROW_H}px;height:${sg.span * ROW_H}px" data-seg="${esc(sg.slot.id)}"><span class="cal-band-words${sg.row === 0 ? ' cal-band-words-2' : ''}">${esc(segWords(sg))}</span></div>`).join('') : ''
   const slotList = it.slots.map((x) => x.id).join(' ')
   return `<div class="cal-cell cal-slot${isHour ? '' : ' is-half'}" role="presentation" style="${place}">` +
     `<div class="cal-band${n >= 2 ? ' is-tall' : ''}" ${common} data-slots="${esc(slotList)}" style="--cal-lines:${lines}"><span class="cal-band-text">${ico('slash')}<span class="cal-band-words">${esc(words).replace(/\n/g, '<br>')}</span></span>${segs}${hits}</div></div>`
@@ -502,6 +505,10 @@ function reblock(targets, handle) {
       reread()
       if (isKnown400(e)) {
         cal.slotBlocksFail = true
+        // Focus goes back to the time(s) that were reopened before the toast (which had it) closes, so the
+        // keyboard user stays on the calendar rather than being dropped on the heading.
+        const first = targets.find((t) => !isYmd(t.target)) || targets[0]
+        if (first) { const sl = cal.model && cal.model.byId.get(String(first.target)); cal.focusKey = `cell:${first.target}`; cal.focusDate = sl ? sl.date : cal.focusDate; focusKeyNow() }
         if (handle) handle.close()
         A.toast("Couldn't put the block back — individual times can't be blocked right now. Block the whole day from Block time… if you need to.", { kind: 'error' })
       }
@@ -814,7 +821,7 @@ function tourContent(s, m, it) {
   if (tel) contact.push(`<a href="${esc(tel)}">${esc(fmt.phone(t.phone))}</a>`)
   if (mail) contact.push(`<a href="${esc(mail)}">${esc(t.email)}</a>`)
   let body = `<p>${esc(dayLabel(sl.date))} · ${esc(fmt.timeRange(sl.startsAt, sl.endsAt))}</p><p>${t.unitId ? `Apartment ${esc(t.unitId)}` : 'No apartment picked yet'}</p><p>${contact.length ? contact.join(' · ') : 'No phone on file'}</p>`
-  if (t.bookedAt && fmt.dateTime(t.bookedAt) !== '—') body += `<p>Booked by the assistant ${esc(fmt.dateTime(t.bookedAt))}</p>`
+  if (t.bookedAt && fmt.dateTime(t.bookedAt) !== '—') body += `<p>Booked by the assistant ${esc(fmt.dateTime(t.bookedAt, { inSentence: true }))}</p>`
   const actions = []
   if (tel) actions.push(`<a class="btn" href="${esc(tel)}">Call</a>`)
   if (t.profile) actions.push(`<a class="btn btn-quiet" href="${esc(A.hashFor('leads', { phone: t.profile.phone }))}">Open lead</a>`)
@@ -834,7 +841,7 @@ function blockedContent(m, it, seg) {
     block = entries[0] || null
   }
   const reason = reasonOf(block && block.reason) || it.reason || ''
-  const added = block && block.blockedAt && fmt.dateTime(block.blockedAt) !== '—' ? ` · added ${fmt.dateTime(block.blockedAt)}` : ''
+  const added = block && block.blockedAt && fmt.dateTime(block.blockedAt) !== '—' ? ` · added ${fmt.dateTime(block.blockedAt, { inSentence: true })}` : ''
   let body = `<p>${reason ? esc(reason) : 'No reason given'}${esc(added)}</p>`
   if (it.kind === 'dayband' && it.tours) body += `<p>Tours already booked on ${esc(longDay(ymd))} stay on the calendar.</p>`
   if (seg) body += `<p>This time also has its own block: ${seg.reason ? esc(seg.reason) : 'no reason given'}.</p>`

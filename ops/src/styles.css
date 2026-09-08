@@ -78,7 +78,9 @@
 }
 /* The base size sits here, above the mobile block, so the 15 px mobile rule (same specificity,
    later in the sheet) wins as the brief's §3.2 intends. */
-html { font-size: 14px; -webkit-text-size-adjust: 100%; }
+/* overscroll-behavior-x: none — the calendar's own left/right swipe pages the agenda; the browser must
+   never read the same gesture as history navigation and drop the person out of the page. */
+html { font-size: 14px; -webkit-text-size-adjust: 100%; overscroll-behavior-x: none; }
 @media (max-width: 959px) {
   :root { --ctrl-h: 44px; --main-pad: 16px; }
   html { font-size: 15px; }
@@ -103,6 +105,7 @@ body {
   line-height: 1.43;
   -webkit-tap-highlight-color: transparent;
   overflow-x: hidden;
+  overscroll-behavior-x: none;
   overflow-wrap: anywhere;
 }
 ::selection { background: var(--accent-soft); }
@@ -233,7 +236,7 @@ main:focus { outline: none; }
   .nav-item {
     width: 100%; min-width: 0; flex-direction: column; justify-content: center; gap: 2px;
     height: 56px; padding: 0; border-radius: 0; border-top: 2px solid transparent;
-    font-size: .733rem; font-weight: 500;
+    font-size: .8rem; font-weight: 500; /* 12 px at the 15 px base — the brief's caption floor */
   }
   .nav-item:hover { background: transparent; }
   .nav-item[aria-current="page"] { background: transparent; border-top-color: var(--accent); }
@@ -325,6 +328,16 @@ main:focus { outline: none; }
 .card.rows { padding: 0; overflow: hidden; }
 .card.rows > .row:last-child { border-bottom: 0; }
 .card-warn.rows > .row, .card-danger.rows > .row { background: transparent; }
+/* A bordered button on a tinted card: --line-ctrl was chosen for 3:1 on white and paper, and on the
+   amber / red soft fills it drops to ~2.8:1, so the border takes the card's own colour (≥ 4.7:1).
+   Buttons whose border is transparent by design (primary, quiet, danger, link) stay that way. */
+.card-warn .btn, .banner-warn .btn, .status-summary.is-warn .btn { border-color: var(--warn); }
+.card-danger .btn, .banner-danger .btn { border-color: var(--danger); }
+.card-warn .btn-primary, .card-warn .btn-quiet, .card-warn .btn-danger, .card-warn .btn-link,
+.banner-warn .btn-primary, .banner-warn .btn-quiet, .banner-warn .btn-danger, .banner-warn .btn-link,
+.status-summary.is-warn .btn-primary, .status-summary.is-warn .btn-quiet,
+.card-danger .btn-primary, .card-danger .btn-quiet, .card-danger .btn-danger, .card-danger .btn-link,
+.banner-danger .btn-primary, .banner-danger .btn-quiet, .banner-danger .btn-danger, .banner-danger .btn-link { border-color: transparent; }
 
 .row {
   display: grid; grid-template-columns: auto minmax(0, 1fr) auto; column-gap: 12px; row-gap: 6px; align-items: start;
@@ -530,6 +543,8 @@ body.has-dialog { overflow: hidden; }
 @media (prefers-color-scheme: dark) { .toast { background: var(--paper-3); } }
 @media (max-width: 959px) {
   .toast-stack { left: 16px; right: 16px; width: auto; bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
+  /* a 44 px close target; the negative margins keep the toast's height and the icon's place */
+  .toast-close { width: 44px; height: 44px; margin: -12px -8px -12px 0; }
   /* While a bottom sheet is open its primary button owns the bottom edge; toasts move to the top. */
   body.has-dialog .toast-stack { bottom: auto; top: 60px; }
 }
@@ -600,6 +615,10 @@ body.has-dialog { overflow: hidden; }
   /* Inline links keep their place in the sentence but get a 44 px tall hit area (padding an
      inline box does not move the line; the negative margin cancels it in flex/grid parents). */
   .btn-link, .today-list .meta a, .today-list .row-sub a, .today-list .row-title a.name { padding: 15px 0; margin: -15px 0; }
+  /* … and the same for every phone / email link inside a row, a panel's meta line or a facts list. */
+  .row-sub a, .row-title a, .meta a, .lead-meta a, .panel-meta a, .facts dd a, .popover-body a { padding: 14px 0; margin: -14px 0; }
+  /* Disclosure summaries (Conversation, For support, Done and not needed) are the operable control: 44 px tall. */
+  details > summary { min-height: 44px; align-items: center; }
 }
 
 /* ---------- narrow screens: rows whose leading column is text stack it above the body ---------- */

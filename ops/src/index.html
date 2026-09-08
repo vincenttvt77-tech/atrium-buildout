@@ -6,10 +6,11 @@
 <meta name="robots" content="noindex, nofollow, noarchive">
 <meta name="referrer" content="no-referrer">
 <title>The Larkin — Front desk</title>
-<!-- Inter loads without blocking first paint: a preload that becomes a stylesheet once it lands
-     (inline handler allowed by script-src 'unsafe-inline'); with scripts off the plain link applies.
-     The system stack in --font paints in the meantime, so a blocked fonts.googleapis.com costs nothing. -->
-<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+<!-- Inter loads without blocking first paint: the stylesheet arrives as media="print" (fetched at low
+     priority, never render-blocking) and app.js boot() flips it to media="all" — no inline handler,
+     so the page does not lean on script-src 'unsafe-inline' for it; with scripts off the plain link
+     applies. The system stack in --font paints in the meantime, so a blocked fonts.googleapis.com costs nothing. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" media="print" data-font-swap>
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap"></noscript>
 <!-- Front desk shell. Sources live in ops/src/ and are composed by `npm run build:ops`:
      each @include line becomes the file wrapped in <style> / <script>. The include order is
@@ -53,7 +54,9 @@
     <section class="view" data-view="status" hidden></section>
   </main>
 </div>
-<div class="toast-stack" id="toasts" role="region" aria-label="Notifications" aria-live="polite" aria-relevant="additions text"></div>
+<!-- Not a live region itself: each toast carries its own role=status / role=alert (app.js), and a
+     polite container around them would make screen readers announce twice or demote an alert. -->
+<div class="toast-stack" id="toasts" role="region" aria-label="Notifications"></div>
 <div class="vh" id="live" aria-live="polite" aria-atomic="true"></div>
 <div id="dialogs"></div>
 <!-- @include app.js -->

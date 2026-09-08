@@ -41,6 +41,9 @@
 .todo-row .row-lead .due .ico { width: 16px; height: 16px; flex: none; margin-top: 2px; }
 .todo-row.row-flag .row-lead-icon { color: var(--warn); }
 .todo-row .row-title .name, .done-row .row-title .name { font-weight: 600; }
+/* On the To do tab the sentence itself opens the person (the name is the keyboard path); the row's buttons stay separate. */
+.leads-list .todo-row .row-body { cursor: pointer; }
+.leads-list .todo-row .row-body:hover .btn-link.name { text-decoration: underline; }
 .todo-row .row-title .btn-link.name { font-weight: 600; }
 .todo-row .row-sub a { color: inherit; }
 .todo-row .row-chips, .done-row .row-chips, .lead-row .row-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }

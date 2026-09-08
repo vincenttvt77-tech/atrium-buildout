@@ -15,6 +15,7 @@
  *   Atrium.fmt.dayLong(v)     'Tuesday, September 8'
  *   Atrium.fmt.time(iso)      '2:00 PM' (New York)
  *   Atrium.fmt.dateTime(iso)  'Today 2:14 PM' | 'Yesterday 6:40 PM' | 'Tomorrow 10:00 AM' | 'Tue, Sep 8, 2:14 PM'
+ *                             (iso, { inSentence: true }) lower-cases the day word for use after another word
  *   Atrium.fmt.relative(iso)  'just now' | '3 min ago' | '2 hours ago' | 'yesterday' | '3 days ago' | 'Tue, Sep 1'
  *                             future: 'in 5 min' | 'in 2 hours' | 'tomorrow' | 'in 3 days' | 'Tue, Sep 15'
  *   Atrium.fmt.duration(s)    '7 min' (≥ 60 s, rounded) | '45 sec' | '—' when null. The brief's
@@ -222,14 +223,16 @@ const fmt = {
     return `${MON[b.m - 1]} ${b.d}${yearSuffix(b.y)}`
   },
   time(iso) { const t = toTime(iso); return t == null ? '—' : tidy(timeFmt.format(new Date(t))) },
-  dateTime(iso) {
+  /** 'Today 2:14 PM' at the start of a line; { inSentence: true } → 'today 2:14 PM' after a word ("called today 2:14 PM"). */
+  dateTime(iso, opts) {
     const p = nyParts(iso); if (!p) return '—'
     const today = nyNow().ymd
     const diff = daysBetween(today, p.ymd)
     const time = fmt.time(iso)
-    if (diff === 0) return `Today ${time}`
-    if (diff === -1) return `Yesterday ${time}`
-    if (diff === 1) return `Tomorrow ${time}`
+    const low = Boolean(opts && opts.inSentence)
+    if (diff === 0) return `${low ? 'today' : 'Today'} ${time}`
+    if (diff === -1) return `${low ? 'yesterday' : 'Yesterday'} ${time}`
+    if (diff === 1) return `${low ? 'tomorrow' : 'Tomorrow'} ${time}`
     return `${fmt.day(p.ymd)}, ${time}`
   },
   /** Mid-sentence form of dateTime: 'at 3:02 AM' | 'yesterday at 1:05 PM' | 'tomorrow at 10:00 AM' | 'on Tue, Sep 1 at 2:14 PM'. */
@@ -384,7 +387,7 @@ const labels = {
     'restricted:legal_question': "The assistant doesn't answer legal questions — it said someone would call.",
     'restricted:dispute': "The assistant doesn't handle disputes — it said someone would call.",
     'restricted:money_movement': "The assistant doesn't move or discuss money — it said someone would call.",
-    emergency: 'The assistant told them to leave and call 911.',
+    emergency: 'The assistant treated it as an emergency.',
   },
   emergency: {
     gas: 'a possible gas leak', smoke_or_fire: 'smoke or fire', carbon_monoxide: 'carbon monoxide', flooding: 'flooding',
@@ -756,8 +759,9 @@ function showView(r, moveFocus) {
     root.innerHTML = placeholderView(r.name)
   }
   if (moveFocus && root) {
+    // a modal dialog keeps focus while it is open (its close handler then lands on this view's heading)
     const h1 = root.querySelector('h1')
-    if (h1) { if (!h1.hasAttribute('tabindex')) h1.setAttribute('tabindex', '-1'); try { h1.focus({ preventScroll: false }) } catch (e) { /* ignore */ } }
+    if (h1 && !dialogs.length) { if (!h1.hasAttribute('tabindex')) h1.setAttribute('tabindex', '-1'); try { h1.focus({ preventScroll: false }) } catch (e) { /* ignore */ } }
     announce(VIEW_LABEL[r.name])
   }
 }
@@ -1000,13 +1004,20 @@ function dialog(spec) {
       const i = dialogs.indexOf(api_); if (i >= 0) dialogs.splice(i, 1)
       backdrop.remove()
       if (!dialogs.length) document.body.classList.remove('has-dialog')
-      let back = opener && typeof opener.focus === 'function' && opener.isConnected && opener !== document.body ? opener : null
+      // An opener that now sits in a hidden view (the hash changed while the dialog was open) cannot
+      // take focus; it counts as gone, and the same key is looked for in the view that is showing.
+      const visible = (el) => Boolean(el) && !el.closest('.view[hidden]')
+      let back = opener && typeof opener.focus === 'function' && opener.isConnected && opener !== document.body && visible(opener) ? opener : null
       if (!back && openerKey) {
         const v = (openerView && openerView.isConnected && !openerView.hidden ? openerView : null) || document.querySelector('.view:not([hidden])')
         back = v ? v.querySelector(`[data-key="${cssq(openerKey)}"]`) : null
       }
-      if (!back) { const v = document.querySelector('.view:not([hidden])'); back = v ? v.querySelector('h1') : null }
+      const viewH1 = () => { const v = document.querySelector('.view:not([hidden])'); return v ? v.querySelector('h1') : null }
+      if (!back) back = viewH1()
       if (back) { try { back.focus({ preventScroll: true }) } catch (e) { /* ignore */ } }
+      // last resort: focus that landed nowhere (on <body>, or somewhere not on screen) goes to the view's heading
+      const a = document.activeElement
+      if (!a || a === document.body || !a.closest('.view:not([hidden]), .side, .toast-stack, .dlg')) { const h = viewH1(); if (h) { try { h.focus({ preventScroll: true }) } catch (e) { /* ignore */ } } }
       if (typeof o.onClose === 'function') { try { o.onClose() } catch (e) { console.error(e) } }
     },
     setPrimary(p) {
@@ -1170,6 +1181,29 @@ const escalationFor = (profile, callId) => {
   const list = arr(profile && profile.escalations)
   return list.find((e) => e && e.callId === callId) || (list.length ? list[list.length - 1] : null)
 }
+/**
+ * What the assistant did about an emergency, said only as far as it can be shown. With a transcript,
+ * the assistant's own lines decide (911 and leave / 911 / neither); without one, the fixed safety
+ * instruction the server gives for that kind (src/escalation/emergency.ts) — gas, smoke or fire and
+ * carbon monoxide say leave and call 911, an injury or intruder says call 911, and flooding, no heat
+ * or structural damage give other instructions, so those are only "treated it as an emergency".
+ */
+const LEAVE_AND_911 = ['gas', 'smoke_or_fire', 'carbon_monoxide'], CALL_911 = ['injury', 'intruder']
+function emergencyAction(kind, transcript) {
+  const t = String(transcript ?? '')
+  if (t.trim()) {
+    const assistant = t.split('\n').filter((l) => /^AI:/.test(l)).join('\n')
+    const said911 = /\b911\b/.test(assistant)
+    const saidLeave = /\b(?:leave the (?:apartment|building)|get (?:everyone )?out|outside)\b/i.test(assistant)
+    if (said911 && saidLeave) return 'The assistant told them to leave and call 911.'
+    if (said911) return 'The assistant told them to call 911.'
+    return 'The assistant treated it as an emergency.'
+  }
+  const k = String(kind ?? '')
+  if (LEAVE_AND_911.includes(k)) return 'The assistant told them to leave and call 911.'
+  if (CALL_911.includes(k)) return 'The assistant told them to call 911.'
+  return 'The assistant treated it as an emergency.'
+}
 /** Which needs-a-person item, if any, is open for a phone (used by displayStage and the flag chip). */
 function openItemsFor(s, phone) { return needsPerson(s).filter((n) => n.phone === phone) }
 function displayStage(profile, s) {
@@ -1207,7 +1241,8 @@ function needsPerson(s) {
     const profile = (rec && rec.profile) || profileForCall(s, e.callId)
     const phone = (rec && rec.phone) || (profile && profile.phone) || 'unknown'
     items.push({ type: 'emergency', callId: e.callId, phone, name: (profile && profile.name) || null, profile,
-      phrase: label(labels.emergency, e.emergencyKind, 'an emergency'), matched: String(e.matched ?? ''), at: e.at, sortAt: toTime(e.at) ?? 0 })
+      phrase: label(labels.emergency, e.emergencyKind, 'an emergency'), matched: String(e.matched ?? ''), at: e.at, sortAt: toTime(e.at) ?? 0,
+      action: emergencyAction(e.emergencyKind, rec && rec.call && rec.call.transcript) })
   }
   const callbacks = followUpsOf(s).filter((f) => f && f.kind === 'callback' && f.status === 'scheduled')
     .sort((a, b) => (toTime(a.dueAt) ?? 0) - (toTime(b.dueAt) ?? 0))
@@ -1404,9 +1439,9 @@ function callStory(record, s) {
     answered: [], captured: {}, unreadable: [], slots: null, noSlots: false, dropped: false, crash: false,
   }
   // events first (structured numbers), then tool calls (authoritative wording) overwrite or fill
-  for (const e of ev('emergency')) f.emergency = { phrase: label(labels.emergency, e.emergencyKind, 'an emergency'), matched: String(e.matched ?? '') }
+  for (const e of ev('emergency')) f.emergency = { phrase: label(labels.emergency, e.emergencyKind, 'an emergency'), matched: String(e.matched ?? ''), kind: String(e.emergencyKind ?? '') }
   for (const e of ev('escalated')) {
-    if (e.trigger === 'emergency') { if (!f.emergency) f.emergency = { phrase: 'an emergency', matched: '' } }
+    if (e.trigger === 'emergency') { if (!f.emergency) f.emergency = { phrase: 'an emergency', matched: '', kind: '' } }
     else if (/^restricted:/.test(String(e.trigger))) f.restricted = { question: String(e.detail ?? ''), trigger: String(e.trigger) }
   }
   for (const e of ev('signal_captured')) if (e.captured !== false) f.captured[e.signal] = { signal: String(e.signal), value: e.value, excerpt: String(e.excerpt ?? '') }
@@ -1485,9 +1520,11 @@ function callStory(record, s) {
         matched = text.truncate((clauses.find((c) => re.test(c)) || clauses[0] || '').replace(/[.!?]+$/, ''), 90)
         break
       }
-      f.emergency = { phrase: label(labels.emergency, kind, 'an emergency'), matched, fromTranscript: true, said911: /\b911\b/.test(assistant) }
+      f.emergency = { phrase: label(labels.emergency, kind, 'an emergency'), matched, kind: kind || '', fromTranscript: true }
     }
   }
+  // What it did is said only as far as the transcript (or, without one, the kind's fixed instruction) shows.
+  if (f.emergency) f.emergency.action = emergencyAction(f.emergency.kind, call && call.transcript)
 
   // who / wants
   const who = (() => {
@@ -1516,13 +1553,10 @@ function callStory(record, s) {
   })()
 
   // the sentence — first rule that matches, then the Also clause
-  // An emergency known from the decision log followed the script (leave, call 911); one read off the
-  // transcript is described only as far as the transcript shows.
-  const emergencyAction = () => (f.emergency && f.emergency.fromTranscript && !f.emergency.said911 ? 'The assistant treated it as an emergency.' : 'The assistant told them to leave and call 911.')
   const bookedSentence = () => `The assistant booked a tour${f.booked.unitId ? ` of apartment ${f.booked.unitId}` : ''} for ${f.booked.when || 'a time on the calendar'}.`
   const askedSentence = () => `They asked "${text.truncate(f.restricted.question || label(labels.trigger, f.restricted.trigger, 'something only a person can answer'), 90)}" — that's for a person to answer, so the assistant took their details for a call back.`
   const rules = [
-    { id: 1, hit: () => Boolean(f.emergency), say: () => `They reported ${f.emergency.phrase}${f.emergency.matched ? ` — "${f.emergency.matched}"` : ''}. ${emergencyAction()}` },
+    { id: 1, hit: () => Boolean(f.emergency), say: () => `They reported ${f.emergency.phrase}${f.emergency.matched ? ` — "${f.emergency.matched}"` : ''}. ${f.emergency.action}` },
     { id: 2, hit: () => Boolean(f.restricted), say: askedSentence },
     { id: 3, hit: () => Boolean(f.booked), say: bookedSentence },
     { id: 4, hit: () => Boolean(f.arranging), say: () => `The assistant is arranging a tour${f.arranging.unitId ? ` of apartment ${f.arranging.unitId}` : ''} — it isn't confirmed yet.` },
@@ -1567,7 +1601,10 @@ function callStory(record, s) {
 
   // steps, one per tool call in order; consecutive captures collapse
   const steps = []
-  if (f.emergency) steps.push({ icon: 'siren', text: `Treated this as an emergency (${f.emergency.phrase})${f.emergency.fromTranscript && !f.emergency.said911 ? '' : ' and told them to leave and call 911'}.` })
+  if (f.emergency) {
+    const did = f.emergency.action.replace(/^The assistant /, '').replace(/\.$/, '')
+    steps.push({ icon: 'siren', text: `Treated this as an emergency (${f.emergency.phrase})${/^told/.test(did) ? ` and ${did}` : ''}.` })
+  }
   let run = []
   const flushRun = () => {
     if (!run.length) return
@@ -1692,7 +1729,7 @@ function todoSentence(fu, profile, s) {
 
 const derive = {
   windowStart, personName, displayName, displayStage, needsPerson, callBackToday, dueTodayCount, toursOn, callRecords, callStory,
-  todoSentence, escalationText, lossText, summarySentence, availabilityText, moveInText, profileByPhone, profileForCall, factValue, bedroomsText,
+  todoSentence, escalationText, lossText, summarySentence, availabilityText, moveInText, profileByPhone, profileForCall, factValue, bedroomsText, emergencyAction,
 }
 
 // ---------------------------------------------------------------------------------------
@@ -1816,10 +1853,14 @@ function todayModel(s) {
     if (callsValue === '0') briefing = 'Since 6 PM yesterday: no calls yet.'
     else {
       const toursPart = toursBooked == null ? '' : `, ${toursBooked === 0 ? 'no tours booked' : text.plural(toursBooked, 'tour booked', 'tours booked')}`
-      const n = needs.length + callBacks.length
-      briefing = n === 0 ? `Since 6 PM yesterday: ${text.plural(callsValue === '20+' ? 20 : Number(callsValue), 'call').replace(/^20 /, '20+ ')}${toursPart}. Nothing needs you right now.`
-        : `Since 6 PM yesterday: ${text.plural(callsValue === '20+' ? 20 : Number(callsValue), 'call').replace(/^20 /, '20+ ')}${toursPart}, ${text.plural(n, 'person to call back', 'people to call back')}.`
-      if (callsValue === '20+') briefing = briefing.replace('20+ calls', '20+ calls')
+      // Two distinct phrases with the same numbers as the tile ("Need a person") and the "Call back
+      // today" section, so nothing in the sentence is left for the reader to reconcile (§17 item 1).
+      const parts = []
+      if (needs.length) parts.push(needs.length === 1 ? '1 needs a person' : `${needs.length} need a person`)
+      if (callBacks.length) parts.push(`${callBacks.length} to call back`)
+      const callsPart = text.plural(callsValue === '20+' ? 20 : Number(callsValue), 'call').replace(/^20 /, '20+ ')
+      briefing = parts.length ? `Since 6 PM yesterday: ${callsPart}${toursPart}, ${parts.join(', ')}.`
+        : `Since 6 PM yesterday: ${callsPart}${toursPart}. Nothing needs you right now.`
     }
   }
   return {
@@ -1839,6 +1880,21 @@ function personRowHtml(item, s) {
   const phone = item.phone, shown = fmt.phone(phone)
   const rec = callRecords(s).find((r) => r.id === item.callId)
   const actions = []
+  if (item.type === 'emergency') {
+    // The emergency is the first item of the list as well as the banner above, so the section's count,
+    // the tile, the badge and the briefing sentence all count the same things.
+    if (shown) actions.push(telBtn(phone, 'Call'))
+    if (item.profile) actions.push(link('leads', { phone }, 'Open lead', 'btn btn-quiet link-action'))
+    if (rec) actions.push(link('calls', { id: item.callId }, 'See the call', 'btn btn-quiet link-action'))
+    const by = item.name ? esc(item.name) : (shown ? telLink(phone) : 'a caller with a hidden number')
+    return `<div class="row" data-key="np:${esc(item.callId)}">` +
+      `<span class="row-lead"><span class="row-lead-icon danger-text">${ico('siren')}</span></span><span class="row-body">` +
+      `<span class="row-title"><span class="name">Emergency — ${esc(item.phrase)}</span> — reported by ${by} ${esc(fmt.whenPhrase(item.at) || fmt.dateTime(item.at, { inSentence: true }))}</span>` +
+      (item.matched ? `<span class="quote">"${esc(item.matched)}"</span>` : '') +
+      `<span class="reassure">${esc(item.action)}</span>` +
+      `<span class="meta">${item.name && shown ? `${telLink(phone)} · ` : ''}stays on this page for a day</span>` +
+      `</span><span class="row-actions">${actions.join('')}</span></div>`
+  }
   if (item.type === 'callback') {
     const t = escalationText({ trigger: item.trigger, detail: item.question })
     const overdue = (toTime(item.respondBy) ?? Infinity) <= Date.now()
@@ -1851,7 +1907,7 @@ function personRowHtml(item, s) {
       `<span class="row-title"><span class="name">Call ${esc(personName(item.profile || { phone }))} back</span> — ${esc(t.headline)}</span>` +
       (t.quote ? `<span class="quote">"${esc(t.quote)}"</span>` : '') +
       `<span class="reassure">${esc(t.reassurance)}</span>` +
-      `<span class="meta">${shown ? `${telLink(phone)} · ` : ''}called ${esc(fmt.dateTime(item.calledAt))} · <span class="${overdue ? 'overdue' : ''}">${esc(fmt.respondPhrase(item.respondBy))}</span></span>` +
+      `<span class="meta">${shown ? `${telLink(phone)} · ` : ''}called ${esc(fmt.dateTime(item.calledAt, { inSentence: true }))} · <span class="${overdue ? 'overdue' : ''}">${esc(fmt.respondPhrase(item.respondBy))}</span></span>` +
       `</span><span class="row-actions">${actions.join('')}</span></div>`
   }
   const b = item.booking
@@ -1863,7 +1919,7 @@ function personRowHtml(item, s) {
   return `<div class="row" data-key="np:${esc(item.callId)}">` +
     `<span class="row-lead"><span class="row-lead-icon warn-text">${ico('hand')}</span></span><span class="row-body">` +
     `<span class="row-title"><span class="name">${esc(name)}'s tour ${failed ? "wasn't booked" : "isn't confirmed yet"}</span> — ${failed ? "the assistant couldn't reach the calendar" : 'the assistant is still arranging it'}</span>` +
-    `<span class="meta">${shown ? `${telLink(phone)} · ` : ''}called ${esc(fmt.dateTime(item.calledAt))} · wanted ${esc(fmt.day(b.startsAt))} at ${esc(fmt.time(b.startsAt))}${b.unitId ? ` (${esc(b.unitId)})` : ''}</span>` +
+    `<span class="meta">${shown ? `${telLink(phone)} · ` : ''}called ${esc(fmt.dateTime(item.calledAt, { inSentence: true }))} · wanted ${esc(fmt.day(b.startsAt))} at ${esc(fmt.time(b.startsAt))}${b.unitId ? ` (${esc(b.unitId)})` : ''}</span>` +
     `<span class="reassure">${failed ? 'Call to set a time, then book it on the calendar.' : "If it isn't confirmed within the hour, call."}</span>` +
     `</span><span class="row-actions">${actions.join('')}</span></div>`
 }
@@ -1881,7 +1937,7 @@ function followUpRowHtml(fu, s) {
   return `<div class="row row-stack" data-key="fu:${esc(fu.id)}">` +
     `<span class="row-lead"><span class="${overdue ? 'overdue' : ''}">${overdue ? ico('clock') : ''} ${esc(fmt.duePhrase(fu.dueAt))}</span><span class="row-lead-icon">${ico(label(labels.channelIcon, channel, 'phone'))}</span></span>` +
     `<span class="row-body"><span class="row-title">${esc(sen.before)}${personLink(fu.phone, sen.name)}${esc(sen.after)}</span>` +
-    `<span class="row-sub">${fmt.phone(fu.phone) ? `${telLink(fu.phone)} · ` : ''}${channel === 'email' && email ? `${mailLink(email)} · ` : ''}from their call ${esc(fmt.dateTime(from))}</span></span>` +
+    `<span class="row-sub">${fmt.phone(fu.phone) ? `${telLink(fu.phone)} · ` : ''}${channel === 'email' && email ? `${mailLink(email)} · ` : ''}from their call ${esc(fmt.dateTime(from, { inSentence: true }))}</span></span>` +
     `<span class="row-actions">${primary}` +
     `<button type="button" class="btn" data-action="done" data-fu="${esc(fu.id)}" data-key="fu:${esc(fu.id)}:done" data-write="leads">Done</button>` +
     `<button type="button" class="btn" data-action="skip" data-fu="${esc(fu.id)}" data-key="fu:${esc(fu.id)}:skip" data-write="leads">Not needed</button></span></div>`
@@ -1906,7 +1962,7 @@ function recentCallRowHtml(rec, s) {
   const dur = rec.durationSeconds != null ? fmt.duration(rec.durationSeconds) : '—'
   return `<a class="row row-click" href="${esc(hashFor('calls', { id: rec.id }))}" data-key="row:${esc(rec.id)}">` +
     `<span class="row-lead"><span class="row-lead-icon ${cls}">${ico(iconName)}</span></span>` +
-    `<span class="row-body"><span class="row-title">${esc(rec.displayName)} <span class="muted" style="font-weight:400">· ${esc(fmt.dateTime(rec.startedAt))}${dur !== '—' ? ` · ${esc(dur)}` : ''}</span></span>` +
+    `<span class="row-body"><span class="row-title">${esc(rec.displayName)} <span class="muted" style="font-weight:400">· ${esc(fmt.dateTime(rec.startedAt, { inSentence: true }))}${dur !== '—' ? ` · ${esc(dur)}` : ''}</span></span>` +
     `<span class="row-sub">${esc(story.sentence)}</span></span>` +
     `<span class="row-actions">${story.chips.slice(0, 2).map(chipHtml).join('')}</span></a>`
 }
@@ -1914,10 +1970,10 @@ function emergencyBannerHtml(item, announced) {
   const sameDay = nyDate(item.at) === nyNow().ymd
   const when = sameDay ? fmt.time(item.at) : fmt.dateTime(item.at)
   const until = (toTime(item.at) ?? Date.now()) + DAY_MS
-  const untilText = nyDate(until) === addDays(nyNow().ymd, 1) ? `${fmt.time(until)} tomorrow` : fmt.dateTime(until)
+  const untilText = nyDate(until) === addDays(nyNow().ymd, 1) ? `${fmt.time(until)} tomorrow` : fmt.dateTime(until, { inSentence: true })
   const shown = fmt.phone(item.phone)
   const raw = `<strong>Emergency — ${esc(item.phrase)}</strong> reported by ${shown ? esc(shown) : 'a caller with a hidden number'} ${esc(fmt.whenPhrase(item.at) || `at ${when}`)}.` +
-    (item.matched ? ` They said "${esc(item.matched)}".` : '') + ' The assistant told them to leave and call 911.' +
+    (item.matched ? ` They said "${esc(item.matched)}".` : '') + ` ${esc(item.action)}` +
     `<div class="small" style="margin-top:4px">Shown until ${esc(untilText)}.</div>`
   const actions = (shown ? telBtn(item.phone, `Call ${shown}`, 'btn') : '') + link('calls', { id: item.callId }, 'See the call', 'btn')
   const first = !announced.has(item.callId)
@@ -1947,7 +2003,7 @@ const todayView = {
     if (!root) return
     const m = todayModel(s)
     const key = JSON.stringify([m.callsValue, m.callsNote, m.toursBooked, m.nextTour, m.needValue, m.oldest, m.leadsOff, m.calOff, m.briefing, m.errors, m.loaded, m.notConfigured, m.callsConfigured,
-      m.emergencies.map((x) => [x.callId, x.at, x.matched]), m.people.map((x) => [x.type, x.callId, x.respondBy, x.calledAt, fmt.respondPhrase(x.respondBy), x.question, x.name]),
+      m.emergencies.map((x) => [x.callId, x.at, x.matched, x.action, x.name]), m.people.map((x) => [x.type, x.callId, x.respondBy, x.calledAt, fmt.respondPhrase(x.respondBy), x.question, x.name]),
       m.callBacks.map((f) => [f.id, f.dueAt, f.status, fmt.duePhrase(f.dueAt), todoSentence(f, profileByPhone(s, f.phone), s).text]),
       m.tours.map((t) => [t.slotId, t.name, t.unitId, t.past, t.phone]), m.toursTomorrow.length,
       m.records.slice(0, 5).map((r) => [r.id, r.displayName, fmt.dateTime(r.startedAt), callStory(r, s).sentence]), busyNow('leads')])
@@ -1978,18 +2034,17 @@ const todayView = {
     out += `<div class="tiles">${tile('Calls', m.callsValue === '—' ? '—' : m.callsValue, callsNote)}` +
       `${tile(m.toursBooked === 1 ? 'Tour booked' : 'Tours booked', toursVal, esc(m.toursBooked == null ? '' : (m.nextTour ? `next one ${m.nextTour}` : 'none today')))}` +
       `${tile(m.needValue === 1 ? 'Needs a person' : 'Need a person', needVal, esc(m.needValue == null ? '' : (m.needs.length ? `oldest waiting ${fmt.elapsed(m.now - m.oldest)}` : 'all handled')), m.needValue > 0 ? ' big-number-warn' : '')}</div>`
-    // Needs a person
-    out += `<section class="section today-list" id="needs-a-person">${sectionHead('Needs a person', m.people.length)}`
+    // Needs a person — every needsPerson item in order, the live emergency first (it is also the banner
+    // above), so the count here is the tile's, the badge's and the briefing sentence's number.
+    out += `<section class="section today-list" id="needs-a-person">${sectionHead('Needs a person', m.needs.length)}`
     out += pollBanner(s, 'leads', 'callers')
-    if (m.people.length) out += `<div class="card card-warn rows">${m.people.map((p) => personRowHtml(p, s)).join('')}</div>`
-    // The tile counts the emergency too; while its banner is on screen the empty state must not contradict it.
-    else if (s.loaded.leads && m.emergencies.length) out += `<div class="card">${html_.empty({ title: 'Nothing else needs a person right now.', text: 'The emergency above is still open — it stays on this page for a day.' })}</div>`
+    if (m.needs.length) out += `<div class="card card-warn rows">${m.needs.map((p) => personRowHtml(p, s)).join('')}</div>`
     else if (s.loaded.leads) out += `<div class="card">${html_.empty({ title: 'Nothing needs a person right now.', text: "When the assistant hands something off — an accommodation question, a dispute, a tour it couldn't book — it shows up here." })}</div>`
     out += '</section>'
     // Call back today
     const more = m.callBacks.length > 6 ? link('leads', { tab: 'todo' }, `See all ${m.callBacks.length} in Leads ›`, 'btn-link') : ''
     out += `<section class="section today-list">${sectionHead('Call back today', m.callBacks.length, more)}`
-    if (!m.people.length) out += pollBanner(s, 'leads', 'callers')
+    if (!m.needs.length) out += pollBanner(s, 'leads', 'callers')
     if (m.callBacks.length) out += `<div class="card rows">${m.callBacks.slice(0, 6).map((f) => followUpRowHtml(f, s)).join('')}</div>`
     else if (s.loaded.leads) out += `<div class="card">${html_.empty({ title: 'No one to call back today.', text: "To-dos the assistant creates — a tour to confirm, a question it couldn't answer — appear here on the day they're due." })}</div>`
     out += '</section>'
@@ -2028,7 +2083,7 @@ document.addEventListener('click', (e) => {
 // Status and Demo tools (§11)
 // ---------------------------------------------------------------------------------------
 
-const ASSISTANT_PARA = "It answers the leasing line, learns what a caller is looking for, quotes only the apartments on the live availability list, answers questions from the approved building information, offers real tour times and books them on this calendar. It doesn't guess: if it hasn't been told something, it says so and offers a call back. It never handles accommodation requests, fair-housing or legal questions, disputes, eligibility or payments — those always go to a person, and you'll see them under \"Needs a person\". If a caller reports an emergency it tells them to leave and call 911, then flags it on Today. It doesn't make outgoing calls or send messages yet."
+const ASSISTANT_PARA = "It answers the leasing line, learns what a caller is looking for, quotes only the apartments on the live availability list, answers questions from the approved building information, offers real tour times and books them on this calendar. It doesn't guess: if it hasn't been told something, it says so and offers a call back. It never handles accommodation requests, fair-housing or legal questions, disputes, eligibility or payments — those always go to a person, and you'll see them under \"Needs a person\". If a caller reports an emergency it gives them the safety instruction for it (get out and call 911 for gas, smoke or carbon monoxide), then flags it on Today. It doesn't make outgoing calls or send messages yet."
 
 function storeLine(store) {
   if (!store) return 'not loaded yet'
@@ -2047,10 +2102,13 @@ const statusView = {
     const root = this.root
     if (!root || this.busyAction) return
     const rows = statusRows()
-    const at = s.updatedAt ? fmt.time(s.updatedAt) : ''
+    // "Updated just now" for a minute after Refresh now was pressed (the minute tick repaints it back to the clock time)
+    const justNow = Boolean(this.refreshedAt) && Date.now() - this.refreshedAt < 60000
+    const at = justNow ? 'just now' : (s.updatedAt ? fmt.time(s.updatedAt) : '')
     const counts = { calls: arr(s.calls).length, slots: arr(s.calendar && s.calendar.slots).length, leads: profilesOf(s).length, todos: followUpsOf(s).length }
+    const week = this.weekDays(s)
     const model = { rows, at, errors: s.errors, lastWriteError: s.lastWriteError, health: s.health, counts, lastPollAt: s.lastPollAt, lstore: s.leads && s.leads.store, cstore: s.calendar && s.calendar.store,
-      callsError: s.callsError, callsConfigured: s.callsConfigured, outbound: Boolean(s.leads && s.leads.outboundEnabled), notConfigured: s.notConfigured, weekDays: this.weekDays(s).length, calLoaded: Boolean(s.calendar) }
+      callsError: s.callsError, callsConfigured: s.callsConfigured, outbound: Boolean(s.leads && s.leads.outboundEnabled), notConfigured: s.notConfigured, weekDays: week.length, weekSkipped: week.skipped.length, calLoaded: Boolean(s.calendar) }
     const key = JSON.stringify(model)
     if (key === this.sigKey) return
     this.sigKey = key
@@ -2087,9 +2145,10 @@ const statusView = {
     if (s.health) support.push(['Health check', `${s.health.store} · ${s.health.durable ? 'durable' : 'not durable'} · call history ${s.health.callHistory ? 'on' : 'off'} · "${s.health.hint}"`])
     out += `<details class="support status-section" data-key="support"><summary>${ico('chevron-down')}For support</summary><dl class="facts">${support.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl></details>`
     const weekN = model.weekDays
+    const weekNote = model.calLoaded && !weekN && model.weekSkipped ? ' Every remaining day of this week is already blocked.' : (model.weekSkipped ? ` ${text.plural(model.weekSkipped, 'day is', 'days are')} already blocked and will be left as ${model.weekSkipped === 1 ? 'it is' : 'they are'}.` : '')
     out += `<section class="card card-demo status-section" id="demo-tools"><div class="demo-head" tabindex="-1" data-key="demo-head">${ico('warning')}<span>Demo tools</span></div><p class="demo-standing">These are for demos and testing. They change real data.</p>` +
       `<div class="demo-row"><p>Try it: call the leasing line and the call shows up on Today within a minute.</p><a class="btn" href="${esc(href.tel(property.leasingPhone))}">Call ${esc(property.leasingPhoneDisplay)}</a></div>` +
-      `<div class="demo-row"><p>Blocks every remaining day of this week so a caller is told there's nothing available.</p><button type="button" class="btn" data-action="block-week" data-key="block-week" data-write="calendar"${model.calLoaded && weekN ? '' : ' aria-disabled="true"'}>Block the rest of this week</button><div class="demo-progress" hidden></div></div>` +
+      `<div class="demo-row"><p>Blocks every remaining day of this week so a caller is told there's nothing available.${esc(weekNote)}</p><button type="button" class="btn" data-action="block-week" data-key="block-week" data-write="calendar"${model.calLoaded && weekN ? '' : ' aria-disabled="true"'}>Block the rest of this week</button><div class="demo-progress" hidden></div></div>` +
       `<div class="demo-row"><p>Removes every tour from the calendar, including real ones. Only for resetting a demo.</p><button type="button" class="btn btn-danger" data-action="clear-bookings" data-key="clear-bookings" data-write="calendar">Delete all tours</button></div>` +
       `<div class="demo-row"><p>Removes every caller and to-do so you can run a fresh demo. Don't use this with real callers.</p><button type="button" class="btn btn-danger" data-action="clear-leads" data-key="clear-leads" data-write="leads">Delete all callers</button></div></section></div>`
     // an open "For support" and the focused control survive the re-render a poll causes
@@ -2110,15 +2169,20 @@ const statusView = {
     head.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
     head.focus({ preventScroll: true })
   },
-  /** NY dates from today through this Saturday that have slots. */
+  /** NY dates from today through this Saturday that have slots and are not already blocked all day;
+   *  `.skipped` carries the ones left out because they are (a re-block is a no-op that keeps the old reason). */
   weekDays(s) {
     const cal = s.calendar
-    if (!cal) return []
+    const out = []
+    out.skipped = []
+    if (!cal) return out
     const today = nyNow().ymd, dow = dayOfWeek(today)
     const days = []
     for (let i = 0; dow + i <= 6; i++) days.push(addDays(today, i))
     const withSlots = new Set(arr(cal.slots).map((x) => x && x.date))
-    return days.filter((d) => withSlots.has(d))
+    const blocked = new Set(arr(cal.blocks).map((b) => b && b.target).filter((t) => isYmd(t)))
+    for (const d of days) { if (!withSlots.has(d)) continue; if (blocked.has(d)) out.skipped.push(d); else out.push(d) }
+    return out
   },
   onClick(e) {
     const btn = e.target.closest('button[data-action]')
@@ -2130,10 +2194,21 @@ const statusView = {
     else if (a === 'clear-bookings') this.clearBookings(btn)
     else if (a === 'clear-leads') this.clearLeads(btn)
   },
+  /** A round finishes in a few ms, so the busy state is held for 600 ms and the result is said in a toast. */
   async refreshNow(btn) {
     this.busyAction = true
     btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true')
-    try { await refresh() } finally { this.busyAction = false; this.sigKey = null; this.render(state) }
+    const started = Date.now()
+    const before = state.updatedAt
+    try { await refresh() } finally {
+      await new Promise((r) => setTimeout(r, Math.max(0, 600 - (Date.now() - started))))
+      this.busyAction = false
+      const fresh = state.updatedAt && state.updatedAt !== before && state.failedRounds === 0
+      this.refreshedAt = fresh ? Date.now() : null
+      this.sigKey = null; this.render(state)
+      if (fresh) toast(`Up to date · ${fmt.time(state.updatedAt)}`, { kind: 'ok', key: 'refresh' })
+      else toast(`Couldn't reach the server.${state.updatedAt ? ` Showing what we had at ${fmt.time(state.updatedAt)}.` : ''}`, { kind: 'warn', key: 'refresh' })
+    }
   },
   async signOut(btn) {
     btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true')
@@ -2145,12 +2220,14 @@ const statusView = {
   },
   async blockWeek(btn) {
     const days = this.weekDays(state)
-    if (!days.length) { toast("The calendar isn't reachable right now.", { kind: 'warn' }); return }
-    const reason = await prompt('Reason (optional)', { title: 'Block the rest of this week?', placeholder: 'e.g. demo', confirmLabel: `Block ${text.plural(days.length, 'day')}`, intro: "Callers will be told there's nothing open. Tours already booked stay." })
+    if (!days.length) { toast(state.calendar ? 'Every remaining day of this week is already blocked.' : "The calendar isn't reachable right now.", { kind: 'warn' }); return }
+    const skipped = days.skipped.map((d) => WD_LONG[dayOfWeek(d)])
+    const intro = `Callers will be told there's nothing open. Tours already booked stay.${skipped.length ? ` ${text.list(skipped)} ${skipped.length > 1 ? 'are' : 'is'} already blocked and will be left as ${skipped.length > 1 ? 'they are' : 'it is'}.` : ''}`
+    const reason = await prompt('Reason (optional)', { title: 'Block the rest of this week?', placeholder: 'e.g. demo', confirmLabel: `Block ${text.plural(days.length, 'day')}`, intro })
     if (reason === null) return
-    await this.blockDays(days, reason.trim().slice(0, 120))
+    await this.blockDays(days, reason.trim().slice(0, 120), skipped)
   },
-  async blockDays(days, reason) {
+  async blockDays(days, reason, skipped) {
     const root = this.root
     const btn = root.querySelector('[data-action="block-week"]'), progress = root.querySelector('.demo-progress')
     this.busyAction = true
@@ -2174,10 +2251,12 @@ const statusView = {
     if (progress) { progress.hidden = true; progress.textContent = '' }
     if (btn && btn.isConnected) { btn.classList.remove('is-busy'); btn.removeAttribute('aria-busy') }
     const long = (d) => WD_LONG[dayOfWeek(d)], short = (d) => WD[dayOfWeek(d)]
-    if (!failedDay) toast(blocked.length > 1 ? `Blocked ${short(blocked[0])} – ${short(blocked[blocked.length - 1])}` : `Blocked ${long(blocked[0])}`, { kind: 'ok' })
+    const sk = arr(skipped)
+    const skippedNote = sk.length ? ` (${text.list(sk)} ${sk.length > 1 ? 'were' : 'was'} already blocked)` : ''
+    if (!failedDay) toast((blocked.length > 1 ? `Blocked ${short(blocked[0])} – ${short(blocked[blocked.length - 1])}` : `Blocked ${long(blocked[0])}`) + skippedNote, { kind: 'ok' })
     else {
       const idx = days.indexOf(failedDay), rest = days.slice(idx)
-      const retry = { label: 'Try again', fn: () => { this.blockDays(rest, reason) } }
+      const retry = { label: 'Try again', fn: () => { this.blockDays(rest, reason, sk) } }
       if (!blocked.length) toast("Couldn't do that. Nothing changed — try again.", { kind: 'error', actions: [retry] })
       else toast(`Couldn't block ${long(failedDay)}. ${text.list(blocked.map(long))} ${blocked.length > 1 ? 'are' : 'is'} blocked${days[idx + 1] ? `; ${long(days[idx + 1])} onward isn't` : ''}.`, { kind: 'error', actions: [retry] })
       reread('calendar')
@@ -2222,6 +2301,8 @@ function boot() {
   if (booted) return
   booted = true
   for (const el of document.querySelectorAll('[data-icon]')) el.innerHTML = icon(el.dataset.icon)
+  // the Inter stylesheet arrived as media="print" so it never blocked first paint; apply it now (index.html)
+  for (const l of document.querySelectorAll('link[data-font-swap]')) l.media = 'all'
   register('today', todayView)
   register('status', statusView)
   paintChrome()
