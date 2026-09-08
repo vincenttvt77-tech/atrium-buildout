@@ -139,7 +139,9 @@
   .lead-panel .panel-head { flex-wrap: wrap; row-gap: 4px; padding-bottom: 12px; }
   .lead-panel .panel-head .panel-back { margin-right: auto; }
   .lead-panel .panel-head h2 { flex-basis: 100%; order: 3; }
+  /* In the column layout the field must not flex on the main axis, or its height collapses to the text (20 px). */
   .lead-panel .note-form { flex-direction: column; align-items: stretch; }
+  .lead-panel .note-form .input { flex: 0 0 auto; }
   .lead-panel .note-form .btn { width: 100%; }
   .lead-panel .np-card .actions .btn { flex: 1 1 auto; }
   .lead-panel .panel-head .setname { padding: 0 8px; }

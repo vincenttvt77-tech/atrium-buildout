@@ -731,6 +731,7 @@ button.cal-dayhead:hover { background: var(--paper-3); }
   padding: 1px 6px; border-radius: 10px; border: 1px solid var(--accent); white-space: nowrap;
 }
 .cal-open { overflow: visible; }
+.cal-open.cal-last-col .cal-sel-caption { left: auto; right: 4px; }
 .cal-view.is-inert .cal-open, .cal-view.is-inert .cal-tour, .cal-view.is-inert .cal-band, .cal-view.is-inert button.cal-dayhead { cursor: not-allowed; opacity: .7; }
 
 .cal-tour {
@@ -812,7 +813,7 @@ button.cal-dayhead:hover { background: var(--paper-3); }
 .cal-sheet .cal-mode label { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; cursor: pointer; }
 .cal-sheet .cal-mode input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
 .cal-sheet .cal-mode label:has(input:disabled) { color: var(--ink-3); cursor: not-allowed; }
-.cal-sheet .cal-mode-note { flex-basis: 100%; margin: 0; font-size: .929rem; color: var(--ink-2); }
+.cal-sheet .cal-mode-note { flex-basis: 100%; margin: 2px 0 4px; font-size: .929rem; color: var(--ink-2); }
 .cal-sheet .cal-range-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .cal-sheet .cal-chips { margin-top: 8px; }
 .cal-sheet .cal-chips .chip-filter { height: 28px; padding: 0 8px; }
@@ -1018,7 +1019,9 @@ button.cal-dayhead:hover { background: var(--paper-3); }
   .lead-panel .panel-head { flex-wrap: wrap; row-gap: 4px; padding-bottom: 12px; }
   .lead-panel .panel-head .panel-back { margin-right: auto; }
   .lead-panel .panel-head h2 { flex-basis: 100%; order: 3; }
+  /* In the column layout the field must not flex on the main axis, or its height collapses to the text (20 px). */
   .lead-panel .note-form { flex-direction: column; align-items: stretch; }
+  .lead-panel .note-form .input { flex: 0 0 auto; }
   .lead-panel .note-form .btn { width: 100%; }
   .lead-panel .np-card .actions .btn { flex: 1 1 auto; }
   .lead-panel .panel-head .setname { padding: 0 8px; }
@@ -2047,10 +2050,12 @@ function toast(txt, opts) {
         pause()
         b.textContent = a.busyLabel || (isUndo ? 'Undoing…' : `${a.label}…`)
         b.setAttribute('aria-busy', 'true'); b.setAttribute('aria-disabled', 'true')
+        // a repaint replaces the button the keyboard user is on; keep them in the toast (its Close)
+        const keep = () => { if (el.contains(document.activeElement) || document.activeElement === document.body) { const c = el.querySelector('.toast-close'); if (c) { try { c.focus({ preventScroll: true }) } catch (e) { /* ignore */ } } } }
         result.then(() => {
-          if (isUndo || a.doneText) { paint(a.doneText || 'Undone', []); el.className = 'toast toast-ok'; arm(4000) } else close()
+          if (isUndo || a.doneText) { paint(a.doneText || 'Undone', []); el.className = 'toast toast-ok'; arm(4000); keep() } else close()
         }, () => {
-          if (isUndo) { paint("Couldn't undo that. Nothing changed.", []); el.className = 'toast toast-error'; arm(TOAST_MS.error) } else close()
+          if (isUndo) { paint("Couldn't undo that. Nothing changed.", []); el.className = 'toast toast-error'; arm(TOAST_MS.error); keep() } else close()
         })
       })
     })
@@ -2061,7 +2066,14 @@ function toast(txt, opts) {
   function close() {
     clearTimeout(timer)
     const i = toasts.indexOf(handle); if (i >= 0) toasts.splice(i, 1)
+    const hadFocus = el.contains(document.activeElement)
     if (el.isConnected) el.remove()
+    // closing the toast under the keyboard user: the newest remaining toast, else the view's heading
+    if (hadFocus) {
+      const next = toasts.length ? toasts[toasts.length - 1].el : null
+      const target = (next && (next.querySelector('.toast-action') || next.querySelector('.toast-close'))) || document.querySelector('.view:not([hidden]) h1')
+      if (target) { try { target.focus({ preventScroll: true }) } catch (e) { /* ignore */ } }
+    }
   }
   function update(t, u) { paint(t, arr(u && u.actions).slice(0, 2)); if (u && u.kind) el.className = `toast toast-${u.kind}`; arm(u && u.sticky ? Infinity : (Number(u && u.ms) || ms)) }
   el.addEventListener('mouseenter', pause); el.addEventListener('mouseleave', resume)
@@ -2595,7 +2607,15 @@ function callStory(record, s) {
       const KINDS = [['gas', /\bgas\b/i], ['carbon_monoxide', /carbon monoxide|\bCO\b/], ['smoke_or_fire', /\b(smoke|fire|burning)\b/i], ['flooding', /flood|water (?:coming|pouring|everywhere)|leak/i],
         ['no_heat', /no heat|heat(?:ing)? (?:is )?(?:out|off|broken)/i], ['injury', /injur|hurt|bleeding|unconscious|fell/i], ['intruder', /intruder|break(?:ing)? in|burglar|someone in my/i], ['structural', /collaps|structural|ceiling (?:is )?(?:falling|caving)/i]]
       let kind = null, matched = ''
-      for (const [k, re] of KINDS) { const line = lines.find((l) => /^User:/.test(l) && re.test(l)); if (line) { kind = k; matched = text.truncate(line.replace(/^User:\s?/, '').trim(), 90); break } }
+      for (const [k, re] of KINDS) {
+        const line = lines.find((l) => /^User:/.test(l) && re.test(l))
+        if (!line) continue
+        kind = k
+        // the clause with the word in it, as the server's own matcher quotes it ("kitchen is flooding")
+        const clauses = line.replace(/^User:\s?/, '').split(/[.;!?,—]+/).map((c) => c.trim()).filter(Boolean)
+        matched = text.truncate((clauses.find((c) => re.test(c)) || clauses[0] || '').replace(/[.!?]+$/, ''), 90)
+        break
+      }
       f.emergency = { phrase: label(labels.emergency, kind, 'an emergency'), matched, fromTranscript: true, said911: /\b911\b/.test(assistant) }
     }
   }
@@ -2605,7 +2625,7 @@ function callStory(record, s) {
     const name = r.name ? r.name : (fmt.phone(r.phone) ? `The caller from ${fmt.phone(r.phone)}` : 'Someone with a hidden number')
     const p = r.startedAt ? nyParts(r.startedAt) : null
     let when = ''
-    if (p) { const d = daysBetween(nyNow().ymd, p.ymd); when = (d >= -1 && d <= 1) ? fmt.dateTime(r.startedAt) : `${fmt.day(p.ymd)} at ${fmt.time(r.startedAt)}` }
+    if (p) { const d = daysBetween(nyNow().ymd, p.ymd), t = fmt.time(r.startedAt); when = d === 0 ? `today at ${t}` : d === -1 ? `yesterday at ${t}` : d === 1 ? `tomorrow at ${t}` : `${fmt.day(p.ymd)} at ${t}` }
     const dur = r.durationSeconds != null ? fmt.duration(r.durationSeconds) : null
     return `${name} called${when ? ` ${when}` : ''}${dur && dur !== '—' ? ` for ${dur}` : ''}.`
   })()
@@ -3972,7 +3992,8 @@ function itemHtml(m, it, col) {
       const first = m.byId.get(cal.sel.slotIds[0]), last = m.byId.get(cal.sel.slotIds[cal.sel.slotIds.length - 1])
       if (first && last) caption = `<span class="cal-sel-caption" aria-hidden="true">${esc(fmt.timeRange(first.startsAt, last.endsAt))} · ${esc(plural(cal.sel.slotIds.length, 'time'))}</span>`
     }
-    return `<button type="button" class="cal-cell cal-open${isHour ? '' : ' is-half'}" role="gridcell" aria-colindex="${col}" ${common} data-slot="${esc(it.slot.id)}" tabindex="-1" aria-label="${esc(itemLabel(m, it))}" aria-selected="${sel ? 'true' : 'false'}" style="${place}">${caption}${cal.slotBlocksFail ? '' : '<span class="cal-plus" aria-hidden="true">+ Block</span>'}</button>`
+    const lastCol = col === m.days.length + 1 && m.days.length > 1 // the caption hangs leftwards there, or the scroll box would clip it
+    return `<button type="button" class="cal-cell cal-open${isHour ? '' : ' is-half'}${lastCol ? ' cal-last-col' : ''}" role="gridcell" aria-colindex="${col}" ${common} data-slot="${esc(it.slot.id)}" tabindex="-1" aria-label="${esc(itemLabel(m, it))}" aria-selected="${sel ? 'true' : 'false'}" style="${place}">${caption}${cal.slotBlocksFail ? '' : '<span class="cal-plus" aria-hidden="true">+ Block</span>'}</button>`
   }
   if (it.kind === 'tour') {
     const sl = it.slot, past = (Date.parse(sl.startsAt) || 0) < Date.now()
@@ -4445,7 +4466,6 @@ function setRoving(el) {
   for (const x of grid.querySelectorAll('[tabindex="0"]')) x.setAttribute('tabindex', '-1')
   const f = focusable(el); if (f) f.setAttribute('tabindex', '0')
   cal.focusKey = keyOf(el); cal.focusDate = (el.closest('[data-date]') || {}).dataset ? el.closest('[data-date]').dataset.date : cal.focusDate
-  cal.focusBy = cal.kbd ? 'kbd' : 'mouse'
 }
 /** Bring a grid stop into view inside .cal-scroll (and the page) with the least movement. */
 function showEl(el) { if (el && el.scrollIntoView) { try { el.scrollIntoView({ block: 'nearest', inline: 'nearest' }) } catch (e) { /* ignore */ } } }
@@ -4714,7 +4734,7 @@ function extendSel(cur, dir) {
   const rowOfId = (x) => { const sl = cal.model.byId.get(x); return sl ? sl.startMin : 0 }
   ids.sort((x, y) => rowOfId(x) - rowOfId(y))
   cal.sel = { date, slotIds: ids }
-  paintSelection(); setRoving(next); focusEl(next); announceSel()
+  paintSelection(); setRoving(next); focusEl(next); cal.focusBy = 'kbd'; announceSel()
 }
 
 // ---------------------------------------------------------------------------------------
@@ -4779,7 +4799,7 @@ function currentStop() {
   if (a.classList.contains('cal-dayhead')) return a
   return a.classList.contains('cal-band-hit') ? a.closest('.cal-band') : (a.matches(STOP_SEL) ? a : null)
 }
-function moveTo(el) { if (el) { setRoving(el); focusEl(el) } }
+function moveTo(el) { if (el) { setRoving(el); focusEl(el); cal.focusBy = 'kbd' } }
 function gridKey(e) {
   const cur = currentStop()
   if (!cur) return
@@ -4876,6 +4896,9 @@ const view = {
         if (f && f !== e.target) { setRoving(d); focusEl(d); showEl(f); return }
       }
       const stop = currentStop(); if (stop) setRoving(stop)
+      // only a focus the browser moved (Tab, a click, a dialog handing focus back) says who owns the
+      // spot; the page's own returns (popover close, focusKeyNow, a re-render) leave that alone
+      if (!cal.entering) cal.focusBy = cal.kbd ? 'kbd' : 'mouse'
       if (entering) showEl(e.target)
       if (cal.kbd && !cal.keysShown && A.hint('calendar-keys')) { cal.keysShown = true; const h = q('.cal-hint'); if (h) h.classList.remove('vh') }
     })

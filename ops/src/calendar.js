@@ -296,7 +296,8 @@ function itemHtml(m, it, col) {
       const first = m.byId.get(cal.sel.slotIds[0]), last = m.byId.get(cal.sel.slotIds[cal.sel.slotIds.length - 1])
       if (first && last) caption = `<span class="cal-sel-caption" aria-hidden="true">${esc(fmt.timeRange(first.startsAt, last.endsAt))} · ${esc(plural(cal.sel.slotIds.length, 'time'))}</span>`
     }
-    return `<button type="button" class="cal-cell cal-open${isHour ? '' : ' is-half'}" role="gridcell" aria-colindex="${col}" ${common} data-slot="${esc(it.slot.id)}" tabindex="-1" aria-label="${esc(itemLabel(m, it))}" aria-selected="${sel ? 'true' : 'false'}" style="${place}">${caption}${cal.slotBlocksFail ? '' : '<span class="cal-plus" aria-hidden="true">+ Block</span>'}</button>`
+    const lastCol = col === m.days.length + 1 && m.days.length > 1 // the caption hangs leftwards there, or the scroll box would clip it
+    return `<button type="button" class="cal-cell cal-open${isHour ? '' : ' is-half'}${lastCol ? ' cal-last-col' : ''}" role="gridcell" aria-colindex="${col}" ${common} data-slot="${esc(it.slot.id)}" tabindex="-1" aria-label="${esc(itemLabel(m, it))}" aria-selected="${sel ? 'true' : 'false'}" style="${place}">${caption}${cal.slotBlocksFail ? '' : '<span class="cal-plus" aria-hidden="true">+ Block</span>'}</button>`
   }
   if (it.kind === 'tour') {
     const sl = it.slot, past = (Date.parse(sl.startsAt) || 0) < Date.now()
@@ -769,7 +770,6 @@ function setRoving(el) {
   for (const x of grid.querySelectorAll('[tabindex="0"]')) x.setAttribute('tabindex', '-1')
   const f = focusable(el); if (f) f.setAttribute('tabindex', '0')
   cal.focusKey = keyOf(el); cal.focusDate = (el.closest('[data-date]') || {}).dataset ? el.closest('[data-date]').dataset.date : cal.focusDate
-  cal.focusBy = cal.kbd ? 'kbd' : 'mouse'
 }
 /** Bring a grid stop into view inside .cal-scroll (and the page) with the least movement. */
 function showEl(el) { if (el && el.scrollIntoView) { try { el.scrollIntoView({ block: 'nearest', inline: 'nearest' }) } catch (e) { /* ignore */ } } }
@@ -1038,7 +1038,7 @@ function extendSel(cur, dir) {
   const rowOfId = (x) => { const sl = cal.model.byId.get(x); return sl ? sl.startMin : 0 }
   ids.sort((x, y) => rowOfId(x) - rowOfId(y))
   cal.sel = { date, slotIds: ids }
-  paintSelection(); setRoving(next); focusEl(next); announceSel()
+  paintSelection(); setRoving(next); focusEl(next); cal.focusBy = 'kbd'; announceSel()
 }
 
 // ---------------------------------------------------------------------------------------
@@ -1103,7 +1103,7 @@ function currentStop() {
   if (a.classList.contains('cal-dayhead')) return a
   return a.classList.contains('cal-band-hit') ? a.closest('.cal-band') : (a.matches(STOP_SEL) ? a : null)
 }
-function moveTo(el) { if (el) { setRoving(el); focusEl(el) } }
+function moveTo(el) { if (el) { setRoving(el); focusEl(el); cal.focusBy = 'kbd' } }
 function gridKey(e) {
   const cur = currentStop()
   if (!cur) return
@@ -1200,6 +1200,9 @@ const view = {
         if (f && f !== e.target) { setRoving(d); focusEl(d); showEl(f); return }
       }
       const stop = currentStop(); if (stop) setRoving(stop)
+      // only a focus the browser moved (Tab, a click, a dialog handing focus back) says who owns the
+      // spot; the page's own returns (popover close, focusKeyNow, a re-render) leave that alone
+      if (!cal.entering) cal.focusBy = cal.kbd ? 'kbd' : 'mouse'
       if (entering) showEl(e.target)
       if (cal.kbd && !cal.keysShown && A.hint('calendar-keys')) { cal.keysShown = true; const h = q('.cal-hint'); if (h) h.classList.remove('vh') }
     })

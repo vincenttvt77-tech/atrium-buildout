@@ -919,10 +919,12 @@ function toast(txt, opts) {
         pause()
         b.textContent = a.busyLabel || (isUndo ? 'Undoing…' : `${a.label}…`)
         b.setAttribute('aria-busy', 'true'); b.setAttribute('aria-disabled', 'true')
+        // a repaint replaces the button the keyboard user is on; keep them in the toast (its Close)
+        const keep = () => { if (el.contains(document.activeElement) || document.activeElement === document.body) { const c = el.querySelector('.toast-close'); if (c) { try { c.focus({ preventScroll: true }) } catch (e) { /* ignore */ } } } }
         result.then(() => {
-          if (isUndo || a.doneText) { paint(a.doneText || 'Undone', []); el.className = 'toast toast-ok'; arm(4000) } else close()
+          if (isUndo || a.doneText) { paint(a.doneText || 'Undone', []); el.className = 'toast toast-ok'; arm(4000); keep() } else close()
         }, () => {
-          if (isUndo) { paint("Couldn't undo that. Nothing changed.", []); el.className = 'toast toast-error'; arm(TOAST_MS.error) } else close()
+          if (isUndo) { paint("Couldn't undo that. Nothing changed.", []); el.className = 'toast toast-error'; arm(TOAST_MS.error); keep() } else close()
         })
       })
     })
@@ -933,7 +935,14 @@ function toast(txt, opts) {
   function close() {
     clearTimeout(timer)
     const i = toasts.indexOf(handle); if (i >= 0) toasts.splice(i, 1)
+    const hadFocus = el.contains(document.activeElement)
     if (el.isConnected) el.remove()
+    // closing the toast under the keyboard user: the newest remaining toast, else the view's heading
+    if (hadFocus) {
+      const next = toasts.length ? toasts[toasts.length - 1].el : null
+      const target = (next && (next.querySelector('.toast-action') || next.querySelector('.toast-close'))) || document.querySelector('.view:not([hidden]) h1')
+      if (target) { try { target.focus({ preventScroll: true }) } catch (e) { /* ignore */ } }
+    }
   }
   function update(t, u) { paint(t, arr(u && u.actions).slice(0, 2)); if (u && u.kind) el.className = `toast toast-${u.kind}`; arm(u && u.sticky ? Infinity : (Number(u && u.ms) || ms)) }
   el.addEventListener('mouseenter', pause); el.addEventListener('mouseleave', resume)
@@ -1467,7 +1476,15 @@ function callStory(record, s) {
       const KINDS = [['gas', /\bgas\b/i], ['carbon_monoxide', /carbon monoxide|\bCO\b/], ['smoke_or_fire', /\b(smoke|fire|burning)\b/i], ['flooding', /flood|water (?:coming|pouring|everywhere)|leak/i],
         ['no_heat', /no heat|heat(?:ing)? (?:is )?(?:out|off|broken)/i], ['injury', /injur|hurt|bleeding|unconscious|fell/i], ['intruder', /intruder|break(?:ing)? in|burglar|someone in my/i], ['structural', /collaps|structural|ceiling (?:is )?(?:falling|caving)/i]]
       let kind = null, matched = ''
-      for (const [k, re] of KINDS) { const line = lines.find((l) => /^User:/.test(l) && re.test(l)); if (line) { kind = k; matched = text.truncate(line.replace(/^User:\s?/, '').trim(), 90); break } }
+      for (const [k, re] of KINDS) {
+        const line = lines.find((l) => /^User:/.test(l) && re.test(l))
+        if (!line) continue
+        kind = k
+        // the clause with the word in it, as the server's own matcher quotes it ("kitchen is flooding")
+        const clauses = line.replace(/^User:\s?/, '').split(/[.;!?,—]+/).map((c) => c.trim()).filter(Boolean)
+        matched = text.truncate((clauses.find((c) => re.test(c)) || clauses[0] || '').replace(/[.!?]+$/, ''), 90)
+        break
+      }
       f.emergency = { phrase: label(labels.emergency, kind, 'an emergency'), matched, fromTranscript: true, said911: /\b911\b/.test(assistant) }
     }
   }
@@ -1477,7 +1494,7 @@ function callStory(record, s) {
     const name = r.name ? r.name : (fmt.phone(r.phone) ? `The caller from ${fmt.phone(r.phone)}` : 'Someone with a hidden number')
     const p = r.startedAt ? nyParts(r.startedAt) : null
     let when = ''
-    if (p) { const d = daysBetween(nyNow().ymd, p.ymd); when = (d >= -1 && d <= 1) ? fmt.dateTime(r.startedAt) : `${fmt.day(p.ymd)} at ${fmt.time(r.startedAt)}` }
+    if (p) { const d = daysBetween(nyNow().ymd, p.ymd), t = fmt.time(r.startedAt); when = d === 0 ? `today at ${t}` : d === -1 ? `yesterday at ${t}` : d === 1 ? `tomorrow at ${t}` : `${fmt.day(p.ymd)} at ${t}` }
     const dur = r.durationSeconds != null ? fmt.duration(r.durationSeconds) : null
     return `${name} called${when ? ` ${when}` : ''}${dur && dur !== '—' ? ` for ${dur}` : ''}.`
   })()

@@ -101,6 +101,7 @@ button.cal-dayhead:hover { background: var(--paper-3); }
   padding: 1px 6px; border-radius: 10px; border: 1px solid var(--accent); white-space: nowrap;
 }
 .cal-open { overflow: visible; }
+.cal-open.cal-last-col .cal-sel-caption { left: auto; right: 4px; }
 .cal-view.is-inert .cal-open, .cal-view.is-inert .cal-tour, .cal-view.is-inert .cal-band, .cal-view.is-inert button.cal-dayhead { cursor: not-allowed; opacity: .7; }
 
 .cal-tour {
@@ -182,7 +183,7 @@ button.cal-dayhead:hover { background: var(--paper-3); }
 .cal-sheet .cal-mode label { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; cursor: pointer; }
 .cal-sheet .cal-mode input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
 .cal-sheet .cal-mode label:has(input:disabled) { color: var(--ink-3); cursor: not-allowed; }
-.cal-sheet .cal-mode-note { flex-basis: 100%; margin: 0; font-size: .929rem; color: var(--ink-2); }
+.cal-sheet .cal-mode-note { flex-basis: 100%; margin: 2px 0 4px; font-size: .929rem; color: var(--ink-2); }
 .cal-sheet .cal-range-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .cal-sheet .cal-chips { margin-top: 8px; }
 .cal-sheet .cal-chips .chip-filter { height: 28px; padding: 0 8px; }
