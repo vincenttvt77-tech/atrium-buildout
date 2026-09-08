@@ -118,6 +118,18 @@ Both halves are now gated by `OPS_DASHBOARD_PASSCODE` (`src/ops/session.ts`):
 - with no passcode configured, both refuse everyone rather than falling open
 - `public/robots.txt` disallows the routes as well, which is a note to crawlers, not a control
 
+### Environment variables the deployment reads
+
+| Variable | What it is | If it is wrong |
+|---|---|---|
+| `OPS_DASHBOARD_PASSCODE` | The dashboard passcode | Nobody can sign in |
+| `VAPI_API_KEY` (or `VAPI_PRIVATE_KEY`) | Vapi **private** key, from Vapi → Organization → API Keys. The public key is refused with 401 | Status shows "call recordings and transcripts: connected, but not answering"; Calls stays empty. `VAPI_PRIVATE_KEY` wins when both exist |
+| `KV_REST_API_URL`, `KV_REST_API_TOKEN` | The Redis/KV database Vercel injects | Status shows "Test mode"; callers and blocks vanish on the next cold start |
+
+Vercel applies a changed variable only to **new** deployments: after editing one, redeploy
+(Deployments → ⋯ → Redeploy) or push a commit. The running functions keep the old value
+until then, which looks exactly like the change having had no effect.
+
 ## Working in this repo
 
 Node runs the TypeScript in **strip-only mode** — no runtime dependencies, but also no
