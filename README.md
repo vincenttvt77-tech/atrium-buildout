@@ -125,6 +125,7 @@ Both halves are now gated by `OPS_DASHBOARD_PASSCODE` (`src/ops/session.ts`):
 | `OPS_DASHBOARD_PASSCODE` | The dashboard passcode | Nobody can sign in |
 | `VAPI_API_KEY` (or `VAPI_PRIVATE_KEY`) | Vapi **private** key, from Vapi → Organization → API Keys. The public key is refused with 401 | Status shows "call recordings and transcripts: connected, but not answering"; Calls stays empty. `VAPI_PRIVATE_KEY` wins when both exist |
 | `KV_REST_API_URL`, `KV_REST_API_TOKEN` | The Redis/KV database Vercel injects | Status shows "Test mode"; callers and blocks vanish on the next cold start |
+| `VAPI_ASSISTANT_ID` (optional) | Which assistant "Update the phone assistant" writes to. Without it, the one named "<building> — Leasing", or the only one in the account | The Status page says which assistants it found and asks for this |
 
 Vercel applies a changed variable only to **new** deployments: after editing one, redeploy
 (Deployments → ⋯ → Redeploy) or push a commit. The running functions keep the old value

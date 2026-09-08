@@ -2139,6 +2139,7 @@ const statusView = {
     out += `<section class="status-section"><h2>Saving</h2>${savingRow('Callers and to-dos', rows.leadsSaving)}${savingRow('Calendar', rows.calendarSaving)}` +
       (rows.leadsSaving === 'off' || rows.calendarSaving === 'off' ? `<p class="status-p muted small">Ask Atrium support to turn saving on.</p>` : '') + '</section>'
     out += `<section class="status-section"><h2>Call recordings and transcripts</h2><div class="status-row"><span class="dot${rec === 'on' ? '' : rec === null ? ' dot-neutral' : ' dot-warn'}"></span><span class="${rec === 'on' || rec === null ? '' : 'warn-text'}">${esc(recText)}</span></div></section>`
+    out += `<section class="status-section" id="phone-assistant"><h2>Phone assistant</h2><p class="status-p">The script and tools the assistant runs on live in this system. Pushing them to Vapi keeps the phone line in step with every fix here — no more pasting. The voice, timing and model settings you set in Vapi are kept.</p><div class="status-actions"><button type="button" class="btn" data-action="sync-assistant" data-key="sync-assistant">Update the phone assistant</button></div></section>`
     out += `<section class="status-section"><h2>Outgoing calls</h2><div class="status-row"><span class="dot dot-neutral"></span><span>${model.outbound ? 'The assistant can make outgoing calls.' : "The assistant answers calls; it doesn't make them. Everything under To do is for your team."}</span></div></section>`
     out += `<section class="status-section"><h2>Times</h2><p class="status-p">All times on this page are New York time.</p></section>`
     out += `<section class="status-section"><h2>Signed in</h2><p class="status-p">You're signed in on this device. Sessions end after 8 hours; you'll be asked for the passcode again.</p><div class="status-actions"><button type="button" class="btn" data-action="signout" data-key="signout">Sign out</button></div></section>`
@@ -2202,6 +2203,20 @@ const statusView = {
     else if (a === 'block-week') this.blockWeek(btn)
     else if (a === 'clear-bookings') this.clearBookings(btn)
     else if (a === 'clear-leads') this.clearLeads(btn)
+    else if (a === 'sync-assistant') this.syncAssistant(btn)
+  },
+  async syncAssistant(btn) {
+    const ok = await confirm('This rewrites the phone assistant\'s script and tools in Vapi to match this system. Voice, timing and model settings in Vapi are kept.', { title: 'Update the phone assistant?', confirmLabel: 'Update' })
+    if (!ok) return
+    btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true')
+    try {
+      const r = await api.post('/api/vapi-sync', {}, { doing: 'updating the phone assistant' })
+      const name = r && r.assistant && r.assistant.name ? `"${r.assistant.name}"` : 'the assistant'
+      toast(`Updated ${name}: ${(r.updated || []).join(', ')}.`, { kind: 'ok', ms: 9000 })
+    } catch (e) {
+      if (e.signedOut) return
+      toast(`Couldn't update the phone assistant. ${e.message || ''}`.trim(), { kind: 'error', ms: 12000 })
+    } finally { if (btn.isConnected) { btn.classList.remove('is-busy'); btn.removeAttribute('aria-busy') } }
   },
   /** A round finishes in a few ms, so the busy state is held for 600 ms and the result is said in a toast. */
   async refreshNow(btn) {

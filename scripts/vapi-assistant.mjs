@@ -16,45 +16,15 @@ if (!serverUrl) {
 // Bundle the config module so this script needs no TS runtime assumptions.
 await mkdir('.vercel-build', { recursive: true })
 await build({
-  entryPoints: ['src/vapi/assistant.ts'],
+  entryPoints: ['src/vapi/config.ts'],
   outfile: '.vercel-build/assistant.mjs',
   bundle: true, platform: 'node', target: 'node22', format: 'esm', logLevel: 'silent',
 })
-const { assistantConfig } = await import('../.vercel-build/assistant.mjs')
+const { demoAssistantConfig } = await import('../.vercel-build/assistant.mjs')
 
 const property = JSON.parse(await readFile('data/property.json', 'utf8'))
 
-/** The property record nests transit and nearby places; the prompt wants prose. */
-function neighborhoodText(n) {
-  if (typeof n === 'string') return n
-  if (!n || typeof n !== 'object') return 'the neighborhood'
-  return [...(n.transit ?? []), ...(n.nearby ?? [])].join('. ')
-}
-
-function buildingFacts(p) {
-  const f = []
-  if (p.buildingFacts?.height) f.push(`${p.floors} floors, ${p.buildingFacts.height} tall, completed ${p.yearBuilt}.`)
-  if (p.totalUnits) f.push(`${p.totalUnits} residences.`)
-  if (p.buildingFacts?.residenceNumbering) f.push(p.buildingFacts.residenceNumbering)
-  if (p.leasingOffice) f.push(p.leasingOffice)
-  if (p.team?.leasing) f.push(p.team.leasing)
-  // Only the two transit facts a caller asks about unprompted. The rest is in the
-  // knowledge base, where it costs nothing until someone actually asks.
-  for (const t of (p.neighborhood?.transit ?? []).slice(0, 2)) f.push(`Transit: ${t}`)
-  return f
-}
-
-const config = assistantConfig({
-  buildingName: property.buildingName,
-  address: property.address,
-  neighborhood: neighborhoodText(property.neighborhood),
-  leasingHours: property.leasingHours,
-  managementCompany: property.managementCompany ?? 'the management office',
-  facts: buildingFacts(property),
-  today: new Date(),
-  serverUrl: `${serverUrl.replace(/\/$/, '')}/api/vapi`,
-  firstMessage: `Thanks for calling ${property.buildingName}. I'm an AI assistant for the building and this call is recorded — how can I help?`,
-})
+const config = demoAssistantConfig(property, serverUrl, new Date())
 
 await writeFile('vapi-assistant.json', JSON.stringify(config, null, 2))
 
