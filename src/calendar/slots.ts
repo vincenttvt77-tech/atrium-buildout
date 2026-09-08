@@ -37,6 +37,12 @@ export interface SlotOptions {
   hours?: BusinessHours
   /** Tours cannot be booked closer than this — staff need warning. */
   minimumNoticeMinutes?: number
+  /**
+   * How many tours one time can hold. Two model residences and two agents means two
+   * callers can tour at 2:00 as long as they are not being shown the same apartment;
+   * a slot is "booked" only when it is full.
+   */
+  capacity?: number
 }
 
 /** Every slot the calendar could offer, before blocks and bookings are applied. */
@@ -71,8 +77,11 @@ export function generateSlots(now: Date, opts: SlotOptions = {}): TourSlot[] {
 
 export type SlotStatus = 'open' | 'blocked' | 'booked'
 
-export function statusOf(slot: TourSlot, state: CalendarState): SlotStatus {
-  if (state.bookings.some((b) => b.slotId === slot.slotId)) return 'booked'
+export const bookingsFor = (slot: TourSlot, state: CalendarState) =>
+  state.bookings.filter((b) => b.slotId === slot.slotId)
+
+export function statusOf(slot: TourSlot, state: CalendarState, capacity = 1): SlotStatus {
+  if (bookingsFor(slot, state).length >= Math.max(1, capacity)) return 'booked'
   return blockFor(slot, state) ? 'blocked' : 'open'
 }
 
@@ -89,5 +98,5 @@ export function blockFor(slot: TourSlot, state: CalendarState) {
 
 /** Only these may be offered to a caller. */
 export function openSlots(now: Date, state: CalendarState, opts?: SlotOptions): TourSlot[] {
-  return generateSlots(now, opts).filter((s) => statusOf(s, state) === 'open')
+  return generateSlots(now, opts).filter((s) => statusOf(s, state, opts?.capacity ?? 1) === 'open')
 }

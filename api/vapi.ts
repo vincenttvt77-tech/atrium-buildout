@@ -119,7 +119,34 @@ async function saveCall(callId: string, state: CallState): Promise<void> {
  * the test that proves it reads a calendar rather than inventing one.
  */
 const calendarStore = calendarStoreFromEnv()
-const demoCalendar = (now: Date) => storeBackedCalendar(calendarStore, () => now)
+const TOUR_CAPACITY = Math.max(1, Number((rawProperty as { tourCapacityPerSlot?: number }).tourCapacityPerSlot ?? 1))
+const demoCalendar = (now: Date) => storeBackedCalendar(calendarStore, () => now, { capacity: TOUR_CAPACITY })
+
+const nyDay = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+const nyHour = (d: Date) => Number(d.toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/New_York' }))
+
+/**
+ * Which open times to put in front of the model.
+ *
+ * The first six slots in date order are six half-hours on the same morning, so the caller
+ * heard "I can do Tuesday" from a calendar that was wide open. A caller who named a day
+ * gets that day; otherwise the next three days with something open, a morning and an
+ * afternoon time on each, and a note that other days are open too.
+ */
+export function pickSlotsToOffer(open: TourSlot[], preferredDate?: string): { offered: TourSlot[]; daysOpen: number } {
+  const byDay = new Map<string, TourSlot[]>()
+  for (const s of open) { const d = nyDay(s.startsAt); if (!byDay.has(d)) byDay.set(d, []); byDay.get(d)!.push(s) }
+  const wanted = preferredDate && /^\d{4}-\d{2}-\d{2}$/.test(preferredDate) ? byDay.get(preferredDate) : undefined
+  if (wanted?.length) return { offered: wanted.slice(0, 6), daysOpen: byDay.size }
+  const offered: TourSlot[] = []
+  for (const [, slots] of [...byDay.entries()].slice(0, 3)) {
+    const morning = slots.find((s) => nyHour(s.startsAt) < 13)
+    const afternoon = slots.find((s) => nyHour(s.startsAt) >= 13)
+    for (const s of [morning, afternoon]) if (s && !offered.includes(s)) offered.push(s)
+    if (!morning && !afternoon) offered.push(slots[0]!)
+  }
+  return { offered, daysOpen: byDay.size }
+}
 
 const fmtSlot = (s: TourSlot) =>
   s.startsAt.toLocaleString('en-US', {
@@ -193,11 +220,11 @@ async function runTool(
 
     case 'list_tour_slots': {
       const slots = await demoCalendar(now).listSlots(ctx.propertyId, now, now)
-      const next = slots.slice(0, 6)
-      logEvent(callId, { kind: 'slots_listed', count: next.length })
-      return next.length === 0
-        ? 'No tour times are open. Offer to have someone call them back.'
-        : `Real open tour times — offer only these, and use the slotId when booking:\n${next.map((s) => `${s.slotId} — ${fmtSlot(s)}`).join('\n')}`
+      const { offered, daysOpen } = pickSlotsToOffer(slots, args.preferredDate ? String(args.preferredDate) : undefined)
+      logEvent(callId, { kind: 'slots_listed', count: offered.length, daysOpen })
+      if (offered.length === 0) return 'No tour times are open. Offer to have someone call them back.'
+      const more = daysOpen > 3 ? ` Other days are open too (${daysOpen} days in the next two weeks) — if none of these suit, ask which day works and call this again with preferredDate as YYYY-MM-DD.` : ''
+      return `Real open tour times — offer two or three, and use the slotId when booking:\n${offered.map((s) => `${s.slotId} — ${fmtSlot(s)}`).join('\n')}${more}`
     }
 
     case 'book_tour': {
@@ -374,6 +401,18 @@ export default async function handler(req: any, res: any) {
         const args = typeof rawArgs === 'string' ? JSON.parse(rawArgs) : rawArgs
         const result = await runTool(String(name), args, callId, now, state)
         results.push({ toolCallId: tc.id ?? tc.toolCallId, result })
+        // What each tool decided, for the runtime log — no names, numbers or caller words.
+        const last = eventLog[eventLog.length - 1] ?? {}
+        console.log('[tool]', JSON.stringify({
+          call: callId.slice(-6), name,
+          ...(last.callId === callId ? {
+            kind: last.kind, outcome: last.outcome ?? last.decision ?? null,
+            topic: last.topic ?? null, confidence: last.confidence ?? null,
+            signal: last.signal ?? null, captured: last.captured ?? null,
+            offered: Array.isArray(last.unitsOffered) ? last.unitsOffered.length : null,
+          } : {}),
+          said: result.slice(0, 60),
+        }))
       }
       await saveCall(callId, state)
       res.status(200).json({ results })
@@ -408,8 +447,13 @@ export default async function handler(req: any, res: any) {
           toolsCalled: state.toolsCalled,
         })
         await documents.delete(callKey(callId))
+        console.log('[call]', JSON.stringify({
+          call: callId.slice(-6), consolidated: true, hasPhone: Boolean(phone && phone !== 'unknown'),
+          tools: state.toolsCalled.length, booked: state.booking?.status ?? null,
+          escalated: Boolean(state.escalation), store: documents.describe().kind,
+        }))
       } catch (err) {
-        console.error('[vapi] consolidate failed', err)
+        console.error('[vapi] consolidate failed', err instanceof Error ? err.message : String(err))
         logEvent(callId, { kind: 'error', message: `consolidate: ${err instanceof Error ? err.message : String(err)}` })
       }
     }

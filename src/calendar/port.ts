@@ -1,6 +1,6 @@
 import type { CalendarPort, TourSlot, BookingIntent } from '../booking/types.ts'
 import type { CalendarStore } from './types.ts'
-import { openSlots, statusOf, generateSlots } from './slots.ts'
+import { openSlots, statusOf, generateSlots, bookingsFor } from './slots.ts'
 import type { SlotOptions } from './slots.ts'
 
 /**
@@ -22,11 +22,18 @@ export function storeBackedCalendar(
 
     async createBooking(intent: BookingIntent) {
       const slot = intent.request.slot
+      let sameUnit = false
       const result = await store.mutate((state) => {
         const existing = state.bookings.find((b) => b.externalId === intent.idempotencyKey)
         if (existing) return state
 
-        if (statusOf(slot, state) !== 'open') return state
+        if (statusOf(slot, state, opts?.capacity ?? 1) !== 'open') return state
+        // Two tours can share a time; one apartment cannot be shown to two parties at once.
+        const unit = intent.request.unitId
+        if (unit && bookingsFor(slot, state).some((b) => b.unitId && b.unitId.toUpperCase() === unit.toUpperCase())) {
+          sameUnit = true
+          return state
+        }
 
         return {
           ...state,
@@ -46,7 +53,9 @@ export function storeBackedCalendar(
       if (!landed) {
         // The slot went between listing and booking. Say so rather than writing anyway —
         // the booking flow turns this into real alternatives for the caller.
-        throw new Error('slot already booked or blocked')
+        throw new Error(sameUnit
+          ? `slot taken: apartment ${intent.request.unitId} is already being shown at that time`
+          : 'slot already booked or blocked')
       }
       return { externalId: landed.externalId }
     },

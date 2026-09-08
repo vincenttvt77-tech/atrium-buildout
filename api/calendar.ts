@@ -1,6 +1,7 @@
 import { authorizeOps } from '../src/ops/session.ts'
 import { calendarStoreFromEnv } from '../src/calendar/store.ts'
-import { generateSlots, statusOf, slotDate, blockFor } from '../src/calendar/slots.ts'
+import { generateSlots, statusOf, slotDate, blockFor, bookingsFor } from '../src/calendar/slots.ts'
+import rawProperty from '../data/property.json' with { type: 'json' }
 
 /**
  * The tour calendar, for the operations dashboard.
@@ -15,10 +16,13 @@ import { generateSlots, statusOf, slotDate, blockFor } from '../src/calendar/slo
 
 const store = calendarStoreFromEnv()
 
+/** Two model residences: two tours can share a time. From the property record. */
+export const TOUR_CAPACITY = Math.max(1, Number((rawProperty as { tourCapacityPerSlot?: number }).tourCapacityPerSlot ?? 1))
+
 function slotsView(now: Date, state: Awaited<ReturnType<typeof store.read>>) {
-  return generateSlots(now).map((s) => {
-    const status = statusOf(s, state)
-    const booking = status === 'booked' ? state.bookings.find((b) => b.slotId === s.slotId) : undefined
+  return generateSlots(now, { capacity: TOUR_CAPACITY }).map((s) => {
+    const status = statusOf(s, state, TOUR_CAPACITY)
+    const bookings = bookingsFor(s, state).map((b) => ({ prospectName: b.prospectName, unitId: b.unitId }))
     const block = status === 'blocked' ? blockFor(s, state) : undefined
     return {
       slotId: s.slotId,
@@ -26,7 +30,11 @@ function slotsView(now: Date, state: Awaited<ReturnType<typeof store.read>>) {
       endsAt: s.endsAt.toISOString(),
       date: slotDate(s.startsAt),
       status,
-      ...(booking ? { booking: { prospectName: booking.prospectName, unitId: booking.unitId } } : {}),
+      capacity: TOUR_CAPACITY,
+      booked: bookings.length,
+      bookings,
+      // The first booking, for readers that expect one per slot.
+      ...(bookings[0] ? { booking: bookings[0] } : {}),
       ...(block ? { block: { reason: block.reason, wholeDay: block.target !== s.slotId } } : {}),
     }
   })
@@ -52,7 +60,7 @@ export default async function handler(req: any, res: any) {
     if (req.method === 'GET') {
       const state = await store.read()
       res.status(200).json({
-        slots: slotsView(now, state),
+        capacity: TOUR_CAPACITY, slots: slotsView(now, state),
         blocks: state.blocks,
         bookings: state.bookings,
         store: store.describe(),
@@ -101,7 +109,7 @@ export default async function handler(req: any, res: any) {
       }
 
       res.status(200).json({
-        slots: slotsView(now, state),
+        capacity: TOUR_CAPACITY, slots: slotsView(now, state),
         blocks: state.blocks,
         bookings: state.bookings,
         store: store.describe(),

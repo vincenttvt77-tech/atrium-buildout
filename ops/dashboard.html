@@ -903,6 +903,10 @@ button.cal-dayhead:hover { background: var(--paper-3); }
      stack above it: tab bar 56 + gap 16 + button 44 + 12 clearance. A bottom sheet still wins (toasts go to the top). */
   body.has-cal-fab:not(.has-dialog) .toast-stack { bottom: calc(128px + env(safe-area-inset-bottom, 0px)); }
 }
+
+/* Two tours can share one time (two model residences). Shared tours split the cell, or sit
+   on the right beside the open place that is still free; the layout itself is inline. */
+.cal-slot.is-shared .cal-tour{padding-left:4px;padding-right:4px;box-shadow:inset 0 0 0 1px var(--panel, #fff)}
 </style>
 <style>
 /* Leads view — the To do and Everyone tabs and the person panel (brief §9). Owner: leads.
@@ -2459,18 +2463,27 @@ function toursOn(s, ymd) {
     for (const b of arr(p && p.bookings)) {
       if (!b || b.status !== 'confirmed' || nyDate(b.startsAt) !== ymd) continue
       if (calLoaded && !calBookingIds.has(b.slotId)) continue
-      if (seen.has(b.slotId)) continue
-      seen.add(b.slotId)
-      const cb = calBookingBy.get(b.slotId)
+      // Two tours can share a time (two model residences): dedupe per tour, not per time.
+      const key = `${b.slotId}|${(b.unitId ?? '')}|${(p.name || '').trim()}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      const cb = arr(cal && cal.bookings).find((x) => x && x.slotId === b.slotId && (x.unitId ?? '') === (b.unitId ?? '')) || calBookingBy.get(b.slotId)
       out.push({ slotId: b.slotId, startsAt: b.startsAt, endsAt: null, name: p.name || (cb && cb.prospectName) || 'Tour', phone: p.phone, email: p.email || null,
         unitId: b.unitId ?? (cb && cb.unitId) ?? null, callId: b.callId, source: 'lead', profile: p, past: (toTime(b.startsAt) ?? 0) < now })
     }
   }
   for (const sl of arr(cal && cal.slots)) {
-    if (!sl || sl.status !== 'booked' || sl.date !== ymd || seen.has(sl.slotId)) continue
-    seen.add(sl.slotId)
-    out.push({ slotId: sl.slotId, startsAt: sl.startsAt, endsAt: sl.endsAt, name: (sl.booking && sl.booking.prospectName) || 'Tour', phone: null, email: null,
-      unitId: (sl.booking && sl.booking.unitId) ?? null, callId: null, source: 'calendar', profile: null, past: (toTime(sl.startsAt) ?? 0) < now })
+    if (!sl || sl.date !== ymd) continue
+    const onSlot = arr(sl.bookings).length ? arr(sl.bookings) : (sl.booking ? [sl.booking] : [])
+    for (const b of onSlot) {
+      if (!b) continue
+      const name = String(b.prospectName ?? '').trim()
+      const key = `${sl.slotId}|${(b.unitId ?? '')}|${name}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push({ slotId: sl.slotId, startsAt: sl.startsAt, endsAt: sl.endsAt, name: name || 'Tour', phone: null, email: null,
+        unitId: b.unitId ?? null, callId: null, source: 'calendar', profile: null, past: (toTime(sl.startsAt) ?? 0) < now })
+    }
   }
   return out.sort((a, b) => (toTime(a.startsAt) ?? 0) - (toTime(b.startsAt) ?? 0))
 }
@@ -3884,13 +3897,22 @@ function buildModel(s, opts) {
     let endMin = pe ? pe.minutes + (pe.ymd !== ps.ymd ? 1440 : 0) : startMin + 30
     if (endMin <= startMin) endMin = startMin + 30
     const status = raw.status === 'booked' || raw.status === 'blocked' ? raw.status : 'open'
+    // Every tour on this time — two callers can tour at once as long as it is not the same
+    // apartment — so a time with one of two places taken is still open and still shows the tour.
+    const onSlot = arr(raw.bookings).length ? arr(raw.bookings) : (raw.booking ? [raw.booking] : [])
+    const tours = onSlot.filter(Boolean).map((b, i) => ({
+      i, name: String((b && b.prospectName) ?? '').trim(),
+      unitId: b && b.unitId != null && b.unitId !== '' ? String(b.unitId) : null,
+      booking: bookings.find((x) => String(x.slotId) === String(raw.slotId) && String(x.prospectName ?? '').trim() === String((b && b.prospectName) ?? '').trim()) || null,
+    }))
     const sl = {
       id: String(raw.slotId), date, startsAt: raw.startsAt, endsAt: raw.endsAt, startMin, endMin, status,
+      capacity: Number(raw.capacity) > 0 ? Number(raw.capacity) : 1, tours,
       rawReason: status === 'blocked' ? String((raw.block && raw.block.reason) ?? '') : '',
       reason: status === 'blocked' ? reasonOf(raw.block && raw.block.reason) : '',
       wholeDay: status === 'blocked' && Boolean(raw.block && raw.block.wholeDay),
-      name: status === 'booked' ? String((raw.booking && raw.booking.prospectName) ?? '').trim() : '',
-      unitId: status === 'booked' && raw.booking && raw.booking.unitId != null && raw.booking.unitId !== '' ? String(raw.booking.unitId) : null,
+      name: tours[0] ? tours[0].name : '',
+      unitId: tours[0] ? tours[0].unitId : null,
     }
     slots.push(sl); byId.set(sl.id, sl)
     if (!byDate.has(date)) byDate.set(date, [])
@@ -3920,7 +3942,12 @@ function buildModel(s, opts) {
   const bookingBySlot = new Map()
   for (const b of bookings) if (!bookingBySlot.has(String(b.slotId))) bookingBySlot.set(String(b.slotId), b)
 
-  const tourItem = (sl) => ({ kind: 'tour', key: `tour:${sl.id}`, ymd: sl.date, slot: sl, slots: [sl], row: rowOf(sl), span: spanOf(sl) })
+  /** One item per tour. The item's slot is a copy carrying that tour's name and apartment. */
+  const tourItems = (sl) => sl.tours.map((t) => ({
+    kind: 'tour', key: `tour:${sl.id}:${t.i}`, ymd: sl.date,
+    slot: { ...sl, name: t.name, unitId: t.unitId, booking: t.booking, tourIndex: t.i, shared: sl.tours.length > 1 || sl.status === 'open' },
+    slots: [sl], row: rowOf(sl), span: spanOf(sl),
+  }))
   /** Consecutive own-block slots with one reason inside a day band are one labelled segment (presentation only). */
   function mergeSegs(own, first) {
     const out = []
@@ -3934,7 +3961,7 @@ function buildModel(s, opts) {
   function dayModel(ymd) {
     const list = byDate.get(ymd) || []
     const dayBlock = dayBlocks.get(ymd) || null
-    const open = list.filter((x) => x.status === 'open'), tours = list.filter((x) => x.status === 'booked')
+    const open = list.filter((x) => x.status === 'open'), tours = list.flatMap((x) => tourItems(x))
     const items = []
     if (dayBlock && list.length) {
       const first = list[0], last = list[list.length - 1]
@@ -3944,13 +3971,13 @@ function buildModel(s, opts) {
         reason: reasonOf(dayBlock.reason), block: dayBlock, tours: tours.length,
         segs: mergeSegs(blocked.filter((x) => !x.wholeDay), first),
       })
-      for (const t of tours) items.push(tourItem(t))
+      for (const t of tours) items.push(t)
     } else {
       let i = 0
       while (i < list.length) {
         const sl = list[i]
-        if (sl.status === 'open') { items.push({ kind: 'open', key: `cell:${sl.id}`, ymd, slot: sl, slots: [sl], row: rowOf(sl), span: spanOf(sl) }); i++; continue }
-        if (sl.status === 'booked') { items.push(tourItem(sl)); i++; continue }
+        if (sl.status === 'open') { items.push({ kind: 'open', key: `cell:${sl.id}`, ymd, slot: sl, slots: [sl], row: rowOf(sl), span: spanOf(sl) }); for (const t of tourItems(sl)) items.push(t); i++; continue }
+        if (sl.status === 'booked') { for (const t of tourItems(sl)) items.push(t); i++; continue }
         const run = [sl]
         let j = i + 1
         while (j < list.length && list[j].status === 'blocked' && list[j].rawReason === sl.rawReason && list[j].wholeDay === sl.wholeDay && list[j].startMin === list[j - 1].endMin) { run.push(list[j]); j++ }
@@ -3983,12 +4010,17 @@ function buildModel(s, opts) {
 
 /** The lead join for a booked slot (never prospectPhone — contract §5.4). */
 function tourInfo(s, m, sl) {
-  const booking = m.bookingBySlot.get(sl.id) || null
+  const booking = sl.booking || m.bookingBySlot.get(sl.id) || null
   let profile = null, lb = null
+  // Several tours can share a time: match the lead by slot AND by the name or apartment on this tour.
+  const candidates = []
   for (const p of arr(s.leads && s.leads.profiles)) {
     const b = arr(p && p.bookings).find((x) => x && x.slotId === sl.id)
-    if (b) { profile = p; lb = b; if (b.status === 'confirmed') break }
+    if (b) candidates.push({ p, b })
   }
+  const pick = candidates.find(({ p, b }) => (sl.unitId && b.unitId && String(b.unitId) === String(sl.unitId)) || (sl.name && p.name && p.name.trim() === sl.name))
+    || (candidates.length === 1 ? candidates[0] : null)
+  if (pick) { profile = pick.p; lb = pick.b }
   const rawCallId = (lb && lb.callId) || (booking && String(booking.externalId ?? '').split('|')[1]) || null
   const callId = rawCallId && derive.callRecords(s).some((r) => r.id === rawCallId) ? rawCallId : null
   return {
@@ -4115,7 +4147,14 @@ function itemHtml(m, it, col) {
       ? `${sl.name || 'Tour'}${sl.unitId ? ` · apartment ${sl.unitId}` : ''} · ${fmt.timeRange(sl.startsAt, sl.endsAt)}`
       : `${clock(sl.startsAt)} ${shortName(sl.name)}${sl.unitId ? ` · ${sl.unitId}` : ''}`
     const short = m.view === 'day' ? full : `${clock(sl.startsAt)} ${firstName(sl.name)}`
-    return `<div class="cal-cell cal-slot${isHour ? '' : ' is-half'}${over ? ' is-over' : ''}" role="presentation" style="${place}">` +
+    // Tours sharing one time split the cell; a lone tour on a time with a place still open
+    // keeps to the right so the open cell beside it can be clicked.
+    const n = Math.max(1, arr(sl.tours).length)
+    // Grid items: split the cell with width + justify-self (left/top would do nothing here).
+    const lay = !sl.shared ? '' : sl.status === 'booked'
+      ? `;width:${Math.floor(100 / n)}%;justify-self:${sl.tourIndex === 0 ? 'start' : sl.tourIndex === n - 1 ? 'end' : 'center'}`
+      : ';width:60%;justify-self:end'
+    return `<div class="cal-cell cal-slot${isHour ? '' : ' is-half'}${over ? ' is-over' : ''}${sl.shared ? ' is-shared' : ''}" role="presentation" style="${place}${lay}">` +
       `<button type="button" class="cal-tour${past ? ' is-past' : ''}" role="gridcell" aria-colindex="${col}" ${common} data-slot="${esc(sl.id)}" tabindex="-1" aria-label="${esc(itemLabel(m, it))}">${ico('person')}<span class="cal-ev-text"><span class="cal-ev-name-full">${esc(full)}</span><span class="cal-ev-name-short">${esc(short)}</span></span></button></div>`
   }
   // band or dayband

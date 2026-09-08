@@ -255,9 +255,13 @@ describe('a question filed under the wrong policy topic', () => {
     const guarded = answerQuestion({ question: 'do you take section 8 vouchers?', topic: 'general_property_fact' },
       ctx({ articles: [petArticle, broker, packages] }))
     assert.equal(guarded.record.decision, 'escalate')
+    // A fee is policy, not a live price: filed under pricing it is still answered from the article.
     const live = answerQuestion({ question: 'is there a broker fee?', topic: 'pricing' },
       ctx({ articles: [petArticle, broker, packages] }))
-    assert.equal(live.record.decision, 'defer')
+    assert.equal(live.record.decision, 'answer')
+    const rent = answerQuestion({ question: 'how much is the rent on a two bedroom?', topic: 'pricing' },
+      ctx({ articles: [petArticle, broker, packages] }))
+    assert.equal(rent.record.decision, 'defer')
   })
 
   test('still refuses when no article anywhere clears the threshold', () => {
@@ -288,7 +292,7 @@ describe('quotes say the net effective figure and the lease figure', () => {
   test('a match names both, in that order', () => {
     const r = checkAvailability(ctx({ qualification: qualified(4500, 1) }))
     assert.equal(r.record.outcome, 'matches')
-    assert.match(r.say, /\$4,200\/month net effective with one month free on a 14-month lease \(\$4,523\/month on the lease itself\)/)
+    assert.match(r.say, /\$4,200\/month — say "forty-two hundred a month" net effective with one month free on a 14-month lease \(\$4,523\/month on the lease itself — say "forty-five twenty-three"\)/)
   })
   test('priced out names the residence, the gap, and what the money does buy', () => {
     const r = checkAvailability(ctx({ qualification: qualified(3500, 1) }))
@@ -305,5 +309,26 @@ describe('quotes say the net effective figure and the lease figure', () => {
     assert.equal(r.qualificationPatch?.budget?.value.maxMonthly, 4500)
     assert.equal(r.qualificationPatch?.bedrooms?.value.min, 1)
     assert.ok(r.qualificationPatch?.moveInTiming)
+  })
+})
+
+describe('a policy question the model filed under a live topic', () => {
+  const gym: KnowledgeArticle = {
+    ...petArticle, id: articleId('art-gym'), topic: 'amenities',
+    question: 'Do you have a gym?', answer: 'The Works is 4,200 square feet on three with Technogym strength and cardio.',
+    keywords: ['gym', 'fitness'],
+  }
+  test('"do you have a gym" under pricing is answered, not deferred', () => {
+    const r = answerQuestion({ question: 'do you have a gym?', topic: 'pricing' }, ctx({ articles: [petArticle, gym] }))
+    assert.equal(r.record.decision, 'answer')
+    assert.match(r.say, /Technogym/)
+  })
+  test('"how much is a one bedroom" under pricing still defers to the live tool', () => {
+    const r = answerQuestion({ question: 'how much is a one bedroom?', topic: 'pricing' }, ctx({ articles: [petArticle, gym] }))
+    assert.equal(r.record.decision, 'defer')
+  })
+  test('a guarded question under a live topic still escalates', () => {
+    const r = answerQuestion({ question: 'do you take section 8?', topic: 'unit_availability' }, ctx({ articles: [petArticle, gym] }))
+    assert.equal(r.record.decision, 'escalate')
   })
 })

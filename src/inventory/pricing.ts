@@ -44,14 +44,47 @@ export function concessionDeadline(text: string | null | undefined): string | nu
 
 const money = (n: number) => `$${n.toLocaleString('en-US')}`
 
+const ONES = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven',
+  'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen']
+const TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety']
+const below100 = (n: number) => n < 20 ? ONES[n]! : `${TENS[Math.floor(n / 10)]}${n % 10 ? `-${ONES[n % 10]}` : ''}`
+const below1000 = (n: number) => {
+  const h = Math.floor(n / 100), r = n % 100
+  return [h ? `${ONES[h]} hundred` : '', r ? below100(r) : ''].filter(Boolean).join(' ') || 'zero'
+}
+
+/**
+ * A rent the way a leasing agent says it out loud: "fifty-four forty", not "$5,440".
+ *
+ * The voice reads digits with a comma as separate numbers — a caller heard "five, four
+ * hundred, forty" for 5,440 — so every figure the tool hands the model carries its spoken
+ * form, and the prompt tells the model to say that form and never the digits.
+ */
+export function spokenMoney(n: number): string {
+  n = Math.round(Math.abs(n))
+  if (n < 1000) return below1000(n)
+  if (n < 10_000) {
+    if (n % 1000 === 0) return `${ONES[n / 1000]} thousand`
+    const hundreds = Math.floor(n / 100), rest = n % 100
+    if (rest === 0) return `${below100(hundreds)} hundred`
+    return `${below100(hundreds)} ${rest < 10 ? `oh-${ONES[rest]}` : below100(rest)}`
+  }
+  const thousands = Math.floor(n / 1000), rest = n % 1000
+  return `${below100(thousands)} thousand${rest ? ` ${below1000(rest)}` : ''}`
+}
+
+/** "$5,440/month — say "fifty-four forty a month"". */
+export const sayableRent = (n: number) => `${money(n)}/month — say "${spokenMoney(n)} a month"`
+
 /** One phrase that prices a residence the way the website does: net first, lease after. */
 export function rentPhrase(unit: Pick<Unit, 'monthlyRent' | 'concession'>): string {
   const t = concessionTerms(unit.concession)
-  if (!t) return `${money(unit.monthlyRent)}/month`
+  if (!t) return sayableRent(unit.monthlyRent)
   const free = t.freeMonths === 1 ? 'one month free'
     : Number.isInteger(t.freeMonths) ? `${t.freeMonths} months free`
     : `${t.freeMonths * 4} weeks free`
   const deadline = concessionDeadline(unit.concession)
-  return `${money(unit.monthlyRent)}/month net effective with ${free} on a ${t.termMonths}-month lease` +
-    `${deadline ? ` if signed by ${deadline}` : ''} (${money(leaseRent(unit))}/month on the lease itself)`
+  const lease = leaseRent(unit)
+  return `${sayableRent(unit.monthlyRent)} net effective with ${free} on a ${t.termMonths}-month lease` +
+    `${deadline ? ` if signed by ${deadline}` : ''} (${money(lease)}/month on the lease itself — say "${spokenMoney(lease)}")`
 }

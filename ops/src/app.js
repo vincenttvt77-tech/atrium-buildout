@@ -1296,18 +1296,27 @@ function toursOn(s, ymd) {
     for (const b of arr(p && p.bookings)) {
       if (!b || b.status !== 'confirmed' || nyDate(b.startsAt) !== ymd) continue
       if (calLoaded && !calBookingIds.has(b.slotId)) continue
-      if (seen.has(b.slotId)) continue
-      seen.add(b.slotId)
-      const cb = calBookingBy.get(b.slotId)
+      // Two tours can share a time (two model residences): dedupe per tour, not per time.
+      const key = `${b.slotId}|${(b.unitId ?? '')}|${(p.name || '').trim()}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      const cb = arr(cal && cal.bookings).find((x) => x && x.slotId === b.slotId && (x.unitId ?? '') === (b.unitId ?? '')) || calBookingBy.get(b.slotId)
       out.push({ slotId: b.slotId, startsAt: b.startsAt, endsAt: null, name: p.name || (cb && cb.prospectName) || 'Tour', phone: p.phone, email: p.email || null,
         unitId: b.unitId ?? (cb && cb.unitId) ?? null, callId: b.callId, source: 'lead', profile: p, past: (toTime(b.startsAt) ?? 0) < now })
     }
   }
   for (const sl of arr(cal && cal.slots)) {
-    if (!sl || sl.status !== 'booked' || sl.date !== ymd || seen.has(sl.slotId)) continue
-    seen.add(sl.slotId)
-    out.push({ slotId: sl.slotId, startsAt: sl.startsAt, endsAt: sl.endsAt, name: (sl.booking && sl.booking.prospectName) || 'Tour', phone: null, email: null,
-      unitId: (sl.booking && sl.booking.unitId) ?? null, callId: null, source: 'calendar', profile: null, past: (toTime(sl.startsAt) ?? 0) < now })
+    if (!sl || sl.date !== ymd) continue
+    const onSlot = arr(sl.bookings).length ? arr(sl.bookings) : (sl.booking ? [sl.booking] : [])
+    for (const b of onSlot) {
+      if (!b) continue
+      const name = String(b.prospectName ?? '').trim()
+      const key = `${sl.slotId}|${(b.unitId ?? '')}|${name}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push({ slotId: sl.slotId, startsAt: sl.startsAt, endsAt: sl.endsAt, name: name || 'Tour', phone: null, email: null,
+        unitId: b.unitId ?? null, callId: null, source: 'calendar', profile: null, past: (toTime(sl.startsAt) ?? 0) < now })
+    }
   }
   return out.sort((a, b) => (toTime(a.startsAt) ?? 0) - (toTime(b.startsAt) ?? 0))
 }

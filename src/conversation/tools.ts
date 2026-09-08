@@ -1,6 +1,6 @@
 import type { InventorySnapshot, FloorPlan } from '../inventory/types.ts'
 import { findMatches } from '../inventory/match.ts'
-import { rentPhrase } from '../inventory/pricing.ts'
+import { rentPhrase, spokenMoney } from '../inventory/pricing.ts'
 import type { QualificationState } from '../leasing/qualification.ts'
 import { mayQuote, nextSignalToAsk, captureCore } from '../leasing/qualification.ts'
 import { extracted } from '../leasing/captured.ts'
@@ -9,7 +9,7 @@ import { decideAnswer } from '../knowledge/answer.ts'
 import { retrieve } from '../knowledge/retrieve.ts'
 import { guardTopic } from '../knowledge/guard.ts'
 import type { KnowledgeArticle } from '../knowledge/article.ts'
-import { isPolicy, type Topic } from '../knowledge/topics.ts'
+import { isPolicy, isVolatile, type Topic } from '../knowledge/topics.ts'
 import { detectEmergency, primaryEmergency, safetyInstruction } from '../escalation/emergency.ts'
 import type { PropertyId, InteractionId } from '../domain/ids.ts'
 import type { LossReason } from '../record/store.ts'
@@ -315,7 +315,7 @@ export function checkAvailability(ctx: ToolContext, args: AvailabilityArgs = {})
       const alternatives = out.alternatives.map((m) => unitLine(m.unit))
       return {
         say: [
-          `Nothing ${size === 'residence' ? '' : `${size} `}is available at or below ${money(out.budgetMax)}. The closest is ${money(out.gap)}/month above what they said:`,
+          `Nothing ${size === 'residence' ? '' : `${size} `}is available at or below ${money(out.budgetMax)}. The closest is ${money(out.gap)}/month above what they said — say "${spokenMoney(out.gap)} a month over":`,
           nearest.join('\n'),
           `Be straight about the gap and name the residence if they ask — that is real, current information. Do NOT pitch it as though it met their budget.`,
           alternatives.length
@@ -371,6 +371,8 @@ export interface AnswerArgs {
   topic: Topic
 }
 
+const ABOUT_RENT_OR_AVAILABILITY = /\b(rent|rents|rental|pricing|price|prices|how much (is|are|for|does|would)|cost of (the|a|an) (studio|apartment|unit|residence|one|two|three)|available|availability|vacanc(y|ies)|what('s| is) open|anything open|move[- ]in date|when can (i|we) move|lease start|specials?|concessions?|discount)\b/i
+
 /** Property questions. Answers only from approved knowledge; escalates the restricted. */
 export function answerQuestion(args: AnswerArgs, ctx: ToolContext): ToolResult {
   /*
@@ -379,7 +381,19 @@ export function answerQuestion(args: AnswerArgs, ctx: ToolContext): ToolResult {
    * and can override the topic upward into a restricted one — never downward.
    */
   const guard = guardTopic(args.question)
-  const topic = guard ? guard.topic : args.topic
+  let topic = guard ? guard.topic : args.topic
+
+  /*
+   * The model files "what amenities do you have?" under pricing often enough to matter, and
+   * a volatile topic defers to the availability tool — which has no amenities in it, so the
+   * caller heard "I don't want to guess" about a gym that has an approved article. A
+   * volatile label is honoured only when the question is actually about rent or
+   * availability; otherwise it is treated as a policy question and answered from approved
+   * text. No article may carry a rent (the validator forbids it), so nothing stale can leak.
+   */
+  if (!guard && isVolatile(topic) && !ABOUT_RENT_OR_AVAILABILITY.test(args.question)) {
+    topic = 'general_property_fact'
+  }
 
   // Rank against what was actually asked. Passing every article filed under the topic and
   // taking the first is how "what are the gym hours" gets answered with the leasing

@@ -244,3 +244,17 @@ describe('several tool calls in one turn', () => {
     assert.equal(mine.length, 0, 'nothing is logged for a partial')
   })
 })
+
+describe('which tour times the model is handed', () => {
+  test('a morning and an afternoon on each of the next three days, not six half-hours on one', async () => {
+    const { pickSlotsToOffer } = await import('../vapi.ts')
+    const mk = (iso: string) => ({ slotId: `slot-${iso.slice(0, 16)}`, startsAt: new Date(iso), endsAt: new Date(Date.parse(iso) + 1800000) })
+    const open = ['2026-09-09T14:00', '2026-09-09T14:30', '2026-09-09T18:00', '2026-09-10T15:00', '2026-09-10T19:00', '2026-09-11T14:00', '2026-09-12T14:00']
+      .map((t) => mk(`${t}:00Z`))
+    const { offered, daysOpen } = pickSlotsToOffer(open)
+    assert.deepEqual(offered.map((s) => s.slotId), ['slot-2026-09-09T14:00', 'slot-2026-09-09T18:00', 'slot-2026-09-10T15:00', 'slot-2026-09-10T19:00', 'slot-2026-09-11T14:00'])
+    assert.equal(daysOpen, 4)
+    const asked = pickSlotsToOffer(open, '2026-09-12')
+    assert.deepEqual(asked.offered.map((s) => s.slotId), ['slot-2026-09-12T14:00'])
+  })
+})

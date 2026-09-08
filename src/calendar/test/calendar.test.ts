@@ -128,3 +128,30 @@ describe('slot identity', () => {
     assert.equal(new Set(ids).size, ids.length, 'every generated slot id is distinct')
   })
 })
+
+describe('two tours can share a time, one apartment cannot', () => {
+  const at = new Date('2026-09-09T18:00:00Z')
+  const slot = { slotId: slotIdFor(at), startsAt: at, endsAt: new Date(at.getTime() + 30 * 60_000) }
+  const booked = (n: number, unit = (i: number) => `1${i}A`) => ({
+    blocks: [], bookings: Array.from({ length: n }, (_, i) => ({
+      slotId: slot.slotId, externalId: `b${i}`, prospectName: `P${i}`, prospectEmail: null, prospectPhone: '+1', unitId: unit(i), bookedAt: at.toISOString(),
+    })),
+  })
+  test('with capacity two, one booking leaves the time open and two fill it', () => {
+    assert.equal(statusOf(slot, booked(1), 2), 'open')
+    assert.equal(statusOf(slot, booked(2), 2), 'booked')
+    assert.equal(statusOf(slot, booked(1), 1), 'booked', 'the default is still one tour per time')
+  })
+  test('the booking port refuses the same apartment twice at one time', async () => {
+    const store = new MemoryCalendarStore()
+    const cal = storeBackedCalendar(store, () => NOW, { capacity: 2 })
+    const intent = (key: string, name: string, unitId: string | null) => ({
+      idempotencyKey: key, request: { propertyId: propertyId('prop-demo'), interactionId: interactionId(`i-${key}`), personId: null,
+        prospectName: name, prospectPhone: '+15550000000', prospectEmail: null, slot, unitId, floorPlanId: null },
+    })
+    await cal.createBooking(intent('k1', 'Ana', '13L') as never)
+    await assert.rejects(cal.createBooking(intent('k2', 'Ben', '13L') as never), /already being shown/)
+    await cal.createBooking(intent('k3', 'Ben', '21B') as never)
+    await assert.rejects(cal.createBooking(intent('k4', 'Cy', '26B') as never), /already booked/, 'the time is full at two')
+  })
+})
