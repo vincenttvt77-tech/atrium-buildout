@@ -119,10 +119,10 @@ export function sayableStatus(booking: Booking): string {
       return `You're all set, ${name}. I've got you down for ${when.toLocaleString('en-US', {
         weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit',
         timeZone: 'America/New_York',
-      })}. You'll get a confirmation by email shortly.`
+      })}. Someone from the leasing office will confirm with you before then.`
     }
     case 'arranging':
-      return `I'm getting that booked for you now, ${name}. I'll confirm by text and email as soon as it's locked in — if you don't hear from me within the hour, please call back.`
+      return `I'm getting that booked for you now, ${name}. The leasing office will confirm with you as soon as it's locked in — if you don't hear from them within the hour, please call back.`
     case 'slot_taken':
       return s.alternatives.length > 0
         ? `That time just went, I'm afraid. I do have ${s.alternatives.slice(0, 3).map((a) => a.startsAt.toLocaleString('en-US', { weekday: 'long', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })).join(', or ')}. Would any of those work?`
