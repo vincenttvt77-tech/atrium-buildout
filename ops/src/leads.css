@@ -130,7 +130,15 @@
   .leads-view .todo-row .row-actions { grid-column: 1 / -1; justify-content: flex-start; }
   .lead-panel .lead-call { display: inline-flex; }
 }
+@media (max-width: 959px) {
+  /* Inline links keep their place in the sentence but get a 44 px tall hit area. */
+  .leads-view .btn-link { padding: 15px 0; margin: -15px 0; }
+}
 @media (max-width: 599px) {
+  /* "‹ Leads" and "Edit name" take the first line of the head; the name gets the whole second line. */
+  .lead-panel .panel-head { flex-wrap: wrap; row-gap: 4px; padding-bottom: 12px; }
+  .lead-panel .panel-head .panel-back { margin-right: auto; }
+  .lead-panel .panel-head h2 { flex-basis: 100%; order: 3; }
   .lead-panel .note-form { flex-direction: column; align-items: stretch; }
   .lead-panel .note-form .btn { width: 100%; }
   .lead-panel .np-card .actions .btn { flex: 1 1 auto; }

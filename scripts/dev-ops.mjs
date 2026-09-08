@@ -30,7 +30,7 @@
  */
 import { createServer } from 'node:http'
 import { access, readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 
@@ -38,7 +38,7 @@ const RealDate = Date
 const DAY = 86_400_000
 const ZONE = 'America/New_York'
 const root = fileURLToPath(new URL('..', import.meta.url))
-const FIXTURE_PATH = join(root, 'scripts', 'dev-fixtures', 'calls.json')
+const DEFAULT_FIXTURE_PATH = join(root, 'scripts', 'dev-fixtures', 'calls.json')
 
 // ---------------------------------------------------------------------------------------
 // CLI and environment — before any handler is imported, because the stores and the passcode
@@ -50,6 +50,7 @@ const { values: flags } = parseArgs({
     seed: { type: 'boolean', default: true },
     built: { type: 'boolean', default: false },
     port: { type: 'string' },
+    fixture: { type: 'string' },
     help: { type: 'boolean', default: false },
   },
   allowNegative: true,
@@ -61,6 +62,8 @@ if (flags.help) {
   --no-seed   start with an empty store (fixture calls are still served on GET /api/vapi)
   --built     serve ops/dashboard.page.json as embedded at startup instead of composing ops/src live
   --port N    listen on N (default 4300; the PORT environment variable also works)
+  --fixture F replay F instead of scripts/dev-fixtures/calls.json (same format; reviewers use
+              this to seed callers with hostile names, excerpts, reasons and notes)
 `)
   process.exit(0)
 }
@@ -77,6 +80,7 @@ const PASSCODE = process.env.OPS_DASHBOARD_PASSCODE
 const VAPI_KEY_SET = Boolean((process.env.VAPI_PRIVATE_KEY ?? process.env.VAPI_API_KEY ?? '').trim())
 const WEBHOOK_SECRET = (process.env.VAPI_WEBHOOK_SECRET ?? '').trim()
 const PORT = Number(flags.port ?? process.env.PORT ?? 4300)
+const FIXTURE_PATH = flags.fixture ? resolve(process.cwd(), flags.fixture) : DEFAULT_FIXTURE_PATH
 
 const load = (rel) => import(pathToFileURL(join(root, rel)).href)
 

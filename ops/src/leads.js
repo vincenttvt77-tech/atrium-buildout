@@ -345,7 +345,7 @@ function leadPanelHtml(p, s) {
   out += `<section class="panel-section"><h3>What they're looking for</h3>`
   if (facts.length) {
     out += `<dl class="facts">${facts.map((f) => `<dt>${esc(f.label)}</dt><dd>${esc(f.value)}${f.unsure ? ' <span class="warn-text small">(not sure)</span>' : ''} — ` +
-      (f.excerpt && f.excerpt !== f.value ? `<span class="quote">"${esc(f.excerpt)}"</span>` : '<span class="faint">(no quote saved)</span>') +
+      (f.excerpt ? `<span class="quote">"${esc(f.excerpt)}"</span>` : '<span class="faint">(no quote saved)</span>') +
       (f.from ? ` <span class="faint small">(from the call ${esc(fmt.dateTime(f.from))})</span>` : '') + '</dd>').join('')}</dl>`
   } else out += `<p class="muted">The assistant hasn't learned what they want yet.</p>`
   out += '</section>'

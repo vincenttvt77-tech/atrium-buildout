@@ -612,6 +612,9 @@ body.has-dialog { overflow: hidden; }
 
 /* ---------- head, strip, toolbar ---------- */
 .cal-view .view-head { margin-bottom: var(--s4); }
+.cal-view .view-head.cal-head-mobile { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.cal-head-main { min-width: 0; }
+.cal-head-tools { flex: none; margin-top: 2px; }
 .cal-today-strip { margin-top: 4px; color: var(--ink-2); font-size: .929rem; }
 .cal-today-strip .cal-strip-item.is-past, .cal-today-strip .cal-strip-item.is-past a { color: var(--ink-3); }
 .cal-today-strip a { color: var(--accent); text-decoration: none; }
@@ -622,7 +625,6 @@ body.has-dialog { overflow: hidden; }
 .cal-banners .banner-link:hover { text-decoration: underline; }
 
 .cal-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 8px; }
-.cal-toolbar-mobile { margin-bottom: 0; }
 .cal-toolbar .cal-nav { display: inline-flex; align-items: center; gap: 4px; }
 .cal-toolbar .cal-range { font-size: 1.071rem; font-weight: 600; margin: 0 4px; white-space: nowrap; }
 .cal-toolbar .cal-range .cal-range-when { color: var(--ink-2); font-weight: 500; }
@@ -647,7 +649,7 @@ body.has-dialog { overflow: hidden; }
 .cal-grid {
   display: grid;
   grid-template-columns: 56px repeat(var(--cal-cols, 7), minmax(0, 1fr));
-  grid-template-rows: 60px repeat(var(--cal-rows, 18), 40px);
+  grid-template-rows: 76px repeat(var(--cal-rows, 18), 40px);
   column-gap: 1px; background: var(--line);
   position: relative; min-width: 0;
 }
@@ -658,19 +660,19 @@ body.has-dialog { overflow: hidden; }
 }
 .cal-corner { z-index: 6; }
 .cal-dayhead {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
-  padding: 4px 4px; text-align: center; color: var(--ink); font: inherit; border-left: 0; border-right: 0; border-top: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0;
+  padding: 2px 4px; text-align: center; color: var(--ink); font: inherit; border-left: 0; border-right: 0; border-top: 0;
   border-radius: 0; width: 100%;
 }
 button.cal-dayhead { cursor: pointer; }
 button.cal-dayhead:hover { background: var(--paper-3); }
-.cal-dayhead .cal-wd { font-size: .929rem; font-weight: 600; color: var(--ink-2); line-height: 1.2; }
+.cal-dayhead .cal-wd { font-size: .929rem; font-weight: 600; color: var(--ink-2); line-height: 1.1; }
 .cal-dayhead .cal-dn {
-  display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; padding: 0 6px;
+  display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 26px; padding: 0 6px;
   border-radius: 999px; font-size: 1.286rem; font-weight: 600; line-height: 1;
 }
 .cal-dayhead[aria-current="date"] .cal-dn { background: var(--accent); color: var(--on-accent); }
-.cal-dayhead .cal-ds { font-size: .857rem; line-height: 1.2; color: var(--ink-3); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.cal-dayhead .cal-ds { font-size: .857rem; line-height: 1.15; color: var(--ink-3); font-weight: 500; max-width: 100%; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
 .cal-dayhead .cal-ds.is-blocked { color: var(--blocked); }
 .cal-dayhead .cal-ds.is-ok { color: var(--ok); }
 .cal-dayhead .cal-ds .ico { width: 12px; height: 12px; vertical-align: -1px; }
@@ -698,20 +700,21 @@ button.cal-dayhead:hover { background: var(--paper-3); }
 .cal-open[aria-selected="true"] { box-shadow: inset 0 0 0 2px var(--accent); z-index: 3; }
 .cal-open[aria-selected="true"] .cal-plus { display: none; }
 .cal-sel-caption {
-  position: absolute; left: 6px; top: 4px; z-index: 5; pointer-events: none;
-  font-size: .857rem; font-weight: 600; color: var(--accent); background: var(--paper-2);
-  padding: 1px 6px; border-radius: 999px; border: 1px solid var(--accent); white-space: nowrap;
+  position: absolute; left: 4px; top: 3px; z-index: 5; pointer-events: none; width: max-content; max-width: calc(100% - 8px);
+  font-size: .857rem; font-weight: 600; line-height: 1.2; color: var(--accent); background: var(--paper-2);
+  padding: 1px 6px; border-radius: 10px; border: 1px solid var(--accent); white-space: normal; overflow-wrap: anywhere;
 }
 .cal-view.is-inert .cal-open, .cal-view.is-inert .cal-tour, .cal-view.is-inert .cal-band, .cal-view.is-inert button.cal-dayhead { cursor: not-allowed; opacity: .7; }
 
 .cal-tour {
   position: absolute; top: 2px; left: 2px; right: 2px; bottom: 2px; z-index: 2; cursor: pointer; text-align: left; font: inherit;
   background: var(--ok-soft); color: var(--ok); border: 0; border-left: 3px solid var(--ok-line); border-radius: 6px;
-  padding: 2px 6px; font-size: .857rem; font-weight: 500; line-height: 1.3; overflow: hidden;
+  padding: 2px 5px; font-size: .857rem; font-weight: 500; line-height: 1.25; overflow: hidden;
   display: flex; align-items: flex-start; gap: 4px;
 }
-.cal-tour .ico { width: 13px; height: 13px; flex: none; margin-top: 2px; }
-.cal-tour .cal-ev-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-tour .ico { width: 13px; height: 13px; flex: none; margin-top: 1px; }
+.cal-tour .cal-ev-text { flex: 1; min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.cal-view[data-cal-view="day"] .cal-tour .cal-ev-text, .cal-grid[style*="--cal-cols:1"] .cal-tour .cal-ev-text { -webkit-line-clamp: 1; }
 .cal-tour.is-past { color: var(--ink-3); background: var(--paper-3); border-left-color: var(--line-strong); }
 .cal-ev-name-short { display: none; }
 @media (max-width: 1099px) { .cal-ev-name-full { display: none; } .cal-ev-name-short { display: inline; } }
@@ -728,7 +731,7 @@ button.cal-dayhead:hover { background: var(--paper-3); }
 }
 .cal-band-text .ico { width: 13px; height: 13px; flex: none; margin-top: 2px; }
 .cal-band-text .cal-band-words { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cal-band.is-tall .cal-band-text .cal-band-words { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.cal-band.is-tall .cal-band-text .cal-band-words { white-space: normal; display: -webkit-box; -webkit-line-clamp: var(--cal-lines, 2); -webkit-box-orient: vertical; overflow-wrap: anywhere; }
 .cal-band-hit { position: absolute; left: 0; right: 0; height: 40px; }
 .cal-band-seg {
   position: absolute; left: 0; right: 0; height: 40px; z-index: 1; pointer-events: none;
@@ -837,6 +840,7 @@ button.cal-dayhead:hover { background: var(--paper-3); }
 }
 .cal-fab .ico { width: 18px; height: 18px; }
 @media (max-width: 599px) { .cal-arow { grid-template-columns: 88px minmax(0, 1fr) auto; } .cal-arow .row-actions { grid-column: auto; } }
+@media (max-width: 959px) { .cal-foot { padding-bottom: 72px; } }
 </style>
 <style>
 /* Leads view — the To do and Everyone tabs and the person panel (brief §9). Owner: leads.
@@ -971,7 +975,15 @@ button.cal-dayhead:hover { background: var(--paper-3); }
   .leads-view .todo-row .row-actions { grid-column: 1 / -1; justify-content: flex-start; }
   .lead-panel .lead-call { display: inline-flex; }
 }
+@media (max-width: 959px) {
+  /* Inline links keep their place in the sentence but get a 44 px tall hit area. */
+  .leads-view .btn-link { padding: 15px 0; margin: -15px 0; }
+}
 @media (max-width: 599px) {
+  /* "‹ Leads" and "Edit name" take the first line of the head; the name gets the whole second line. */
+  .lead-panel .panel-head { flex-wrap: wrap; row-gap: 4px; padding-bottom: 12px; }
+  .lead-panel .panel-head .panel-back { margin-right: auto; }
+  .lead-panel .panel-head h2 { flex-basis: 100%; order: 3; }
   .lead-panel .note-form { flex-direction: column; align-items: stretch; }
   .lead-panel .note-form .btn { width: 100%; }
   .lead-panel .np-card .actions .btn { flex: 1 1 auto; }
@@ -3546,7 +3558,7 @@ const arr = (v) => (Array.isArray(v) ? v : [])
 const isMobile = () => matchMedia('(max-width: 959px)').matches
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches
 const isYmd = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)
-const ROW_H = 40, HEAD_H = 60
+const ROW_H = 40, HEAD_H = 76
 const QUICK = ['Painting', 'Staff out', 'Maintenance', 'Holiday', 'Private showing']
 const KEYS_HINT = 'Use the arrow keys to move, Enter to open, Shift + arrows to select a range.'
 
@@ -3636,6 +3648,16 @@ function buildModel(s, opts) {
   for (const b of bookings) if (!bookingBySlot.has(String(b.slotId))) bookingBySlot.set(String(b.slotId), b)
 
   const tourItem = (sl) => ({ kind: 'tour', key: `tour:${sl.id}`, ymd: sl.date, slot: sl, slots: [sl], row: rowOf(sl), span: spanOf(sl) })
+  /** Consecutive own-block slots with one reason inside a day band are one labelled segment (presentation only). */
+  function mergeSegs(own, first) {
+    const out = []
+    for (const x of own) {
+      const prev = out[out.length - 1]
+      if (prev && prev.slot.rawReason === x.rawReason && x.startMin === prev.slots[prev.slots.length - 1].endMin) { prev.slots.push(x); prev.span += spanOf(x); continue }
+      out.push({ slot: x, slots: [x], row: rowOf(x) - rowOf(first), span: spanOf(x) })
+    }
+    return out
+  }
   function dayModel(ymd) {
     const list = byDate.get(ymd) || []
     const dayBlock = dayBlocks.get(ymd) || null
@@ -3647,7 +3669,7 @@ function buildModel(s, opts) {
       items.push({
         kind: 'dayband', key: `dayband:${ymd}`, ymd, slots: blocked, first, last, row: rowOf(first), span: rowOf(last) + spanOf(last) - rowOf(first),
         reason: reasonOf(dayBlock.reason), block: dayBlock, tours: tours.length,
-        segs: blocked.filter((x) => !x.wholeDay).map((x) => ({ slot: x, row: rowOf(x) - rowOf(first), span: spanOf(x) })),
+        segs: mergeSegs(blocked.filter((x) => !x.wholeDay), first),
       })
       for (const t of tours) items.push(tourItem(t))
     } else {
@@ -3818,18 +3840,22 @@ function itemHtml(m, it, col) {
   }
   // band or dayband
   const n = it.span
+  const topSegs = it.kind === 'dayband' ? it.segs.filter((sg) => sg.row === 0) : []
+  const nextSeg = it.kind === 'dayband' ? it.segs.find((sg) => sg.row > 0) : null
+  const linesFor = (rows) => Math.max(2, Math.min(6, Math.floor((rows * ROW_H - 8) / 15)))
+  const lines = nextSeg ? Math.max(1, Math.min(linesFor(n), linesFor(nextSeg.row))) : linesFor(n)
   let words
-  if (it.kind === 'dayband') words = `Blocked all day${it.reason ? ` · ${it.reason}` : ''}`
+  if (it.kind === 'dayband') words = `Blocked all day${it.reason ? ` · ${it.reason}` : ''}${topSegs.map((sg) => `\n· ${sg.slot.reason || 'Blocked'}`).join('')}`
   else if (it.slots.length > 1) words = `Blocked ${fmt.timeRange(it.first.startsAt, it.last.endsAt)}${it.reason ? (n >= 2 ? '\n' : ' · ') + it.reason : ''}`
   else words = `Blocked${it.reason ? ` · ${it.reason}` : ''}`
   let hits = ''
   for (let i = 0; i < n; i++) hits += i === 0
     ? `<div class="cal-band-hit" role="gridcell" aria-colindex="${col}" aria-rowspan="${n}" tabindex="-1" aria-label="${esc(itemLabel(m, it))}" style="top:0"></div>`
     : `<div class="cal-band-hit" aria-hidden="true" style="top:${i * ROW_H}px"></div>`
-  const segs = it.kind === 'dayband' ? it.segs.map((sg) => `<div class="cal-band-seg" aria-hidden="true" style="top:${sg.row * ROW_H}px;height:${sg.span * ROW_H}px" data-seg="${esc(sg.slot.id)}"><span class="cal-band-words">· ${esc(sg.slot.reason || 'Blocked')}</span></div>`).join('') : ''
+  const segs = it.kind === 'dayband' ? it.segs.map((sg) => `<div class="cal-band-seg" aria-hidden="true" style="top:${sg.row * ROW_H}px;height:${sg.span * ROW_H}px" data-seg="${esc(sg.slot.id)}">${sg.row === 0 ? '' : `<span class="cal-band-words">· ${esc(sg.slot.reason || 'Blocked')}</span>`}</div>`).join('') : ''
   const slotList = it.slots.map((x) => x.id).join(' ')
   return `<div class="cal-cell cal-slot${isHour ? '' : ' is-half'}" role="presentation" style="${place}">` +
-    `<div class="cal-band${n >= 2 ? ' is-tall' : ''}" ${common} data-slots="${esc(slotList)}"><span class="cal-band-text">${ico('slash')}<span class="cal-band-words">${esc(words).replace('\n', '<br>')}</span></span>${segs}${hits}</div></div>`
+    `<div class="cal-band${n >= 2 ? ' is-tall' : ''}" ${common} data-slots="${esc(slotList)}" style="--cal-lines:${lines}"><span class="cal-band-text">${ico('slash')}<span class="cal-band-words">${esc(words).replace(/\n/g, '<br>')}</span></span>${segs}${hits}</div></div>`
 }
 
 function gridHtml(m) {
@@ -4228,7 +4254,7 @@ function openSheet(preset) {
     title: 'Block time', build,
     primary: { label: `Block ${longDay(st.date)}`, busyLabel: 'Blocking…', onClick: (d) => submit(d) },
     secondary: { label: 'Cancel' },
-    onClose() { cal.sheet = null },
+    onClose() { cal.sheet = null; clearSel() },
   })
 }
 
@@ -4752,10 +4778,11 @@ const view = {
       cal.sel = null
       if (changed && m.loaded) say('Some of those times changed — selection cleared')
     }
-    setPart('head', `<div class="view-head"><h1 tabindex="-1">Tour calendar</h1>${m.loaded || s.loaded.leads ? stripHtml(s, m) : ''}</div>`)
+    const moreBtn = `<button type="button" class="btn-icon" data-action="more" data-key="more" aria-label="More calendar actions" aria-haspopup="dialog" data-write="calendar"${dis(A.busyNow('calendar') || cal.inert)}>${A.icon('more')}</button>`
+    setPart('head', `<div class="view-head${m.mobile ? ' cal-head-mobile' : ''}"><div class="cal-head-main"><h1 tabindex="-1">Tour calendar</h1>${m.loaded || s.loaded.leads ? stripHtml(s, m) : ''}</div>${m.mobile ? `<div class="cal-head-tools">${moreBtn}</div>` : ''}</div>`)
     setPart('banners', bannersHtml(s, m))
     const rt = rangeText(m)
-    if (m.mobile) setPart('toolbar', `<div class="cal-toolbar cal-toolbar-mobile"><span class="cal-spacer"></span><button type="button" class="btn-icon" data-action="more" data-key="more" aria-label="More calendar actions" aria-haspopup="dialog" data-write="calendar"${dis(A.busyNow('calendar') || cal.inert)}>${A.icon('more')}</button></div><div class="cal-progress"${A.busyNow('calendar') ? '' : ' hidden'}></div>`)
+    if (m.mobile) setPart('toolbar', `<div class="cal-progress"${A.busyNow('calendar') ? '' : ' hidden'}></div>`)
     else setPart('toolbar', toolbarHtml(m))
     let body
     if (loading) body = skeletonHtml()
@@ -5173,7 +5200,7 @@ function leadPanelHtml(p, s) {
   out += `<section class="panel-section"><h3>What they're looking for</h3>`
   if (facts.length) {
     out += `<dl class="facts">${facts.map((f) => `<dt>${esc(f.label)}</dt><dd>${esc(f.value)}${f.unsure ? ' <span class="warn-text small">(not sure)</span>' : ''} — ` +
-      (f.excerpt && f.excerpt !== f.value ? `<span class="quote">"${esc(f.excerpt)}"</span>` : '<span class="faint">(no quote saved)</span>') +
+      (f.excerpt ? `<span class="quote">"${esc(f.excerpt)}"</span>` : '<span class="faint">(no quote saved)</span>') +
       (f.from ? ` <span class="faint small">(from the call ${esc(fmt.dateTime(f.from))})</span>` : '') + '</dd>').join('')}</dl>`
   } else out += `<p class="muted">The assistant hasn't learned what they want yet.</p>`
   out += '</section>'

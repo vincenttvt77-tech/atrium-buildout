@@ -21,7 +21,7 @@ const arr = (v) => (Array.isArray(v) ? v : [])
 const isMobile = () => matchMedia('(max-width: 959px)').matches
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches
 const isYmd = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)
-const ROW_H = 40, HEAD_H = 60
+const ROW_H = 40, HEAD_H = 76
 const QUICK = ['Painting', 'Staff out', 'Maintenance', 'Holiday', 'Private showing']
 const KEYS_HINT = 'Use the arrow keys to move, Enter to open, Shift + arrows to select a range.'
 
@@ -111,6 +111,16 @@ function buildModel(s, opts) {
   for (const b of bookings) if (!bookingBySlot.has(String(b.slotId))) bookingBySlot.set(String(b.slotId), b)
 
   const tourItem = (sl) => ({ kind: 'tour', key: `tour:${sl.id}`, ymd: sl.date, slot: sl, slots: [sl], row: rowOf(sl), span: spanOf(sl) })
+  /** Consecutive own-block slots with one reason inside a day band are one labelled segment (presentation only). */
+  function mergeSegs(own, first) {
+    const out = []
+    for (const x of own) {
+      const prev = out[out.length - 1]
+      if (prev && prev.slot.rawReason === x.rawReason && x.startMin === prev.slots[prev.slots.length - 1].endMin) { prev.slots.push(x); prev.span += spanOf(x); continue }
+      out.push({ slot: x, slots: [x], row: rowOf(x) - rowOf(first), span: spanOf(x) })
+    }
+    return out
+  }
   function dayModel(ymd) {
     const list = byDate.get(ymd) || []
     const dayBlock = dayBlocks.get(ymd) || null
@@ -122,7 +132,7 @@ function buildModel(s, opts) {
       items.push({
         kind: 'dayband', key: `dayband:${ymd}`, ymd, slots: blocked, first, last, row: rowOf(first), span: rowOf(last) + spanOf(last) - rowOf(first),
         reason: reasonOf(dayBlock.reason), block: dayBlock, tours: tours.length,
-        segs: blocked.filter((x) => !x.wholeDay).map((x) => ({ slot: x, row: rowOf(x) - rowOf(first), span: spanOf(x) })),
+        segs: mergeSegs(blocked.filter((x) => !x.wholeDay), first),
       })
       for (const t of tours) items.push(tourItem(t))
     } else {
@@ -293,18 +303,22 @@ function itemHtml(m, it, col) {
   }
   // band or dayband
   const n = it.span
+  const topSegs = it.kind === 'dayband' ? it.segs.filter((sg) => sg.row === 0) : []
+  const nextSeg = it.kind === 'dayband' ? it.segs.find((sg) => sg.row > 0) : null
+  const linesFor = (rows) => Math.max(2, Math.min(6, Math.floor((rows * ROW_H - 8) / 15)))
+  const lines = nextSeg ? Math.max(1, Math.min(linesFor(n), linesFor(nextSeg.row))) : linesFor(n)
   let words
-  if (it.kind === 'dayband') words = `Blocked all day${it.reason ? ` · ${it.reason}` : ''}`
+  if (it.kind === 'dayband') words = `Blocked all day${it.reason ? ` · ${it.reason}` : ''}${topSegs.map((sg) => `\n· ${sg.slot.reason || 'Blocked'}`).join('')}`
   else if (it.slots.length > 1) words = `Blocked ${fmt.timeRange(it.first.startsAt, it.last.endsAt)}${it.reason ? (n >= 2 ? '\n' : ' · ') + it.reason : ''}`
   else words = `Blocked${it.reason ? ` · ${it.reason}` : ''}`
   let hits = ''
   for (let i = 0; i < n; i++) hits += i === 0
     ? `<div class="cal-band-hit" role="gridcell" aria-colindex="${col}" aria-rowspan="${n}" tabindex="-1" aria-label="${esc(itemLabel(m, it))}" style="top:0"></div>`
     : `<div class="cal-band-hit" aria-hidden="true" style="top:${i * ROW_H}px"></div>`
-  const segs = it.kind === 'dayband' ? it.segs.map((sg) => `<div class="cal-band-seg" aria-hidden="true" style="top:${sg.row * ROW_H}px;height:${sg.span * ROW_H}px" data-seg="${esc(sg.slot.id)}"><span class="cal-band-words">· ${esc(sg.slot.reason || 'Blocked')}</span></div>`).join('') : ''
+  const segs = it.kind === 'dayband' ? it.segs.map((sg) => `<div class="cal-band-seg" aria-hidden="true" style="top:${sg.row * ROW_H}px;height:${sg.span * ROW_H}px" data-seg="${esc(sg.slot.id)}">${sg.row === 0 ? '' : `<span class="cal-band-words">· ${esc(sg.slot.reason || 'Blocked')}</span>`}</div>`).join('') : ''
   const slotList = it.slots.map((x) => x.id).join(' ')
   return `<div class="cal-cell cal-slot${isHour ? '' : ' is-half'}" role="presentation" style="${place}">` +
-    `<div class="cal-band${n >= 2 ? ' is-tall' : ''}" ${common} data-slots="${esc(slotList)}"><span class="cal-band-text">${ico('slash')}<span class="cal-band-words">${esc(words).replace('\n', '<br>')}</span></span>${segs}${hits}</div></div>`
+    `<div class="cal-band${n >= 2 ? ' is-tall' : ''}" ${common} data-slots="${esc(slotList)}" style="--cal-lines:${lines}"><span class="cal-band-text">${ico('slash')}<span class="cal-band-words">${esc(words).replace(/\n/g, '<br>')}</span></span>${segs}${hits}</div></div>`
 }
 
 function gridHtml(m) {
@@ -703,7 +717,7 @@ function openSheet(preset) {
     title: 'Block time', build,
     primary: { label: `Block ${longDay(st.date)}`, busyLabel: 'Blocking…', onClick: (d) => submit(d) },
     secondary: { label: 'Cancel' },
-    onClose() { cal.sheet = null },
+    onClose() { cal.sheet = null; clearSel() },
   })
 }
 
@@ -1227,10 +1241,11 @@ const view = {
       cal.sel = null
       if (changed && m.loaded) say('Some of those times changed — selection cleared')
     }
-    setPart('head', `<div class="view-head"><h1 tabindex="-1">Tour calendar</h1>${m.loaded || s.loaded.leads ? stripHtml(s, m) : ''}</div>`)
+    const moreBtn = `<button type="button" class="btn-icon" data-action="more" data-key="more" aria-label="More calendar actions" aria-haspopup="dialog" data-write="calendar"${dis(A.busyNow('calendar') || cal.inert)}>${A.icon('more')}</button>`
+    setPart('head', `<div class="view-head${m.mobile ? ' cal-head-mobile' : ''}"><div class="cal-head-main"><h1 tabindex="-1">Tour calendar</h1>${m.loaded || s.loaded.leads ? stripHtml(s, m) : ''}</div>${m.mobile ? `<div class="cal-head-tools">${moreBtn}</div>` : ''}</div>`)
     setPart('banners', bannersHtml(s, m))
     const rt = rangeText(m)
-    if (m.mobile) setPart('toolbar', `<div class="cal-toolbar cal-toolbar-mobile"><span class="cal-spacer"></span><button type="button" class="btn-icon" data-action="more" data-key="more" aria-label="More calendar actions" aria-haspopup="dialog" data-write="calendar"${dis(A.busyNow('calendar') || cal.inert)}>${A.icon('more')}</button></div><div class="cal-progress"${A.busyNow('calendar') ? '' : ' hidden'}></div>`)
+    if (m.mobile) setPart('toolbar', `<div class="cal-progress"${A.busyNow('calendar') ? '' : ' hidden'}></div>`)
     else setPart('toolbar', toolbarHtml(m))
     let body
     if (loading) body = skeletonHtml()
