@@ -97,7 +97,20 @@
 (function () {
 'use strict'
 
-const NY = 'America/New_York'
+const LEGACY_TIME_ZONE = 'America/New_York'
+function validatedTimeZone(value) {
+  if (typeof value !== 'string' || !/^(?:UTC|GMT|[A-Za-z_]+(?:\/[A-Za-z0-9_+.-]+)+)$/.test(value)) throw new Error('Invalid property timezone')
+  return new Intl.DateTimeFormat('en-US', { timeZone: value }).resolvedOptions().timeZone
+}
+let propertyTimeZone
+try {
+  const supplied = window.ATRIUM_PROPERTY && Object.prototype.hasOwnProperty.call(window.ATRIUM_PROPERTY, 'timeZone')
+    ? window.ATRIUM_PROPERTY.timeZone : LEGACY_TIME_ZONE
+  propertyTimeZone = validatedTimeZone(supplied)
+} catch {
+  document.body.textContent = 'Property configuration needs attention. The timezone is invalid; ask an administrator to correct it, then reload.'
+  return
+}
 const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const WD_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -109,6 +122,9 @@ const USD = "$"
 /** Build-time copy of data/property.json (buildingName, leasingPhone, leasingHoursByDay). Gap G-9/G-10. */
 const property = {
   name: 'The Larkin',
+  timeZone: propertyTimeZone,
+  timeZoneLabel: new Intl.DateTimeFormat('en-US', { timeZone: propertyTimeZone, timeZoneName: 'longGeneric' })
+    .formatToParts(new Date()).find(part => part.type === 'timeZoneName').value,
   leasingPhone: '+15169909252',
   leasingPhoneDisplay: '(516) 990-9252',
   hours: { 0: [11, 16], 1: [10, 18], 2: [10, 18], 3: [10, 19], 4: [10, 19], 5: [10, 18], 6: [10, 17] },
@@ -150,14 +166,14 @@ const text = {
 }
 
 // ---------------------------------------------------------------------------------------
-// Time — New York, always, via Intl. Never the viewer's zone.
+// Time — the server-authorized property timezone, never the viewer's zone.
 // ---------------------------------------------------------------------------------------
 
 const partsFmt = new Intl.DateTimeFormat('en-US', {
-  timeZone: NY, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+  timeZone: propertyTimeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
   hour: '2-digit', minute: '2-digit', weekday: 'short',
 })
-const timeFmt = new Intl.DateTimeFormat('en-US', { timeZone: NY, hour: 'numeric', minute: '2-digit' })
+const timeFmt = new Intl.DateTimeFormat('en-US', { timeZone: propertyTimeZone, hour: 'numeric', minute: '2-digit' })
 const tidy = (s) => String(s).replace(/[\u202f\u00a0]/g, ' ')
 
 function toTime(v) {
@@ -189,7 +205,7 @@ const dayOfWeek = (ymd) => new Date(ymdNoon(ymd)).getUTCDay()
 const daysBetween = (a, b) => Math.round((ymdNoon(b) - ymdNoon(a)) / DAY_MS)
 const nyDate = (v) => (isYmd(v) ? v : (nyParts(v) || {}).ymd || null)
 const nyNow = () => nyParts(Date.now())
-/** The instant of a New York wall-clock time. */
+/** The instant of a property-local wall-clock time; ny* names remain module compatibility aliases. */
 function nyInstant(ymd, hour, minute) {
   const [y, m, d] = ymd.split('-').map(Number)
   const want = Date.UTC(y, m - 1, d, hour, minute)
@@ -203,7 +219,7 @@ function nyInstant(ymd, hour, minute) {
 }
 const ymdBits = (ymd) => { const [y, m, d] = ymd.split('-').map(Number); return { y, m, d, dow: dayOfWeek(ymd) } }
 const yearSuffix = (y) => (String(y) === nyNow().ymd.slice(0, 4) ? '' : `, ${y}`)
-/** The NY calendar day of anything: a day value renders as itself, an instant on its NY day. */
+/** A day value renders as itself; a timestamp uses its property-local calendar day. */
 const dayOf = (v) => dayValue(v) || nyDate(v)
 
 const fmt = {
@@ -533,13 +549,20 @@ async function request(path, init) {
     const err = new Error(msg); err.status = r.status; err.body = body; throw err
   }
   if (!parsed || body === null || typeof body !== 'object') { const err = new Error('Unexpected response'); err.status = r.status; err.badJson = true; throw err }
+  if (path.split('?')[0] === '/api/calendar') checkCalendarTimeZone(body)
   return body
+}
+function checkCalendarTimeZone(data) {
+  let zone
+  try { zone = validatedTimeZone(data.timeZone === undefined ? LEGACY_TIME_ZONE : data.timeZone) }
+  catch { const error = new Error('The calendar returned an invalid property timezone. Reload after the configuration is corrected.'); error.status = 503; throw error }
+  if (zone !== propertyTimeZone) { const error = new Error('The property timezone changed. Reload the portal before viewing or changing tours.'); error.status = 409; throw error }
 }
 const api = {
   get(path) { return request(path, { headers: JSON_HEADERS }) },
   async post(path, body, opts) {
     try {
-      if (path === '/api/calendar') body = { ...body, ...calendarRequestRange() }
+      if (path === '/api/calendar') body = { ...body, ...calendarRequestRange(), expectedTimeZone: propertyTimeZone }
       return await request(path, {
         method: 'POST', headers: { ...JSON_HEADERS, 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}),
       })
@@ -590,7 +613,7 @@ function setCalendarRange(range) {
 function snapshot(name, d) {
   if (name === 'calls') return { calls: arr(d.calls), events: arr(d.events), callsError: d.callsError ?? null, callsConfigured: typeof d.callsConfigured === 'boolean' ? d.callsConfigured : null }
   if (name === 'calendar') return { slots: arr(d.slots), blocks: arr(d.blocks), bookings: arr(d.bookings), store: d.store ?? null,
-    range: d.range ?? null, settings: d.settings ?? null, settingsRevision: d.settingsRevision ?? null }
+    timeZone: d.timeZone ?? LEGACY_TIME_ZONE, range: d.range ?? null, settings: d.settings ?? null, settingsRevision: d.settingsRevision ?? null }
   return { profiles: arr(d.profiles), followUps: arr(d.followUps), outboundEnabled: d.outboundEnabled === true, store: d.store ?? null }
 }
 function assign(name, snap) {
@@ -601,6 +624,7 @@ function assign(name, snap) {
 }
 /** Replace a resource from a payload; true when its signature changed. */
 function ingest(name, data) {
+  if (name === 'calendar') checkCalendarTimeZone(data || {})
   const snap = snapshot(name, data || {})
   const s = JSON.stringify(snap)
   const changed = s !== sig[name]
@@ -695,6 +719,7 @@ function apply(resource, data) {
     ingest('calendar', {
       slots: Array.isArray(d.slots) ? d.slots : cur.slots, blocks: Array.isArray(d.blocks) ? d.blocks : cur.blocks,
       bookings: Array.isArray(d.bookings) ? d.bookings : cur.bookings, store: d.store ?? cur.store,
+      timeZone: d.timeZone ?? cur.timeZone ?? LEGACY_TIME_ZONE,
       range: d.range ?? cur.range, settings: d.settings ?? cur.settings, settingsRevision: d.settingsRevision ?? cur.settingsRevision,
     })
   } else if (resource === 'leads') {
@@ -1242,11 +1267,7 @@ function openItemsFor(s, phone) { return needsPerson(s).filter((n) => n.phone ==
 function displayStage(profile, s) {
   const stage = String((profile && profile.stage) ?? '')
   const out = { key: stage, label: label(labels.stage, stage), chipClass: label(labels.stageChip, stage, 'chip-neutral'), icon: label(labels.stageIcon, stage, '') }
-  const now = Date.now()
-  if (stage === 'tour_scheduled') {
-    const confirmed = arr(profile.bookings).filter((b) => b && b.status === 'confirmed')
-    if (confirmed.length && confirmed.every((b) => (toTime(b.startsAt) ?? Infinity) < now)) return { key: 'toured', label: 'Toured', chipClass: 'chip-ok', icon: 'check' }
-  }
+  // The clock does not establish attendance; keep the evidence-derived server stage.
   if (stage === 'escalated' && s && !openItemsFor(s, profile.phone).length) return { key: 'handled', label: 'Handled by a person', chipClass: 'chip-neutral', icon: 'check' }
   return out
 }
@@ -1717,7 +1738,7 @@ function callStory(record, s) {
       if (/^No tour times are open/.test(res)) steps.push({ icon: 'calendar', text: 'No tour times were open, so offered a call back.' })
       else steps.push({ icon: 'calendar', text: `Offered ${text.plural((res.match(/^slot-/gm) || []).length, 'tour time')}.` })
     } else if (t.name === 'book_tour') {
-      if (/^You're all set/.test(res)) steps.push({ icon: 'calendar', text: `Booked a tour${t.args.unitId ? ` of apartment ${t.args.unitId}` : ''} for ${(f.booked && f.booked.when) || parseWhen(res) || 'a time on the calendar'}${t.args.prospectEmail ? `; confirmation to ${t.args.prospectEmail}` : ''}.` })
+      if (/^You're all set/.test(res)) steps.push({ icon: 'calendar', text: `Booked a tour${t.args.unitId ? ` of apartment ${t.args.unitId}` : ''} for ${(f.booked && f.booked.when) || parseWhen(res) || 'a time on the calendar'}${t.args.prospectEmail ? `; email recorded: ${t.args.prospectEmail}` : ''}.` })
       else if (/^I'm getting that booked/.test(res)) steps.push({ icon: 'calendar', text: 'Started arranging a tour; not confirmed yet.' })
       else if (/^That time just went/.test(res)) steps.push({ icon: 'calendar', text: 'The time was taken while booking; offered other times.' })
       else if (/^I'm having trouble reaching the calendar/.test(res)) steps.push({ icon: 'hand', text: "Couldn't reach the calendar; flagged this for a call back." })
@@ -1761,8 +1782,8 @@ function todoSentence(fu, profile, s) {
   } else if (kind === 'post_tour') {
     const past = arr(p.bookings).filter((b) => b && b.status === 'confirmed' && (toTime(b.startsAt) ?? Infinity) < Date.now()).sort((a, b) => (toTime(b.startsAt) ?? 0) - (toTime(a.startsAt) ?? 0))
     let unit = past.length ? past[0].unitId : null
-    if (!unit && (m = /toured(?: residence (\S+?))? —/.exec(reason))) unit = m[1] || null
-    after = ` — how did the tour${unit ? ` of apartment ${unit}` : ''} go? Do they want to apply?`
+    if (!unit && (m = /(?:toured|was scheduled to tour)(?: residence (\S+?))? —/.exec(reason))) unit = m[1] || null
+    after = ` to check whether they attended the tour${unit ? ` of apartment ${unit}` : ''}. If so, ask how it went and whether they want to apply.`
   } else if (kind === 'priced_out_watch') {
     verb = verbFor(fu.channel); before = `${verb} `
     const budget = p.signals && p.signals.budget && p.signals.budget.value
@@ -1774,7 +1795,11 @@ function todoSentence(fu, profile, s) {
   } else if (kind === 'callback') {
     const q = callbackQuestion(fu, p)
     const t = escalationText({ trigger: q.trigger, detail: q.detail })
-    after = ` back — ${t.headline}`; needs = true
+    if (q.trigger === 'emergency' || /^Emergency reported by /.test(reason)) {
+      verb = 'Review'; before = 'Review the emergency reported by '
+      after = " now. No automatic notification has been sent; follow the building's emergency protocol."
+    } else after = ` back — ${t.headline}`
+    needs = true
   } else if (kind === 'collect_email') {
     if (p.name) { before = 'Get '; after = "'s email so the tour confirmation can go out" }
     else { before = 'Get an email address for '; after = ' so the tour confirmation can go out' }
@@ -1786,6 +1811,13 @@ function todoSentence(fu, profile, s) {
 }
 
 const derive = {
+  /** The API resolves saved UTC bounds against the current property timezone. */
+  wholeDayBlockDates(block) {
+    if (Array.isArray(block && block.wholeDayDates)) return block.wholeDayDates.filter(isYmd)
+    // Date-only legacy records have no preserved interval. Timestamped records
+    // without coverage metadata must not be presented as covering an entire day.
+    return block && isYmd(block.target) && !block.startsAt && !block.endsAt ? [block.target] : []
+  },
   windowStart, personName, displayName, displayStage, needsPerson, callBackToday, dueTodayCount, toursOn, callRecords, callStory,
   todoSentence, escalationText, lossText, summarySentence, availabilityText, moveInText, profileByPhone, profileForCall, factValue, bedroomsText, emergencyAction,
 }
@@ -2190,7 +2222,7 @@ const statusView = {
     out += `<section class="status-section"><h2>Call recordings and transcripts</h2><div class="status-row"><span class="dot${rec === 'on' ? '' : rec === null ? ' dot-neutral' : ' dot-warn'}"></span><span class="${rec === 'on' || rec === null ? '' : 'warn-text'}">${esc(recText)}</span></div></section>`
     out += isDemo ? `<section class="status-section" id="phone-assistant"><h2>Phone assistant</h2><p class="status-p">This demo uses sample conversations. It does not update your live phone assistant.</p></section>` : `<section class="status-section" id="phone-assistant"><h2>Phone assistant</h2><p class="status-p">Apply the latest leasing instructions and tools to your phone assistant. Your existing voice, model, and webhook authentication settings are preserved.</p><div class="status-actions"><button type="button" class="btn" data-action="sync-assistant" data-key="sync-assistant">Update the phone assistant</button></div></section>`
     out += `<section class="status-section"><h2>Outgoing calls</h2><div class="status-row"><span class="dot dot-neutral"></span><span>${model.outbound ? 'The assistant can make outgoing calls.' : "The assistant answers calls; it doesn't make them. Everything under To do is for your team."}</span></div></section>`
-    out += `<section class="status-section"><h2>Times</h2><p class="status-p">All times on this page are New York time.</p></section>`
+    out += `<section class="status-section"><h2>Times</h2><p class="status-p">All times on this page use ${esc(property.timeZoneLabel)} (${esc(property.timeZone)}).</p></section>`
     out += `<section class="status-section"><h2>Signed in</h2><p class="status-p">${window.ATRIUM_ACCOUNT ? `Signed in as <strong>${esc(window.ATRIUM_ACCOUNT.username)}</strong> to ${esc(window.ATRIUM_ACCOUNT.displayName)}. ` : "You're signed in on this device. "}Sessions end after 8 hours. Sign out before switching accounts.</p><div class="status-actions"><button type="button" class="btn" data-action="signout" data-key="signout">Sign out</button></div></section>`
     out += `<section class="status-section"><h2>Who can see this</h2><p class="status-p">This page has callers' names, numbers and what they said. Keep it to the leasing team, don't screenshot it into a shared channel, and sign out when you're done.</p></section>`
     out += `<section class="status-section"><h2>What the assistant does and doesn't do</h2><p class="status-p">${esc(ASSISTANT_PARA)}</p></section>`
@@ -2239,7 +2271,7 @@ const statusView = {
     const days = []
     for (let i = 0; dow + i <= 6; i++) days.push(addDays(today, i))
     const withSlots = new Set(arr(cal.slots).map((x) => x && x.date))
-    const blocked = new Set(arr(cal.blocks).map((b) => b && b.target).filter((t) => isYmd(t)))
+    const blocked = new Set(arr(cal.blocks).flatMap(derive.wholeDayBlockDates))
     for (const d of days) { if (!withSlots.has(d)) continue; if (blocked.has(d)) out.skipped.push(d); else out.push(d) }
     return out
   },

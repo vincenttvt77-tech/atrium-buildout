@@ -20,7 +20,7 @@
  *     `transcript`, `tool-calls` and `end-of-call-report` posts — so the leads, follow-ups,
  *     bookings and decision events exist exactly as production would have written them. Each
  *     call is replayed under a clock set to its own start time (see `withClock`), which is the
- *     only way the real code can produce a tour that is already in the past ("toured").
+ *     only way the real code can produce a tour scheduled in the past. Attendance remains unknown.
  *   - Serves `/` through `api/dashboard.ts` so the login form and cookie flow are real. On a
  *     200 the body is the page composed live from `ops/src/` (what `npm run build:ops` would
  *     write), so builders edit, refresh, and see it — `--built` serves the embedded build
@@ -259,6 +259,7 @@ async function invoke(handler, request) {
 const opsHeaders = (extra = {}) => ({ cookie: `${OPS_COOKIE}=${mintAccountSession(new Date(), demoAccount)}`, accept: 'application/json', ...extra })
 
 async function api(handler, method, url, body) {
+  if (method === 'POST' && url.split('?')[0] === '/api/calendar') body = { ...body, expectedTimeZone: ZONE }
   const headers = opsHeaders(body === undefined ? {} : { 'content-type': 'application/json' })
   const out = await invoke(handler, { method, url, headers, body: body === undefined ? undefined : JSON.stringify(body) })
   if (out.status >= 400) {

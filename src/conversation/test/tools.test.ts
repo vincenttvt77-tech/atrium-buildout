@@ -62,6 +62,27 @@ describe('emergency pre-empts every other tool', () => {
   test('a leasing question returns null so the normal flow proceeds', () => {
     assert.equal(checkEmergency('what is the rent on the one bedroom', ctx()), null)
   })
+
+  test('answer_question returns emergency guidance before even reading knowledge', () => {
+    const context = ctx()
+    Object.defineProperty(context, 'articles', { get() { throw new Error('Emergency must bypass knowledge lookup') } })
+    const r = answerQuestion({ question: 'I smell gas in my apartment right now', topic: 'pet_policy' }, context)
+    assert.equal(r.record.kind, 'emergency')
+    assert.equal(r.emergency?.kind, 'gas')
+    assert.equal(r.escalate?.trigger, 'emergency')
+    assert.match(r.say, /outside.*call 911/i)
+    assert.match(r.say, /have not contacted/i)
+    assert.doesNotMatch(r.say, /do not want to guess|take their contact|I.?m alerting|dispatching/i)
+  })
+
+  test('ordinary pet, fire-pit, and smoking questions remain ordinary knowledge questions', () => {
+    for (const question of ['do you allow dogs', 'does the roof have a fire pit', 'can I smoke in my apartment']) {
+      const r = answerQuestion({ question, topic: 'general_property_fact' }, ctx())
+      assert.notEqual(r.record.kind, 'emergency', question)
+      assert.equal(r.emergency, undefined, question)
+      assert.doesNotMatch(r.say, /call 911/i, question)
+    }
+  })
 })
 
 describe('the quote gate cannot be talked past', () => {

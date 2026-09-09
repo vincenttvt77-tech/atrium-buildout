@@ -121,8 +121,17 @@ describe('named account dashboard sign-in', () => {
     assert.equal(html.match(/<\/script>/g)?.length, 1)
     assert.equal(html.includes('<img'), false)
     assert.equal(html.includes('private-assistant-routing'), false)
-    const value = /Object\.freeze\((.*)\);<\/script>/.exec(html)?.[1]
+    const value = /ATRIUM_ACCOUNT=Object\.freeze\((.*?)\);/.exec(html)?.[1]
     assert.ok(value)
     assert.deepEqual(JSON.parse(value), { username: 'larkin', tenantId: 'demo-larkin', displayName })
+  })
+
+  test('property timezone bootstrap uses validated server configuration and keeps absent legacy fields compatible', () => {
+    const auth = { ok: true as const, via: 'session' as const, username: 'larkin', tenantId: 'demo-larkin', displayName: 'Larkin', assistantIds: [] }
+    for (const [property, zone] of [[{ timeZone: 'America/Chicago' }, 'America/Chicago'], [{}, 'America/New_York']] as const) {
+      const html = decorateDashboard('<head></head>', auth, property)
+      assert.ok(html.includes(`window.ATRIUM_PROPERTY=Object.freeze({"timeZone":"${zone}"})`))
+    }
+    for (const timeZone of [null, '', 'EST', 'America/Miami', '</script>']) assert.throws(() => decorateDashboard('<head></head>', auth, { timeZone }), /valid IANA timezone/)
   })
 })

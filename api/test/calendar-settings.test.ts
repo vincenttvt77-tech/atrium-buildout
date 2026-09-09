@@ -26,7 +26,9 @@ async function invoke(handler: typeof calendar | typeof vapi, req: any) {
   await handler(req, res)
   return res
 }
-const call = (method: string, body?: unknown, query?: Record<string, string>) => invoke(calendar, { method, body, query, headers: { 'x-ops-passcode': passcode } })
+const call = (method: string, body?: unknown, query?: Record<string, string>) => invoke(calendar, { method,
+  body: method === 'POST' && body && typeof body === 'object' ? { expectedTimeZone: 'America/New_York', ...body } : body,
+  query, headers: { 'x-ops-passcode': passcode } })
 const tool = async (name: string, args: Record<string, unknown>, id: string) => {
   const response = await invoke(vapi, { method: 'POST', headers: {}, body: { message: { type: 'tool-calls', call: { id }, toolCallList: [{ id: `tool-${id}`, name, arguments: args }] } } })
   assert.equal(response.code, 200)

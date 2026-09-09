@@ -11,7 +11,7 @@ import { guardTopic } from '../knowledge/guard.ts'
 import type { KnowledgeArticle } from '../knowledge/article.ts'
 import { isServable } from '../knowledge/article.ts'
 import { isPolicy, isVolatile, type Topic } from '../knowledge/topics.ts'
-import { detectEmergency, primaryEmergency, safetyInstruction } from '../escalation/emergency.ts'
+import { detectEmergency, primaryEmergency, safetyInstruction, type EmergencySignal } from '../escalation/emergency.ts'
 import type { PropertyId, InteractionId } from '../domain/ids.ts'
 import type { LossReason } from '../record/store.ts'
 
@@ -42,6 +42,8 @@ export interface ToolResult {
   record: Record<string, unknown>
   /** Set when this turn must hand off to a human. */
   escalate?: { trigger: string; detail: string }
+  /** A detected emergency also suspends the call's leasing workflow. */
+  emergency?: EmergencySignal
   /** Mutations the caller should apply to conversation state. */
   qualificationPatch?: QualificationState
 }
@@ -57,6 +59,7 @@ export function checkEmergency(utterance: string, ctx: ToolContext): ToolResult 
     say: safetyInstruction(primary),
     record: { kind: 'emergency', emergencyKind: primary.kind, matched: primary.matched },
     escalate: { trigger: 'emergency', detail: `${primary.kind}: "${primary.matched}"` },
+    emergency: primary,
   }
 }
 
@@ -409,6 +412,11 @@ const ABOUT_PROMOTIONS = /\b(specials|special offers?|concessions?|rent discount
 
 /** Property questions. Answers only from approved knowledge; escalates the restricted. */
 export function answerQuestion(args: AnswerArgs, ctx: ToolContext): ToolResult {
+  // Vapi can call this tool without a preceding transcript event. Knowledge lookup
+  // must never turn an active emergency into an ordinary low-confidence refusal.
+  const emergency = checkEmergency(String(args.question ?? ''), ctx)
+  if (emergency) return emergency
+
   /*
    * The topic is an argument the model supplies. Trusting it alone means one
    * misclassification is a Fair Housing incident, so the question text is screened first

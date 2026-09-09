@@ -72,3 +72,15 @@ test('a successful retry upgrades a previously failed tour', async () => {
   assert.equal(result.profile.bookings.length, 1)
   assert.equal(result.profile.bookings[0]!.status, 'confirmed')
 })
+
+test('listing an old persisted toured profile repairs the stage using booking evidence', async () => {
+  const store = new MemoryDocumentStore()
+  const first = await consolidateCall(store, call({ booking: {
+    slotId: 'past-slot', startsAt: '2026-09-01T14:00:00Z', unitId: '08E', status: 'confirmed',
+  } }))
+  assert.equal(first.profile.stage, 'tour_scheduled')
+  await store.set(`lead:${first.profile.phone}`, { ...first.profile, stage: 'toured' })
+  const listed = await listProfiles(store)
+  assert.equal(listed[0]!.stage, 'tour_scheduled')
+  assert.ok(first.followUps.some(f => f.kind === 'post_tour' && f.reason.includes('confirm whether they attended')))
+})

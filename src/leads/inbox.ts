@@ -1,5 +1,7 @@
 import type { DocumentStore } from '../store/documents.ts'
 import { consolidateCall, type CallOutcome } from './consolidate.ts'
+import { propertyTimeZone } from '../config/property.ts'
+import { validateTimeZone } from '../calendar/time.ts'
 
 type StoredOutcome = Omit<CallOutcome, 'at'> & { at: string }
 export interface CallReceipt {
@@ -11,6 +13,8 @@ export interface CallReceipt {
   updatedAt: string
   completedAt: string | null
   lastErrorCode: 'consolidation_failed' | null
+  /** Server-resolved once before projection; retained so retries keep the same local schedule. */
+  timeZone?: string
   outcome: StoredOutcome | null
 }
 
@@ -50,9 +54,15 @@ export async function replayFinishedCall(store: DocumentStore, callId: string, n
   if (receipt.status === 'complete') return receipt
   if (!receipt.outcome) throw new Error('Pending finished-call receipt has no outcome')
   const at = now.toISOString()
-  await store.update(key, receipt, current => current.status === 'complete' ? current : { ...current, attempts: current.attempts + 1, updatedAt: at })
   try {
-    await consolidateCall(store, restore(receipt.outcome))
+    // Legacy receipts have no zone. The bundled property is currently the workflow
+    // boundary; provider payloads cannot choose this configuration.
+    const timeZone = receipt.timeZone === undefined ? propertyTimeZone() : validateTimeZone(receipt.timeZone)
+    const attempt = await store.update(key, receipt, current => current.status === 'complete' ? current : {
+      ...current, timeZone: current.timeZone ?? timeZone, attempts: current.attempts + 1, updatedAt: at,
+    })
+    if (attempt.status === 'complete') return attempt
+    await consolidateCall(store, restore(receipt.outcome), validateTimeZone(attempt.timeZone))
     // Keep a compact completion receipt, not another permanent copy of prospect details.
     return await store.update<CallReceipt>(key, receipt, current => ({ ...current, status: 'complete', completedAt: at, updatedAt: at, lastErrorCode: null, outcome: null }))
   } catch (error) {

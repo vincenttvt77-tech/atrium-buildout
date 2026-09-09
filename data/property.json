@@ -1,5 +1,6 @@
 {
   "id": "prop-demo",
+  "timeZone": "America/New_York",
   "buildingName": "The Larkin",
   "domain": "thelarkinlic.com",
   "tagline": "The best view of Manhattan isn't in Manhattan.",

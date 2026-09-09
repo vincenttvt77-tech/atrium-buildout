@@ -5,6 +5,7 @@ import { emptyProfile, deriveStage, normalisePhone, pinnedName } from './profile
 import type { LeadProfile, CallSummary } from './profile.ts'
 import { deriveFollowUps } from './followups.ts'
 import type { FollowUp } from './followups.ts'
+import { DEFAULT_TIME_ZONE, validateTimeZone } from '../calendar/time.ts'
 
 /**
  * Folds one finished call into the caller's profile, then re-derives their follow-ups.
@@ -42,8 +43,9 @@ function outcomeLine(o: CallOutcome): string {
 }
 
 export async function consolidateCall(
-  store: DocumentStore, o: CallOutcome,
+  store: DocumentStore, o: CallOutcome, timeZone = DEFAULT_TIME_ZONE,
 ): Promise<{ profile: LeadProfile; followUps: FollowUp[] }> {
+  const zone = validateTimeZone(timeZone)
   const phone = normalisePhone(o.phone)
   const at = o.at.toISOString()
 
@@ -97,7 +99,7 @@ export async function consolidateCall(
   // A retried report may arrive hours or days later. Its work is still due relative to
   // the original call, including retries after a partially failed follow-up write.
   const recordedAt = profile.calls.find((c) => c.callId === o.callId)!.at
-  const derived = deriveFollowUps(profile, new Date(recordedAt), o.callId)
+  const derived = deriveFollowUps(profile, new Date(recordedAt), o.callId, zone)
   const followUps: FollowUp[] = []
   for (const f of derived) {
     const stored = await store.update<FollowUp>(followUpKey(f.id), f, (cur) => cur.status === 'scheduled' ? f : cur)

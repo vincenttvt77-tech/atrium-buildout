@@ -36,6 +36,9 @@ function headers(index: number) {
   return { cookie: `${OPS_COOKIE}=${mintAccountSession(new Date(), accounts[index]!)}` }
 }
 async function invoke(handler: (req: any, res: any) => unknown, req: any) {
+  if (handler === calendar && req.method === 'POST' && req.body && typeof req.body === 'object') req = {
+    ...req, body: { expectedTimeZone: 'America/New_York', ...req.body },
+  }
   const response: any = { code: 0, body: null, headers: {},
     setHeader(k: string, v: string) { this.headers[k] = v; return this },
     status(code: number) { this.code = code; return this },
