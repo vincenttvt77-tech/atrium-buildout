@@ -1,4 +1,5 @@
 import type { InventorySnapshot, Unit, FloorPlan } from './types.ts'
+import { validateInventoryProvenance } from './source.ts'
 
 export interface LoadProblem {
   where: string
@@ -101,7 +102,9 @@ function validUnit(
  */
 export function loadInventory(
   rawUnits: unknown[], rawPlans: unknown[], readAt: Date, source: string,
+  rawProvenance?: unknown, now = new Date(),
 ): LoadResult {
+  const provenance = validateInventoryProvenance(rawProvenance, readAt, now)
   const problems: LoadProblem[] = []
 
   const floorPlans = rawPlans
@@ -114,5 +117,6 @@ export function loadInventory(
     .map((u, i) => validUnit(u, i, planMap, problems))
     .filter((u): u is Unit => u !== null)
 
-  return { snapshot: { units, floorPlans, readAt, source }, problems }
+  return { snapshot: { units, floorPlans, readAt: new Date(readAt), source,
+    ...(provenance ? { provenance } : {}) }, problems }
 }

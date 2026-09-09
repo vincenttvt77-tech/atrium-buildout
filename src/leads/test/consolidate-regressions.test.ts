@@ -4,11 +4,26 @@ import { consolidateCall, listProfiles, listFollowUps, followUpKey } from '../co
 import type { CallOutcome } from '../consolidate.ts'
 import { MemoryDocumentStore } from '../../store/documents.ts'
 import { emptyQualification } from '../../leasing/qualification.ts'
+import { extracted } from '../../leasing/captured.ts'
+import { interactionId } from '../../domain/ids.ts'
 
 const call = (overrides: Partial<CallOutcome> = {}): CallOutcome => ({
   callId: 'call-1', phone: '+15165551234', at: new Date('2026-09-09T14:00:00Z'),
   durationSeconds: 60, qualification: emptyQualification(), name: 'Dana', email: null,
   unitsDiscussed: [], booking: null, lossReason: null, escalation: null, toolsCalled: [], ...overrides,
+})
+
+test('a later spending floor removes an obsolete ceiling and preserves range evidence', async () => {
+  const store = new MemoryDocumentStore()
+  const first = call({ qualification: { ...emptyQualification(), budget: extracted({ maxMonthly: 8000, stated: true },
+    0.9, interactionId('first'), 'not over eight thousand', new Date('2026-09-09T14:00:00Z')) } })
+  await consolidateCall(store, first)
+  const later = await consolidateCall(store, call({ callId: 'later', at: new Date('2026-09-09T15:00:00Z'),
+    qualification: { ...emptyQualification(), budget: extracted({ minMonthly: 8000, maxMonthly: null, stated: true },
+      0.9, interactionId('later'), 'I meant over eight thousand', new Date('2026-09-09T15:00:00Z')) } }))
+  assert.equal(later.profile.signals.budget, undefined)
+  assert.deepEqual(later.profile.signals.budgetRange?.value, { minMonthly: 8000, maxMonthly: null })
+  assert.equal(later.profile.signals.budgetRange?.excerpt, 'I meant over eight thousand')
 })
 
 test('duplicate end-of-call delivery does not duplicate escalation or rewrite the call', async () => {

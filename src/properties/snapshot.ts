@@ -2,6 +2,7 @@ import { assertAuthorizedScope } from '../auth/index.ts'
 import type { AuthorizedScope } from '../auth/index.ts'
 import { validateTimeZone } from '../calendar/time.ts'
 import { loadInventory } from '../inventory/load.ts'
+import { validateInventoryProvenance } from '../inventory/source.ts'
 import type { KnowledgeArticle } from '../knowledge/article.ts'
 import { PropertyConfigurationError } from './model.ts'
 import type { PropertyBundle, PropertyRepository, PropertySnapshot, PublishedPropertyConfiguration } from './model.ts'
@@ -141,7 +142,9 @@ export function validatePublishedProperty(
   unique(units, 'unitId', 'bundle.inventory', value => value.toUpperCase())
   unique(plans, 'id', 'bundle.floorplans')
   unique(knowledge, 'id', 'bundle.knowledge')
-  const inventory = loadInventory(units, plans, inventoryReadAt, value.inventorySource)
+  try { validateInventoryProvenance(bundle.inventoryProvenance, inventoryReadAt, publishedAt) }
+  catch { return invalid('bundle.inventoryProvenance') }
+  const inventory = loadInventory(units, plans, inventoryReadAt, value.inventorySource, bundle.inventoryProvenance, now)
   // The fixture loader excludes invalid records; a published customer configuration
   // cannot quietly turn a defective inventory into an empty or partial building.
   if (inventory.problems.length) invalid(`inventory:${inventory.problems[0]!.where}`)

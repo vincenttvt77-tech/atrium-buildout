@@ -157,7 +157,7 @@ describe('the loader refuses to invent data', () => {
 describe('a unit available after the move-in window is offered as later, not hidden', () => {
   // The real call: caller said "2 months" (November 7), asked about 19A, which frees up
   // December 1. The old 21-day filter dropped it and the agent said "not available" while
-  // the website showed it. Under the six-week window 19A is simply in time.
+  // the website showed it. It must be shown separately as later, never called in time.
   const s = snap([
     unit({ unitId: '12A', floorPlanId: 'C1', monthlyRent: 7150, bedrooms: 3, availableFrom: '2026-11-03' }),
     unit({ unitId: '19A', floorPlanId: 'C1', monthlyRent: 7615, bedrooms: 3, availableFrom: '2026-12-01' }),
@@ -168,12 +168,13 @@ describe('a unit available after the move-in window is offered as later, not hid
   const q = captureCore(withBeds(3, 3)(withBudget(9000)), 'moveInTiming',
     extracted({ earliest: new Date('2026-11-07'), latest: null }, 0.9, CALL, '2 months', NOW))
 
-  test('19A, free 24 days after the target, is in time — the old filter hid it', () => {
+  test('19A, free 24 days after the target, is explicitly later rather than in time', () => {
     const out = findMatches(s, q, { now: NOW })
     assert.equal(out.kind, 'matches')
     if (out.kind !== 'matches') return
     const shown = [...out.units.map((m) => m.unit.unitId), ...out.moreInTime]
-    assert.ok(shown.includes('19A'), '19A must be offered as available')
+    assert.ok(!shown.includes('19A'), 'A later date must not be described as inside the window')
+    assert.ok(out.later.some(match => match.unit.unitId === '19A'))
   })
 
   test('a January unit is offered as later, with its date, never dropped', () => {
@@ -202,7 +203,7 @@ describe('a unit available after the move-in window is offered as later, not hid
 
   test('in-time units cut by the limit are named so a caller is never contradicted', () => {
     const many = snap(
-      ['A', 'B', 'C', 'D', 'E'].map((l, i) => unit({ unitId: `1${i}${l}`, floorPlanId: 'C1', monthlyRent: 7000 + i * 100, bedrooms: 3, availableFrom: '2026-11-10' })),
+      ['A', 'B', 'C', 'D', 'E'].map((l, i) => unit({ unitId: `1${i}${l}`, floorPlanId: 'C1', monthlyRent: 7000 + i * 100, bedrooms: 3, availableFrom: '2026-11-05' })),
       [plan('C1', 3, 1332)])
     const out = findMatches(many, q, { now: NOW, limit: 3 })
     assert.equal(out.kind, 'matches')

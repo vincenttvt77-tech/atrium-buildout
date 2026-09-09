@@ -39,6 +39,7 @@ export interface RunResult {
   callId: string
   assistantModel: string
   turns: Turn[]
+  startedAt?: string
   endedBy: 'caller' | 'assistant' | 'limit' | 'silence'
   callerTurns: number
   usage: { input: number; output: number }
@@ -141,5 +142,5 @@ export async function runScenario(o: RunOptions): Promise<RunResult> {
   }
 
   await bridge.endOfCall(callId, startedAt, now())
-  return { scenario: o.scenario, callId, assistantModel: o.assistantModel, turns, endedBy, callerTurns, usage }
+  return { scenario: o.scenario, callId, assistantModel: o.assistantModel, startedAt: startedAt.toISOString(), turns, endedBy, callerTurns, usage }
 }

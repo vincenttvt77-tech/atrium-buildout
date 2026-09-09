@@ -172,6 +172,20 @@ Every build imports the actual bundled handlers in a clean child process, outsid
 worker for each scenario. It uses the model, prompt and tool schemas from the repository's
 assistant configuration (`src/vapi/assistant.ts`), which may differ from the published Vapi
 assistant until a coordinated release.
+
+Assistant publishing now checks `/api/health` for the exact tool-schema fingerprint
+and working durable storage before changing Vapi. It also requires
+`VAPI_WEBHOOK_CREDENTIAL_ID` and `VAPI_WEBHOOK_SECRET`; the credential must send the
+matching secret to the webhook. Publish the backend and assistant as one reviewed
+release, then verify the saved assistant and run conversation tests. A matching
+fingerprint proves compatibility, not voice quality, latency, or a passing call.
+
+The fictional Larkin catalogue has explicit source metadata in
+`data/inventory-source.json`. Its original date and version remain visible to the
+tools; sample rents and availability can be demonstrated without relabeling old
+data as a live PMS feed. Real inventory, including sources without demo provenance,
+still requires the freshness checks. Published PostgreSQL configurations carry this
+declaration in `inventoryProvenance`; changing it requires a new configuration version.
 Every tool call goes through `api/vapi.ts`, so the quote gate, the calendar and the
 knowledge guard are the real ones. The scenarios in `src/sim/scenarios.ts` are the calls
 that went badly: a two bedroom on a four thousand budget, a tour booking, a specific

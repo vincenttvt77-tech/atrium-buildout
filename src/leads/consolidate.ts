@@ -64,7 +64,12 @@ export async function consolidateCall(
     const q = o.qualification
     const ev = <T,>(value: T, excerpt: string, confidence: number) =>
       ({ value, excerpt, callId: o.callId, at, confidence })
-    if (q.budget && newest) next.signals.budget = ev(q.budget.value.maxMonthly, q.budget.excerpt, q.budget.confidence)
+    if (q.budget && newest) {
+      next.signals.budgetRange = ev({ minMonthly: q.budget.value.minMonthly ?? null,
+        maxMonthly: q.budget.value.maxMonthly }, q.budget.excerpt, q.budget.confidence)
+      if (q.budget.value.maxMonthly !== null) next.signals.budget = ev(q.budget.value.maxMonthly, q.budget.excerpt, q.budget.confidence)
+      else delete next.signals.budget
+    }
     if (q.bedrooms && newest) next.signals.bedrooms = ev(q.bedrooms.value.min, q.bedrooms.excerpt, q.bedrooms.confidence)
     if (q.moveInTiming && newest) next.signals.moveIn = ev(
       { earliest: q.moveInTiming.value.earliest.toISOString(),

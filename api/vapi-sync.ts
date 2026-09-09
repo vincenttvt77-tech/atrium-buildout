@@ -3,6 +3,7 @@ import { authorizeOps } from '../src/ops/session.ts'
 import { demoAssistantConfig } from '../src/vapi/config.ts'
 import { syncAssistant } from '../src/vapi/sync.ts'
 import { isPostgresRuntime, resolveOpsRuntime, readRuntimeError } from '../src/application/runtime.ts'
+import { verifyVoiceBackend } from '../src/vapi/contract.ts'
 
 /**
  * "Update the phone assistant" — pushes the repository's script and tools to Vapi.
@@ -76,7 +77,19 @@ export default async function handler(req: any, res: any) {
     return
   }
 
-  const config = demoAssistantConfig(rawProperty as Record<string, unknown>, origin, new Date())
+  const credentialId = process.env.VAPI_WEBHOOK_CREDENTIAL_ID?.trim()
+  if (!process.env.VAPI_WEBHOOK_SECRET?.trim() || !credentialId || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(credentialId)) {
+    res.status(503).json({ ok: false, code: 'voice_authentication_not_configured',
+      error: 'Configure the webhook secret and its matching Vapi credential before publishing the phone assistant. No changes were sent to Vapi.' })
+    return
+  }
+  if (!await verifyVoiceBackend(origin)) {
+    res.status(409).json({ ok: false, code: 'voice_backend_contract_mismatch',
+      error: 'The deployed backend is unavailable or does not match these voice tools. Deploy and verify the matching backend before publishing the assistant. No changes were sent to Vapi.' })
+    return
+  }
+  const base = demoAssistantConfig(rawProperty as Record<string, unknown>, origin, new Date())
+  const config = { ...base, server: { ...base.server, credentialId } }
 
   try {
     const result = await syncAssistant({ apiKey, assistantId: named ? auth.assistantIds[0] : process.env.VAPI_ASSISTANT_ID, config })

@@ -6,7 +6,7 @@ import { judge } from '../judge.ts'
 import { reportMarkdown } from '../report.ts'
 import { TOOL_DEFINITIONS } from '../../vapi/assistant.ts'
 import type { Model, ModelRequest, ModelResponse, Webhook } from '../types.ts'
-import type { Scenario } from '../scenarios.ts'
+import { findScenario, type Scenario } from '../scenarios.ts'
 
 /** Answers each request from a queue, and remembers what it was asked. */
 function scripted(responses: ModelResponse[]): Model & { requests: ModelRequest[] } {
@@ -106,6 +106,21 @@ describe('the simulated call', () => {
 })
 
 describe('grading', () => {
+  test('a confirmed wrong tour cannot pass the premium caller regression', () => {
+    const requested = findScenario('premium-next-wednesday')!
+    const run = { scenario: requested, callId: 'synthetic-premium', assistantModel: 'scripted',
+      startedAt: '2026-09-09T19:00:00Z', endedBy: 'caller' as const, callerTurns: 4,
+      turns: [], usage: { input: 0, output: 0 } }
+    const correct = { kind: 'tour_booked', status: 'confirmed', unitId: '33A', startsAt: '2026-09-16T20:00:00Z' }
+    const check = (event: Record<string, unknown> | null) => grade(run, requested, event ? [event] : []).checks.find(item => item.id === 'requested-tour-booked')!.ok
+    assert.equal(check(correct), true)
+    assert.equal(check({ ...correct, unitId: '19A' }), false)
+    assert.equal(check({ ...correct, startsAt: '2026-09-16T14:00:00Z' }), false)
+    assert.equal(check({ ...correct, startsAt: '2026-09-09T20:00:00Z' }), false)
+    assert.equal(check({ ...correct, status: 'arranging' }), false)
+    assert.equal(check({ ...correct, startsAt: undefined }), false)
+    assert.equal(check(null), false)
+  })
   test('catches the things callers complained about', () => {
     assert.ok(MONEY_AS_DIGITS.test('That one is $5,440 a month.'))
     assert.ok(MONEY_AS_DIGITS.test('It rents for 5,440.'))

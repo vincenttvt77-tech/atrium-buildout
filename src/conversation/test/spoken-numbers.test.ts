@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseBedrooms, parseBudget, captureSignal, checkAvailability } from '../tools.ts'
+import { parseBedrooms, parseBudget, parseBudgetSignal, captureSignal, checkAvailability } from '../tools.ts'
 import type { ToolContext } from '../tools.ts'
 import { emptyQualification } from '../../leasing/qualification.ts'
 import { propertyId, interactionId } from '../../domain/ids.ts'
@@ -21,6 +21,23 @@ test('common spoken budget amounts keep the complete number', () => {
     ['thirty-eight hundred', 3800], ['forty-two hundred', 4200], ['4 thousand 5 hundred', 4500],
     ['4.5 thousand', 4500], ['$4. 500', 4500], ['four grand', 4000],
   ] as const) assert.equal(parseBudget(speech, speech), expected, speech)
+})
+
+test('spending floors, ceilings, negation and ranges retain their different meanings', () => {
+  for (const phrase of ['over $8. 000', 'above eight thousand', 'at least eight thousand', 'not under eight thousand', 'no less than eight thousand', 'nothing under eight thousand']) {
+    assert.deepEqual(parseBudgetSignal('8000', phrase), { minMonthly: 8000, maxMonthly: null, stated: true }, phrase)
+    assert.equal(parseBudget('8000', phrase), null, 'A floor must not appear in the legacy ceiling parser')
+  }
+  for (const phrase of ['not over $8. 000', "I do not want to spend more than eight thousand", 'up to eight thousand', 'no more than eight thousand', 'nothing over eight thousand']) {
+    assert.deepEqual(parseBudgetSignal('8000', phrase), { maxMonthly: 8000, stated: true }, phrase)
+  }
+  for (const phrase of ['between eight and twelve thousand', 'eight to twelve thousand', '$8k-$12k']) {
+    assert.deepEqual(parseBudgetSignal(phrase, phrase), { minMonthly: 8000, maxMonthly: 12000, stated: true }, phrase)
+  }
+  const ambiguous = checkAvailability(ctx(), { bedrooms: 'one', budget: 'eight thousand or twelve thousand' })
+  assert.equal(ambiguous.record.outcome, 'budget_unclear')
+  assert.deepEqual(ambiguous.record.unitsOffered, [])
+  assert.match(ambiguous.say, /one concise clarification/)
 })
 
 test('spoken bedrooms distinguish one bedroom from studios and reject ambiguous or missing sizes', () => {

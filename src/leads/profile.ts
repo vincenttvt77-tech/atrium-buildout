@@ -66,6 +66,7 @@ export interface LeadProfile {
   calls: CallSummary[]
   signals: {
     budget?: Evidence<number>
+    budgetRange?: Evidence<{ minMonthly: number | null; maxMonthly: number | null }>
     bedrooms?: Evidence<number>
     moveIn?: Evidence<{ earliest: string; latest: string | null; said: string }>
     pets?: Evidence<string>
@@ -99,7 +100,7 @@ export function deriveStage(p: LeadProfile, _now: Date): LeadStage {
   if (confirmed.length > 0) return 'tour_scheduled'
   if (p.escalations.length > 0) return 'escalated'
   if (p.lossReasons.length > 0) return 'lost'
-  const core = [p.signals.budget, p.signals.bedrooms, p.signals.moveIn].filter(Boolean).length
+  const core = [p.signals.budgetRange ?? p.signals.budget, p.signals.bedrooms, p.signals.moveIn].filter(Boolean).length
   return core >= 2 ? 'qualified' : 'new'
 }
 

@@ -29,6 +29,11 @@ export interface Unit {
   features?: string[]
 }
 
+/** Server-owned source metadata. Demo catalogues never establish live availability. */
+export type InventoryProvenance =
+  | { readonly sourceMode: 'live' }
+  | { readonly sourceMode: 'demo'; readonly catalogAsOf: string; readonly catalogVersion: string; readonly fictional: true }
+
 /**
  * Inventory as read from the source of record, stamped with when it was read.
  *
@@ -41,4 +46,6 @@ export interface InventorySnapshot {
   floorPlans: FloorPlan[]
   readAt: Date
   source: string
+  /** Omitted metadata retains the strict live-source freshness rule. */
+  provenance?: InventoryProvenance
 }

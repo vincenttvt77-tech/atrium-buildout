@@ -1,5 +1,7 @@
 import type { InventorySnapshot, Unit } from './types.ts'
 import type { QualificationState } from '../leasing/qualification.ts'
+import { inventoryIsQuotable } from './source.ts'
+export { inventoryIsFresh } from './source.ts'
 
 export interface MatchOptions {
   now: Date
@@ -8,6 +10,7 @@ export interface MatchOptions {
   /** Units priced within this fraction above budget are "just over" rather than excluded. */
   stretchFraction?: number
   limit?: number
+  sortBy?: 'price_desc'
 }
 
 export interface ScoredUnit {
@@ -41,17 +44,11 @@ export type MatchOutcome =
       alternatives: ScoredUnit[]
     }
   /** Nothing matches the stated need at all. */
-  | { kind: 'no_match'; reason: 'no_availability' | 'bedroom_mismatch' | 'timing_mismatch' }
+  | { kind: 'no_match'; reason: 'no_availability' | 'bedroom_mismatch' | 'timing_mismatch' | 'below_minimum_budget' }
   /** The snapshot is too old to quote from. The agent must re-read before saying anything. */
   | { kind: 'stale'; readAt: Date; ageMs: number }
 
 const DAY = 86_400_000
-
-/** One freshness rule for matching and direct residence/floor-plan lookups. */
-export function inventoryIsFresh(snapshot: InventorySnapshot, now: Date, maxAgeMs = 15 * 60_000): boolean {
-  const age = now.getTime() - snapshot.readAt.getTime()
-  return Number.isFinite(age) && age >= 0 && Number.isFinite(maxAgeMs) && maxAgeMs >= 0 && age <= maxAgeMs
-}
 
 /** Available at all: on the market and not pending. Timing is judged separately. */
 function onMarket(u: Unit): boolean {
@@ -59,17 +56,12 @@ function onMarket(u: Unit): boolean {
 }
 
 /**
- * Whether the unit frees up in time for the caller. Measured from the END of what they
- * said, with six weeks of flex: "within the next two months" is a window that runs to
- * early November, and a residence free on October 22 is inside it. Measuring from the
- * start of the window pushed that residence to "later" and named a dearer one as the
- * closest match, on a real call. Six weeks rather than three because someone who said
- * "two months" is not going to walk over three and a half weeks, and a unit hidden for
- * that reason reads as a lie when the website shows it.
+ * A stated window ends at its actual boundary. Later residences are identified
+ * separately; only an explicit broader search may remove the timing constraint.
  */
 function inTime(u: Unit, until: Date | null): boolean {
   if (until === null) return true
-  return Date.parse(u.availableFrom) <= until.getTime() + 42 * DAY
+  return Date.parse(u.availableFrom) <= until.getTime()
 }
 
 /**
@@ -95,7 +87,7 @@ export function findMatches(
   opts: MatchOptions,
 ): MatchOutcome {
   const age = opts.now.getTime() - snapshot.readAt.getTime()
-  if (!inventoryIsFresh(snapshot, opts.now, opts.maxSnapshotAgeMs)) return { kind: 'stale', readAt: snapshot.readAt, ageMs: age }
+  if (!inventoryIsQuotable(snapshot, opts.now, opts.maxSnapshotAgeMs)) return { kind: 'stale', readAt: snapshot.readAt, ageMs: age }
 
   const window = qual.moveInTiming?.value ?? null
   const from = window?.earliest ?? null
@@ -103,6 +95,7 @@ export function findMatches(
   const moveIn = window ? (window.latest ?? window.earliest) : null
   const beds = qual.bedrooms?.value
   const budgetMax = qual.budget?.value.maxMonthly ?? null
+  const budgetMin = qual.budget?.value.minMonthly ?? null
 
   let market = snapshot.units.filter(onMarket)
   if (market.length === 0) return { kind: 'no_match', reason: 'no_availability' }
@@ -111,6 +104,10 @@ export function findMatches(
     const byBeds = market.filter((u) => u.bedrooms >= beds.min && u.bedrooms <= beds.max)
     if (byBeds.length === 0) return { kind: 'no_match', reason: 'bedroom_mismatch' }
     market = byBeds
+  }
+  if (budgetMin !== null) {
+    market = market.filter(unit => unit.monthlyRent >= budgetMin)
+    if (market.length === 0) return { kind: 'no_match', reason: 'below_minimum_budget' }
   }
 
   // Split on timing rather than filtering on it, so the later ones can still be offered.
@@ -131,7 +128,7 @@ export function findMatches(
     if (u.floor >= 20) { s += 5; reasons.push(`high floor — ${u.floor}`) }
     if (from && moveIn) {
       const t = Date.parse(u.availableFrom)
-      if (t >= from.getTime() - 14 * DAY && t <= moveIn.getTime() + 14 * DAY) {
+      if (t >= from.getTime() && t <= moveIn.getTime()) {
         s += 15; reasons.push('available right when they need it')
       }
     }
@@ -139,6 +136,8 @@ export function findMatches(
   }
 
   const limit = opts.limit ?? 3
+  const rank = (a: ScoredUnit, b: ScoredUnit) => opts.sortBy === 'price_desc'
+    ? b.unit.monthlyRent - a.unit.monthlyRent || b.score - a.score : b.score - a.score
 
   const later = laterPool
     .filter((u) => budgetMax === null || u.monthlyRent <= budgetMax * (1 + (opts.stretchFraction ?? 0.08)))
@@ -147,7 +146,7 @@ export function findMatches(
     .slice(0, 2)
 
   if (budgetMax === null) {
-    const all = pool.map(score).sort((a, b) => b.score - a.score)
+    const all = pool.map(score).sort(rank)
     return {
       kind: 'matches', units: all.slice(0, limit), stretch: [], later,
       moreInTime: all.slice(limit).map((m) => m.unit.unitId),
@@ -182,6 +181,7 @@ export function findMatches(
     const alternatives = beds
       ? snapshot.units
           .filter(onMarket)
+          .filter((u) => budgetMin === null || u.monthlyRent >= budgetMin)
           .filter((u) => u.bedrooms < beds.min && u.monthlyRent <= budgetMax && inTime(u, moveIn))
           .sort((a, b) => b.bedrooms - a.bedrooms || b.monthlyRent - a.monthlyRent)
           .slice(0, limit)
@@ -197,7 +197,7 @@ export function findMatches(
     }
   }
 
-  const rankedWithin = within.sort((a, b) => b.score - a.score)
+  const rankedWithin = within.sort(rank)
   return {
     kind: 'matches',
     units: rankedWithin.slice(0, limit),

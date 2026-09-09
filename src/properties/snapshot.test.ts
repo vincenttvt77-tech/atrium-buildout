@@ -8,6 +8,7 @@ import { createAuthorizationService, AuthorizationError } from '../auth/index.ts
 import type { AuthorizationRepository, AuthorizedScope } from '../auth/index.ts'
 import { isServable } from '../knowledge/article.ts'
 import { propertyId } from '../domain/ids.ts'
+import { inventoryDemoDisclosure, inventoryIsFresh, inventoryIsQuotable } from '../inventory/source.ts'
 import { PropertyConfigurationError, validatePublishedProperty, loadPublishedProperty,
   withProperty, currentProperty, propertyContext } from './index.ts'
 import type { PublishedPropertyConfiguration, PropertySnapshot } from './index.ts'
@@ -242,4 +243,41 @@ test('existing Larkin content validates only after explicit jurisdiction and pro
   assert.equal(snapshot.inventory.units.length, rawInventory.length)
   assert.equal(snapshot.propertyId, authority.propertyId)
   assert.equal(snapshot.timeZone, 'America/New_York')
+})
+
+test('published demo provenance survives loading without rejuvenating the inventory source', async () => {
+  const authority = await scope()
+  const config = configuration(authority)
+  config.bundle.inventoryProvenance = { sourceMode: 'demo', catalogAsOf: config.inventoryReadAt,
+    catalogVersion: 'sample-catalogue-v2', fictional: true }
+  const snapshot = validatePublishedProperty(config, authority, NOW)
+  assert.equal(snapshot.inventory.readAt.toISOString(), config.inventoryReadAt)
+  assert.equal(inventoryIsFresh(snapshot.inventory, NOW), false)
+  assert.equal(inventoryIsQuotable(snapshot.inventory, NOW), true)
+  assert.match(inventoryDemoDisclosure(snapshot.inventory, NOW)!, /fictional demo catalogue/)
+  assert.match(inventoryDemoDisclosure(snapshot.inventory, NOW)!, /sample-catalogue-v2/)
+  assert.throws(() => { (snapshot.bundle.inventoryProvenance as { catalogVersion: string }).catalogVersion = 'other' }, TypeError)
+})
+
+test('invalid or inconsistent published source provenance fails the property configuration explicitly', async () => {
+  const authority = await scope()
+  for (const provenance of [null, {}, { sourceMode: 'other' },
+    { sourceMode: 'demo', catalogAsOf: '2026-09-08T09:00:00.000Z', catalogVersion: 'v1', fictional: false },
+    { sourceMode: 'demo', catalogAsOf: NOW.toISOString(), catalogVersion: 'v1', fictional: true },
+  ]) {
+    const config = configuration(authority)
+    Object.assign(config.bundle, { inventoryProvenance: provenance })
+    assert.throws(() => validatePublishedProperty(config, authority, NOW), {
+      code: 'property_configuration_invalid', field: 'bundle.inventoryProvenance',
+    })
+  }
+})
+
+test('a source name containing demo does not change a published live inventory into sample data', async () => {
+  const authority = await scope()
+  const config = configuration(authority)
+  config.inventorySource = 'Fictional demo in an untyped source name'
+  const snapshot = validatePublishedProperty(config, authority, NOW)
+  assert.equal(snapshot.inventory.provenance, undefined)
+  assert.equal(inventoryIsQuotable(snapshot.inventory, NOW), false)
 })
