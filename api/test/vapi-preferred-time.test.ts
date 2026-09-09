@@ -9,6 +9,7 @@ import type { TourSlot } from '../../src/booking/types.ts'
 const originalEnv = { ...process.env }, originalZone = property.timeZone
 const store = calendarStoreFromEnv()
 let sequence = 0
+let toolSequence = 0
 before(() => {
   for (const key of ['ATRIUM_RUNTIME_MODE', 'ATRIUM_DATABASE_URL', 'ATRIUM_AUTH_DATABASE_URL', 'OPS_ACCOUNTS_JSON',
     'VAPI_WEBHOOK_SECRET', 'VAPI_API_KEY', 'VAPI_PRIVATE_KEY', 'KV_REST_API_URL', 'KV_REST_API_TOKEN', 'NODE_ENV', 'VERCEL']) delete process.env[key]
@@ -27,7 +28,7 @@ after(() => {
 async function tool(name: string, args: Record<string, unknown>, callId = `preferred-time-${++sequence}`): Promise<string> {
   const res: any = { code: 0, body: null, setHeader() {}, status(value: number) { this.code = value; return this }, json(value: unknown) { this.body = value; return this } }
   await handler({ method: 'POST', headers: {}, body: { message: { type: 'tool-calls', call: { id: callId },
-    toolCallList: [{ id: `tool-${sequence}`, name, arguments: args }] } } }, res)
+    toolCallList: [{ id: `tool-${++toolSequence}`, name, arguments: args }] } } }, res)
   assert.equal(res.code, 200)
   return String(res.body.results[0].result)
 }

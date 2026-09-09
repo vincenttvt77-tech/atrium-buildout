@@ -2,6 +2,7 @@ import { after, afterEach, before, beforeEach, mock, test } from 'node:test'
 import assert from 'node:assert/strict'
 import property from '../../data/property.json' with { type: 'json' }
 import { calendarStoreFromEnv } from '../../src/calendar/store.ts'
+import { documentStoreFromEnv } from '../../src/store/documents.ts'
 import { defaultSettings } from '../../src/calendar/settings.ts'
 import { sayableStatus } from '../../src/booking/book.ts'
 import type { Booking, TourSlot } from '../../src/booking/types.ts'
@@ -139,6 +140,23 @@ test('legacy property without timezone retains New York Vapi hours', async () =>
   delete config.timeZone
   const offered = (await invoke([list('2032-06-01')]))[0]!.result
   assert.match(offered, /slot-2032-06-01T14:00 — Tuesday, June 1, 2032 at 10:00 AM/)
+})
+
+test('invalid legacy calendar configuration still permits contact capture and ordinary pricing questions', async () => {
+  config.timeZone = 'invalid-zone'
+  const callId = `invalid-calendar-ordinary-${++nextCall}`
+  const response = await invoke([
+    tool('capture_contact', { name: 'Calendar Test Visitor', email: 'calendar-test@example.com', excerpt: 'My email is calendar-test@example.com' }),
+    tool('answer_question', { question: 'What is the difference between gross and net effective rent?', topic: 'pricing' }),
+    list('2032-06-01'),
+  ], callId)
+  assert.match(response[0]!.result, /contact details saved/i)
+  assert.match(response[1]!.result, /average monthly cost/i)
+  assert.doesNotMatch(response[1]!.result, /tour calendar needs staff attention/i)
+  assert.match(response[2]!.result, /tour calendar needs staff attention/i)
+  const saved: any = await documentStoreFromEnv().get(`call:${callId}`)
+  assert.equal(saved.email, 'calendar-test@example.com')
+  assert.equal((await store.read()).bookings.length, 0)
 })
 
 test('booking status formats confirmed times and conflict alternatives in the same explicit timezone', () => {

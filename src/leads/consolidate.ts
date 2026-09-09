@@ -3,7 +3,7 @@ import type { QualificationState } from '../leasing/qualification.ts'
 import type { LossReason } from '../record/store.ts'
 import { emptyProfile, deriveStage, normalisePhone, pinnedName } from './profile.ts'
 import type { LeadProfile, CallSummary } from './profile.ts'
-import { deriveFollowUps } from './followups.ts'
+import { bookingIdentity, deriveFollowUps, legacyFollowUpId } from './followups.ts'
 import type { FollowUp } from './followups.ts'
 import { DEFAULT_TIME_ZONE, validateTimeZone } from '../calendar/time.ts'
 
@@ -80,9 +80,14 @@ export async function consolidateCall(
     next.unitsDiscussed = [...new Set([...p.unitsDiscussed, ...o.unitsDiscussed])]
 
     if (o.booking) {
-      const existing = p.bookings.find((b) => b.slotId === o.booking!.slotId)
+      const existing = p.bookings.find((b) => bookingIdentity(b) === bookingIdentity(o.booking!))
       if (!existing) next.bookings = [...p.bookings, { ...o.booking, callId: o.callId }]
-      else if (existing.status !== 'confirmed' || o.booking.status === 'confirmed') next.bookings = p.bookings.map((b) => b === existing ? { ...o.booking!, callId: o.callId } : b)
+      else if (existing.status !== 'confirmed') {
+        const priorAt = p.calls.find(c => c.callId === existing.callId)?.at
+        if (o.booking.status === 'confirmed' || !priorAt || at >= priorAt) {
+          next.bookings = p.bookings.map((b) => b === existing ? { ...o.booking!, callId: o.callId } : b)
+        }
+      }
     }
     if (o.lossReason) next.lossReasons = [...p.lossReasons, { ...o.lossReason, callId: o.callId }]
     if (o.escalation) next.escalations = [...p.escalations, { ...o.escalation, callId: o.callId, at }]
@@ -99,18 +104,78 @@ export async function consolidateCall(
     return next
   })
 
-  // Deterministic ids make this a no-op for follow-ups that already exist, and a done or
-  // skipped one is never reopened by a later call.
   // A retried report may arrive hours or days later. Its work is still due relative to
   // the original call, including retries after a partially failed follow-up write.
   const recordedAt = profile.calls.find((c) => c.callId === o.callId)!.at
   const derived = deriveFollowUps(profile, new Date(recordedAt), o.callId, zone)
-  const followUps: FollowUp[] = []
-  for (const f of derived) {
-    const stored = await store.update<FollowUp>(followUpKey(f.id), f, (cur) => cur.status === 'scheduled' ? f : cur)
-    followUps.push(stored)
-  }
+  const followUps = await reconcileFollowUps(store, profile, derived, zone)
   return { profile, followUps }
+}
+
+/**
+ * Saved work is immutable to automatic re-derivation, including scheduled staff edits.
+ * Reuse unambiguous v1 work in place. An old hour bucket shared by several intents is
+ * retained with explicit review metadata; guessing a mapping would duplicate or lose
+ * the operator's original decision. No deletion, ID rewrite or outbound action occurs.
+ */
+async function reconcileFollowUps(store: DocumentStore, profile: LeadProfile, derived: FollowUp[], timeZone: string): Promise<FollowUp[]> {
+  if (!derived.length) return []
+  const callIds = new Set(profile.calls.map(call => call.callId))
+  const existing = (await listFollowUps(store)).filter(f => f.phone === profile.phone
+    && (profile.phone !== 'unknown' || callIds.has(f.createdFromCall)))
+  const result = new Map<string, FollowUp>()
+  const missing: FollowUp[] = []
+  for (const f of derived) {
+    const current = existing.find(row => row.id === f.id || (row.source?.key && row.source.key === f.source?.key))
+    if (current) result.set(current.id, current)
+    else missing.push(f)
+  }
+  const legacy = existing.filter(row => !row.source && !row.id.startsWith('fu-v2-'))
+  // A replay of an older event must still account for newer known bookings when
+  // deciding whether a legacy hour bucket has one possible owner. These candidates
+  // are for reconciliation only; the older event cannot create their missing work.
+  const latestCall = profile.calls.reduce((latest, call) => call.at > latest.at ? call : latest, profile.calls[0]!)
+  const possible = new Map(derived.map(f => [f.id, f]))
+  if (latestCall) for (const f of deriveFollowUps(profile, new Date(latestCall.at), latestCall.callId, timeZone)) {
+    if (f.source?.kind === 'booking') possible.set(f.id, f)
+  }
+  const missingIds = new Set(missing.map(f => f.id))
+  const matches = new Map<string, FollowUp[]>()
+  for (const row of legacy) {
+    const candidates = [...possible.values()].filter(f => row.kind === f.kind && (
+      row.reconciliation?.candidateIds.includes(f.id)
+      || (f.source?.kind === 'call' ? row.createdFromCall === f.source.callId
+        : row.id === legacyFollowUpId(profile, f) || row.createdFromCall === f.source?.callId
+          // Earlier collect-email rows could be rescheduled by every subsequent call.
+          // A second booking makes that legacy relationship ambiguous, never guessed.
+          || (f.kind === 'collect_email' && callIds.has(row.createdFromCall)))
+    ))
+    if (candidates.some(f => missingIds.has(f.id))) matches.set(row.id, candidates)
+  }
+  const matchCount = (f: FollowUp) => [...matches.values()].filter(rows => rows.some(row => row.id === f.id)).length
+  const covered = new Set<string>()
+  for (const row of legacy) {
+    const candidates = matches.get(row.id)
+    if (!candidates) continue
+    candidates.forEach(f => covered.add(f.id))
+    const ambiguous = row.reconciliation?.status === 'needs_review' || candidates.length !== 1 || matchCount(candidates[0]!) !== 1
+    const stored = await store.update<FollowUp>(followUpKey(row.id), row, current => {
+      if (current.source) return current
+      if (!ambiguous) return { ...current, source: candidates[0]!.source! }
+      return { ...current, reconciliation: {
+        status: 'needs_review', code: 'legacy_followup_identity_ambiguous',
+        candidateIds: [...new Set([...(current.reconciliation?.candidateIds ?? []), ...candidates.map(f => f.id)])].sort(),
+      } }
+    })
+    result.set(stored.id, stored)
+  }
+  for (const f of missing) {
+    if (covered.has(f.id)) continue
+    // update keeps the first persisted value even when another projection wins a race.
+    const stored = await store.update<FollowUp>(followUpKey(f.id), f, current => current)
+    result.set(stored.id, stored)
+  }
+  return [...result.values()]
 }
 
 export async function listProfiles(store: DocumentStore): Promise<LeadProfile[]> {

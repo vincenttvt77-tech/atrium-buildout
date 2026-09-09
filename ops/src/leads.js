@@ -54,6 +54,8 @@ const telBtn = (phone, txt, cls) => { const h = href.tel(phone); return h ? `<a 
 const link = (name, params, txt, cls) => `<a class="${cls || 'btn btn-quiet'}" href="${esc(A.hashFor(name, params))}">${esc(txt)}</a>`
 const chip = (cls, iconName, txt) => A.html.chip(cls, iconName, txt)
 const countHtml = (n) => `<span class="count">· ${Number(n) || 0}</span>`
+const needsReview = f => f?.reconciliation?.status === 'needs_review' && f.reconciliation.code === 'legacy_followup_identity_ambiguous'
+const reviewSummary = items => items.some(needsReview) ? chip('chip-warn', 'warning', 'Review needed') : ''
 
 /** '2026-09-07T21:49:42.591Z MR: left a voicemail' → { stamp, body }; a note without a stamp is all body. */
 function parseNote(n) {
@@ -108,6 +110,7 @@ function fuRowHtml(fu, s, o) {
     `<span class="row-lead-icon">${ico(sen.needsPerson ? 'hand' : A.label(labels.channelIcon, channel, 'phone'))}</span></span>` +
     `<span class="row-body"><span class="row-title">${esc(sen.before)}${nameHtml}${esc(sen.after)}</span>` +
     (sen.needsPerson ? `<span class="row-chips">${chip('chip-warn', 'hand', 'Needs a person')}</span>` : '') +
+    A.html.followUpReview(fu) +
     `<span class="row-sub">${sub}</span></span>` +
     `<span class="row-actions">${primary}` +
     `<button type="button" class="btn" data-action="done" data-fu="${esc(fu.id)}" data-key="fu:${esc(fu.id)}:done" data-write="leads">Done</button>` +
@@ -119,17 +122,20 @@ function doneRowHtml(fu, s) {
   const done = String(fu.status) === 'done'
   return `<div class="row done-row" data-key="fu:${esc(fu.id)}"><span class="row-body">` +
     `<span class="row-title">${esc(sen.before)}<span class="name">${esc(sen.name)}</span>${esc(sen.after)}</span>` +
-    `<span class="row-chips">${done ? chip('chip-ok', 'check', 'Done') : chip('chip-neutral', 'x', 'Not needed')}</span></span>` +
+    `<span class="row-chips">${done ? chip('chip-ok', 'check', 'Done') : chip('chip-neutral', 'x', 'Not needed')}</span>` +
+    A.html.followUpReview(fu) + '</span>' +
     `<span class="row-actions"><button type="button" class="btn btn-quiet" data-action="back" data-fu="${esc(fu.id)}" data-key="fu:${esc(fu.id)}:back" data-write="leads">${ico('undo')}Put back</button></span></div>`
 }
 function todoListHtml(s) {
   const now = Date.now(), today = fmt.nyNow().ymd, weekEnd = fmt.addDays(today, 6 - fmt.dayOfWeek(today))
   const all = followUpsOf(s)
   const scheduled = all.filter((f) => f.status === 'scheduled').sort(byDue)
-  const done = all.filter((f) => (f.status === 'done' || f.status === 'skipped') && (fmt.nyDate(f.dueAt) || '9999') <= today).sort(byDueDesc).slice(0, 20)
+  const done = all.filter((f) => (f.status === 'done' || f.status === 'skipped') && (needsReview(f) || (fmt.nyDate(f.dueAt) || '9999') <= today))
+    .sort((a, b) => Number(needsReview(b)) - Number(needsReview(a)) || byDueDesc(a, b)).slice(0, 20)
   let out = ''
   if (!scheduled.length) {
     if (!all.length) out += A.html.empty({ icon: 'check-circle', title: 'Nothing to do yet.', text: "When the assistant thinks someone needs a call — a tour to confirm, a question it couldn't answer — it shows up here." })
+    else if (done.some(needsReview)) out += A.html.empty({ icon: 'warning', title: 'Review older tasks.', text: 'Some completed or not-needed tasks have an unclear booking match. Check the booking before contacting the caller.', actionHtml: `<button type="button" class="btn-link" data-action="seedone">See completed tasks</button>` })
     else out += A.html.empty({ icon: 'check-circle', title: 'All caught up.', text: 'Everything on the list is done.', actionHtml: done.length ? `<button type="button" class="btn-link" data-action="seedone">See what's done</button>` : '' })
   } else {
     const groups = { overdue: [], today: [], week: [], later: [] }
@@ -142,7 +148,7 @@ function todoListHtml(s) {
     }
   }
   if (done.length) {
-    out += `<details class="done-list" data-key="done-today"><summary data-key="done-today-summary">${ico('chevron-down')}<span>Done and not needed today</span>${countHtml(done.length)}</summary>` +
+    out += `<details class="done-list" data-key="done-today"><summary data-key="done-today-summary">${ico('chevron-down')}<span>Done and not needed${done.some(needsReview) ? '' : ' today'}</span>${countHtml(done.length)}${reviewSummary(done)}</summary>` +
       `<div class="card rows">${done.map((f) => doneRowHtml(f, s)).join('')}</div></details>`
   }
   return out
@@ -265,6 +271,7 @@ function npCardHtml(it, recById) {
     return `<div class="card card-warn np-card"><div class="np-title"><strong>Call ${esc(derive.personName(it.profile || { phone: it.phone, name: null }))} back</strong> — ${esc(t.headline)}</div>` +
       (t.quote ? `<div class="quote">"${esc(t.quote)}"</div>` : '') +
       `<div class="reassure">${esc(t.reassurance)}</div>` +
+      A.html.followUpReview(it.fu) +
       `<div class="meta">called ${esc(fmt.dateTime(it.calledAt, { inSentence: true }))} · <span class="${overdue ? 'overdue' : ''}">${esc(fmt.respondPhrase(it.respondBy))}</span></div>` +
       `<div class="actions"><button type="button" class="btn" data-action="handled" data-fu="${esc(it.fu.id)}" data-key="fu:${esc(it.fu.id)}:done" data-write="leads">Mark handled</button>${seeCall}</div></div>`
   }
@@ -327,7 +334,7 @@ function leadPanelHtml(p, s) {
     out += `<section class="panel-section"><h3 data-key="panel-todo" tabindex="-1">To do ${countHtml(scheduled.length)}</h3>`
     if (scheduled.length) out += `<div class="card rows">${scheduled.map((f) => fuRowHtml(f, s, { nameLink: false })).join('')}</div>`
     else out += `<p class="muted">Nothing to do for ${esc(first)} right now.</p>`
-    if (finished.length) out += `<details class="done-list" data-key="done-panel"><summary data-key="done-panel-summary">${ico('chevron-down')}<span>Done and not needed</span>${countHtml(finished.length)}</summary><div class="card rows">${finished.map((f) => doneRowHtml(f, s)).join('')}</div></details>`
+    if (finished.length) out += `<details class="done-list" data-key="done-panel"><summary data-key="done-panel-summary">${ico('chevron-down')}<span>Done and not needed</span>${countHtml(finished.length)}${reviewSummary(finished)}</summary><div class="card rows">${finished.map((f) => doneRowHtml(f, s)).join('')}</div></details>`
     out += '</section>'
   }
   // 4. tours

@@ -46,11 +46,12 @@ async function readLog(headers: Record<string, string> = { 'x-ops-passcode': OPS
   return res
 }
 
+let toolSequence = 0
 async function toolCall(name: string, args: Record<string, unknown>, callId: string, headers: Record<string, string> = {}) {
   const res = mockRes()
   await handler({
     method: 'POST', headers,
-    body: { message: { type: 'tool-calls', call: { id: callId }, toolCallList: [{ id: 'tc1', name, arguments: args }] } },
+    body: { message: { type: 'tool-calls', call: { id: callId }, toolCallList: [{ id: `tool-${++toolSequence}`, name, arguments: args }] } },
   }, res)
   return { res, result: res.body?.results?.[0]?.result as string | undefined }
 }

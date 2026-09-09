@@ -9,7 +9,7 @@ import { propertyTransaction } from './scope.ts'
 import { storeBackedCalendar } from '../calendar/port.ts'
 import type { CalendarPort } from '../booking/types.ts'
 import type { SlotOptions } from '../calendar/slots.ts'
-import { AuthorizationError } from '../auth/index.ts'
+import { assertAuthorizedScope, AuthorizationError } from '../auth/index.ts'
 
 export interface MutationAttribution { requestId: string; configurationVersion?: number }
 const description = () => ({ kind: 'postgres' as const, durable: true,
@@ -46,67 +46,152 @@ async function audit(client: PoolClient, scope: AuthorizedScope, attribution: Mu
     attribution.requestId, attribution.configurationVersion ?? null])
 }
 
-/** Transitional JSON repository: one row per scoped record, not a portfolio query API. */
-export class PostgresDocumentStore implements DocumentStore {
-  private connection: DatabaseConnection
-  private scope: AuthorizedScope
-  private attribution: MutationAttribution
-  constructor(connection: DatabaseConnection, scope: AuthorizedScope, attribution: MutationAttribution) {
-    this.connection = connection; this.scope = scope; this.attribution = attribution
+/** Private client adapter. Only the owning transaction can create or use it. */
+function documentsOnClient(client: PoolClient, scope: AuthorizedScope, attribution: MutationAttribution): DocumentStore {
+  const ids = [scope.organizationId, scope.propertyId]
+  const write = async (key: string, value: string): Promise<void> => {
+    await client.query(`INSERT INTO atrium.operational_documents(organization_id,property_id,key,value) VALUES($1,$2,$3,$4::jsonb)
+      ON CONFLICT (organization_id,property_id,key) DO UPDATE SET value=EXCLUDED.value`, [...ids, key, value])
   }
-  get<T>(key: string): Promise<T | null> {
-    keyValid(key)
-    return propertyTransaction(this.connection, this.scope, 'read', async client => {
+  return {
+    async get<T>(key: string): Promise<T | null> {
+      keyValid(key)
       const row = (await client.query('SELECT value FROM atrium.operational_documents WHERE organization_id=$1 AND property_id=$2 AND key=$3',
-        [this.scope.organizationId, this.scope.propertyId, key])).rows[0]
+        [...ids, key])).rows[0]
       return row ? row.value as T : null
-    }, this.attribution.configurationVersion)
-  }
-  async set<T>(key: string, value: T): Promise<void> {
-    keyValid(key)
-    const serialized = serialize(value)
-    await propertyTransaction(this.connection, this.scope, 'operate', async client => {
-      await lock(client, this.scope, `document:${key}`)
-      await this.write(client, key, serialized)
-      await audit(client, this.scope, this.attribution, 'document.set', key)
-    }, this.attribution.configurationVersion)
-  }
-  update<T>(key: string, initial: T, fn: (current: T) => T): Promise<T> {
-    keyValid(key)
-    return propertyTransaction(this.connection, this.scope, 'operate', async client => {
-      await lock(client, this.scope, `document:${key}`)
+    },
+    async set<T>(key: string, value: T): Promise<void> {
+      keyValid(key)
+      const serialized = serialize(value)
+      await lock(client, scope, `document:${key}`)
+      await write(key, serialized)
+      await audit(client, scope, attribution, 'document.set', key)
+    },
+    async update<T>(key: string, initial: T, fn: (current: T) => T): Promise<T> {
+      keyValid(key)
+      await lock(client, scope, `document:${key}`)
       const row = (await client.query('SELECT value FROM atrium.operational_documents WHERE organization_id=$1 AND property_id=$2 AND key=$3 FOR UPDATE',
-        [this.scope.organizationId, this.scope.propertyId, key])).rows[0]
+        [...ids, key])).rows[0]
       const next = fn(row ? row.value as T : structuredClone(initial))
       const serialized = serialize(next)
-      await this.write(client, key, serialized)
-      await audit(client, this.scope, this.attribution, 'document.update', key)
+      await write(key, serialized)
+      await audit(client, scope, attribution, 'document.update', key)
       return JSON.parse(serialized) as T
-    }, this.attribution.configurationVersion)
-  }
-  private async write(client: PoolClient, key: string, value: string): Promise<void> {
-    await client.query(`INSERT INTO atrium.operational_documents(organization_id,property_id,key,value) VALUES($1,$2,$3,$4::jsonb)
-      ON CONFLICT (organization_id,property_id,key) DO UPDATE SET value=EXCLUDED.value`,
-    [this.scope.organizationId, this.scope.propertyId, key, value])
-  }
-  list(prefix: string): Promise<string[]> {
-    if (typeof prefix !== 'string' || prefix.length > 512 || /[\u0000-\u001f\u007f]/.test(prefix)) throw new Error('Invalid document prefix.')
-    const pattern = prefix.replace(/[\\%_]/g, '\\$&') + '%'
-    return propertyTransaction(this.connection, this.scope, 'read', async client => {
+    },
+    async list(prefix: string): Promise<string[]> {
+      if (typeof prefix !== 'string' || prefix.length > 512 || /[\u0000-\u001f\u007f]/.test(prefix)) throw new Error('Invalid document prefix.')
+      const pattern = prefix.replace(/[\\%_]/g, '\\$&') + '%'
       const rows = (await client.query<{ key: string }>(`SELECT key FROM atrium.operational_documents
-        WHERE organization_id=$1 AND property_id=$2 AND key LIKE $3 ORDER BY key LIMIT 5001`,
-      [this.scope.organizationId, this.scope.propertyId, pattern])).rows
+        WHERE organization_id=$1 AND property_id=$2 AND key LIKE $3 ORDER BY key LIMIT 5001`, [...ids, pattern])).rows
       if (rows.length > 5000) throw new Error('This workspace requires a paginated operational query.')
       return rows.map(row => row.key)
-    }, this.attribution.configurationVersion)
+    },
+    async delete(key: string): Promise<void> {
+      keyValid(key)
+      await lock(client, scope, `document:${key}`)
+      await client.query('DELETE FROM atrium.operational_documents WHERE organization_id=$1 AND property_id=$2 AND key=$3', [...ids, key])
+      await audit(client, scope, attribution, 'document.delete', key)
+    },
+    describe: description,
   }
-  async delete(key: string): Promise<void> {
-    keyValid(key)
-    await propertyTransaction(this.connection, this.scope, 'operate', async client => {
-      await lock(client, this.scope, `document:${key}`)
-      await client.query('DELETE FROM atrium.operational_documents WHERE organization_id=$1 AND property_id=$2 AND key=$3',
-        [this.scope.organizationId, this.scope.propertyId, key])
-      await audit(client, this.scope, this.attribution, 'document.delete', key)
+}
+
+const transactionError = (code: 'document_transaction_closed' | 'document_transaction_incomplete') =>
+  Object.assign(new Error(code === 'document_transaction_closed'
+    ? 'The document transaction is closed.' : 'Every document operation must finish before the transaction callback returns.'), { code })
+
+/** @internal Database-owned composition only, after propertyTransaction admission.
+ * Call close before committing, including cleanup after callback failure. No raw
+ * client or scope-changing method is exposed through the returned document port.
+ */
+export function createTransactionDocumentStore(client: PoolClient, scope: AuthorizedScope,
+  attribution: MutationAttribution): { documents: DocumentStore; close(): Promise<void> } {
+  assertAuthorizedScope(scope, 'operate')
+  const documents = documentsOnClient(client, scope, { ...attribution })
+  let accepting = true
+  let failed = false
+  let failure: unknown
+  let tail: Promise<void> = Promise.resolve()
+  const pending = new Set<Promise<unknown>>()
+  const run = <U>(operation: () => Promise<U>): Promise<U> => {
+    if (!accepting) return Promise.reject(transactionError('document_transaction_closed'))
+    // One client, including read/modify/write callbacks, in invocation order.
+    const result = tail.then(() => {
+      if (failed) throw failure
+      return operation()
+    })
+    pending.add(result)
+    tail = result.then(() => { pending.delete(result) }, error => {
+      pending.delete(result)
+      if (!failed) { failed = true; failure = error }
+    })
+    return result
+  }
+  const scoped: DocumentStore = Object.freeze({
+    get: <U>(key: string) => run(() => documents.get<U>(key)),
+    set: <U>(key: string, value: U) => run(() => documents.set(key, value)),
+    update: <U>(key: string, initial: U, fn: (current: U) => U) => run(() => documents.update(key, initial, fn)),
+    list: (prefix: string) => run(() => documents.list(prefix)),
+    delete: (key: string) => run(() => documents.delete(key)),
+    describe: () => {
+      if (!accepting) throw transactionError('document_transaction_closed')
+      return description()
+    },
+  })
+  let closing: Promise<void> | undefined
+  return Object.freeze({
+    documents: scoped,
+    close(): Promise<void> {
+      if (closing) return closing
+      // Close admission first, then drain before any owning transaction releases its client.
+      accepting = false
+      const incomplete = pending.size > 0
+      closing = (async () => {
+        await tail
+        if (failed) throw failure
+        if (incomplete) throw transactionError('document_transaction_incomplete')
+      })()
+      return closing
+    },
+  })
+}
+
+/** Transitional JSON repository: one row per scoped record, not a portfolio query API. */
+export class PostgresDocumentStore implements DocumentStore {
+  private readonly connection: DatabaseConnection
+  private readonly scope: AuthorizedScope
+  private readonly attribution: MutationAttribution
+  constructor(connection: DatabaseConnection, scope: AuthorizedScope, attribution: MutationAttribution) {
+    this.connection = connection; this.scope = scope; this.attribution = { ...attribution }
+  }
+  private single<T>(permission: Permission, work: (documents: DocumentStore) => Promise<T>): Promise<T> {
+    return propertyTransaction(this.connection, this.scope, permission,
+      client => work(documentsOnClient(client, this.scope, this.attribution)), this.attribution.configurationVersion)
+  }
+  get<T>(key: string): Promise<T | null> { return this.single('read', documents => documents.get<T>(key)) }
+  set<T>(key: string, value: T): Promise<void> { return this.single('operate', documents => documents.set(key, value)) }
+  update<T>(key: string, initial: T, fn: (current: T) => T): Promise<T> {
+    return this.single('operate', documents => documents.update(key, initial, fn))
+  }
+  list(prefix: string): Promise<string[]> { return this.single('read', documents => documents.list(prefix)) }
+  delete(key: string): Promise<void> { return this.single('operate', documents => documents.delete(key)) }
+
+  /** All operations and their audits commit together under the same property scope.
+   * Await each operation (or Promise.all). The callback handle expires on return,
+   * and any failed or unfinished operation makes the whole unit roll back.
+   */
+  transaction<T>(work: (documents: DocumentStore) => Promise<T>): Promise<T> {
+    if (typeof work !== 'function') throw new Error('A document transaction callback is required.')
+    return propertyTransaction(this.connection, this.scope, 'operate', async client => {
+      const unit = createTransactionDocumentStore(client, this.scope, this.attribution)
+      try {
+        const value = await work(unit.documents)
+        await unit.close()
+        return value
+      } catch (error) {
+        try { await unit.close() } catch { /* The original callback/close error remains authoritative. */ }
+        throw error
+      }
     }, this.attribution.configurationVersion)
   }
   describe = description

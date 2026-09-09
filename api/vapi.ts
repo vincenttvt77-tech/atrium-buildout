@@ -21,7 +21,7 @@ import { parseCalendarDate, addCalendarDays } from '../src/calendar/range.ts'
 import { DEFAULT_TIME_ZONE, localDate, validateTimeZone, wallTime } from '../src/calendar/time.ts'
 import { propertyTimeZone } from '../src/config/property.ts'
 import { storeBackedCalendar } from '../src/calendar/port.ts'
-import { documentStoreFromEnv } from '../src/store/documents.ts'
+import { documentStoreFromEnv, type DocumentStore } from '../src/store/documents.ts'
 import { normalisePhone } from '../src/leads/profile.ts'
 import { reconcile } from '../src/leasing/captured.ts'
 import { receiveFinishedCall, type CallReceiptScope } from '../src/leads/inbox.ts'
@@ -37,6 +37,10 @@ import { detectEmergency, primaryEmergency, safetyInstruction, type EmergencySig
 import { isPostgresRuntime, resolveOpsRuntime, resolveVerifiedChannelRuntime, runWithPropertyRuntime,
   currentPropertyRuntime, runtimeForRequest, readRuntimeError, RuntimeRequestError, type ResolvedPropertyRuntime } from '../src/application/runtime.ts'
 import { webhookAssistantId } from '../src/tenancy/webhook.ts'
+import { initializeCallLifecycle, admitToolBatch, markToolDispatch, completeToolBatch,
+  requestCallEnd, freezeCall, completeCall, hashCallToolArgs, CallLifecycleError,
+  type CallLifecycle, type CallProvenance, type CallToolResult } from '../src/calls/lifecycle.ts'
+import { recordCallSafetyEvent, listCallSafetyEvents, safetyEventForOps } from '../src/calls/safety-events.ts'
 
 /**
  * Vapi tool-call webhook.
@@ -97,6 +101,7 @@ interface CallState {
   phone?: string
   /** A compact receipt prevents repeated finished-call reports from recreating a caller. */
   completedAt?: string
+  work?: CallLifecycle
   name: string | null
   email: string | null
   unitsDiscussed: string[]
@@ -123,6 +128,50 @@ function receiptScope(runtime?: ResolvedPropertyRuntime): CallReceiptScope | und
   const routing = routingIdentity()
   if (!routing) throw new Error('Call routing authority is missing')
   return { ...routing, configurationVersion: runtime.snapshot.version, timeZone: runtime.snapshot.timeZone }
+}
+
+function callProvenance(runtime?: ResolvedPropertyRuntime): CallProvenance | undefined {
+  if (!runtime) {
+    try { return { tenantId: currentTenantId(), timeZone: propertyTimeZone(rawProperty) } }
+    catch { return undefined } // Individual scheduling boundaries report bad legacy calendar configuration.
+  }
+  const actor = runtime.scope.actor
+  if (actor.kind !== 'channel') throw new Error('Call work requires verified channel authority')
+  return { organizationId: runtime.scope.organizationId, propertyId: runtime.scope.propertyId,
+    channelBindingId: actor.bindingId, channelBindingVersion: actor.bindingVersion,
+    configurationVersion: runtime.snapshot.version, timeZone: runtime.snapshot.timeZone }
+}
+
+function lifecycleRoute(state: CallState, proposed?: CallProvenance): { provenance?: CallProvenance } {
+  const stored = state.work?.provenance
+  const provenance = proposed ?? (stored && 'tenantId' in stored && stored.tenantId === currentTenantId() ? stored : undefined)
+  return provenance ? { provenance } : {}
+}
+
+/** Accept only actual ISO calendar instants; malformed optional provider dates remain missing. */
+function reportInstant(value: unknown): number {
+  if (typeof value !== 'string') return NaN
+  const parts = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/.exec(value)
+  if (!parts) return NaN
+  const [, year, month, day, hour, minute, second, offset] = parts
+  const date = new Date(`${year}-${month}-${day}T00:00:00.000Z`)
+  if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== `${year}-${month}-${day}`
+    || Number(hour) > 23 || Number(minute) > 59 || Number(second) > 59
+    || (offset !== 'Z' && (Number(offset!.slice(1, 3)) > 23 || Number(offset!.slice(4)) > 59))) return NaN
+  return Date.parse(value)
+}
+
+function lifecycleResponse(res: any, error: CallLifecycleError, toolIds: unknown[] = []): void {
+  const busy = ['call_work_busy', 'call_work_unresolved', 'call_admission_stale'].includes(error.code)
+  const conflict = ['call_tool_identity_conflict', 'call_event_identity_conflict', 'call_provenance_conflict', 'call_revision_conflict'].includes(error.code)
+  if (busy) res.setHeader('retry-after', '2')
+  const result = error.code === 'call_closed' ? 'This call has already ended. No action was taken.'
+    : busy ? 'This call has unfinished work that must be resolved before another action can run. Do not claim it succeeded.'
+      : 'The call or tool identity does not match the accepted request. No new action was taken.'
+  res.status(error.code === 'call_closed' ? 200 : busy ? 503 : conflict ? 409 : 400).json({
+    code: error.code, ...(busy ? { retryable: true } : {}),
+    ...(toolIds.length ? { results: toolIds.map(toolCallId => ({ toolCallId, result })) } : { error: result }),
+  })
 }
 
 const freshCall = (): CallState => ({
@@ -154,10 +203,14 @@ async function getCall(callId: string): Promise<CallState> {
   return reviveCall(await documents.get<CallState>(callKey(callId)))
 }
 
-async function saveCall(callId: string, state: CallState, before: CallState): Promise<void> {
-  await documents.update<CallState>(callKey(callId), freshCall(), (raw) => {
+async function saveCall(callId: string, state: CallState, before: CallState,
+  completion?: { token: string; results: CallToolResult[] }): Promise<CallState> {
+  return documents.update<CallState>(callKey(callId), freshCall(), (raw) => {
     const current = reviveCall(raw)
-    if (current.completedAt) return current
+    if (current.completedAt || current.work?.phase === 'frozen') {
+      if (completion) throw new CallLifecycleError('call_admission_stale')
+      return current
+    }
     const qualification = { ...current.qualification }
     for (const key of ['moveInTiming', 'budget', 'bedrooms', 'pets', 'parking', 'source'] as const) {
       const incoming = state.qualification[key]
@@ -177,7 +230,44 @@ async function saveCall(callId: string, state: CallState, before: CallState): Pr
       : current.escalation?.trigger === 'emergency' ? current.escalation
       : state.escalation?.trigger === 'emergency' ? state.escalation
         : JSON.stringify(state.escalation) !== JSON.stringify(before.escalation) ? state.escalation : current.escalation
+    if (completion) {
+      if (!current.work) throw new CallLifecycleError('call_admission_stale')
+      next.work = completeToolBatch(current.work, { ...completion, now: new Date().toISOString() })
+    }
     return next
+  })
+}
+
+async function finishEndedCall(callId: string, state: CallState, now: Date, runtime?: ResolvedPropertyRuntime): Promise<void> {
+  const work = state.work
+  if (!work || (work.phase !== 'ending' && work.phase !== 'frozen')
+    || work.intents.some(intent => intent.status !== 'complete' && intent.status !== 'blocked')) return
+  if (runtime) await runtime.documents.transaction(store => projectFrozenCall(store, callId, now, runtime))
+  else await projectFrozenCall(documents, callId, now)
+}
+
+/** Only document operations run here; the PostgreSQL caller owns one atomic unit. */
+async function projectFrozenCall(store: DocumentStore, callId: string, now: Date, runtime?: ResolvedPropertyRuntime): Promise<CallState> {
+  const frozen = reviveCall(await store.update<CallState>(callKey(callId), freshCall(), raw => {
+    const current = reviveCall(raw)
+    if (current.completedAt) return current
+    if (!current.work) throw new CallLifecycleError('call_work_unresolved')
+    return { ...current, work: freezeCall(current.work, { now: now.toISOString() }) }
+  }))
+  if (frozen.completedAt) return frozen
+  const work = frozen.work!, end = work.end!
+  const phone = normalisePhone(frozen.phone ?? end.reportedPhone ?? 'unknown')
+  await receiveFinishedCall(store, {
+    callId, phone, at: new Date(end.endedAt), durationSeconds: end.durationSeconds,
+    qualification: frozen.qualification, name: frozen.name, email: frozen.email,
+    unitsDiscussed: frozen.unitsDiscussed, booking: frozen.booking, lossReason: frozen.lossReason,
+    escalation: frozen.escalation, toolsCalled: frozen.toolsCalled,
+  }, now, receiptScope(runtime))
+  return store.update<CallState>(callKey(callId), frozen, raw => {
+    const current = reviveCall(raw)
+    if (!current.work) throw new CallLifecycleError('call_revision_conflict')
+    const completed = completeCall(current.work, { now: now.toISOString(), frozenRevision: work.frozenRevision! })
+    return { ...freshCall(), phone, completedAt: end.endedAt, work: completed }
   })
 }
 
@@ -349,10 +439,11 @@ function callEmergency(state: CallState): EmergencySignal | null {
 
 /** Recording a report does not deliver a notification or dispatch a responder. */
 async function rememberEmergency(callId: string, signal: EmergencySignal, toolsCalled: string[] = []): Promise<{
-  state: CallState | null; hold: EmergencySignal | null;
+  state: CallState | null; hold: EmergencySignal | null; incident: boolean;
 }> {
   let saved: CallState | null = null
   let hold: EmergencySignal | null = null
+  let incident = false
   // Admission shares the calendar's atomic update. A conversation read alone cannot
   // prevent a concurrent booking with stale state. Record the pause before acknowledging.
   try { hold = await holdEmergency(calendarStore, callId, signal, new Date()) }
@@ -360,7 +451,7 @@ async function rememberEmergency(callId: string, signal: EmergencySignal, toolsC
   try {
     saved = await documents.update<CallState>(callKey(callId), freshCall(), (raw) => {
       const current = reviveCall(raw)
-      if (current.completedAt) return current
+      if (current.completedAt || current.work?.phase === 'frozen') return current
       const selected = primaryEmergency([callEmergency(current), signal].filter((e): e is EmergencySignal => Boolean(e)))!
       return { ...current, emergency: selected,
         escalation: { trigger: 'emergency', detail: `${selected.kind}: "${selected.matched}"` },
@@ -372,13 +463,21 @@ async function rememberEmergency(callId: string, signal: EmergencySignal, toolsC
     // The independent calendar guard can preserve the pause if this projection fails.
     logEvent(callId, { kind: 'emergency_record_failed', notificationStatus: 'not_sent' })
   }
+  try {
+    // Safety reports remain independently visible even after the ordinary call
+    // snapshot is frozen or complete. This does not send a staff notification.
+    const selected = primaryEmergency([hold, saved && callEmergency(saved), signal].filter((value): value is EmergencySignal => Boolean(value)))!
+    await recordCallSafetyEvent(documents, { callId, signal: selected, at: new Date(),
+      ...(saved?.phone ? { phone: saved.phone } : {}), ...(saved?.name ? { name: saved.name } : {}) })
+    incident = true
+  } catch { logEvent(callId, { kind: 'emergency_incident_failed', notificationStatus: 'not_sent' }) }
   if (!saved?.completedAt) {
     logEvent(callId, { kind: 'emergency', emergencyKind: signal.kind, matched: signal.matched,
-      persisted: saved !== null, bookingHoldPersisted: hold !== null, notificationStatus: 'not_sent' })
+      persisted: saved !== null, bookingHoldPersisted: hold !== null, incidentPersisted: incident, notificationStatus: 'not_sent' })
     logEvent(callId, { kind: 'escalated', trigger: 'emergency', detail: `${signal.kind}: "${signal.matched}"`,
       persisted: saved !== null, notificationStatus: 'not_sent' })
   }
-  return { state: saved, hold }
+  return { state: saved, hold, incident }
 }
 
 function emergencyToolResponse(signal: EmergencySignal | null, name: string): string {
@@ -395,6 +494,7 @@ function emergencyToolResponse(signal: EmergencySignal | null, name: string): st
 async function runTool(
   name: string, args: Record<string, unknown>, callId: string, now: Date, state: CallState,
   runtime?: ResolvedPropertyRuntime,
+  execution?: { beforeBooking(): Promise<void>; bookingUncertain: boolean },
 ): Promise<string> {
   const { inventory, articles, property } = load(now, runtime)
   const unitIds = runtime ? inventory.units.map(unit => unit.unitId) : rawUnits.map(unit => unit.unitId)
@@ -520,6 +620,7 @@ async function runTool(
       state.name = String(args.prospectName ?? state.name ?? '')
       state.email = args.prospectEmail ? String(args.prospectEmail) : state.email
 
+      await execution?.beforeBooking()
       const booking = await bookTour({
         propertyId: ctx.propertyId,
         interactionId: ctx.interactionId,
@@ -531,6 +632,7 @@ async function runTool(
         unitId,
         floorPlanId: null,
       }, callCalendar(now, timeZone, runtime), { now, makeIntentId: () => `intent-${callId}-${slot.slotId}` })
+      if (execution) execution.bookingUncertain = booking.state.status === 'arranging' || booking.state.status === 'failed'
 
       logEvent(callId, {
         kind: 'tour_booked', status: booking.state.status,
@@ -718,6 +820,10 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
      * supplementary now, not the source.
      */
     const history = await callHistory(runtime ? runtime.assistantIds : auth?.ok && auth.tenantId !== 'legacy' ? auth.assistantIds : undefined, runtime)
+    let safetyEvents: ReturnType<typeof safetyEventForOps>[] = []
+    let safetyEventsError: string | null = null
+    try { safetyEvents = (await listCallSafetyEvents(documents)).map(safetyEventForOps) }
+    catch { safetyEventsError = 'Saved emergency reports are temporarily unavailable. Retry before assuming there are none.' }
     // An upstream fetch can outlast a membership or assistant-binding change.
     // Recheck the existing scope before releasing calls or in-process events.
     if (runtime) await runtime.revalidate()
@@ -727,11 +833,12 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
       callsError: history.error,
       callsConfigured: history.configured,
       callsStale: history.stale,
-      events: scopedEvents(),
+      events: [...scopedEvents().filter(event => event.kind !== 'emergency' || !safetyEvents.some(saved => saved.callId === event.callId)), ...safetyEvents],
+      safetyEventsError,
       generatedAt: new Date().toISOString(),
       note: history.error
         ? (history.stale ? 'Call history is the last good read; Vapi did not answer this time.' : 'Call history unavailable — see callsError.')
-        : 'Calls from Vapi. Decision events are in-process and reset on cold start.',
+        : 'Calls from Vapi. Emergency reports are stored in this workspace; other decision events reset on cold start.',
     })
     return
   }
@@ -762,6 +869,7 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
   const now = new Date()
   let callId = 'unknown-call'
   let pendingToolIds: unknown[] = []
+  let hasAdmittedWork = false
 
   try {
     // Parsing lives inside the try deliberately. A malformed body thrown here would
@@ -800,7 +908,7 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
       if (emergency) {
         if (callId !== 'unknown-call' && emergency.emergency) {
           const recorded = await rememberEmergency(callId, emergency.emergency)
-          if (!recorded.hold || !recorded.state) {
+          if (!recorded.hold || !recorded.state || !recorded.incident) {
             res.status(503).json({ error: 'Emergency pause could not be persisted; retry required.',
               code: 'emergency_persistence_unavailable', safetyInstruction: safetyInstruction(emergency.emergency) })
             return
@@ -828,7 +936,7 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
         const raw = tc?.arguments ?? tc?.function?.arguments ?? {}
         const args = parseToolArgs(raw)
         return { toolCallId: tc?.id ?? tc?.toolCallId,
-          name: String(tc?.name ?? tc?.function?.name ?? ''), args,
+          name: String(tc?.name ?? tc?.function?.name ?? ''), args, raw,
           emergencies: emergencyInArgs(args, raw),
         }
       })
@@ -839,11 +947,11 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
         const recorded = await rememberEmergency(callId, batchEmergency, prepared.map((tc) => tc.name))
         const saved = recorded.state
         const signal = primaryEmergency([saved && callEmergency(saved), recorded.hold, batchEmergency].filter((e): e is EmergencySignal => Boolean(e)))!
-        const persisted = recorded.hold !== null && saved !== null
+        const persisted = recorded.hold !== null && saved !== null && recorded.incident
         res.status(persisted ? 200 : 503).json({
           ...(!persisted ? { code: 'emergency_persistence_unavailable' } : {}),
           results: prepared.map((tc) => ({ toolCallId: tc.toolCallId,
-          result: saved?.completedAt ? 'This call has already ended. No action was taken.' : emergencyToolResponse(signal, tc.name),
+          result: emergencyToolResponse(signal, tc.name),
         })) })
         return
       }
@@ -853,8 +961,8 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
         calendarStore.read().then(calendar => heldEmergency(calendar, callId)), getCall(callId),
       ])
       const activeHold = holdRead.status === 'fulfilled' ? holdRead.value : null
-      const state = callRead.status === 'fulfilled' ? callRead.value : freshCall()
-      if (state.completedAt) {
+      let state = callRead.status === 'fulfilled' ? callRead.value : freshCall()
+      if (state.completedAt && !state.work) {
         res.status(200).json({ results: pendingToolIds.map((toolCallId) => ({
           toolCallId, result: 'This call has already ended. No action was taken.',
         })) })
@@ -875,26 +983,94 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
         return
       }
       if (holdRead.status === 'rejected' || callRead.status === 'rejected') throw new Error('Call safety state could not be verified')
+      const provenance = callProvenance(runtime)
+      const identities = prepared.map(tc => {
+        if (typeof tc.toolCallId !== 'string') throw new CallLifecycleError('call_work_invalid')
+        return { id: tc.toolCallId, name: tc.name, argsHash: hashCallToolArgs(tc.args ?? { invalidArguments: tc.raw }) }
+      })
+      const token = randomUUID()
+      let admission: ReturnType<typeof admitToolBatch> | undefined
+      try {
+        state = reviveCall(await documents.update<CallState>(callKey(callId), freshCall(), raw => {
+          const current = reviveCall(raw)
+          if (current.completedAt && !current.work) throw new CallLifecycleError('call_closed')
+          const route = lifecycleRoute(current, provenance)
+          admission = admitToolBatch(current.work ?? initializeCallLifecycle({ now: now.toISOString(), ...route }),
+            { token, tools: identities, now: now.toISOString(), ...route })
+          return { ...current, work: admission.work }
+        }))
+      } catch (error) {
+        if (error instanceof CallLifecycleError) throw error
+        // An independent safety request may have committed after our first reads,
+        // while this call-record admission failed. Preserve any known guidance.
+        const safety = await Promise.allSettled([
+          calendarStore.read().then(calendar => heldEmergency(calendar, callId)),
+          getCall(callId).then(current => callEmergency(current)),
+        ])
+        const signal = primaryEmergency(safety.flatMap(item => item.status === 'fulfilled' && item.value ? [item.value] : []))
+        res.setHeader('retry-after', '2')
+        res.status(503).json({ code: signal ? 'emergency_persistence_unavailable' : 'call_work_unavailable', retryable: true,
+          results: prepared.map(tc => ({ toolCallId: tc.toolCallId, result: signal ? emergencyToolResponse(signal, tc.name)
+            : 'The call work could not be admitted safely. No action was taken; retry or ask the leasing team for help.' })) })
+        return
+      }
+      const accepted = admission!
+      const cached = new Map(accepted.results.map(item => [item.toolId, item.result]))
+      if (!accepted.admission) {
+        const results = prepared.map(tc => ({ toolCallId: tc.toolCallId, result: cached.get(tc.toolCallId)! }))
+        try { await finishEndedCall(callId, state, now, runtime) }
+        catch {
+          res.setHeader('retry-after', '2')
+          res.status(503).json({ results, code: 'call_projection_pending', retryable: true })
+          return
+        }
+        res.status(200).json({ results })
+        return
+      }
+      hasAdmittedWork = true
+      const freshIds = new Set(accepted.admission.toolIds)
       const before = structuredClone(state)
       const phone = message.call?.customer?.number ?? body.call?.customer?.number
       if (!state.phone && typeof phone === 'string' && phone.trim()) state.phone = normalisePhone(phone)
       const results: Array<{ toolCallId: unknown; result: string }> = []
+      const completions: CallToolResult[] = []
       let pauseUnpersisted = false
+      let unresolved = false
       for (const tc of prepared) {
+        if (!freshIds.has(tc.toolCallId)) {
+          results.push({ toolCallId: tc.toolCallId, result: cached.get(tc.toolCallId)! })
+          continue
+        }
         const name = tc.name
         const toolStartedAt = performance.now()
         let result: string
         let errorCode: string | null = null
+        let outcome: CallToolResult['outcome'] = 'complete'
+        const execution = {
+          bookingUncertain: false,
+          beforeBooking: async () => {
+            await documents.update<CallState>(callKey(callId), freshCall(), raw => {
+              const current = reviveCall(raw)
+              if (!current.work) throw new CallLifecycleError('call_admission_stale')
+              return { ...current, work: markToolDispatch(current.work, { token, toolId: tc.toolCallId, now: new Date().toISOString() }) }
+            })
+          },
+        }
         try {
           if (state.emergency || state.escalation?.trigger === 'emergency') {
-            results.push({ toolCallId: tc.toolCallId, result: emergencyToolResponse(callEmergency(state), name) })
-            continue
-          }
-          if (!tc.args) throw new Error('Invalid tool arguments')
-          result = await runTool(name, tc.args, callId, now, state, runtime)
-          if (state.emergency) {
-            const recorded = await rememberEmergency(callId, state.emergency)
-            pauseUnpersisted ||= !recorded.hold || !recorded.state
+            result = emergencyToolResponse(callEmergency(state), name)
+            outcome = 'blocked'
+          } else if (unresolved) {
+            result = 'An earlier action needs staff review. This additional action was not taken.'
+            outcome = 'blocked'
+          } else {
+            if (!tc.args) throw new Error('Invalid tool arguments')
+            result = await runTool(name, tc.args, callId, now, state, runtime, execution)
+            if (execution.bookingUncertain) { outcome = 'needs_review'; unresolved = true }
+            if (state.emergency) {
+              const recorded = await rememberEmergency(callId, state.emergency)
+              pauseUnpersisted ||= !recorded.hold || !recorded.state || !recorded.incident
+            }
           }
         } catch (error) {
           errorCode = 'tool_failed'
@@ -902,9 +1078,14 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
             state.emergency = error instanceof CalendarInteractionPausedError ? error.signal : callEmergency(state)
             state.escalation = { trigger: 'emergency', detail: 'Leasing paused by the calendar safety guard.' }
             result = emergencyToolResponse(state.emergency, name)
-          } else result = 'I could not verify that action. Ask for clarification or offer a callback; do not claim it succeeded.'
+          } else {
+            result = 'I could not verify that action. Ask for clarification or offer a callback; do not claim it succeeded.'
+            outcome = name === 'book_tour' ? 'needs_review' : 'blocked'
+            unresolved ||= outcome === 'needs_review'
+          }
         }
         results.push({ toolCallId: tc.toolCallId, result })
+        completions.push({ toolId: tc.toolCallId, result, outcome })
         // What each tool decided, for the runtime log — no names, numbers or caller words.
         const events = scopedEvents()
         const last = events[events.length - 1] ?? {}
@@ -919,15 +1100,27 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
           } : {}),
         }))
       }
-      try { await saveCall(callId, state, before) }
+      let saved: CallState | undefined
+      try { saved = await saveCall(callId, state, before, { token, results: completions }) }
       catch (error) {
         if (!state.emergency && state.escalation?.trigger !== 'emergency') throw error
         // Do not replace an already known safety instruction with generic failure copy.
         pauseUnpersisted = true
         logEvent(callId, { kind: 'emergency_record_failed', notificationStatus: 'not_sent' })
       }
-      res.status(pauseUnpersisted ? 503 : 200).json({ results,
-        ...(pauseUnpersisted ? { code: 'emergency_persistence_unavailable' } : {}),
+      let projectionFailed = false
+      if (saved && !unresolved && !pauseUnpersisted) {
+        try { await finishEndedCall(callId, saved, new Date(), runtime) }
+        catch {
+          projectionFailed = true
+          logEvent(callId, { kind: 'error', message: 'Finished-call projection remains pending after admitted work completed.' })
+        }
+      }
+      if (unresolved || projectionFailed) res.setHeader('retry-after', '2')
+      res.status(pauseUnpersisted || unresolved || projectionFailed ? 503 : 200).json({ results,
+        ...(pauseUnpersisted ? { code: 'emergency_persistence_unavailable' }
+          : unresolved ? { code: 'call_work_unresolved', retryable: true }
+            : projectionFailed ? { code: 'call_projection_pending', retryable: true } : {}),
       })
       return
     }
@@ -949,30 +1142,32 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
        * successful delivery. The inbox preserves accepted work for explicit replay.
        */
       try {
-        const state = await getCall(callId)
-        if (state.completedAt) {
-          res.status(200).json({})
-          return
-        }
         const call = message.call ?? body.call ?? {}
-        const phone = normalisePhone(state.phone ?? String(call?.customer?.number ?? message.customer?.number ?? 'unknown'))
-        const started = Date.parse(message.startedAt ?? call.startedAt ?? '')
-        const ended = Date.parse(message.endedAt ?? call.endedAt ?? '')
-        const finishedAt = Number.isFinite(ended) ? new Date(ended) : now
-        await receiveFinishedCall(documents, {
-          callId, phone, at: finishedAt,
-          durationSeconds: !Number.isFinite(started) || !Number.isFinite(ended) || ended < started
-            ? null : Math.round((ended - started) / 1000),
-          qualification: state.qualification,
-          name: state.name, email: state.email,
-          unitsDiscussed: state.unitsDiscussed,
-          booking: state.booking, lossReason: state.lossReason, escalation: state.escalation,
-          toolsCalled: state.toolsCalled,
-        }, now, receiptScope(runtime))
-        // Delete the working details, but retain the completed call's identity. Vapi can
-        // retry its report after a cold start, when no customer number is present and
-        // the only callback number was captured by a tool during the call.
-        await documents.set<CallState>(callKey(callId), { ...freshCall(), phone, completedAt: finishedAt.toISOString() })
+        const started = reportInstant(message.startedAt ?? call.startedAt)
+        const ended = reportInstant(message.endedAt ?? call.endedAt)
+        const duration = Number.isFinite(started) && Number.isFinite(ended) ? Math.round((ended - started) / 1000) : null
+        const reported = call?.customer?.number ?? message.customer?.number
+        const provenance = callProvenance(runtime)
+        const state = reviveCall(await documents.update<CallState>(callKey(callId), freshCall(), raw => {
+          const current = reviveCall(raw)
+          if (current.completedAt && !current.work) return current
+          const route = lifecycleRoute(current, provenance)
+          const work = current.work ?? initializeCallLifecycle({ now: now.toISOString(), ...route })
+          return { ...current, work: requestCallEnd(work, { now: now.toISOString(), ...route, metadata: {
+            eventKey: `end:${hashCallToolArgs({ callId })}`,
+            startedAt: Number.isFinite(started) ? new Date(started).toISOString() : null,
+            endedAt: Number.isFinite(ended) ? new Date(ended).toISOString() : null,
+            reportedPhone: typeof reported === 'string' ? normalisePhone(reported) : null,
+            durationSeconds: duration !== null && duration >= 0 && duration <= 604_800 ? duration : null,
+          } }) }
+        }))
+        if (state.completedAt) { res.status(200).json({}); return }
+        // PostgreSQL freezes, projects receipt/profile/follow-ups, and completes the
+        // same call revision atomically. KV retains the frozen snapshot for replay.
+        const completed = runtime
+          ? await runtime.documents.transaction(store => projectFrozenCall(store, callId, now, runtime))
+          : await projectFrozenCall(documents, callId, now)
+        const phone = completed.phone
         console.log('[call]', JSON.stringify({
           ...diagnosticScope(), requestId: res.atriumRequestId, callId,
           consolidated: true, hasPhone: Boolean(phone && phone !== 'unknown'),
@@ -980,6 +1175,7 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
           escalated: Boolean(state.escalation), store: documents.describe().kind,
         }))
       } catch (err) {
+        if (err instanceof CallLifecycleError) { lifecycleResponse(res, err); return }
         console.error('[vapi]', JSON.stringify({ ...diagnosticScope(), requestId: res.atriumRequestId, callId, errorCode: 'consolidation_failed' }))
         logEvent(callId, { kind: 'error', message: 'Finished-call processing failed; delivery must be retried.' })
         res.setHeader('retry-after', '30')
@@ -990,6 +1186,14 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
 
     res.status(200).json({})
   } catch (err) {
+    if (err instanceof CallLifecycleError) { lifecycleResponse(res, err, pendingToolIds); return }
+    if (hasAdmittedWork) {
+      res.setHeader('retry-after', '2')
+      res.status(503).json({ code: 'call_work_unresolved', retryable: true,
+        results: pendingToolIds.map(toolCallId => ({ toolCallId,
+          result: 'The accepted call work could not be completed safely. Do not claim the action succeeded; it needs retry or staff review.' })) })
+      return
+    }
     if (runtime) throw err
     console.error('[vapi] handler error', err)
     logEvent(callId, { kind: 'error', message: err instanceof Error ? err.message : String(err) })
