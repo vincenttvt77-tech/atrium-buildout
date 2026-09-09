@@ -42,8 +42,9 @@ and the database connection budget when selecting hosting/pooling.
 
 Provision users, scrypt credential hashes, organizations, memberships and explicit
 property grants through a reviewed administrative workflow. Configure channel
-bindings and publish complete property bundles separately. No general customer
-onboarding, password-reset or membership-management UI is included in this slice.
+bindings and publish complete property bundles separately. The PostgreSQL portal includes personal password changes at `/api/account`.
+General customer onboarding, forgotten-password recovery and membership management
+remain open; a personal password change is not an administrator reset.
 The hosting project/provider, production backup policy and production restore proof
 remain open; native PostgreSQL test success does not resolve those choices.
 
@@ -57,6 +58,7 @@ current membership, organization/property status and explicit grants per operati
 | Route | Scope and behavior |
 | --- | --- |
 | `GET/POST /api/dashboard` | Sign-in/logout and protected HTML. A signed-in user with multiple properties sees a picker; an explicit page uses `?organizationId=...&propertyId=...`. |
+| `GET/POST /api/account` | Personal security page and current-password-verified rotation. Requires a fresh user session, same-origin JSON POST and identity-bound signed form token; independent of property access. Absent in legacy mode. |
 | `GET /api/properties` | Authenticated, unscoped catalogue of properties this user can read. It exposes safe labels, role/permissions and navigation links, not property inventories or credentials. |
 | `GET /api/leads`, `/api/calendar`, `/api/vapi` | Require the user session and all three explicit property headers below; permission is `read`. |
 | `POST /api/leads`, `/api/calendar` | Same explicit selection plus `operate`; calendar `settings` requires `configure`. Bulk demo resets are unavailable in PostgreSQL mode. |
@@ -102,6 +104,25 @@ responses on revocation/mismatched scope, and offers reload/property selection
 instead of repeatedly reloading a 403. Normal calendar conflicts retain their own
 retry behavior. These guards do not cancel work already committed before revocation.
 
+## Personal password changes
+
+Status → Account security opens an identity-scoped page. Users without property
+grants can reach the same page from the property picker. Enter the current password
+and a different new password of at least 15 characters. On confirmed save, all old
+sessions are revoked and normal sign-in is required again. No environment edits
+are involved. The legacy production passcode is unaffected.
+
+A database reservation limits each identity to 10 password-change attempts in a
+rolling 15-minute window across application instances. Current-password verification
+and hashing occur outside locks, followed by a version/hash compare-and-swap and
+minimal audit in one transaction. This limit does not protect the separate login
+endpoint. Lost responses never trigger blind password retries. No other person’s
+password can be changed through this route.
+
+[ADR 0002](../docs/adr/0002-personal-account-security.md) records the boundary and
+remaining MFA, invitation, recovery, breached-password screening and hosted
+migration gates. The security event table is private, not a customer audit UI.
+
 ## Published showing rules
 
 A PostgreSQL property must publish `property.tourSettings` in its configuration
@@ -146,10 +167,15 @@ separately by the deployment secret store. There are no database passwords in SQ
 | Role | Purpose and privileges |
 | --- | --- |
 | `atrium_admin` | Owns the private `atrium` schema and its objects. Runs migrations, explicit provisioning and maintenance. Has an explicit all-row policy, including under forced RLS. Never use this role in an HTTP request. |
-| `atrium_authenticator` | Separate login/session repository connection. Read-only control-plane queries, narrowed by login username, actor identity or exact provider routing identity. Can read one selected user's password hash; has no operational table grants. |
+| `atrium_authenticator` | Separate login/session connection. Scoped identity queries and two finite personal password commands. Can read the selected credential but cannot write raw identity tables or access operational tables. |
+| `atrium_account_executor` | NOLOGIN owner of the two private password commands. Has only self-scoped credential/version writes, attempt reservations and audit append under forced RLS. Runtime logins cannot inherit or assume this role. |
 | `atrium_app` | Property repositories only. Scoped configuration reads and operational document/calendar writes, plus scoped audit append/read. Cannot read password hashes, change memberships/configuration/channel bindings, truncate tables, or modify audit history. |
 
-All three should be `NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`.
+All four must be `NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`.
+Provision `atrium_account_executor NOLOGIN` before the account-security migration.
+Grant it only to `atrium_admin` so the migration can transfer function ownership;
+do not grant it to either runtime login. The function execution grants are explicit
+and do not require another runtime connection or deployment secret.
 Runtime roles must not own objects or inherit/assume another role, especially the
 maintenance role. An initial cluster administrator must provision roles and grant
 the migration executor only the required access to create the schema and assume

@@ -23,6 +23,11 @@ node scripts/validate-data.mjs   # check property data against the runtime contr
 See [db/README.md](db/README.md) for the PostgreSQL runtime contract and current
 deployment limits; [SETUP.md](SETUP.md) covers the existing phone integration.
 
+The PostgreSQL portal also includes **Status → Account security** for changing
+your own password. Current-password verification, database rate limits and session
+revocation protect the flow; no environment-file edits are needed. This does not
+change the hosted legacy demo password or complete MFA/customer onboarding.
+
 ## The one idea worth understanding
 
 Every rule that matters is enforced in **code the model cannot argue with** — not in the
@@ -118,7 +123,8 @@ scripts/            build, deploy manifest, assistant config, data validation
 The portal contains caller names, contact details and conversation excerpts. It is
 served by `api/dashboard.ts` after sign-in and is never copied into `public/`.
 
-With `ATRIUM_RUNTIME_MODE=postgres`, sign-in resolves a persisted user. The session
+With `ATRIUM_RUNTIME_MODE=postgres`, staff sign in with their username and password;
+the server resolves a persisted user. Database setup is not part of each login. The session
 contains user identity and credential version, not an active property or cached role.
 Each page selects its organization/property explicitly; every operational request
 rechecks membership, grants and published configuration. Separate tabs can operate
@@ -147,7 +153,9 @@ and no-cache headers supplement authentication; they do not grant or deny access
 Configure database URLs and the session secret once for each deployment environment.
 Create additional staff users and client/property access in PostgreSQL, not new
 environment files. URLs contain no query parameters or fragments; runtime roles must
-not be administrators or inherit each other. See [.env.example](.env.example).
+not be administrators or inherit each other. Account records and grants require an
+authorized provisioning workflow; these runtime settings do not create users or complete
+customer onboarding. See [.env.example](.env.example) and [account modes](TENANCY.md).
 
 PostgreSQL properties require a complete published bundle, including
 `property.tourSettings`; they never inherit bundled Larkin defaults. Stored calendar
@@ -253,7 +261,10 @@ loopback PostgreSQL database in ignored `.atrium-local/`. It imports the existin
 `larkin` account hash from `.env.demo-account.json` once, preserving that password.
 If no local account exists, startup creates one and shows its generated password
 once in the terminal. Later starts authenticate against persisted database users;
-they do not overwrite password changes, memberships or staff edits.
+they do not overwrite password changes, memberships or staff edits. Editing the old
+import file does not reset a persisted password. The local fixture maps legacy
+`demo-larkin` to PostgreSQL organization `org-demo-larkin` and property `prop-demo`;
+it does not copy accounts or credentials into a hosted deployment.
 
 Sample calls are imported once, with checkpointed progress and retained dates.
 `--no-seed` skips call import without clearing saved data. Only one preview process
@@ -261,7 +272,9 @@ may open the same local database, even on different HTTP ports. Stop it normally
 before reopening. Invalid files or uncertain interrupted imports refuse rather
 than reset data. The preview ignores external database/KV/Vapi credentials and
 does not connect to a PMS; bundled fictional inventory retains its source timestamp.
-See [local database notes](db/README.md#local-preview-and-verification).
+Users sign in normally after startup; no per-user environment setup is needed.
+See [local database notes](db/README.md#local-preview-and-verification) and
+[local account persistence](TENANCY.md#persistent-local-preview).
 
 The Calendar view can browse any supported date with previous/next controls or **Go to
 date**; it loads the displayed day or week instead of stopping after two weeks. **Tour

@@ -119,6 +119,7 @@ function propertyPicker(principal: AuthenticatedUser, properties: readonly Autho
         <strong style="display:block;color:var(--ink)">${escapeHtml(property.name)}</strong>
         <span style="font-size:13px;color:var(--muted)">${escapeHtml(property.organizationName)} · ${escapeHtml(property.role)}</span>
       </a>`).join('')}</nav>` : '<p role="status">Your account does not have access to an active property. Contact your organization administrator.</p>'}
+    <p><a href="/api/account">Account security</a></p>
     <form method="post" action="/api/dashboard"><input type="hidden" name="action" value="logout"><button type="submit">Sign out</button></form>
   `)
 }
@@ -312,6 +313,11 @@ async function databaseDashboard(req: any, res: any) {
   const runtime = runtimeForRequest(req)
   const selection = selectedProperty(req)
   const destination = selection ? propertyDashboardUrl(selection.organizationId, selection.propertyId) : '/api/dashboard'
+  // A password-change response may be lost after commit. Offer a fresh sign-in
+  // without relying on whether that response managed to clear the previous cookie.
+  if (req.method === 'GET' && new URL(req.url ?? '/api/dashboard', 'http://localhost').searchParams.get('reauthenticate') === '1') {
+    send(res, 200, loginPage(false, true, destination)); return
+  }
   if (req.method === 'POST') {
     const fields = bodyFields(req)
     const principal = await runtime.authorization.authenticatePassword(fields.username ?? '', fields.password ?? '')
