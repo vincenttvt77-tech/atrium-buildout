@@ -3,6 +3,8 @@ import { storageConfig } from '../store/config.ts'
 import { currentTenantId, tenantNamespace } from '../tenancy/context.ts'
 import type { CalendarState, CalendarStore } from './types.ts'
 import { emptyCalendar } from './types.ts'
+import { isPostgresRuntime } from '../database/mode.ts'
+import { requirePropertyRuntime } from '../database/request.ts'
 
 /**
  * In-process. Survives nothing.
@@ -75,6 +77,7 @@ const tenantMemory = new Map<string, MemoryCalendarStore>()
 export function calendarStoreFromEnv(env: NodeJS.ProcessEnv = process.env): CalendarStore {
   const kvStores = new Map<string, KvCalendarStore>()
   const resolve = (): CalendarStore => {
+    if (isPostgresRuntime(env)) return requirePropertyRuntime().calendarStore
     const tenantId = currentTenantId()
     const namespace = tenantNamespace(tenantId)
     const config = storageConfig(env)

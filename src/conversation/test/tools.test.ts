@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { checkEmergency, checkAvailability, answerQuestion, captureSignal, parseBudget } from '../tools.ts'
+import { checkEmergency, checkAvailability, lookupUnit, lookupPlan, answerQuestion, captureSignal, parseBudget } from '../tools.ts'
 import type { ToolContext } from '../tools.ts'
 import type { InventorySnapshot } from '../../inventory/types.ts'
 import type { KnowledgeArticle } from '../../knowledge/article.ts'
@@ -49,6 +49,39 @@ const qualified = (budget: number, beds: number) => {
   q = captureCore(q, 'bedrooms', extracted({ min: beds, max: beds }, 0.9, CALL, 'one bed', NOW))
   return q
 }
+
+test('date-only move-in warnings preserve June 1 after parsing to a midnight timestamp', () => {
+  const now = new Date('2032-01-01T12:00:00Z')
+  const futureInventory = { ...inventory, readAt: now,
+    units: inventory.units.map(unit => ({ ...unit, availableFrom: '2032-08-01' })) }
+  for (const moveIn of ['2032-06-01', 'June 1, 2032']) {
+    const result = checkAvailability(ctx({ now, inventory: futureInventory, jurisdiction: 'CA' }), { unitId: '21A', moveIn })
+    assert.match(result.say, /not free until August 1, which is later than the June 1 they mentioned/)
+    assert.doesNotMatch(result.say, /May 31|July 31/)
+  }
+})
+
+test('stale inventory cannot quote a named residence, floor plan, status or nonexistent-unit conclusion', () => {
+  const stale = { ...inventory, readAt: new Date(NOW.getTime() - 16 * 60000) }
+  const context = ctx({ inventory: stale, qualification: qualified(4500, 1) })
+  const responses = [checkAvailability(context),
+    ...['21A', 'A1', '99Q'].map(unitId => checkAvailability(context, { unitId })),
+    lookupUnit('21A', context), lookupPlan(stale.floorPlans[1]!, context),
+    ...(['pending', 'leased', 'off_market'] as const).map(status => lookupUnit('21A', {
+      ...context, inventory: { ...stale, units: stale.units.map(unit => ({ ...unit, status })) },
+    })),
+  ]
+  for (const result of responses) {
+    assert.equal(result.record.outcome, 'stale')
+    assert.deepEqual(result.record.unitsOffered, [])
+    assert.match(result.say, /cannot verify current rent, concessions, availability, or move-in dates/)
+    assert.doesNotMatch(result.say, /\$|4,200|one month free|November 1|is available|is pending|no residence|open now|pulling up the live list/i)
+  }
+  assert.equal(stale.readAt.toISOString(), '2026-09-07T11:44:00.000Z', 'Lookup must not freshen the source timestamp')
+  const inline = checkAvailability(ctx({ inventory: stale }), { unitId: '21A', budget: 'four thousand two hundred' })
+  assert.equal(inline.record.outcome, 'stale')
+  assert.equal(inline.qualificationPatch?.budget?.value.maxMonthly, 4200, 'Staleness must preserve caller evidence')
+})
 
 describe('emergency pre-empts every other tool', () => {
   test('a gas report returns the fixed safety instruction and escalates', () => {

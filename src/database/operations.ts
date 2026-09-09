@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import type { PoolClient } from 'pg'
-import type { AuthorizedScope } from '../auth/index.ts'
+import type { AuthorizedScope, Permission } from '../auth/index.ts'
 import type { DocumentStore } from '../store/documents.ts'
 import type { CalendarStore, CalendarState } from '../calendar/types.ts'
 import { emptyCalendar } from '../calendar/types.ts'
@@ -60,7 +60,7 @@ export class PostgresDocumentStore implements DocumentStore {
       const row = (await client.query('SELECT value FROM atrium.operational_documents WHERE organization_id=$1 AND property_id=$2 AND key=$3',
         [this.scope.organizationId, this.scope.propertyId, key])).rows[0]
       return row ? row.value as T : null
-    })
+    }, this.attribution.configurationVersion)
   }
   async set<T>(key: string, value: T): Promise<void> {
     keyValid(key)
@@ -69,7 +69,7 @@ export class PostgresDocumentStore implements DocumentStore {
       await lock(client, this.scope, `document:${key}`)
       await this.write(client, key, serialized)
       await audit(client, this.scope, this.attribution, 'document.set', key)
-    })
+    }, this.attribution.configurationVersion)
   }
   update<T>(key: string, initial: T, fn: (current: T) => T): Promise<T> {
     keyValid(key)
@@ -82,7 +82,7 @@ export class PostgresDocumentStore implements DocumentStore {
       await this.write(client, key, serialized)
       await audit(client, this.scope, this.attribution, 'document.update', key)
       return JSON.parse(serialized) as T
-    })
+    }, this.attribution.configurationVersion)
   }
   private async write(client: PoolClient, key: string, value: string): Promise<void> {
     await client.query(`INSERT INTO atrium.operational_documents(organization_id,property_id,key,value) VALUES($1,$2,$3,$4::jsonb)
@@ -98,7 +98,7 @@ export class PostgresDocumentStore implements DocumentStore {
       [this.scope.organizationId, this.scope.propertyId, pattern])).rows
       if (rows.length > 5000) throw new Error('This workspace requires a paginated operational query.')
       return rows.map(row => row.key)
-    })
+    }, this.attribution.configurationVersion)
   }
   async delete(key: string): Promise<void> {
     keyValid(key)
@@ -107,18 +107,19 @@ export class PostgresDocumentStore implements DocumentStore {
       await client.query('DELETE FROM atrium.operational_documents WHERE organization_id=$1 AND property_id=$2 AND key=$3',
         [this.scope.organizationId, this.scope.propertyId, key])
       await audit(client, this.scope, this.attribution, 'document.delete', key)
-    })
+    }, this.attribution.configurationVersion)
   }
   describe = description
 }
 
 /** Property-wide lock preserves existing capacity and emergency admission rules atomically. */
 export class PostgresCalendarStore implements CalendarStore {
+  private mutationPermission: Permission
   private connection: DatabaseConnection
   private scope: AuthorizedScope
   private attribution: MutationAttribution
-  constructor(connection: DatabaseConnection, scope: AuthorizedScope, attribution: MutationAttribution) {
-    this.connection = connection; this.scope = scope; this.attribution = attribution
+  constructor(connection: DatabaseConnection, scope: AuthorizedScope, attribution: MutationAttribution, mutationPermission: Permission = 'operate') {
+    this.connection = connection; this.scope = scope; this.attribution = attribution; this.mutationPermission = mutationPermission
   }
   assertScope(scope: AuthorizedScope): void {
     if (scope !== this.scope) throw new AuthorizationError('forbidden')
@@ -128,10 +129,10 @@ export class PostgresCalendarStore implements CalendarStore {
       const row = (await client.query('SELECT state FROM atrium.calendars WHERE organization_id=$1 AND property_id=$2',
         [this.scope.organizationId, this.scope.propertyId])).rows[0]
       return validateCalendar(row ? row.state : emptyCalendar())
-    })
+    }, this.attribution.configurationVersion)
   }
   mutate(fn: (state: CalendarState) => CalendarState): Promise<CalendarState> {
-    return propertyTransaction(this.connection, this.scope, 'operate', async client => {
+    return propertyTransaction(this.connection, this.scope, this.mutationPermission, async client => {
       await lock(client, this.scope, 'calendar')
       const row = (await client.query('SELECT state FROM atrium.calendars WHERE organization_id=$1 AND property_id=$2 FOR UPDATE',
         [this.scope.organizationId, this.scope.propertyId])).rows[0]
@@ -142,7 +143,7 @@ export class PostgresCalendarStore implements CalendarStore {
       [this.scope.organizationId, this.scope.propertyId, serialized])
       await audit(client, this.scope, this.attribution, 'calendar.update', 'calendar')
       return JSON.parse(serialized) as CalendarState
-    })
+    }, this.attribution.configurationVersion)
   }
   describe = description
 }

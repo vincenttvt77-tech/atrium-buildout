@@ -2,6 +2,7 @@ import rawProperty from '../data/property.json' with { type: 'json' }
 import { authorizeOps } from '../src/ops/session.ts'
 import { demoAssistantConfig } from '../src/vapi/config.ts'
 import { syncAssistant } from '../src/vapi/sync.ts'
+import { isPostgresRuntime, resolveOpsRuntime, readRuntimeError } from '../src/application/runtime.ts'
 
 /**
  * "Update the phone assistant" — pushes the repository's script and tools to Vapi.
@@ -13,6 +14,34 @@ export default async function handler(req: any, res: any) {
   res.setHeader('cache-control', 'no-store')
   res.setHeader('x-robots-tag', 'noindex, nofollow')
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return }
+
+  let databaseMode: boolean
+  try { databaseMode = isPostgresRuntime() }
+  catch (error) {
+    const result = readRuntimeError(error)
+    res.status(result.status).json(result.body)
+    return
+  }
+  if (databaseMode) {
+    try {
+      const runtime = await resolveOpsRuntime(req, 'configure', new Date())
+      if (runtime.assistantIds.length !== 1) {
+        res.status(409).json({ ok: false, error: runtime.assistantIds.length
+          ? 'This property has multiple connected assistants. Select a property assistant through the configuration workflow.'
+          : 'This property has no active voice assistant connected.', scope: runtime.responseScope })
+        return
+      }
+      // The existing publisher builds a bundled Larkin assistant. It cannot publish a
+      // customer property until a versioned configuration/action rollout is available.
+      res.status(409).json({ ok: false, code: 'property_assistant_publish_unavailable',
+        error: 'Property assistant publishing requires a coordinated configuration and webhook rollout. No changes were sent to Vapi.',
+        scope: runtime.responseScope })
+    } catch (error) {
+      const result = readRuntimeError(error)
+      res.status(result.status).json(result.body)
+    }
+    return
+  }
 
   const auth = authorizeOps(req.headers ?? {}, new Date())
   if (!auth.ok) {

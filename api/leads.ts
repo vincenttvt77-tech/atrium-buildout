@@ -6,6 +6,9 @@ import type { LeadProfile } from '../src/leads/profile.ts'
 import type { FollowUp } from '../src/leads/followups.ts'
 import { normalisePhone, pinnedName } from '../src/leads/profile.ts'
 import { withTenant } from '../src/tenancy/context.ts'
+import { isPostgresRuntime, resolveOpsRuntime, runWithPropertyRuntime, readRuntimeError } from '../src/application/runtime.ts'
+import type { ResolvedPropertyRuntime } from '../src/application/runtime.ts'
+import { randomUUID } from 'node:crypto'
 
 /**
  * Lead profiles and the follow-up queue, for the operations dashboard.
@@ -18,18 +21,28 @@ import { withTenant } from '../src/tenancy/context.ts'
 const store = documentStoreFromEnv()
 
 export default async function handler(req: any, res: any) {
+  req.atriumRequestId = randomUUID()
+  res.setHeader('x-request-id', req.atriumRequestId)
   res.setHeader('cache-control', 'no-store, no-cache, must-revalidate, private')
   res.setHeader('x-robots-tag', 'noindex, nofollow, noarchive, nosnippet')
 
-  const auth = authorizeOps(req.headers ?? {}, new Date())
-  if (!auth.ok) {
-    res.status(auth.reason === 'not_configured' ? 503 : 401).json({
-      error: auth.reason === 'not_configured' ? 'Leads are closed until OPS_DASHBOARD_PASSCODE is set.' : 'unauthorized',
-    })
-    return
-  }
-
-  return withTenant(auth.tenantId, async () => {
+  let runtime: ResolvedPropertyRuntime | undefined
+  let tenantId: string | undefined
+  try {
+    if (isPostgresRuntime()) {
+      runtime = await resolveOpsRuntime(req, req.method === 'GET' ? 'read' : 'operate')
+      const json = res.json.bind(res)
+      res.json = (body: Record<string, unknown>) => json({...body,scope:runtime!.responseScope})
+    } else {
+      const auth = authorizeOps(req.headers ?? {}, new Date())
+      if (!auth.ok) {
+        res.status(auth.reason === 'not_configured' ? 503 : 401).json({error:auth.reason === 'not_configured' ? 'Leads require a configured portal account.' : 'unauthorized'})
+        return
+      }
+      tenantId = auth.tenantId
+    }
+  } catch(error) { const failure = readRuntimeError(error); res.status(failure.status).json(failure.body); return }
+  const run = async () => {
   const now = new Date()
 
   try {
@@ -48,7 +61,10 @@ export default async function handler(req: any, res: any) {
     }
 
     if (req.method === 'POST') {
-      const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body ?? {})
+      let body: any
+      try { body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body ?? {}) }
+      catch { res.status(400).json({error:'Invalid JSON request.'}); return }
+      if (!body || typeof body !== 'object' || Array.isArray(body)) {res.status(400).json({error:'A JSON object is required.'}); return}
       const action = String(body.action ?? '')
 
       if (action === 'followup_status') {
@@ -82,7 +98,7 @@ export default async function handler(req: any, res: any) {
 
       if (action === 'clear_leads') {
         // Test control for resetting the demo. Labelled as such on the dashboard.
-        if (isHostedRuntime()) {
+        if (runtime || isHostedRuntime()) {
           res.status(403).json({ error: 'Bulk lead reset is only available in local testing' })
           return
         }
@@ -97,7 +113,9 @@ export default async function handler(req: any, res: any) {
 
     res.status(405).json({ error: 'GET or POST only' })
   } catch (err) {
+    if (runtime) { const failure = readRuntimeError(err); res.status(failure.status).json(failure.body); return }
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
   }
-  })
+  }
+  return runtime ? runWithPropertyRuntime(runtime,run) : withTenant(tenantId!,run)
 }

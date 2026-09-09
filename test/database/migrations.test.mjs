@@ -38,14 +38,15 @@ test('generated migration applies once and refuses checksum drift without changi
   const directory = await mkdtemp(join(tmpdir(), 'atrium-migration-check-'))
   try {
     const names = (await readdir(migrationsDirectory)).filter(name => name.endsWith('.sql')).sort()
-    assert.equal(names.length, 1)
+    assert.ok(names.length >= 2)
     const sql = await readFile(join(migrationsDirectory, names[0]), 'utf8')
     assert.equal(sql, await readFile(new URL('../../db/schema.sql', import.meta.url), 'utf8'))
     assert.deepEqual(await applyDatabaseMigrations(db.admin), [])
-    assert.equal((await db.admin.query('SELECT count(*) FROM atrium_migrations.history')).rows[0].count, '1')
+    assert.equal((await db.admin.query('SELECT count(*) FROM atrium_migrations.history')).rows[0].count, String(names.length))
+    for (const name of names) await writeFile(join(directory,name),await readFile(join(migrationsDirectory,name)))
     await writeFile(join(directory, names[0]), sql + '\n-- Deliberate test-only checksum mismatch\n')
     await assert.rejects(applyDatabaseMigrations(db.admin,directory), /checksum mismatch/)
-    assert.equal((await db.admin.query('SELECT count(*) FROM atrium_migrations.history')).rows[0].count, '1')
+    assert.equal((await db.admin.query('SELECT count(*) FROM atrium_migrations.history')).rows[0].count, String(names.length))
     await writeFile(join(directory, names[0]), sql)
     // Intentionally misordered fixture, derived from the CLI-generated filename.
     await writeFile(join(directory, names[0].replace(/^2026/,'2025')), '-- Should never be applied after a later migration\n')

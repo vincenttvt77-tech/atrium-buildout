@@ -1,5 +1,5 @@
 import type { InventorySnapshot, FloorPlan } from '../inventory/types.ts'
-import { findMatches } from '../inventory/match.ts'
+import { findMatches, inventoryIsFresh } from '../inventory/match.ts'
 import { rentPhrase, spokenMoney } from '../inventory/pricing.ts'
 import type { QualificationState } from '../leasing/qualification.ts'
 import { mayQuote, nextSignalToAsk, captureCore } from '../leasing/qualification.ts'
@@ -216,8 +216,15 @@ const sizeOf = (u: { bedrooms: number }) => (u.bedrooms === 0 ? 'studio' : `${u.
 const unitLine = (u: { unitId: string; bedrooms: number; bathrooms: number; sqft: number; floor: number; monthlyRent: number; concession?: string | null; availableFrom: string; view?: string }) =>
   `Unit ${u.unitId} (${sizeOf(u)}, ${u.bathrooms} bath, ${u.sqft} sq ft, floor ${u.floor}): ${rentPhrase(u)}, available ${availDate(u.availableFrom)}${u.view ? `. ${u.view}` : ''}`
 
+// Availability and parsed move-in dates use UTC calendar fields, including when
+// serialized as midnight timestamps. These are dates, not tour appointment instants.
 const availDate = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: /^\d{4}-\d{2}-\d{2}$/.test(iso) ? 'UTC' : 'America/New_York' })
+  new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' })
+
+const staleAvailability = (): ToolResult => ({
+  say: 'The inventory source is out of date, so I cannot verify current rent, concessions, availability, or move-in dates. Tell the caller this limitation and offer to take their details for a leasing-team follow-up. Do not quote from this snapshot or say a live refresh is underway.',
+  record: { kind: 'availability_checked', outcome: 'stale', unitsOffered: [] },
+})
 
 /**
  * A caller who has the website open asks about a residence by name. That question does
@@ -226,6 +233,7 @@ const availDate = (iso: string) =>
  * look a unit up and either improvised or said it was unavailable.
  */
 export function lookupUnit(unitId: string, ctx: ToolContext): ToolResult {
+  if (!inventoryIsFresh(ctx.inventory, ctx.now)) return staleAvailability()
   const wanted = unitId.trim().toUpperCase().replace(/^(RESIDENCE|UNIT|APARTMENT|APT)\s*/i, '')
   const u = ctx.inventory.units.find((x) => x.unitId.toUpperCase() === wanted)
   const plan = u ? ctx.inventory.floorPlans.find((p) => p.id === u.floorPlanId) : undefined
@@ -262,6 +270,7 @@ export function lookupUnit(unitId: string, ctx: ToolContext): ToolResult {
  * answered like one: what is open in that layout, from the verified snapshot.
  */
 export function lookupPlan(plan: FloorPlan, ctx: ToolContext): ToolResult {
+  if (!inventoryIsFresh(ctx.inventory, ctx.now)) return staleAvailability()
   const open = ctx.inventory.units
     .filter((u) => u.floorPlanId === plan.id && u.status === 'available')
     .sort((a, b) => Date.parse(a.availableFrom) - Date.parse(b.availableFrom))
@@ -300,6 +309,9 @@ export function checkAvailability(ctx: ToolContext, args: AvailabilityArgs = {})
     return { ...out, qualificationPatch: inline }
   }
 
+  // A caller naming a residence or layout bypasses qualification, never freshness.
+  if (!inventoryIsFresh(ctx.inventory, ctx.now)) return staleAvailability()
+
   if (args.unitId) {
     // A residence first — it is the more specific name — then a plan by code or name.
     const wanted = args.unitId.trim().toUpperCase()
@@ -327,10 +339,7 @@ export function checkAvailability(ctx: ToolContext, args: AvailabilityArgs = {})
 
   switch (out.kind) {
     case 'stale':
-      return {
-        say: 'I need to re-check the current availability before I quote anything — tell the caller you are pulling up the live list.',
-        record: { kind: 'availability_checked', outcome: 'stale', unitsOffered: [] },
-      }
+      return staleAvailability()
 
     case 'no_match':
       return {

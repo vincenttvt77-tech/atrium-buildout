@@ -33,7 +33,7 @@
  *                             overdue: 'Was due 4 hours ago' | 'Was due yesterday 10:00 AM' | 'Was due Sun, Sep 6'
  *   Atrium.fmt.respondPhrase(iso) 'respond by 4:00 PM today' | 'respond by tomorrow 10:00 AM' | … | 'was due 2 hours ago'
  *   Atrium.fmt.elapsed(ms)    '14 hours' | '20 min' | '2 days' — for "oldest waiting …"
- *   Atrium.api.get(path)      parsed JSON; 401/403 → Atrium.gate() and throws { signedOut:true }
+ *   Atrium.api.get(path)      parsed JSON; 401 signs out; revoked property access retires the document
  *   Atrium.api.post(path, body, { doing }) same; JSON body; throws Error(server {error}) with .status;
  *                             a failed write is remembered as state.lastWriteError (Status › For support)
  *   Atrium.gate()             session over: stop polling, no more requests, location.reload()
@@ -62,7 +62,7 @@
  *   Atrium.apply(resource, data)    replace that resource's state from a write response; emits 'data'
  *   Atrium.refresh()          one forced poll round of all three resources (+ /api/health) → Promise
  *   Atrium.icons / Atrium.icon(name)  inline SVG strings (24px, currentColor); '' for an unknown name
- *   Atrium.property           { name, leasingPhone, leasingPhoneDisplay, hours } — build-time copy of data/property.json
+ *   Atrium.property           safe property display facts from server bootstrap (legacy fixture defaults only)
  *   Atrium.normalisePhone(s)  the server's rule: 10 digits → '+1…', 11 starting 1 → '+…', other → '+digits', empty → 'unknown'
  *   Atrium.labels / Atrium.label(map, key, fallback)  §6 vocabulary; own-property lookup, humanised fallback
  *   Atrium.derive.*           windowStart, personName, displayName, displayStage, needsPerson, callBackToday,
@@ -98,17 +98,56 @@
 'use strict'
 
 const LEGACY_TIME_ZONE = 'America/New_York'
+const databaseMode = window.ATRIUM_RUNTIME_MODE === 'postgres'
+const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/
+const PERMISSIONS = ['read', 'operate', 'configure', 'manage_members', 'manage_organization']
+let documentScope = null
+let displayProperty = null
+let documentAccessIssue = null
+function permissionAllowed(permission) {
+  return !documentAccessIssue && (!databaseMode || documentScope.permissions.includes(permission))
+}
+function displayText(value, max = 200) { return typeof value === 'string' && value.length <= max && !/[\u0000-\u001f\u007f]/.test(value) }
+function scopeIdentity(value) {
+  return value && typeof value === 'object' && typeof value.organizationId === 'string' && typeof value.propertyId === 'string'
+    && ID_PATTERN.test(value.organizationId) && ID_PATTERN.test(value.propertyId)
+}
+function validatedBootstrap(value) {
+  if (!scopeIdentity(value) || !Number.isSafeInteger(value.configurationVersion) || value.configurationVersion < 1
+    || !displayText(value.permissionVersion) || !value.permissionVersion
+    || !Array.isArray(value.permissions) || !value.permissions.includes('read')
+    || value.permissions.some(p => !PERMISSIONS.includes(p)) || new Set(value.permissions).size !== value.permissions.length
+    || !displayText(value.buildingName) || !value.buildingName.trim()
+    || !displayText(value.locationLabel ?? '', 300) || !value.hours || typeof value.hours !== 'object' || Array.isArray(value.hours)) throw new Error('Invalid property bootstrap')
+  const hours = {}
+  for (const [day, range] of Object.entries(value.hours)) {
+    if (!/^[0-6]$/.test(day) || !Array.isArray(range) || range.length !== 2
+      || range.some(n => typeof n !== 'number' || !Number.isFinite(n) || n < 0 || n > 24) || range[1] <= range[0]) throw new Error('Invalid property hours')
+    hours[day] = Object.freeze([...range])
+  }
+  for (const key of ['leasingPhone', 'leasingPhoneDisplay']) if (value[key] != null && !displayText(value[key], 80)) throw new Error('Invalid property contact')
+  documentScope = Object.freeze({ organizationId: value.organizationId, propertyId: value.propertyId,
+    configurationVersion: value.configurationVersion, permissionVersion: value.permissionVersion,
+    permissions: Object.freeze([...value.permissions]) })
+  return Object.freeze({ name: value.buildingName, locationLabel: value.locationLabel || '',
+    leasingPhone: value.leasingPhone || null, leasingPhoneDisplay: value.leasingPhoneDisplay || value.leasingPhone || null,
+    hours: Object.freeze(hours) })
+}
 function validatedTimeZone(value) {
   if (typeof value !== 'string' || !/^(?:UTC|GMT|[A-Za-z_]+(?:\/[A-Za-z0-9_+.-]+)+)$/.test(value)) throw new Error('Invalid property timezone')
   return new Intl.DateTimeFormat('en-US', { timeZone: value }).resolvedOptions().timeZone
 }
 let propertyTimeZone
 try {
+  if (window.ATRIUM_RUNTIME_MODE !== undefined && !['legacy', 'postgres'].includes(window.ATRIUM_RUNTIME_MODE)) throw new Error('Unknown runtime mode')
+  if (databaseMode) displayProperty = validatedBootstrap(window.ATRIUM_PROPERTY)
   const supplied = window.ATRIUM_PROPERTY && Object.prototype.hasOwnProperty.call(window.ATRIUM_PROPERTY, 'timeZone')
-    ? window.ATRIUM_PROPERTY.timeZone : LEGACY_TIME_ZONE
+    ? window.ATRIUM_PROPERTY.timeZone : databaseMode ? null : LEGACY_TIME_ZONE
   propertyTimeZone = validatedTimeZone(supplied)
 } catch {
-  document.body.textContent = 'Property configuration needs attention. The timezone is invalid; ask an administrator to correct it, then reload.'
+  document.body.textContent = databaseMode
+    ? 'Property configuration needs attention. The property details or timezone are invalid; ask an administrator to correct them, then reload.'
+    : 'Property configuration needs attention. The timezone is invalid; ask an administrator to correct it, then reload.'
   return
 }
 const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -117,18 +156,18 @@ const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct
 const MON_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const DAY_MS = 86400000
 const isDemo = window.ATRIUM_DEMO === true
+const isPersistentDemo = isDemo && window.ATRIUM_DEMO_PERSISTENT === true
 const USD = "$"
 
-/** Build-time copy of data/property.json (buildingName, leasingPhone, leasingHoursByDay). Gap G-9/G-10. */
-const property = {
-  name: 'The Larkin',
+/** DB mode never inherits another building's phone, hours, name or location. */
+const property = Object.freeze({
+  ...(displayProperty || { name: 'The Larkin', locationLabel: 'Long Island City, NY',
+    leasingPhone: '+15169909252', leasingPhoneDisplay: '(516) 990-9252',
+    hours: { 0: [11, 16], 1: [10, 18], 2: [10, 18], 3: [10, 19], 4: [10, 19], 5: [10, 18], 6: [10, 17] } }),
   timeZone: propertyTimeZone,
   timeZoneLabel: new Intl.DateTimeFormat('en-US', { timeZone: propertyTimeZone, timeZoneName: 'longGeneric' })
     .formatToParts(new Date()).find(part => part.type === 'timeZoneName').value,
-  leasingPhone: '+15169909252',
-  leasingPhoneDisplay: '(516) 990-9252',
-  hours: { 0: [11, 16], 1: [10, 18], 2: [10, 18], 3: [10, 19], 4: [10, 19], 5: [10, 18], 6: [10, 17] },
-}
+})
 
 // ---------------------------------------------------------------------------------------
 // Escaping and text
@@ -520,11 +559,44 @@ function emit(ev, ...args) {
 const arr = (v) => (Array.isArray(v) ? v : [])
 
 // ---------------------------------------------------------------------------------------
-// API — same-origin only; 401/403 means the session is over
+// API — immutable document scope; only 401 ends authentication
 // ---------------------------------------------------------------------------------------
 
 let gated = false
+let scopeEpoch = 0
+const PROPERTY_ENDPOINTS = new Set(['/api/vapi', '/api/calendar', '/api/leads', '/api/vapi-sync'])
+const propertyEndpoint = path => PROPERTY_ENDPOINTS.has(String(path).split('?')[0])
 const JSON_HEADERS = { accept: 'application/json' }
+function accessError(message, status = 409) { const error = new Error(message); error.status = status; error.propertyAccess = true; return error }
+function invalidateDocument(message, status = 409) {
+  if (!documentAccessIssue) {
+    documentAccessIssue = { message, status }; scopeEpoch += 1; stopPolling()
+    for (const name of Object.keys(seq)) { seq[name] += 1; sig[name] = '' }
+    Object.assign(state, { calls: [], events: [], calendar: null, leads: null, callsError: null, callsConfigured: null,
+      loaded: { calls: false, calendar: false, leads: false }, errors: {}, lastWriteError: null, lastGoodAt: {}, updatedAt: null })
+    crCache = { key: null, value: [] }
+    if (booted) {
+      for (const item of [...dialogs]) item.close()
+      for (const item of [...toasts]) item.close()
+      for (const media of document.querySelectorAll('audio, video')) media.pause()
+      // Retire every view, including hidden views with cached caller details. A new
+      // authorized document is required; hash navigation must not revive them.
+      for (const view of document.querySelectorAll('.view')) { view.hidden = true; view.replaceChildren() }
+      const live = document.getElementById('live'); if (live) live.textContent = ''
+      paintChrome()
+    }
+  }
+  return accessError(message, status)
+}
+function checkResponseScope(data) {
+  if (!databaseMode) return
+  if (documentAccessIssue) throw accessError(documentAccessIssue.message, documentAccessIssue.status)
+  const scope = data && data.scope
+  if (!scope || scope.organizationId !== documentScope.organizationId || scope.propertyId !== documentScope.propertyId
+    || scope.configurationVersion !== documentScope.configurationVersion || scope.permissionVersion !== documentScope.permissionVersion) {
+    throw invalidateDocument('The property or your access changed. Reload this property before viewing or making changes.')
+  }
+}
 function signedOut() { const e = new Error('Signed out'); e.signedOut = true; e.status = 401; return e }
 function gate() {
   if (gated) return
@@ -534,35 +606,59 @@ function gate() {
 }
 async function request(path, init) {
   if (gated) throw signedOut()
+  const scoped = databaseMode && propertyEndpoint(path)
+  if (scoped && documentAccessIssue) throw accessError(documentAccessIssue.message, documentAccessIssue.status)
+  const epoch = scopeEpoch
+  const headers = { ...(init && init.headers), ...(scoped ? {
+    'x-atrium-organization-id': documentScope.organizationId, 'x-atrium-property-id': documentScope.propertyId,
+    'x-atrium-config-version': String(documentScope.configurationVersion),
+  } : {}) }
   let r
   try {
-    r = await fetch(path, { credentials: 'same-origin', cache: 'no-store', ...init })
+    r = await fetch(path, { credentials: 'same-origin', cache: 'no-store', ...init, headers })
   } catch (e) {
     const err = new Error("Couldn't reach the server"); err.status = 0; err.network = true; throw err
   }
-  if (r.status === 401 || r.status === 403) { gate(); throw signedOut() }
+  if (r.status === 401) { if (databaseMode) invalidateDocument('Your session ended. Sign in again.', 401); gate(); throw signedOut() }
   let body = null, parsed = false
   try { body = await r.json(); parsed = true } catch (e) { parsed = false }
+  if (scoped && epoch !== scopeEpoch) throw accessError('This response belongs to an earlier property session. Reload the property.')
   if (!r.ok) {
+    if (scoped && r.status === 403) throw invalidateDocument('Access to this property or operation is no longer available. Choose a property you can access or reload to refresh your permissions.', 403)
+    if (scoped && (r.status === 428 || (r.status === 409 && /property|configuration|scope/.test(String(body && body.code))))) {
+      throw invalidateDocument('The property configuration changed. Reload this property before continuing.')
+    }
     const msg = body && typeof body.error === 'string' ? body.error : `HTTP ${r.status}`
     if (r.status === 503 && /OPS_DASHBOARD_PASSCODE/.test(msg)) state.notConfigured = true
     const err = new Error(msg); err.status = r.status; err.body = body; throw err
   }
   if (!parsed || body === null || typeof body !== 'object') { const err = new Error('Unexpected response'); err.status = r.status; err.badJson = true; throw err }
+  if (scoped) checkResponseScope(body)
   if (path.split('?')[0] === '/api/calendar') checkCalendarTimeZone(body)
   return body
 }
 function checkCalendarTimeZone(data) {
   let zone
-  try { zone = validatedTimeZone(data.timeZone === undefined ? LEGACY_TIME_ZONE : data.timeZone) }
-  catch { const error = new Error('The calendar returned an invalid property timezone. Reload after the configuration is corrected.'); error.status = 503; throw error }
-  if (zone !== propertyTimeZone) { const error = new Error('The property timezone changed. Reload the portal before viewing or changing tours.'); error.status = 409; throw error }
+  try { zone = validatedTimeZone(data.timeZone === undefined && !databaseMode ? LEGACY_TIME_ZONE : data.timeZone) }
+  catch {
+    const message = 'The calendar returned an invalid property timezone. Reload after the configuration is corrected.'
+    if (databaseMode) throw invalidateDocument(message, 503)
+    const error = new Error(message); error.status = 503; throw error
+  }
+  if (zone !== propertyTimeZone) {
+    const message = 'The property timezone changed. Reload the portal before viewing or changing tours.'
+    if (databaseMode) throw invalidateDocument(message)
+    const error = new Error(message); error.status = 409; throw error
+  }
 }
 const api = {
   get(path) { return request(path, { headers: JSON_HEADERS }) },
   async post(path, body, opts) {
     try {
-      if (path === '/api/calendar') body = { ...body, ...calendarRequestRange(), expectedTimeZone: propertyTimeZone }
+      const endpoint = String(path).split('?')[0]
+      const needed = endpoint === '/api/vapi-sync' || (endpoint === '/api/calendar' && body && body.action === 'settings') ? 'configure' : 'operate'
+      if (propertyEndpoint(path) && !permissionAllowed(needed)) throw accessError('Your access is view only for this operation.', 403)
+      if (endpoint === '/api/calendar') body = { ...body, ...calendarRequestRange(), expectedTimeZone: propertyTimeZone }
       return await request(path, {
         method: 'POST', headers: { ...JSON_HEADERS, 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}),
       })
@@ -624,6 +720,7 @@ function assign(name, snap) {
 }
 /** Replace a resource from a payload; true when its signature changed. */
 function ingest(name, data) {
+  checkResponseScope(data)
   if (name === 'calendar') checkCalendarTimeZone(data || {})
   const snap = snapshot(name, data || {})
   const s = JSON.stringify(snap)
@@ -671,7 +768,7 @@ async function pollRound(force) {
   paintChrome()
 }
 function startPolling() {
-  if (pollTimer || gated) return
+  if (pollTimer || gated || documentAccessIssue) return
   pollTimer = setInterval(() => { pollRound(false) }, 5000)
   pollRound(true)
 }
@@ -709,14 +806,17 @@ function paintBusy(resource) {
     if (on) { if (!el.classList.contains('is-busy')) el.setAttribute('aria-disabled', 'true') }
     else el.removeAttribute('aria-disabled')
   }
+  paintPermissions()
 }
 function apply(resource, data) {
+  checkResponseScope(data)
   if (resource === 'calendar' && data && !calendarRangeMatches(data)) return
   seq[resource] += 1
   const d = data || {}
   if (resource === 'calendar') {
     const cur = state.calendar || { slots: [], blocks: [], bookings: [], store: null }
     ingest('calendar', {
+      scope: d.scope,
       slots: Array.isArray(d.slots) ? d.slots : cur.slots, blocks: Array.isArray(d.blocks) ? d.blocks : cur.blocks,
       bookings: Array.isArray(d.bookings) ? d.bookings : cur.bookings, store: d.store ?? cur.store,
       timeZone: d.timeZone ?? cur.timeZone ?? LEGACY_TIME_ZONE,
@@ -735,7 +835,7 @@ function apply(resource, data) {
       const i = profiles.findIndex((p) => p && p.phone === d.profile.phone)
       if (i >= 0) profiles[i] = d.profile; else profiles.unshift(d.profile)
     }
-    ingest('leads', { profiles, followUps, outboundEnabled: typeof d.outboundEnabled === 'boolean' ? d.outboundEnabled : cur.outboundEnabled, store: d.store ?? cur.store })
+    ingest('leads', { scope: d.scope, profiles, followUps, outboundEnabled: typeof d.outboundEnabled === 'boolean' ? d.outboundEnabled : cur.outboundEnabled, store: d.store ?? cur.store })
   } else if (resource === 'calls') {
     ingest('calls', d)
   } else return
@@ -792,6 +892,7 @@ function placeholderView(name) {
     `<p class="faint" style="margin-top:12px">Loading…</p></div>`
 }
 function showView(r, moveFocus) {
+  if (documentAccessIssue) return
   for (const sec of document.querySelectorAll('.view')) sec.hidden = sec.dataset.view !== r.name
   for (const a of document.querySelectorAll('.nav-item')) {
     if (a.dataset.view === r.name) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current')
@@ -865,10 +966,17 @@ function badgeFor(name) {
 }
 function paintChrome() {
   const account = window.ATRIUM_ACCOUNT
+  document.title = `Atrium — ${property.name}`
+  document.querySelectorAll('[data-property-name]').forEach(node => { node.textContent = property.name })
+  document.querySelectorAll('[data-property-location]').forEach(node => { node.textContent = property.locationLabel ? `/ ${property.locationLabel}` : '' })
+  document.querySelectorAll('[data-workspace-name]').forEach(node => { node.textContent = databaseMode ? property.name : account ? account.displayName : property.name })
+  document.querySelectorAll('[data-property-switch]').forEach(node => { node.hidden = !databaseMode })
+  document.querySelectorAll('[data-view-only]').forEach(node => { node.hidden = !databaseMode || permissionAllowed('operate') })
   if (account) {
-    document.querySelectorAll('[data-workspace-name]').forEach((node) => { node.textContent = account.displayName })
     document.querySelectorAll('[data-account-name]').forEach((node) => { node.textContent = account.username })
+    document.querySelectorAll('[data-account-avatar]').forEach(node => { node.textContent = String(account.displayName || account.username || 'A').trim().slice(0, 1).toUpperCase() })
   }
+  paintPermissions()
   const needs = derive.needsPerson(state)
   const live = needs.some((n) => n.type === 'emergency')
   const badges = {
@@ -897,8 +1005,8 @@ function paintCluster(rows) {
   const anyLoaded = state.loaded.leads || state.loaded.calendar || state.loaded.calls
   if (rows.reconnecting) { iconName = 'refresh'; l1 = 'Trying to reconnect…'; l2 = at ? `Showing what we had at ${at}` : ''; mobile = 'Reconnecting…'; cls = 'cluster-warn' }
   else if (anyLoaded && (rows.leadsSaving === 'off' || rows.leadsSaving === 'temp' || rows.calendarSaving === 'off' || rows.calendarSaving === 'temp')) {
-    iconName = 'cloud-off'; l1 = isDemo ? 'Demo workspace' : "Changes aren't being saved"; l2 = isDemo ? 'Sample data resets on restart' : at ? `Updated ${at}` : ''; mobile = isDemo ? 'Demo' : 'Not saving'; cls = isDemo ? '' : 'cluster-warn'
-  } else if (anyLoaded) { iconName = 'check-circle'; l1 = 'Changes are being saved'; l2 = at ? `Updated ${at}` : ''; mobile = at ? `Updated ${at}` : 'Updated'; cls = 'cluster-ok' }
+    iconName = 'cloud-off'; l1 = isDemo && !isPersistentDemo ? 'Demo workspace' : "Changes aren't being saved"; l2 = isDemo && !isPersistentDemo ? 'Sample data resets on restart' : at ? `Updated ${at}` : ''; mobile = isDemo && !isPersistentDemo ? 'Demo' : 'Not saving'; cls = isDemo && !isPersistentDemo ? '' : 'cluster-warn'
+  } else if (anyLoaded) { iconName = 'check-circle'; l1 = isPersistentDemo ? 'Local demo workspace' : 'Changes are being saved'; l2 = isPersistentDemo ? 'Sample data saved locally' : at ? `Updated ${at}` : ''; mobile = isPersistentDemo ? 'Local demo' : at ? `Updated ${at}` : 'Updated'; cls = 'cluster-ok' }
   el.innerHTML = `<span class="cluster-desk ${cls}">${ico(iconName)}<span><span class="cluster-l1">${esc(l1)}</span>${l2 ? `<span class="cluster-l2">${esc(l2)}</span>` : ''}</span></span>` +
     `<span class="cluster-mobile ${cls}">${ico(iconName)}<span>${esc(mobile)}</span></span>`
   el.setAttribute('aria-label', l2 ? `${l1}${/[.…!?]$/.test(l1) ? '' : '.'} ${l2}` : l1)
@@ -906,8 +1014,53 @@ function paintCluster(rows) {
 function paintGlobalBanners() {
   const host = document.getElementById('global-banners')
   if (!host) return
-  const html = state.notConfigured ? html_.banner('warn', "This page isn't set up yet. Ask Atrium support.") : ''
+  const html = documentAccessIssue ? html_.banner('warn', documentAccessIssue.message, { actionsHtml:
+    `<a class="btn" href="${esc(propertyUrl(documentScope))}">Reload property</a><a class="btn btn-quiet" href="/api/dashboard">Choose a property</a>` })
+    : state.notConfigured ? html_.banner('warn', "This page isn't set up yet. Ask Atrium support.") : ''
   if (host.innerHTML !== html) host.innerHTML = html
+}
+
+/** UI affordances follow bootstrap permissions; the server independently authorizes writes. */
+function paintPermissions(root = document) {
+  if (!databaseMode || typeof root.querySelectorAll !== 'function') return
+  for (const control of root.querySelectorAll('[data-write], [data-permission]')) {
+    const permission = control.dataset.permission || 'operate'
+    const allowed = permissionAllowed(permission)
+    if (!allowed) { control.hidden = true; control.setAttribute('aria-disabled', 'true'); if ('disabled' in control) control.disabled = true }
+  }
+  if (root === document && document.body.classList) {
+    document.body.classList.toggle('portal-read-only', !permissionAllowed('operate'))
+    document.body.classList.toggle('portal-no-configure', !permissionAllowed('configure'))
+  }
+}
+
+function propertyUrl(scope) {
+  if (!scopeIdentity(scope)) return '/api/dashboard'
+  return `/api/dashboard?${new URLSearchParams({ organizationId: scope.organizationId, propertyId: scope.propertyId })}`
+}
+
+async function openPropertySwitcher() {
+  if (!databaseMode) return
+  let list
+  const panel = dialog({ title: 'Switch property', secondary: { label: 'Close' }, build(body) {
+    list = document.createElement('div'); list.className = 'property-list'; list.textContent = 'Loading your properties…'; body.append(list)
+  } })
+  try {
+    const result = await api.get('/api/properties')
+    if (!Array.isArray(result.properties)) throw new Error('The property list could not be verified.')
+    const seen = new Set()
+    const properties = result.properties.map(item => {
+      const selection = { organizationId: item && item.organizationId, propertyId: item && item.id }
+      if (!scopeIdentity(selection) || !displayText(item.name) || !item.name.trim() || !displayText(item.organizationName)
+        || seen.has(propertyUrl(selection))) throw new Error('The property list could not be verified.')
+      seen.add(propertyUrl(selection))
+      return { ...selection, name: item.name, organizationName: item.organizationName }
+    })
+    list.innerHTML = properties.length ? properties.map(item => {
+      const current = item.organizationId === documentScope.organizationId && item.propertyId === documentScope.propertyId
+      return `<a class="property-choice${current ? ' is-current' : ''}" href="${esc(propertyUrl(item))}"${current ? ' aria-current="page"' : ''}><span><strong>${esc(item.name)}</strong><small>${esc(item.organizationName)}</small></span><span>${current ? 'Current property' : 'Open property'} ${ico('chevron-right')}</span></a>`
+    }).join('') : '<p class="muted">You do not currently have access to any properties. Contact your administrator.</p>'
+  } catch (error) { list.textContent = ''; panel.setError(error.message || 'The property list is unavailable.') }
 }
 
 // ---------------------------------------------------------------------------------------
@@ -932,12 +1085,17 @@ const html_ = {
   },
 }
 function hint(key) {
-  const k = `atrium.hint.${window.ATRIUM_ACCOUNT?.tenantId || 'legacy'}.${String(key)}`
+  const k = preferenceKey(`hint.${String(key)}`)
   try {
     if (localStorage.getItem(k)) return false
     localStorage.setItem(k, '1')
     return true
   } catch (e) { return true }
+}
+const preferenceIdentity = databaseMode ? JSON.stringify([documentScope.organizationId, documentScope.propertyId, window.ATRIUM_ACCOUNT?.userId || '']) : window.ATRIUM_ACCOUNT?.tenantId || 'legacy'
+function preferenceKey(key) {
+  const identity = preferenceIdentity
+  return `atrium.${identity}.${String(key)}`
 }
 const escStack = []
 const escape_ = {
@@ -1906,7 +2064,7 @@ const telLink = (phone) => { const h = href.tel(phone), shown = fmt.phone(phone)
 const personLink = (phone, name) => `<a class="name" href="${esc(hashFor('leads', { phone: phone || 'unknown' }))}">${esc(name)}</a>`
 const mailLink = (email) => { const h = href.mailto(email); return h ? `<a href="${esc(h)}">${esc(email)}</a>` : esc(email || '') }
 const chipHtml = (c) => html_.chip(c.cls, c.icon, c.text)
-const isAfterHours = (t) => { const p = nyParts(t); if (!p) return false; const h = property.hours[p.dayOfWeek]; if (!h) return true; const x = p.hour + p.minute / 60; return x < h[0] || x >= h[1] }
+const isAfterHours = (t) => { const p = nyParts(t); if (!p || !Object.keys(property.hours).length) return false; const h = property.hours[p.dayOfWeek]; if (!h) return true; const x = p.hour + p.minute / 60; return x < h[0] || x >= h[1] }
 function sectionHead(title, count, trailing) {
   // tabindex=-1 + data-key: where keyboard focus lands when the row it was on has just left the list
   return `<div class="section-head"><h2 tabindex="-1" data-key="section:${esc(title)}">${esc(title)}${count != null ? ` <span class="count">· ${count}</span>` : ''}</h2>${trailing || ''}</div>`
@@ -2105,7 +2263,7 @@ const todayView = {
     if (m.notConfigured) { root.innerHTML = out; return }
     out += m.emergencies.map((x) => emergencyBannerHtml(x, this.announced)).join('')
     if (m.leadsOff || m.calOff) {
-      const txt = isDemo ? 'Demo workspace: explore these sample calls, leads and tours. Changes last until the local preview restarts.' : m.leadsOff && m.calOff ? "Heads up: changes aren't being saved right now. Anything you mark may disappear. Ask Atrium support."
+      const txt = isDemo && !isPersistentDemo ? 'Demo workspace: explore these sample calls, leads and tours. Changes last until the local preview restarts.' : m.leadsOff && m.calOff ? "Heads up: changes aren't being saved right now. Anything you mark may disappear. Ask Atrium support."
         : m.leadsOff ? "Heads up: callers and to-dos aren't being saved right now. Anything you mark here may disappear. Ask Atrium support."
           : "Heads up: calendar changes aren't being saved right now. Blocks you add may disappear. Ask Atrium support."
       out += html_.banner('warn', '', { raw: `<a class="banner-link" href="#/status" style="color:inherit;text-decoration:none">${esc(txt)}</a>` })
@@ -2206,7 +2364,7 @@ const statusView = {
     const savingRow = (labelText, v) => {
       if (v === null) return `<div class="status-row"><span class="dot dot-neutral"></span><span class="muted">${esc(labelText)}: not loaded yet</span></div>`
       const off = v !== 'on'
-      const word = v === 'on' ? 'Saving on' : v === 'temp' ? 'Saving temporarily unavailable — check the connection' : isDemo ? 'Demo data — resets when the preview restarts' : 'Saving off — changes may be lost'
+      const word = v === 'on' ? (isPersistentDemo ? 'Sample data saved locally' : 'Saving on') : v === 'temp' ? 'Saving temporarily unavailable — check the connection' : isDemo && !isPersistentDemo ? 'Demo data — resets when the preview restarts' : 'Saving off — changes may be lost'
       return `<div class="status-row"><span class="dot${off ? ' dot-warn' : ''}"></span><span class="${off ? 'warn-text' : ''}">${off ? ico('cloud-off') : ico('check')} ${esc(labelText)}: ${esc(word)}</span></div>`
     }
     const rec = rows.recordings
@@ -2220,10 +2378,10 @@ const statusView = {
     out += `<section class="status-section"><h2>Saving</h2>${savingRow('Callers and to-dos', rows.leadsSaving)}${savingRow('Calendar', rows.calendarSaving)}` +
       (!isDemo && (rows.leadsSaving === 'off' || rows.calendarSaving === 'off') ? `<p class="status-p muted small">Ask Atrium support to turn saving on.</p>` : '') + '</section>'
     out += `<section class="status-section"><h2>Call recordings and transcripts</h2><div class="status-row"><span class="dot${rec === 'on' ? '' : rec === null ? ' dot-neutral' : ' dot-warn'}"></span><span class="${rec === 'on' || rec === null ? '' : 'warn-text'}">${esc(recText)}</span></div></section>`
-    out += isDemo ? `<section class="status-section" id="phone-assistant"><h2>Phone assistant</h2><p class="status-p">This demo uses sample conversations. It does not update your live phone assistant.</p></section>` : `<section class="status-section" id="phone-assistant"><h2>Phone assistant</h2><p class="status-p">Apply the latest leasing instructions and tools to your phone assistant. Your existing voice, model, and webhook authentication settings are preserved.</p><div class="status-actions"><button type="button" class="btn" data-action="sync-assistant" data-key="sync-assistant">Update the phone assistant</button></div></section>`
+    out += isDemo ? `<section class="status-section" id="phone-assistant"><h2>Phone assistant</h2><p class="status-p">This demo uses sample conversations. It does not update your live phone assistant.</p></section>` : `<section class="status-section" id="phone-assistant"><h2>Phone assistant</h2><p class="status-p">${databaseMode ? 'Phone assistant changes require an administrator and a verified property connection.' : 'Apply the latest leasing instructions and tools to your phone assistant. Your existing voice, model, and webhook authentication settings are preserved.'}</p>${!databaseMode ? '<div class="status-actions"><button type="button" class="btn" data-action="sync-assistant" data-key="sync-assistant" data-permission="configure">Update the phone assistant</button></div>' : ''}</section>`
     out += `<section class="status-section"><h2>Outgoing calls</h2><div class="status-row"><span class="dot dot-neutral"></span><span>${model.outbound ? 'The assistant can make outgoing calls.' : "The assistant answers calls; it doesn't make them. Everything under To do is for your team."}</span></div></section>`
     out += `<section class="status-section"><h2>Times</h2><p class="status-p">All times on this page use ${esc(property.timeZoneLabel)} (${esc(property.timeZone)}).</p></section>`
-    out += `<section class="status-section"><h2>Signed in</h2><p class="status-p">${window.ATRIUM_ACCOUNT ? `Signed in as <strong>${esc(window.ATRIUM_ACCOUNT.username)}</strong> to ${esc(window.ATRIUM_ACCOUNT.displayName)}. ` : "You're signed in on this device. "}Sessions end after 8 hours. Sign out before switching accounts.</p><div class="status-actions"><button type="button" class="btn" data-action="signout" data-key="signout">Sign out</button></div></section>`
+    out += `<section class="status-section"><h2>Signed in</h2><p class="status-p">${window.ATRIUM_ACCOUNT ? `Signed in as <strong>${esc(window.ATRIUM_ACCOUNT.username)}</strong> to ${esc(databaseMode ? property.name : window.ATRIUM_ACCOUNT.displayName)}. ` : "You're signed in on this device. "}${databaseMode && !permissionAllowed('operate') ? 'Your property access is view only. ' : ''}Sessions end after 8 hours. Sign out before switching accounts.</p><div class="status-actions"><button type="button" class="btn" data-action="signout" data-key="signout">Sign out</button></div></section>`
     out += `<section class="status-section"><h2>Who can see this</h2><p class="status-p">This page has callers' names, numbers and what they said. Keep it to the leasing team, don't screenshot it into a shared channel, and sign out when you're done.</p></section>`
     out += `<section class="status-section"><h2>What the assistant does and doesn't do</h2><p class="status-p">${esc(ASSISTANT_PARA)}</p></section>`
     const support = []
@@ -2237,11 +2395,12 @@ const statusView = {
     out += `<details class="support status-section" data-key="support"><summary>${ico('chevron-down')}For support</summary><dl class="facts">${support.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl></details>`
     const weekN = model.weekDays
     const weekNote = model.calLoaded && !weekN && model.weekSkipped ? ' Every remaining day of this week is already blocked.' : (model.weekSkipped ? ` ${text.plural(model.weekSkipped, 'day is', 'days are')} already blocked and will be left as ${model.weekSkipped === 1 ? 'it is' : 'they are'}.` : '')
-    out += `<section class="card card-demo status-section" id="demo-tools"><div class="demo-head" tabindex="-1" data-key="demo-head">${ico('warning')}<span>Demo tools</span></div><p class="demo-standing">These are for demos and testing. They change real data.</p>` +
+    if (!databaseMode) out += `<section class="card card-demo status-section" id="demo-tools"><div class="demo-head" tabindex="-1" data-key="demo-head">${ico('warning')}<span>Demo tools</span></div><p class="demo-standing">These are for demos and testing. They change real data.</p>` +
       `<div class="demo-row"><p>Try it: call the leasing line and the call shows up on Today within a minute.</p><a class="btn" href="${esc(href.tel(property.leasingPhone))}">Call ${esc(property.leasingPhoneDisplay)}</a></div>` +
       `<div class="demo-row"><p>Blocks every remaining day of this week so a caller is told there's nothing available.${esc(weekNote)}</p><button type="button" class="btn" data-action="block-week" data-key="block-week" data-write="calendar"${model.calLoaded && weekN ? '' : ' aria-disabled="true"'}>Block the rest of this week</button><div class="demo-progress" hidden></div></div>` +
       `<div class="demo-row"><p>Removes every tour from the calendar, including real ones. Only for resetting a demo.</p><button type="button" class="btn btn-danger" data-action="clear-bookings" data-key="clear-bookings" data-write="calendar">Delete all tours</button></div>` +
-      `<div class="demo-row"><p>Removes every caller and to-do so you can run a fresh demo. Don't use this with real callers.</p><button type="button" class="btn btn-danger" data-action="clear-leads" data-key="clear-leads" data-write="leads">Delete all callers</button></div></section></div>`
+      `<div class="demo-row"><p>Removes every caller and to-do so you can run a fresh demo. Don't use this with real callers.</p><button type="button" class="btn btn-danger" data-action="clear-leads" data-key="clear-leads" data-write="leads">Delete all callers</button></div></section>`
+    out += '</div>'
     // an open "For support" and the focused control survive the re-render a poll causes
     const wasOpen = new Set([...root.querySelectorAll('details[open]')].map((d) => d.dataset.key))
     root.innerHTML = out
@@ -2317,6 +2476,7 @@ const statusView = {
   },
   async signOut(btn) {
     btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true')
+    if (databaseMode) invalidateDocument('Signing out. Sign in again to continue.', 401)
     stopPolling(); gated = true
     try {
       await fetch('/api/dashboard', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { ...JSON_HEADERS, 'content-type': 'application/json' }, body: JSON.stringify({ action: 'logout' }) })
@@ -2405,6 +2565,7 @@ const statusView = {
 function boot() {
   if (booted) return
   booted = true
+  for (const button of document.querySelectorAll('[data-property-switch]')) button.addEventListener('click', openPropertySwitcher)
   for (const el of document.querySelectorAll('[data-icon]')) el.innerHTML = icon(el.dataset.icon)
   // the Inter stylesheet arrived as media="print" so it never blocked first paint; apply it now (index.html)
   for (const l of document.querySelectorAll('link[data-font-swap]')) l.media = 'all'
@@ -2424,6 +2585,7 @@ function boot() {
 window.Atrium = {
   escapeHtml, fmt, api, gate, toast, confirm, prompt, dialog, register, navigate, route, hashFor, state, on,
   busy, busyNow, apply, refresh, calendarUrl, setCalendarRange, icons, icon, property, normalisePhone, labels, label, derive, hint, text, href,
+  can: permissionAllowed, paintPermissions, preferenceKey, propertyUrl, databaseMode,
   html: html_, announce, escape: escape_, setFollowUpStatus, boot, views: VIEWS.slice(),
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot)
