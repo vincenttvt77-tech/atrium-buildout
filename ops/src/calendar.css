@@ -281,3 +281,19 @@ button.cal-dayhead:hover { background: var(--paper-3); }
 /* Two tours can share one time (two model residences). Shared tours split the cell, or sit
    on the right beside the open place that is still free; the layout itself is inline. */
 .cal-slot.is-shared .cal-tour{padding-left:4px;padding-right:4px;box-shadow:inset 0 0 0 1px var(--panel, #fff)}
+
+/* Unit availability and manual tour changes share the calendar's property context. */
+.cal-action-form { display: grid; gap: 16px; }
+.cal-action-intro { color: var(--ink-2); line-height: 1.55; margin: 0 0 20px; }
+.cal-action-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.cal-action-pair[hidden] { display: none; }
+.cal-action-check { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.cal-unit-blocks { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 16px; }
+.cal-unit-blocks h4 { font-size: 14px; margin: 0 0 12px; }
+.cal-unit-block { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding: 14px 0; }
+.cal-unit-block:first-child { border-top: 0; }
+.cal-unit-block p { color: var(--ink-2); font-size: 13px; line-height: 1.5; margin: 5px 0 0; }
+.cal-unit-conflict { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 10px 12px; line-height: 1.5; }
+.cal-unit-block .cal-unit-conflict { color: var(--warn); }
+.cal-action-form :disabled { opacity: .65; }
+@media (max-width: 480px) { .cal-action-pair { grid-template-columns: 1fr; } .cal-unit-block { flex-direction: column; } }

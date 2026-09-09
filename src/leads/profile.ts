@@ -36,6 +36,13 @@ export interface CallSummary {
 }
 
 export interface LeadBooking {
+  /** Stable calendar reservation identity; absent only on older profile records. */
+  externalId?: string
+  rescheduleRevision?: number
+  rescheduledAt?: string
+  endsAt?: string
+  /** Physical aliases prevent a late legacy report from restoring a moved tour. */
+  rescheduledFrom?: { slotId: string; startsAt: string; unitId: string | null }[]
   slotId: string
   startsAt: string
   unitId: string | null

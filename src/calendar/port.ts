@@ -1,9 +1,10 @@
 import type { CalendarPort, TourSlot, BookingIntent } from '../booking/types.ts'
 import type { CalendarStore, SlotBooking } from './types.ts'
-import { openSlots, generateSlots, bookingSlot, canBook } from './slots.ts'
+import { openSlots, generateSlots, bookingSlot, canBook, unitBlocksFor } from './slots.ts'
 import { effectiveOptions } from './settings.ts'
 import type { SlotOptions } from './slots.ts'
 import { heldEmergency, CalendarInteractionPausedError } from './safety.ts'
+import { tourChangeHold, tourProspectPhone, TourChangeRequiredError } from '../leads/tour-change.ts'
 
 const normalizedUnit = (unit: string | null | undefined): string | null => unit?.trim().toUpperCase() || null
 const sameSlot = (left: TourSlot | null, right: TourSlot): boolean => left !== null
@@ -51,6 +52,13 @@ export function storeBackedCalendar(
           return state
         }
 
+        if (tourChangeHold(state, String(intent.request.interactionId))) throw new TourChangeRequiredError('caller_requested')
+        const phone = tourProspectPhone(intent.request.prospectPhone)
+        if (phone && state.bookings.some(booking => tourProspectPhone(booking.prospectPhone) === phone
+          && (bookingSlot(booking)?.startsAt.getTime() ?? Infinity) >= now().getTime())) {
+          throw new TourChangeRequiredError('existing_future_tour')
+        }
+
         const options = effectiveOptions(state, { capacity: 1, ...opts })
         if (unit && options.unitIds && !options.unitIds.some((id) => normalizedUnit(id) === unit)) {
           throw new Error('booking unavailable: the selected apartment is not in this property inventory')
@@ -60,7 +68,9 @@ export function storeBackedCalendar(
           .find((candidate) => sameSlot(candidate, slot))
         if (!available) return state
         if (!canBook(slot, state, options, unit)) {
-          if (unit && canBook(slot, state, options, null)) {
+          if (unit && unitBlocksFor(slot, state, options, unit).length) {
+            reason = `booking unavailable: apartment ${unit} is blocked for that time`
+          } else if (unit && canBook(slot, state, options, null)) {
             reason = `slot taken: apartment ${unit} is already being shown at that time`
           }
           return state
@@ -81,6 +91,7 @@ export function storeBackedCalendar(
             occupiedStartsAt: new Date(slot.startsAt.getTime() - buffer).toISOString(),
             occupiedEndsAt: new Date(slot.endsAt.getTime() + buffer).toISOString(),
             bookedAt: at.toISOString(),
+            interactionId: String(intent.request.interactionId),
           }],
         }
       })

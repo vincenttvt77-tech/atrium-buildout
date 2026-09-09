@@ -148,7 +148,7 @@ describe('two tours can share a time, one apartment cannot', () => {
     const cal = storeBackedCalendar(store, () => NOW, { capacity: 2 })
     const intent = (key: string, name: string, unitId: string | null) => ({
       idempotencyKey: key, request: { propertyId: propertyId('prop-demo'), interactionId: interactionId(`i-${key}`), personId: null,
-        prospectName: name, prospectPhone: '+15550000000', prospectEmail: null, slot, unitId, floorPlanId: null },
+        prospectName: name, prospectPhone: { Ana: '+15550000001', Ben: '+15550000002', Cy: '+15550000003' }[name], prospectEmail: null, slot, unitId, floorPlanId: null },
     })
     await cal.createBooking(intent('k1', 'Ana', '13L') as never)
     await assert.rejects(cal.createBooking(intent('k2', 'Ben', '13L') as never), /already being shown/)

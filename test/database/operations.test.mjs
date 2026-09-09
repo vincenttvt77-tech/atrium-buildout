@@ -57,8 +57,13 @@ test('real concurrent tour reservations honor three staff, unit exclusivity, and
   const calendar = propertyCalendar(store, scope, () => now, { minimumNoticeMinutes: 0, capacity: 3, timeZone: 'America/New_York', unitIds: ['1A','1B','1C','1D'] })
   const slots = await calendar.listSlots('property-a1', new Date('2026-09-08T14:00:00Z'), new Date('2026-09-08T18:00:00Z'))
   assert.ok(slots.length > 0)
-  const request = (id, unit, propertyId = 'property-a1') => ({ intentId: id, idempotencyKey: id, createdAt: now,
-    request: { propertyId, interactionId: `call-${id}`, personId: null, prospectName: 'Synthetic prospect', prospectPhone: '+15555550101', prospectEmail: null, unitId: unit, floorPlanId: null, slot: slots[0] } })
+  // Staff-capacity cases represent independent visitors, not repeat bookings by one prospect.
+  const visitorPhones = new Map()
+  const request = (id, unit, propertyId = 'property-a1') => {
+    if (!visitorPhones.has(id)) visitorPhones.set(id, `+1555777${String(visitorPhones.size).padStart(4, '0')}`)
+    return { intentId: id, idempotencyKey: id, createdAt: now,
+      request: { propertyId, interactionId: `call-${id}`, personId: null, prospectName: 'Synthetic prospect', prospectPhone: visitorPhones.get(id), prospectEmail: null, unitId: unit, floorPlanId: null, slot: slots[0] } }
+  }
   await assert.rejects(calendar.listSlots('property-b1', now, new Date('2026-09-09T00:00:00Z')), { code: 'forbidden' })
   await assert.rejects(calendar.createBooking(request('wrong-property','1A','property-b1')), { code: 'forbidden' })
   const result = await Promise.allSettled(['1A','1B','1C','1D'].map((unit,index) => calendar.createBooking(request(`tour-${index}`,unit))))

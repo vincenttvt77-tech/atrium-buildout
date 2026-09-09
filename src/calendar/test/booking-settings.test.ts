@@ -20,9 +20,12 @@ const request = (slot: TourSlot, unitId: string | null = '12A', phone = '+155555
   prospectName: 'Local calendar test', prospectPhone: phone, prospectEmail: null,
   unitId, floorPlanId: null, slot,
 })
-const intent = (slot: TourSlot, key: string, unitId: string | null = '12A'): BookingIntent => ({
-  intentId: key, idempotencyKey: key, createdAt: NOW, request: request(slot, unitId),
-})
+// Capacity cases represent different visitors; same-key retries retain one phone.
+const visitorPhones = new Map<string, string>()
+const intent = (slot: TourSlot, key: string, unitId: string | null = '12A'): BookingIntent => {
+  if (!visitorPhones.has(key)) visitorPhones.set(key, `+1555777${String(visitorPhones.size).padStart(4, '0')}`)
+  return { intentId: key, idempotencyKey: key, createdAt: NOW, request: request(slot, unitId, visitorPhones.get(key)!) }
+}
 
 test('calendar queries honor both range boundaries, including dates beyond the default two weeks', async () => {
   const cal = storeBackedCalendar(new MemoryCalendarStore(), () => NOW, options)

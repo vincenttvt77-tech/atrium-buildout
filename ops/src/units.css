@@ -1,0 +1,69 @@
+/* Unit feedback complements the source inventory; this view never edits unit facts. */
+.uf-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.uf-heading p { max-width: 65ch; margin-top: 8px; }
+.uf-heading .btn { flex: none; }
+.uf-source { margin-bottom: 20px; }
+.uf-toolbar { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.uf-toolbar .search { width: min(100%, 420px); }
+.uf-period { display: flex; align-items: center; gap: 8px; font-size: .875rem; color: var(--ink-2); }
+.uf-layout { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); gap: 24px; align-items: start; }
+.uf-units { overflow: hidden; }
+.uf-unit-list { max-height: 65vh; overflow-y: auto; }
+.uf-unit { display: block; width: 100%; text-align: left; padding: 16px 18px; color: var(--ink); border: 0; border-bottom: 1px solid var(--line); background: var(--paper-2); cursor: pointer; font: inherit; }
+.uf-unit:hover { background: var(--accent-soft); }
+.uf-unit[aria-current="true"] { background: var(--accent-soft); box-shadow: inset 3px 0 var(--accent); }
+.uf-unit:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
+.uf-unit strong, .uf-unit .small { display: block; }
+.uf-unit strong { font-weight: 600; margin-bottom: 4px; }
+.uf-unit .small { line-height: 1.6; }
+.uf-unit .uf-counts { display: flex; flex-wrap: wrap; gap: 5px 12px; margin-top: 8px; font-size: .8125rem; }
+.uf-up { color: var(--ok); } .uf-down { color: var(--danger); }
+.uf-unit-empty { padding: 18px; }
+.uf-detail { min-width: 0; }
+.uf-detail-head { margin-bottom: 16px; }
+.uf-detail-head h2 { font-size: 1.4rem; margin: 0 0 5px; }
+.uf-detail-head p { margin: 0; }
+.uf-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+.uf-metric { padding: 18px; }
+.uf-metric strong { display: block; font-size: 1.8rem; font-weight: 600; letter-spacing: -.04em; margin: 5px 0; }
+.uf-metric span { font-size: .8125rem; color: var(--ink-2); }
+.uf-section { padding: 22px; margin-bottom: 20px; }
+.uf-section h3 { margin: 0 0 6px; font-size: 1rem; font-weight: 600; }
+.uf-reasons { margin: 16px 0 0; display: grid; gap: 14px; }
+.uf-reason-line { display: flex; justify-content: space-between; gap: 15px; font-size: .875rem; }
+.uf-reason-count { color: var(--ink-2); white-space: nowrap; }
+.uf-reason-track { display: flex; gap: 2px; height: 5px; margin-top: 7px; border-radius: 5px; overflow: hidden; background: var(--paper-3); }
+.uf-reason-bar { display: block; height: 5px; flex: none; background: var(--line-strong); }
+.uf-reason-bar.positive { background: var(--ok); }
+.uf-reason-bar.negative { background: var(--danger); }
+.uf-feed { margin: 16px 0 0; padding: 0; list-style: none; }
+.uf-entry { padding: 18px 0; border-top: 1px solid var(--line); }
+.uf-entry:first-child { padding-top: 0; border-top: 0; }
+.uf-entry:last-child { padding-bottom: 0; }
+.uf-entry-head, .uf-entry-meta { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.uf-entry-head { font-weight: 500; }
+.uf-entry-note { margin: 10px 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.uf-entry-meta { margin-top: 9px; color: var(--ink-3); font-size: .8125rem; }
+.uf-entry-meta .btn-link { margin-left: auto; }
+.uf-entry a { color: var(--accent); }
+.uf-form { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.uf-form label { display: grid; gap: 6px; color: var(--ink); font-size: .875rem; font-weight: 500; }
+.uf-form .uf-full { grid-column: 1 / -1; }
+.uf-form textarea { resize: vertical; min-height: 110px; font: inherit; }
+.uf-form .field-hint { margin: 0; font-weight: 400; }
+.uf-form fieldset { border: 0; padding: 0; margin: 0; min-width: 0; display: contents; }
+.uf-form :disabled { opacity: .65; cursor: not-allowed; }
+.uf-form-intro { margin: 0 0 18px; color: var(--ink-2); font-size: .875rem; }
+@media (max-width: 1100px) { .uf-layout { grid-template-columns: 235px minmax(0, 1fr); gap: 16px; } .uf-section { padding: 18px; } }
+@media (max-width: 760px) {
+  .uf-layout { grid-template-columns: minmax(0, 1fr); }
+  .uf-unit-list { max-height: 235px; }
+  .uf-heading { flex-wrap: wrap; gap: 14px; }
+  .uf-heading .btn { width: 100%; justify-content: center; }
+  .uf-toolbar { align-items: stretch; flex-direction: column; gap: 12px; }
+  .uf-toolbar .search { width: 100%; }
+  .uf-period { justify-content: space-between; }
+  .uf-period select { flex: 1; max-width: 240px; }
+  .uf-metric { padding: 14px; } .uf-metric strong { font-size: 1.5rem; }
+}
+@media (max-width: 420px) { .uf-form { grid-template-columns: minmax(0, 1fr); } .uf-metrics { gap: 8px; } .uf-metric { padding: 12px; } }

@@ -875,6 +875,22 @@ button.cal-dayhead:hover { background: var(--paper-3); }
 /* Two tours can share one time (two model residences). Shared tours split the cell, or sit
    on the right beside the open place that is still free; the layout itself is inline. */
 .cal-slot.is-shared .cal-tour{padding-left:4px;padding-right:4px;box-shadow:inset 0 0 0 1px var(--panel, #fff)}
+
+/* Unit availability and manual tour changes share the calendar's property context. */
+.cal-action-form { display: grid; gap: 16px; }
+.cal-action-intro { color: var(--ink-2); line-height: 1.55; margin: 0 0 20px; }
+.cal-action-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.cal-action-pair[hidden] { display: none; }
+.cal-action-check { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.cal-unit-blocks { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 16px; }
+.cal-unit-blocks h4 { font-size: 14px; margin: 0 0 12px; }
+.cal-unit-block { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding: 14px 0; }
+.cal-unit-block:first-child { border-top: 0; }
+.cal-unit-block p { color: var(--ink-2); font-size: 13px; line-height: 1.5; margin: 5px 0 0; }
+.cal-unit-conflict { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 10px 12px; line-height: 1.5; }
+.cal-unit-block .cal-unit-conflict { color: var(--warn); }
+.cal-action-form :disabled { opacity: .65; }
+@media (max-width: 480px) { .cal-action-pair { grid-template-columns: 1fr; } .cal-unit-block { flex-direction: column; } }
 </style>
 <style>
 /* Leads view — the To do and Everyone tabs and the person panel (brief §9). Owner: leads.
@@ -1028,6 +1044,15 @@ button.cal-dayhead:hover { background: var(--paper-3); }
   .lead-panel .np-card .actions .btn { flex: 1 1 auto; }
   .lead-panel .panel-head .setname { padding: 0 8px; }
 }
+
+/* Shared Today / Leads request card: caller claims stay readable in narrow columns. */
+.tour-change-row { grid-template-columns: minmax(0, 1fr); }
+.tour-change-row .row-body { gap: 6px; overflow-wrap: anywhere; }
+.tour-change-row .row-actions { grid-column: 1 / -1; justify-content: flex-start; }
+.tour-change-row .row-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.tour-change-row .quote { color: var(--ink-2); font-style: italic; }
+.tour-change-row .reassure, .tour-change-row .meta { color: var(--ink-2); font-size: .929rem; }
+.tour-change-note { width: 100%; min-height: 110px; resize: vertical; }
 </style>
 <style>
 /* Calls view — list + detail panel. Owner: shell. Uses the shared classes in styles.css. */
@@ -1092,6 +1117,77 @@ button.cal-dayhead:hover { background: var(--paper-3); }
   .call-panel .panel-head .panel-back { margin-right: auto; }
   .call-panel .panel-head h2 { flex-basis: 100%; order: 3; }
 }
+</style>
+<style>
+/* Unit feedback complements the source inventory; this view never edits unit facts. */
+.uf-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.uf-heading p { max-width: 65ch; margin-top: 8px; }
+.uf-heading .btn { flex: none; }
+.uf-source { margin-bottom: 20px; }
+.uf-toolbar { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.uf-toolbar .search { width: min(100%, 420px); }
+.uf-period { display: flex; align-items: center; gap: 8px; font-size: .875rem; color: var(--ink-2); }
+.uf-layout { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); gap: 24px; align-items: start; }
+.uf-units { overflow: hidden; }
+.uf-unit-list { max-height: 65vh; overflow-y: auto; }
+.uf-unit { display: block; width: 100%; text-align: left; padding: 16px 18px; color: var(--ink); border: 0; border-bottom: 1px solid var(--line); background: var(--paper-2); cursor: pointer; font: inherit; }
+.uf-unit:hover { background: var(--accent-soft); }
+.uf-unit[aria-current="true"] { background: var(--accent-soft); box-shadow: inset 3px 0 var(--accent); }
+.uf-unit:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
+.uf-unit strong, .uf-unit .small { display: block; }
+.uf-unit strong { font-weight: 600; margin-bottom: 4px; }
+.uf-unit .small { line-height: 1.6; }
+.uf-unit .uf-counts { display: flex; flex-wrap: wrap; gap: 5px 12px; margin-top: 8px; font-size: .8125rem; }
+.uf-up { color: var(--ok); } .uf-down { color: var(--danger); }
+.uf-unit-empty { padding: 18px; }
+.uf-detail { min-width: 0; }
+.uf-detail-head { margin-bottom: 16px; }
+.uf-detail-head h2 { font-size: 1.4rem; margin: 0 0 5px; }
+.uf-detail-head p { margin: 0; }
+.uf-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+.uf-metric { padding: 18px; }
+.uf-metric strong { display: block; font-size: 1.8rem; font-weight: 600; letter-spacing: -.04em; margin: 5px 0; }
+.uf-metric span { font-size: .8125rem; color: var(--ink-2); }
+.uf-section { padding: 22px; margin-bottom: 20px; }
+.uf-section h3 { margin: 0 0 6px; font-size: 1rem; font-weight: 600; }
+.uf-reasons { margin: 16px 0 0; display: grid; gap: 14px; }
+.uf-reason-line { display: flex; justify-content: space-between; gap: 15px; font-size: .875rem; }
+.uf-reason-count { color: var(--ink-2); white-space: nowrap; }
+.uf-reason-track { display: flex; gap: 2px; height: 5px; margin-top: 7px; border-radius: 5px; overflow: hidden; background: var(--paper-3); }
+.uf-reason-bar { display: block; height: 5px; flex: none; background: var(--line-strong); }
+.uf-reason-bar.positive { background: var(--ok); }
+.uf-reason-bar.negative { background: var(--danger); }
+.uf-feed { margin: 16px 0 0; padding: 0; list-style: none; }
+.uf-entry { padding: 18px 0; border-top: 1px solid var(--line); }
+.uf-entry:first-child { padding-top: 0; border-top: 0; }
+.uf-entry:last-child { padding-bottom: 0; }
+.uf-entry-head, .uf-entry-meta { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.uf-entry-head { font-weight: 500; }
+.uf-entry-note { margin: 10px 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.uf-entry-meta { margin-top: 9px; color: var(--ink-3); font-size: .8125rem; }
+.uf-entry-meta .btn-link { margin-left: auto; }
+.uf-entry a { color: var(--accent); }
+.uf-form { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.uf-form label { display: grid; gap: 6px; color: var(--ink); font-size: .875rem; font-weight: 500; }
+.uf-form .uf-full { grid-column: 1 / -1; }
+.uf-form textarea { resize: vertical; min-height: 110px; font: inherit; }
+.uf-form .field-hint { margin: 0; font-weight: 400; }
+.uf-form fieldset { border: 0; padding: 0; margin: 0; min-width: 0; display: contents; }
+.uf-form :disabled { opacity: .65; cursor: not-allowed; }
+.uf-form-intro { margin: 0 0 18px; color: var(--ink-2); font-size: .875rem; }
+@media (max-width: 1100px) { .uf-layout { grid-template-columns: 235px minmax(0, 1fr); gap: 16px; } .uf-section { padding: 18px; } }
+@media (max-width: 760px) {
+  .uf-layout { grid-template-columns: minmax(0, 1fr); }
+  .uf-unit-list { max-height: 235px; }
+  .uf-heading { flex-wrap: wrap; gap: 14px; }
+  .uf-heading .btn { width: 100%; justify-content: center; }
+  .uf-toolbar { align-items: stretch; flex-direction: column; gap: 12px; }
+  .uf-toolbar .search { width: 100%; }
+  .uf-period { justify-content: space-between; }
+  .uf-period select { flex: 1; max-width: 240px; }
+  .uf-metric { padding: 14px; } .uf-metric strong { font-size: 1.5rem; }
+}
+@media (max-width: 420px) { .uf-form { grid-template-columns: minmax(0, 1fr); } .uf-metrics { gap: 8px; } .uf-metric { padding: 12px; } }
 </style>
 <style>
 /* Atrium's shared visual layer. All routes use the same controls and surfaces. */
@@ -1216,6 +1312,7 @@ h2 { letter-spacing: -.025em; }
         <li><a class="nav-item" href="#/today" data-view="today"><span class="nav-icon" data-icon="today"></span><span class="nav-label">Today</span><span class="nav-badge" data-badge="today"></span></a></li>
         <li><a class="nav-item" href="#/calls" data-view="calls"><span class="nav-icon" data-icon="calls"></span><span class="nav-label">Calls</span><span class="nav-badge" data-badge="calls"></span></a></li>
         <li><a class="nav-item" href="#/leads" data-view="leads"><span class="nav-icon" data-icon="leads"></span><span class="nav-label">Leads</span><span class="nav-badge" data-badge="leads"></span></a></li>
+        <li><a class="nav-item" href="#/units" data-view="units"><span class="nav-icon" data-icon="units"></span><span class="nav-label">Feedback</span><span class="nav-badge" data-badge="units"></span></a></li>
         <li><a class="nav-item" href="#/calendar" data-view="calendar"><span class="nav-icon" data-icon="calendar"></span><span class="nav-label">Calendar</span><span class="nav-badge" data-badge="calendar"></span></a></li>
         <li><a class="nav-item" href="#/status" data-view="status"><span class="nav-icon" data-icon="status"></span><span class="nav-label">Status</span><span class="nav-badge" data-badge="status"></span></a></li>
       </ul>
@@ -1231,6 +1328,7 @@ h2 { letter-spacing: -.025em; }
     <section class="view" data-view="today" hidden></section>
     <section class="view" data-view="calls" hidden></section>
     <section class="view" data-view="leads" hidden></section>
+    <section class="view" data-view="units" hidden></section>
     <section class="view" data-view="calendar" hidden></section>
     <section class="view" data-view="status" hidden></section>
   </main>
@@ -1342,6 +1440,9 @@ h2 { letter-spacing: -.025em; }
 
 const LEGACY_TIME_ZONE = 'America/New_York'
 const databaseMode = window.ATRIUM_RUNTIME_MODE === 'postgres'
+// Snapshot the rendered account once. A different tab can replace the shared login cookie.
+const legacyTenantId = databaseMode ? null : window.ATRIUM_ACCOUNT && Object.prototype.hasOwnProperty.call(window.ATRIUM_ACCOUNT, 'tenantId')
+  ? window.ATRIUM_ACCOUNT.tenantId : 'legacy'
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/
 const PERMISSIONS = ['read', 'operate', 'configure', 'manage_members', 'manage_organization']
 let documentScope = null
@@ -1383,6 +1484,7 @@ function validatedTimeZone(value) {
 let propertyTimeZone
 try {
   if (window.ATRIUM_RUNTIME_MODE !== undefined && !['legacy', 'postgres'].includes(window.ATRIUM_RUNTIME_MODE)) throw new Error('Unknown runtime mode')
+  if (!databaseMode && (typeof legacyTenantId !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(legacyTenantId))) throw new Error('Invalid account identity')
   if (databaseMode) displayProperty = validatedBootstrap(window.ATRIUM_PROPERTY)
   const supplied = window.ATRIUM_PROPERTY && Object.prototype.hasOwnProperty.call(window.ATRIUM_PROPERTY, 'timeZone')
     ? window.ATRIUM_PROPERTY.timeZone : databaseMode ? null : LEGACY_TIME_ZONE
@@ -1390,7 +1492,7 @@ try {
 } catch {
   document.body.textContent = databaseMode
     ? 'Property configuration needs attention. The property details or timezone are invalid; ask an administrator to correct them, then reload.'
-    : 'Property configuration needs attention. The timezone is invalid; ask an administrator to correct it, then reload.'
+    : 'Property configuration needs attention. The account identity or timezone is invalid; ask an administrator to correct it, then reload.'
   return
 }
 const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -1770,6 +1872,7 @@ const ICON_PATHS = {
   spinner: '<path d="M21 12a9 9 0 1 1-6.22-8.56"/>',
 }
 ICON_PATHS.phone = ICON_PATHS.calls
+ICON_PATHS.units = ICON_PATHS.home
 const icons = {}
 for (const name of Object.keys(ICON_PATHS)) {
   icons[name] = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${ICON_PATHS[name]}</svg>`
@@ -1832,8 +1935,8 @@ function invalidateDocument(message, status = 409) {
   return accessError(message, status)
 }
 function checkResponseScope(data) {
-  if (!databaseMode) return
   if (documentAccessIssue) throw accessError(documentAccessIssue.message, documentAccessIssue.status)
+  if (!databaseMode) return
   const scope = data && data.scope
   if (!scope || scope.organizationId !== documentScope.organizationId || scope.propertyId !== documentScope.propertyId
     || scope.configurationVersion !== documentScope.configurationVersion || scope.permissionVersion !== documentScope.permissionVersion) {
@@ -1849,24 +1952,26 @@ function gate() {
 }
 async function request(path, init) {
   if (gated) throw signedOut()
-  const scoped = databaseMode && propertyEndpoint(path)
-  if (scoped && documentAccessIssue) throw accessError(documentAccessIssue.message, documentAccessIssue.status)
+  const propertyRequest = propertyEndpoint(path), scoped = databaseMode && propertyRequest
+  if (propertyRequest && documentAccessIssue) throw accessError(documentAccessIssue.message, documentAccessIssue.status)
   const epoch = scopeEpoch
   const headers = { ...(init && init.headers), ...(scoped ? {
     'x-atrium-organization-id': documentScope.organizationId, 'x-atrium-property-id': documentScope.propertyId,
     'x-atrium-config-version': String(documentScope.configurationVersion),
-  } : {}) }
+  } : propertyRequest ? { 'x-atrium-tenant-id': legacyTenantId } : {}) }
   let r
   try {
     r = await fetch(path, { credentials: 'same-origin', cache: 'no-store', ...init, headers })
   } catch (e) {
     const err = new Error("Couldn't reach the server"); err.status = 0; err.network = true; throw err
   }
-  if (r.status === 401) { if (databaseMode) invalidateDocument('Your session ended. Sign in again.', 401); gate(); throw signedOut() }
+  if (r.status === 401) { if (propertyRequest) invalidateDocument('Your session ended. Sign in again.', 401); gate(); throw signedOut() }
   let body = null, parsed = false
   try { body = await r.json(); parsed = true } catch (e) { parsed = false }
-  if (scoped && epoch !== scopeEpoch) throw accessError('This response belongs to an earlier property session. Reload the property.')
+  if (propertyRequest && epoch !== scopeEpoch) throw accessError('This response belongs to an earlier property session. Reload the property.')
   if (!r.ok) {
+    if (propertyRequest && r.status === 409 && body && body.code === 'portal_tenant_changed')
+      throw invalidateDocument('The signed-in account changed in another tab. Reload the workspace before viewing or making changes.')
     if (scoped && r.status === 403) throw invalidateDocument('Access to this property or operation is no longer available. Choose a property you can access or reload to refresh your permissions.', 403)
     if (scoped && (r.status === 428 || (r.status === 409 && /property|configuration|scope/.test(String(body && body.code))))) {
       throw invalidateDocument('The property configuration changed. Reload this property before continuing.')
@@ -1959,9 +2064,14 @@ function snapshot(name, d) {
     return { calls: arr(d.calls), events, callsError: d.callsError ?? null, safetyEventsError: d.safetyEventsError ?? null,
       callsConfigured: typeof d.callsConfigured === 'boolean' ? d.callsConfigured : null }
   }
-  if (name === 'calendar') return { slots: arr(d.slots), blocks: arr(d.blocks), bookings: arr(d.bookings), store: d.store ?? null,
+  if (name === 'calendar') return { slots: arr(d.slots), blocks: arr(d.blocks), bookings: arr(d.bookings), units: arr(d.units), unitBlocks: arr(d.unitBlocks), store: d.store ?? null,
+    rescheduleProjectionPending: arr(d.rescheduleProjectionPending),
     timeZone: d.timeZone ?? LEGACY_TIME_ZONE, range: d.range ?? null, settings: d.settings ?? null, settingsRevision: d.settingsRevision ?? null }
-  return { profiles: arr(d.profiles), followUps: arr(d.followUps), outboundEnabled: d.outboundEnabled === true, store: d.store ?? null }
+  const heldFollowUps = arr(d.heldFollowUps), heldIds = new Set(heldFollowUps.map(f => f && f.id))
+  return { profiles: arr(d.profiles), followUps: arr(d.followUps).filter(f => !f || f.status !== 'scheduled' || !heldIds.has(f.id)), outboundEnabled: d.outboundEnabled === true, store: d.store ?? null,
+    heldFollowUps, rescheduleProjectionPending: arr(d.rescheduleProjectionPending), tourChangeRequests: arr(d.tourChangeRequests),
+    unitFeedback: arr(d.unitFeedback), feedbackUnits: arr(d.feedbackUnits), feedbackInventory: d.feedbackInventory ?? null,
+    unitFeedbackTruncated: d.unitFeedbackTruncated === true }
 }
 function assign(name, snap) {
   if (name === 'calls') { state.calls = snap.calls; state.events = snap.events; state.callsError = snap.callsError; state.callsConfigured = snap.callsConfigured; state.safetyEventsError = snap.safetyEventsError }
@@ -2070,6 +2180,8 @@ function apply(resource, data) {
       scope: d.scope,
       slots: Array.isArray(d.slots) ? d.slots : cur.slots, blocks: Array.isArray(d.blocks) ? d.blocks : cur.blocks,
       bookings: Array.isArray(d.bookings) ? d.bookings : cur.bookings, store: d.store ?? cur.store,
+      units: Array.isArray(d.units) ? d.units : arr(cur.units), unitBlocks: Array.isArray(d.unitBlocks) ? d.unitBlocks : arr(cur.unitBlocks),
+      rescheduleProjectionPending: Array.isArray(d.rescheduleProjectionPending) ? d.rescheduleProjectionPending : arr(cur.rescheduleProjectionPending),
       timeZone: d.timeZone ?? cur.timeZone ?? LEGACY_TIME_ZONE,
       range: d.range ?? cur.range, settings: d.settings ?? cur.settings, settingsRevision: d.settingsRevision ?? cur.settingsRevision,
     })
@@ -2077,6 +2189,16 @@ function apply(resource, data) {
     const cur = state.leads || { profiles: [], followUps: [], outboundEnabled: false, store: null }
     let profiles = Array.isArray(d.profiles) ? d.profiles : cur.profiles.slice()
     let followUps = Array.isArray(d.followUps) ? d.followUps : cur.followUps.slice()
+    let tourChangeRequests = Array.isArray(d.tourChangeRequests) ? d.tourChangeRequests : arr(cur.tourChangeRequests).slice()
+    if (d.tourChangeRequest && typeof d.tourChangeRequest === 'object' && d.tourChangeRequest.id != null) {
+      const i = tourChangeRequests.findIndex(r => r && r.id === d.tourChangeRequest.id)
+      if (i >= 0) tourChangeRequests[i] = d.tourChangeRequest; else tourChangeRequests.unshift(d.tourChangeRequest)
+    }
+    let unitFeedback = Array.isArray(d.unitFeedback) ? d.unitFeedback : arr(cur.unitFeedback).slice()
+    if (d.unitFeedback && !Array.isArray(d.unitFeedback) && typeof d.unitFeedback === 'object' && d.unitFeedback.id != null) {
+      const i = unitFeedback.findIndex(f => f && f.id === d.unitFeedback.id)
+      if (i >= 0) unitFeedback[i] = d.unitFeedback; else unitFeedback.unshift(d.unitFeedback)
+    }
     if (d.followUp && typeof d.followUp === 'object' && d.followUp.id != null) {
       const i = followUps.findIndex((f) => f && f.id === d.followUp.id)
       if (i >= 0) followUps[i] = d.followUp; else followUps.push(d.followUp)
@@ -2086,7 +2208,12 @@ function apply(resource, data) {
       const i = profiles.findIndex((p) => p && p.phone === d.profile.phone)
       if (i >= 0) profiles[i] = d.profile; else profiles.unshift(d.profile)
     }
-    ingest('leads', { scope: d.scope, profiles, followUps, outboundEnabled: typeof d.outboundEnabled === 'boolean' ? d.outboundEnabled : cur.outboundEnabled, store: d.store ?? cur.store })
+    ingest('leads', { scope: d.scope, profiles, followUps, outboundEnabled: typeof d.outboundEnabled === 'boolean' ? d.outboundEnabled : cur.outboundEnabled, store: d.store ?? cur.store,
+      tourChangeRequests, unitFeedback, feedbackUnits: Array.isArray(d.feedbackUnits) ? d.feedbackUnits : arr(cur.feedbackUnits),
+      heldFollowUps: Array.isArray(d.heldFollowUps) ? d.heldFollowUps : arr(cur.heldFollowUps),
+      rescheduleProjectionPending: Array.isArray(d.rescheduleProjectionPending) ? d.rescheduleProjectionPending : arr(cur.rescheduleProjectionPending),
+      feedbackInventory: d.feedbackInventory === undefined ? cur.feedbackInventory : d.feedbackInventory,
+      unitFeedbackTruncated: d.unitFeedbackTruncated === undefined ? cur.unitFeedbackTruncated : d.unitFeedbackTruncated })
   } else if (resource === 'calls') {
     ingest('calls', d)
   } else return
@@ -2100,9 +2227,9 @@ function apply(resource, data) {
 // Routing and views
 // ---------------------------------------------------------------------------------------
 
-const VIEWS = ['today', 'calls', 'leads', 'calendar', 'status']
-const VIEW_LABEL = { today: 'Today', calls: 'Calls', leads: 'Leads', calendar: 'Calendar', status: 'Status' }
-const VIEW_H1 = { today: 'Today', calls: 'Calls', leads: 'Leads', calendar: 'Tour calendar', status: 'Status' }
+const VIEWS = ['today', 'calls', 'leads', 'units', 'calendar', 'status']
+const VIEW_LABEL = { today: 'Today', calls: 'Calls', leads: 'Leads', units: 'Unit feedback', calendar: 'Calendar', status: 'Status' }
+const VIEW_H1 = { today: 'Today', calls: 'Calls', leads: 'Leads', units: 'Unit feedback', calendar: 'Tour calendar', status: 'Status' }
 const modules = {}
 let current = null
 let booted = false
@@ -2265,9 +2392,13 @@ function paintCluster(rows) {
 function paintGlobalBanners() {
   const host = document.getElementById('global-banners')
   if (!host) return
+  const pending = new Set([...arr(state.leads && state.leads.rescheduleProjectionPending), ...arr(state.calendar && state.calendar.rescheduleProjectionPending)]
+    .filter(Boolean).map(item => `${item.externalId}:${item.requestId}`)).size
   const html = documentAccessIssue ? html_.banner('warn', documentAccessIssue.message, { actionsHtml:
     `<a class="btn" href="${esc(propertyUrl(documentScope))}">Reload property</a><a class="btn btn-quiet" href="/api/dashboard">Choose a property</a>` })
-    : state.notConfigured ? html_.banner('warn', "This page isn't set up yet. Ask Atrium support.") : ''
+    : state.notConfigured ? html_.banner('warn', "This page isn't set up yet. Ask Atrium support.")
+      : pending ? html_.banner('warn', `${pending === 1 ? 'A tour change is' : `${pending} tour changes are`} saved; CRM follow-ups are pending reconciliation. Check the updated calendar before contacting a prospect.`,
+        { actionsHtml: '<a class="btn" href="#/calendar">Review calendar</a>' }) : ''
   if (host.innerHTML !== html) host.innerHTML = html
 }
 
@@ -2320,6 +2451,7 @@ async function openPropertySwitcher() {
 
 const html_ = {
   chip(cls, iconName, txt) { return `<span class="chip ${esc(cls)}">${iconName ? ico(iconName) : ''}<span>${esc(txt)}</span></span>` },
+  tourChangeRequest: tourChangeRequestHtml,
   followUpReview(fu) {
     if (fu?.reconciliation?.status !== 'needs_review' || fu.reconciliation.code !== 'legacy_followup_identity_ambiguous') return ''
     return `<span class="row-chips">${html_.chip('chip-warn', 'warning', 'Review needed')}</span>` +
@@ -2467,7 +2599,7 @@ function dialog(spec) {
   const progEl = el.querySelector('.dlg-progress')
   const primaryBtn = el.querySelector('.dlg-primary')
   const secondaryBtn = el.querySelector('.dlg-secondary')
-  let closed = false, busyText = null
+  let closed = false, busyText = null, idlePrimaryLabel = primary ? String(primary.label || 'OK') : '', primaryDisabled = Boolean(primary && primary.disabled)
   const api_ = {
     el, body,
     close() {
@@ -2494,15 +2626,15 @@ function dialog(spec) {
     },
     setPrimary(p) {
       if (!primaryBtn) return
-      if (p && p.label != null) primaryBtn.textContent = String(p.label)
-      if (p && p.disabled != null) { if (p.disabled) primaryBtn.setAttribute('aria-disabled', 'true'); else primaryBtn.removeAttribute('aria-disabled') }
+      if (p && p.label != null) { idlePrimaryLabel = String(p.label); if (busyText == null) primaryBtn.textContent = idlePrimaryLabel }
+      if (p && p.disabled != null) { primaryDisabled = Boolean(p.disabled); if (primaryDisabled || busyText != null) primaryBtn.setAttribute('aria-disabled', 'true'); else primaryBtn.removeAttribute('aria-disabled') }
       if (p && p.danger != null) { primaryBtn.classList.toggle('btn-danger', Boolean(p.danger)); primaryBtn.classList.toggle('btn-primary', !p.danger) }
     },
     setBusy(t) {
       busyText = t == null ? null : String(t)
       if (!primaryBtn) return
       if (busyText != null) { primaryBtn.textContent = busyText; primaryBtn.setAttribute('aria-busy', 'true'); primaryBtn.setAttribute('aria-disabled', 'true'); secondaryBtn.setAttribute('aria-disabled', 'true') }
-      else { primaryBtn.removeAttribute('aria-busy'); primaryBtn.removeAttribute('aria-disabled'); secondaryBtn.removeAttribute('aria-disabled') }
+      else { primaryBtn.textContent = idlePrimaryLabel; primaryBtn.removeAttribute('aria-busy'); if (primaryDisabled) primaryBtn.setAttribute('aria-disabled', 'true'); else primaryBtn.removeAttribute('aria-disabled'); secondaryBtn.removeAttribute('aria-disabled') }
     },
     setError(t) {
       if (t == null || t === '') { errEl.hidden = true; errEl.querySelector('.dlg-error-text').textContent = '' }
@@ -2715,6 +2847,10 @@ function needsPerson(s) {
       phrase: label(labels.emergency, e.emergencyKind, 'an emergency'), matched: String(e.matched ?? ''), at: e.at, sortAt: toTime(e.at) ?? 0,
       action: emergencyAction(e.emergencyKind, rec && rec.call && rec.call.transcript, e) })
   }
+  const tourChanges = arr(s.leads && s.leads.tourChangeRequests).filter(r => r && r.status === 'pending')
+    .sort((a, b) => (toTime(a.firstRequestedAt) ?? 0) - (toTime(b.firstRequestedAt) ?? 0))
+    .map(request => ({ type: 'tourChange', request, callId: request.callId, phone: request.phone || 'unknown',
+      name: request.name, at: request.firstRequestedAt, sortAt: toTime(request.firstRequestedAt) ?? 0 }))
   const callbacks = followUpsOf(s).filter((f) => f && f.kind === 'callback' && f.status === 'scheduled')
     .sort((a, b) => (toTime(a.dueAt) ?? 0) - (toTime(b.dueAt) ?? 0))
   for (const fu of callbacks) {
@@ -2743,7 +2879,7 @@ function needsPerson(s) {
     }
   }
   stuck.sort((a, b) => b.sortAt - a.sortAt)
-  const value = items.filter((i) => i.type === 'emergency').concat(items.filter((i) => i.type === 'callback'), stuck)
+  const value = items.filter((i) => i.type === 'emergency').concat(tourChanges, items.filter((i) => i.type === 'callback'), stuck)
   npCache = { key, value }
   return value
 }
@@ -2755,6 +2891,7 @@ function callBackToday(s) {
 function dueTodayCount(s) {
   const today = nyNow().ymd
   return followUpsOf(s).filter((f) => f && f.status === 'scheduled' && (nyDate(f.dueAt) || '9999') <= today).length
+    + arr(s.leads && s.leads.tourChangeRequests).filter(r => r && r.status === 'pending').length
 }
 function toursOn(s, ymd) {
   const now = Date.now()
@@ -3321,6 +3458,63 @@ function restoreFocus(keys, toastHandle) {
   if (toastHandle && toastHandle.el && tryFocus(toastHandle.el.querySelector('.toast-action'))) return
   if (view) tryFocus(view.querySelector('h1'))
 }
+function tourChangeRequestHtml(request) {
+  if (!request) return ''
+  const reviewed = request.status === 'reviewed'
+  const contact = [request.name, fmt.phone(request.phone), request.email].filter(Boolean).map(esc).join(' · ')
+  return `<div class="row row-stack tour-change-row" data-key="tour-change:${esc(request.id)}"><span class="row-body">` +
+    `<span class="row-title"><strong>Tour-change request</strong> ${html_.chip(reviewed ? 'chip-neutral' : 'chip-warn', reviewed ? 'check' : 'hand', reviewed ? 'Reviewed' : 'Needs review')}</span>` +
+    `<span class="row-sub">${contact || 'Caller details not provided'} · identity unverified</span>` +
+    `<span class="meta">Requested ${esc(fmt.dateTime(request.firstRequestedAt))}${request.reason === 'existing_future_tour' ? ' · a possible existing tour needs checking' : ''}</span>` +
+    arr(request.excerpts).map(excerpt => `<span class="quote">“${esc(excerpt)}”</span>`).join('') +
+    '<span class="reassure">Verify the caller and the correct booking before changing a tour. No tour change or notification is made by reviewing this request.</span>' +
+    (reviewed ? `<span class="row-sub">Review recorded ${esc(fmt.dateTime(request.review && request.review.at))}. This does not confirm rescheduling or contact.</span>${request.review && request.review.note ? `<span class="row-sub">Review note: ${esc(request.review.note)}</span>` : ''}` : '') +
+    '</span><span class="row-actions">' +
+    (!reviewed && permissionAllowed('operate') ? `<button type="button" class="btn" data-action="review-tour-change" data-request="${esc(request.id)}" data-key="tour-change:${esc(request.id)}:review" data-write="leads">Review request</button>` : '') +
+    '<a class="btn btn-quiet" href="#/calendar">Open calendar</a></span></div>'
+}
+function reviewTourChange(id) {
+  if (!permissionAllowed('operate') || busyNow('leads')) return
+  const request = arr(state.leads && state.leads.tourChangeRequests).find(r => r && r.id === id)
+  if (!request || request.status !== 'pending') return
+  let note, pending = null, closed = false, conflicted = false
+  return window.Atrium.dialog({ title: 'Review tour-change request', secondary: { label: 'Cancel' },
+    build(body) {
+      body.innerHTML = '<p>Verify the caller and the correct booking before moving a tour. Marking this request reviewed only records your review; it does not change a booking or send a notification.</p>' +
+        '<label class="stack">Review note (optional)<textarea class="input tour-change-note" data-review-note maxlength="1000" rows="4" placeholder="Record what you checked or what still needs attention"></textarea></label>'
+      note = body.querySelector('[data-review-note]')
+    },
+    primary: { label: 'Mark reviewed', busyLabel: 'Saving review…', async onClick(d) {
+      if (closed || !permissionAllowed('operate')) return
+      if (conflicted) { d.close(); await reread('leads'); return }
+      if (!pending) pending = Object.freeze({ action: 'review_tour_change', id: request.id, expectedRevision: request.revision, note: note.value.trim() })
+      note.disabled = true
+      d.setError('')
+      try {
+        const result = await busy('leads', api.post('/api/leads', pending, { doing: 'recording a tour-change review' }))
+        const saved = result.tourChangeRequest
+        if (!saved || saved.id !== pending.id || saved.status !== 'reviewed' || saved.revision !== pending.expectedRevision + 1) throw new Error('The review acknowledgement could not be verified.')
+        if (closed) return
+        apply('leads', result)
+        d.close()
+        window.Atrium.toast('Review recorded. No booking changed or notification sent.', { kind: 'ok' })
+      } catch (error) {
+        if (closed || error.signedOut || !permissionAllowed('operate')) return
+        if (error.status === 409 || error.status === 404) {
+          conflicted = true
+          d.setError('This request changed or is no longer available. Close and refresh to review the latest record; this screen cannot confirm your review.')
+          d.setPrimary({ label: 'Close and refresh' })
+        } else if (!error.status || error.status >= 500 || error.badJson || (error.status >= 200 && error.status < 300)) {
+          d.setError('The review could not be confirmed. Retry to check the same review; your note is held so it cannot be submitted as a different review.')
+          d.setPrimary({ label: 'Retry review' })
+        } else {
+          pending = null; note.disabled = false
+          d.setError(error.message || 'Check the note and try again.')
+        }
+      }
+    } }, onClose() { closed = true },
+  })
+}
 async function setFollowUpStatus(fu, status, opts) {
   const o = opts || {}
   if (!fu || !fu.id || busyNow('leads')) return false
@@ -3422,6 +3616,7 @@ function pollBanner(s, resource, what) {
   return html_.banner('warn', `We can't load ${what} right now.${at ? ` Showing what we had at ${fmt.time(at)}.` : ''}`)
 }
 function personRowHtml(item, s) {
+  if (item.type === 'tourChange') return tourChangeRequestHtml(item.request)
   const phone = item.phone, shown = fmt.phone(phone)
   const rec = callRecords(s).find((r) => r.id === item.callId)
   const actions = []
@@ -3539,6 +3734,7 @@ const todayView = {
   onClick(e) {
     const btn = e.target.closest('button[data-action]')
     if (!btn || btn.getAttribute('aria-disabled') === 'true') return
+    if (btn.dataset.action === 'review-tour-change') { reviewTourChange(btn.dataset.request); return }
     const fu = followUpsOf(state).find((f) => f && f.id === btn.dataset.fu)
     if (!fu) return
     if (btn.dataset.action === 'done') setFollowUpStatus(fu, 'done', { button: btn })
@@ -3550,7 +3746,7 @@ const todayView = {
     if (!root) return
     const m = todayModel(s)
     const key = JSON.stringify([m.callsValue, m.callsNote, m.toursBooked, m.nextTour, m.needValue, m.oldest, m.leadsOff, m.calOff, m.briefing, m.errors, m.loaded, m.notConfigured, m.callsConfigured, m.safetyEventsError,
-      m.emergencies.map((x) => [x.callId, x.at, x.matched, x.action, x.name]), m.people.map((x) => [x.type, x.callId, x.respondBy, x.calledAt, fmt.respondPhrase(x.respondBy), x.question, x.name, html_.followUpReview(x.fu)]),
+      m.emergencies.map((x) => [x.callId, x.at, x.matched, x.action, x.name]), m.people.map((x) => [x.type, x.callId, x.respondBy, x.calledAt, fmt.respondPhrase(x.respondBy), x.question, x.name, x.request, html_.followUpReview(x.fu)]),
       m.callBacks.map((f) => [f.id, f.dueAt, f.status, fmt.duePhrase(f.dueAt), todoSentence(f, profileByPhone(s, f.phone), s).text, html_.followUpReview(f)]),
       m.tours.map((t) => [t.slotId, t.name, t.unitId, t.past, t.phone]), m.toursTomorrow.length,
       m.records.slice(0, 5).map((r) => [r.id, r.displayName, fmt.dateTime(r.startedAt), callStory(r, s).sentence]), busyNow('leads')])
@@ -3747,7 +3943,7 @@ const statusView = {
     else if (a === 'sync-assistant') this.syncAssistant(btn)
   },
   async syncAssistant(btn) {
-    const ok = await confirm('This rewrites the phone assistant\'s script and tools in Vapi to match this system. Voice, timing and model settings in Vapi are kept.', { title: 'Update the phone assistant?', confirmLabel: 'Update' })
+    const ok = await confirm('This updates the phone assistant’s workflow, tools and selected timing settings. Your voice and model providers are kept.', { title: 'Update the phone assistant?', confirmLabel: 'Update' })
     if (!ok) return
     btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true')
     try {
@@ -3887,7 +4083,7 @@ window.Atrium = {
   escapeHtml, fmt, api, gate, toast, confirm, prompt, dialog, register, navigate, route, hashFor, state, on,
   busy, busyNow, apply, refresh, calendarUrl, setCalendarRange, icons, icon, property, normalisePhone, labels, label, derive, hint, text, href,
   can: permissionAllowed, paintPermissions, preferenceKey, propertyUrl, databaseMode,
-  html: html_, announce, escape: escape_, setFollowUpStatus, boot, views: VIEWS.slice(),
+  html: html_, announce, escape: escape_, setFollowUpStatus, reviewTourChange, boot, views: VIEWS.slice(),
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot)
 else boot()
@@ -4466,7 +4662,7 @@ function tourInfo(s, m, sl) {
   return {
     name: sl.name || (profile && profile.name) || 'Tour', profile, phone: profile && profile.phone !== 'unknown' ? profile.phone : null,
     email: (profile && profile.email) || null, unitId: sl.unitId != null ? sl.unitId : (lb && lb.unitId != null ? String(lb.unitId) : null),
-    bookedAt: booking ? booking.bookedAt : null, callId,
+    bookedAt: booking ? booking.bookedAt : null, booking, callId,
   }
 }
 
@@ -4564,6 +4760,7 @@ function toolbarHtml(m) {
     `<h2 class="cal-range" aria-live="polite" data-key="range">${rt.when ? `<span class="cal-range-when">${esc(rt.when)} · </span>` : ''}${esc(rt.range)}</h2><span class="cal-spacer"></span>` +
     `<div class="cal-tools"><div class="seg cal-seg" role="radiogroup" aria-label="Layout"><button type="button" class="tab" role="radio" aria-checked="${m.view === 'week' ? 'true' : 'false'}" data-action="view-week" data-key="view-week">Week</button><button type="button" class="tab" role="radio" aria-checked="${m.view === 'day' ? 'true' : 'false'}" data-action="view-day" data-key="view-day">Day</button></div>` +
     `<button type="button" class="btn" data-action="goto" data-key="goto">Go to date</button><button type="button" class="btn" data-action="settings" data-key="settings" data-write="calendar" data-permission="configure"${dis(busy)}>Tour settings</button>` +
+    `<button type="button" class="btn" data-action="unit-blocks" data-key="unit-blocks" data-write="calendar"${dis(busy)}>Unit availability</button>` +
     `<button type="button" class="btn btn-primary" data-action="block" data-key="block" data-write="calendar"${dis(busy)}>Block time…</button>` +
     `<button type="button" class="btn-icon" data-action="more" data-key="more" aria-label="More calendar actions" aria-haspopup="dialog" data-write="calendar"${dis(busy)}>${A.icon('more')}</button></div></div>` +
     `<div class="cal-progress"${A.busyNow('calendar') ? '' : ' hidden'}></div>`
@@ -4709,7 +4906,7 @@ function agendaHtml(m) {
       } else if (it.kind === 'tour') {
         const sl = it.slot
         rows.push(arow('is-tour', fmt.timeRange(sl.startsAt, sl.endsAt), `${ico('person')}<span>${esc(sl.name || 'Tour')}</span>${sl.unitId ? `<span class="cal-ar-sub">· apartment ${esc(sl.unitId)}</span>` : ''}<span class="cal-ar-sub">· Confirmed</span>`,
-          `data-action="agenda-tour" data-slot="${esc(sl.id)}" data-key="tour:${esc(sl.id)}"`, `${fmt.timeRange(sl.startsAt, sl.endsAt)}, tour with ${sl.name || 'a caller'}${sl.unitId ? `, apartment ${sl.unitId}` : ''}, confirmed. Open the details`))
+          `data-action="agenda-tour" data-slot="${esc(sl.id)}" data-key="${esc(it.key)}"`, `${fmt.timeRange(sl.startsAt, sl.endsAt)}, tour with ${sl.name || 'a caller'}${sl.unitId ? `, apartment ${sl.unitId}` : ''}, confirmed. Open the details`))
         i++
       } else {
         const lead = it.kind === 'dayband' ? fmt.timeRange(it.first.startsAt, it.last.endsAt) : (it.slots.length > 1 ? fmt.timeRange(it.first.startsAt, it.last.endsAt) : fmt.time(it.first.startsAt))
@@ -5091,7 +5288,9 @@ function showEl(el) { if (el && el.scrollIntoView) { try { el.scrollIntoView({ b
 // ---------------------------------------------------------------------------------------
 
 let popSeq = 0
-const popSig = (it) => JSON.stringify([it.kind, it.slots.map((x) => [x.id, x.status, x.blockTarget, x.rawReason, x.name, x.unitId]), it.reason || '', it.kind === 'dayband' && it.block ? it.block.blockedAt : ''])
+const popSig = (it) => JSON.stringify([it.kind, it.slots.map((x) => [x.id, x.status, x.blockTarget, x.rawReason, x.name, x.unitId]), it.reason || '', it.kind === 'dayband' && it.block ? it.block.blockedAt : '',
+  arr(A.state.calendar?.bookings).map(booking => [booking.externalId, booking.revision, booking.conflictBlockIds]),
+  A.state.calendar?.rescheduleProjectionPending])
 
 function closePopover(returnFocus) {
   const p = cal.pop
@@ -5128,11 +5327,20 @@ function tourContent(s, m, it) {
   let body = `<p>${esc(dayLabel(sl.date))} · ${esc(fmt.timeRange(sl.startsAt, sl.endsAt))}</p><p>${t.unitId ? `Apartment ${esc(t.unitId)}` : 'No apartment picked yet'}</p><p>${contact.length ? contact.join(' · ') : 'No phone on file'}</p>`
   if (t.bookedAt && fmt.dateTime(t.bookedAt) !== '—') body += `<p>Booked by the assistant ${esc(fmt.dateTime(t.bookedAt, { inSentence: true }))}</p>`
   const actions = []
+  if (t.booking && t.booking.externalId && A.can('operate')) actions.push(`<button type="button" class="btn btn-primary" data-pop="reschedule" data-write="calendar">Reschedule</button>`)
   if (tel) actions.push(`<a class="btn" href="${esc(tel)}">Call</a>`)
   if (t.profile) actions.push(`<a class="btn btn-quiet" href="${esc(A.hashFor('leads', { phone: t.profile.phone }))}">Open lead</a>`)
   if (t.callId) actions.push(`<a class="btn btn-quiet" href="${esc(A.hashFor('calls', { id: t.callId }))}">See the call</a>`)
-  const who = t.name === 'Tour' ? 'them' : firstName(t.name)
-  return { title: t.name, body, actions: actions.join(''), note: `To move or cancel this tour, call ${esc(who)} — the assistant can't change tours yet.` }
+  const conflicts = arr(s.calendar && s.calendar.unitBlocks).filter(block => !block.removedAt && (Array.isArray(t.booking?.conflictBlockIds)
+    ? t.booking.conflictBlockIds.includes(block.id)
+    : block.unitId === t.unitId && Date.parse(block.startsAt) < Date.parse(t.booking?.occupiedEndsAt || sl.endsAt) && Date.parse(block.endsAt) > Date.parse(t.booking?.occupiedStartsAt || sl.startsAt)))
+  if (conflicts.length) body += `<p class="cal-unit-conflict">This apartment is blocked during the tour or its reserved preparation time: ${conflicts.map(block => esc(block.reason)).join('; ')}. Contact the prospect and choose another time or apartment.</p>`
+  const pending = arr(s.calendar && s.calendar.rescheduleProjectionPending).find(item => item.externalId === t.booking?.externalId)
+  if (pending) {
+    body += '<p class="cal-unit-conflict">The tour moved, but its CRM follow-ups still need to sync.</p>'
+    if (A.can('operate')) actions.unshift('<button type="button" class="btn btn-primary" data-pop="reschedule-sync" data-write="calendar">Retry follow-up sync</button>')
+  }
+  return { title: t.name, body, actions: actions.join(''), note: 'Changing a tour does not send a text or email. Contact the prospect to confirm the new time.' }
 }
 function blockedContent(m, it, seg) {
   const ymd = it.ymd
@@ -5164,6 +5372,12 @@ function showDetails(kind, it, anchorEl, seg) {
       title: content.title,
       build(body) {
         body.innerHTML = `<div class="popover-body">${content.body}${content.note ? `<p class="muted-line">${content.note}</p>` : ''}</div>${kind === 'tour' && content.actions ? `<div class="cal-sheet-links">${content.actions}</div>` : ''}`
+        body.addEventListener('click', event => {
+          const action = event.target.closest('[data-pop]')?.dataset.pop
+          const booking = it.slot && it.slot.booking
+          if (action === 'reschedule' && booking && A.can('operate')) { closePopover(false); A.calendarActions.openReschedule(booking) }
+          if (action === 'reschedule-sync' && booking && A.can('operate')) { closePopover(false); A.calendarActions.retryProjection(booking.externalId) }
+        })
       },
       secondary: { label: 'Close' },
       onClose() { if (cal.pop && cal.pop.dialog === d) cal.pop = null },
@@ -5196,6 +5410,8 @@ function showDetails(kind, it, anchorEl, seg) {
     const b = e.target.closest('[data-pop]'); if (!b) return
     if (b.dataset.pop === 'close') closePopover(true)
     else if (b.dataset.pop === 'reopen' && b.getAttribute('aria-disabled') !== 'true') reopen(findItem(it.key) || it)
+    else if (b.dataset.pop === 'reschedule' && it.slot?.booking && A.can('operate')) { closePopover(false); A.calendarActions.openReschedule(it.slot.booking) }
+    else if (b.dataset.pop === 'reschedule-sync' && it.slot?.booking && A.can('operate')) { closePopover(false); A.calendarActions.retryProjection(it.slot.booking.externalId) }
   })
   cal.pop = { kind, key: it.key, sig: popSig(it), anchorKey, el, onDown, onEsc, seg: seg ? seg.id : null }
   const first = el.querySelector('.popover-actions .btn, .popover-actions a') || el.querySelector('.popover-x')
@@ -5217,8 +5433,8 @@ function refreshPopover() {
 
 // --- the ⋯ menu ---------------------------------------------------------------------------
 
-const menuButtons = () => `<button type="button" class="btn btn-quiet" data-menu="settings" data-permission="configure">${ico('calendar')}Tour settings</button><button type="button" class="btn btn-quiet" data-menu="goto">${ico('calendar')}Go to date…</button><button type="button" class="btn btn-quiet" data-menu="remove-all" data-write="calendar">${ico('slash')}Remove all blocks…</button>`
-function runMenu(a) { if (a === 'remove-all' && A.can('operate')) removeAll(); else if (a === 'goto') goToDate(); else if (a === 'settings') openSettings() }
+const menuButtons = () => `<button type="button" class="btn btn-quiet" data-menu="unit-blocks" data-write="calendar">${ico('calendar')}Unit availability</button><button type="button" class="btn btn-quiet" data-menu="settings" data-permission="configure">${ico('calendar')}Tour settings</button><button type="button" class="btn btn-quiet" data-menu="goto">${ico('calendar')}Go to date…</button><button type="button" class="btn btn-quiet" data-menu="remove-all" data-write="calendar">${ico('slash')}Remove all blocks…</button>`
+function runMenu(a) { if (a === 'unit-blocks' && A.can('operate')) A.calendarActions?.openUnitBlocks(); else if (a === 'remove-all' && A.can('operate')) removeAll(); else if (a === 'goto') goToDate(); else if (a === 'settings') openSettings() }
 function openMenu(anchorEl) {
   if (A.busyNow('calendar') || cal.inert) return
   if (cal.pop && cal.pop.kind === 'menu') { closePopover(true); return }
@@ -5629,11 +5845,12 @@ const view = {
       else if (a === 'goto') goToDate()
       else if (a === 'settings') openSettings()
       else if (a === 'block') openSheet({ date: cal.model && cal.model.view === 'day' ? cal.model.date : undefined, mode: 'day' })
+      else if (a === 'unit-blocks') { closePopover(false); A.calendarActions.openUnitBlocks({ date: cal.model && cal.model.date }) }
       else if (a === 'more') openMenu(btn)
       else if (a === 'remove-old') removeOld()
       else if (a === 'strip') setParams({ date: btn.dataset.date })
       else if (a === 'agenda-open') openSheet({ date: cal.model.date, mode: 'range', from: btn.dataset.first, to: btn.dataset.last })
-      else if (a === 'agenda-tour') showDetails('tour', itemForSlot(btn.dataset.slot), null)
+      else if (a === 'agenda-tour') showDetails('tour', findItem(btn.dataset.key), null)
       else if (a === 'agenda-band') showDetails('blocked', findItem(btn.dataset.key), null)
       else if (a === 'agenda-day') { const d = cal.model.dayModel(btn.dataset.date); showDetails('blocked', { kind: 'day', key: `dayband:${d.ymd}`, ymd: d.ymd, block: d.dayBlock, slots: [], tours: d.tours.length, reason: reasonOf(d.dayBlock && d.dayBlock.reason) }, null) }
       return
@@ -5773,6 +5990,256 @@ A.register('calendar', view)
 })()
 </script>
 <script>
+/* Property-scoped unit blackout and manual tour-change controls. */
+(function () {
+'use strict'
+const A = window.Atrium
+if (!A) return
+const esc = A.escapeHtml, arr = value => Array.isArray(value) ? value : []
+const current = () => A.state.calendar || {}
+const units = () => arr(current().units)
+const dateValid = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && A.fmt.addDays(value, 0) === value
+const unitId = unit => String(unit.id || unit.unitId || '')
+const unitLabel = unit => unit.label || `Apartment ${unitId(unit)}`
+const options = selected => units().map(unit => `<option value="${esc(unitId(unit))}"${unitId(unit) === selected ? ' selected' : ''}>${esc(unitLabel(unit))}</option>`).join('')
+const requestId = () => window.crypto.randomUUID()
+const uncertain = error => error.network || error.badJson || !error.status || error.status >= 500 || (error.status >= 200 && error.status < 300)
+const unverified = message => Object.assign(new Error(message), { badJson: true })
+function verifiedCalendar(result) {
+  if (!result || !['slots', 'blocks', 'bookings', 'unitBlocks'].every(key => Array.isArray(result[key]))) throw unverified('The saved calendar could not be verified.')
+}
+const lockForm = (form, locked) => { for (const control of form.querySelectorAll('input, select, textarea')) control.disabled = locked }
+let active = null
+function allowed() {
+  if (!A.can('operate')) { A.toast('Your access is view only.', { kind: 'info' }); return false }
+  if (!A.state.calendar || A.busyNow('calendar')) { A.toast('Wait for the calendar to finish loading.', { kind: 'info' }); return false }
+  return true
+}
+async function reload() {
+  const calendar = await A.api.get(A.calendarUrl())
+  A.apply('calendar', calendar)
+  return calendar
+}
+function closeActive() { if (active) active.close(); active = null }
+A.on('route', () => closeActive())
+function field(label, name, type, value, extra = '') {
+  return `<label class="field"><span class="field-label">${esc(label)}</span><input class="input" name="${esc(name)}" type="${type}" value="${esc(value)}" ${extra}></label>`
+}
+function unitConflicts(block) {
+  if (Array.isArray(block.conflictingBookingIds)) {
+    const ids = new Set(block.conflictingBookingIds)
+    return arr(current().bookings).filter(booking => ids.has(booking.externalId))
+  }
+  const start = Date.parse(block.startsAt), end = Date.parse(block.endsAt)
+  return arr(current().bookings).filter(booking => String(booking.unitId || '').toUpperCase() === String(block.unitId).toUpperCase()
+    && Date.parse(booking.occupiedStartsAt || booking.startsAt) < end && Date.parse(booking.occupiedEndsAt || booking.endsAt) > start)
+}
+function unitBlocksHtml(selected) {
+  const blocks = arr(current().unitBlocks).filter(block => !block.removedAt && (!selected || block.unitId === selected) && Date.parse(block.endsAt) > Date.now())
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt))
+  if (!blocks.length) return '<p class="muted-line">No upcoming unit blocks.</p>'
+  return blocks.map(block => {
+    const conflicts = unitConflicts(block)
+    return `<article class="cal-unit-block"><div><strong>Apartment ${esc(block.unitId)}</strong><p>${esc(A.fmt.dateTime(block.startsAt))} – ${esc(A.fmt.dateTime(block.endsAt))}</p><p>${esc(block.reason || 'Unavailable for tours')}</p>${conflicts.length ? `<p class="cal-unit-conflict" role="status">${conflicts.length} existing tour${conflicts.length === 1 ? ' needs' : 's need'} attention, including time reserved before or after tours. Reschedule from the calendar.</p>` : ''}</div><button type="button" class="btn btn-quiet" data-unit-reopen="${esc(block.id)}" data-write="calendar">Reopen unit</button></article>`
+  }).join('')
+}
+function openUnitBlocks(preset = {}) {
+  if (!allowed()) return
+  if (!units().length) { A.toast('No property units are available to select. Refresh the property inventory first.', { kind: 'warn' }); return }
+  closeActive()
+  const today = A.fmt.nyNow().ymd
+  const selected = units().some(unit => unitId(unit) === preset.unitId) ? preset.unitId : unitId(units()[0])
+  const date = dateValid(preset.date) && preset.date >= today ? preset.date : today
+  let fields, draftId = requestId(), previousPayload = '', alive = true, uncertainWrite = false, pendingWrite = null
+  active = A.dialog({ title: 'Unit availability', secondary: { label: 'Close' },
+    build(body, dialog) {
+      body.innerHTML = `<p class="cal-action-intro">Block an apartment for painting, renovation, a move-out, or another reason. Other apartments remain available. Existing tours stay on the calendar.</p><form class="cal-action-form">` +
+        `<label class="field"><span class="field-label">Apartment</span><select class="select" name="unitId">${options(selected)}</select></label>` +
+        `<label class="cal-action-check"><input type="checkbox" name="allDay" checked> All day</label><div class="cal-action-pair">${field('First day', 'date', 'date', date, `min="${today}" max="9998-12-31"`)}${field('Last day', 'endDate', 'date', date, `min="${today}" max="9998-12-31"`)}</div>` +
+        `<div class="cal-action-pair" data-times hidden>${field('Start time', 'startTime', 'time', '09:00')}${field('End time', 'endTime', 'time', '17:00')}</div>` +
+        `<label class="field"><span class="field-label">Reason</span><input class="input" name="reason" maxlength="120" placeholder="e.g. Painting, renovation, move-out" required></label><p class="field-hint">Times use ${esc(A.property.timeZoneLabel)}. The last day is included for all-day blocks.</p></form><section class="cal-unit-blocks"><h4>Upcoming blocks</h4><div data-block-list>${unitBlocksHtml(selected)}</div></section>`
+      fields = Object.fromEntries([...body.querySelectorAll('[name]')].map(element => [element.name, element]))
+      const list = body.querySelector('[data-block-list]')
+      fields.allDay.addEventListener('change', () => { body.querySelector('[data-times]').hidden = fields.allDay.checked })
+      fields.unitId.addEventListener('change', () => { list.innerHTML = unitBlocksHtml(fields.unitId.value); dialog.setError(null) })
+      fields.date.addEventListener('change', () => { if (fields.endDate.value < fields.date.value) fields.endDate.value = fields.date.value })
+      body.querySelector('form').addEventListener('submit', event => { event.preventDefault(); dialog.el.querySelector('.dlg-primary').click() })
+      list.addEventListener('click', async event => {
+        const button = event.target.closest('[data-unit-reopen]')
+        if (!button || dialog.isBusy() || !A.can('operate')) return
+        const block = arr(current().unitBlocks).find(value => value.id === button.dataset.unitReopen)
+        if (!block) { dialog.setError('This block changed. Refresh and try again.'); return }
+        dialog.setBusy('Reopening…'); dialog.setError(null)
+        try {
+          const result = await A.busy('calendar', A.api.post('/api/calendar', { action: 'unit_unblock', blockId: block.id, revision: block.revision }, { doing: 'reopening a unit' }))
+          A.apply('calendar', result)
+          if (alive) list.innerHTML = unitBlocksHtml(fields.unitId.value)
+          A.toast(`Apartment ${block.unitId} reopened for tours.`, { kind: 'ok' })
+        } catch (error) { if (alive && !error.signedOut) dialog.setError(error.message); reload().catch(() => {}) }
+        finally { if (alive) dialog.setBusy(null) }
+      })
+    },
+    primary: { label: 'Block unit', busyLabel: 'Saving unit block…', async onClick(dialog) {
+      if (!A.can('operate')) throw new Error('Your access is view only.')
+      const form = dialog.body.querySelector('form')
+      if (!uncertainWrite && !form.reportValidity()) return
+      if (!pendingWrite) {
+        const payload = { action: 'unit_block', unitId: fields.unitId.value, date: fields.date.value, endDate: fields.endDate.value,
+          allDay: fields.allDay.checked, reason: fields.reason.value.trim(), ...(!fields.allDay.checked ? { startTime: fields.startTime.value, endTime: fields.endTime.value } : {}) }
+        if (!dateValid(payload.date) || !dateValid(payload.endDate) || payload.endDate < payload.date) throw new Error('Choose a valid start and end date.')
+        if (!payload.reason) throw new Error('Enter a reason for this unit block.')
+        const fingerprint = JSON.stringify(payload)
+        if (previousPayload && previousPayload !== fingerprint) draftId = requestId()
+        previousPayload = fingerprint
+        pendingWrite = Object.freeze({ ...payload, requestId: draftId })
+      }
+      const payload = pendingWrite
+      lockForm(form, true)
+      try {
+        const result = await A.busy('calendar', A.api.post('/api/calendar', payload, { doing: 'blocking a unit' }))
+        verifiedCalendar(result)
+        const saved = result.unitBlocks.find(block => block.requestId === payload.requestId)
+        if (saved && (saved.unitId !== payload.unitId || saved.date !== payload.date || saved.endDate !== payload.endDate
+          || saved.allDay !== payload.allDay || saved.reason !== payload.reason)) throw unverified('The saved unit block does not match this request.')
+        A.apply('calendar', result)
+        if (!alive) return
+        if (!saved || saved.removedAt) {
+          dialog.close()
+          A.toast('No active block for this request is shown. Review the current availability before adding a different block.', { kind: 'info' })
+          return
+        }
+        const conflicts = arr(result.unitBlocks).filter(block => !block.removedAt && block.unitId === payload.unitId).flatMap(unitConflicts)
+        dialog.close()
+        A.toast(`Apartment ${payload.unitId} blocked.${conflicts.length ? ' Existing tours need staff attention.' : ''}`, { kind: conflicts.length ? 'warn' : 'ok' })
+      } catch (error) {
+        uncertainWrite = uncertainWrite || uncertain(error)
+        reload().catch(() => {})
+        if (uncertainWrite) throw new Error('The result could not be verified. Retry this same block, or close and refresh the calendar before making a different change.')
+        throw error
+      } finally { if (alive && !uncertainWrite) { pendingWrite = null; lockForm(form, false) } }
+    } },
+    onClose() { alive = false; active = null },
+  })
+}
+
+function openReschedule(booking) {
+  if (!allowed()) return
+  if (!booking || !booking.externalId) { A.toast('Refresh the calendar to load this booking.', { kind: 'info' }); return }
+  closeActive()
+  const original = structuredClone(booking), today = A.fmt.nyNow().ymd
+  const oldDate = A.fmt.nyParts(booking.startsAt)?.ymd
+  let fields, alive = true, epoch = 0, slots = [], dialog, draftId = requestId(), previousPayload = '', uncertainWrite = false, pendingWrite = null, pendingSlot = null
+  const initialUnit = original.unitId || ''
+  async function loadSlots() {
+    if (!dialog || !alive || pendingWrite) return
+    const version = ++epoch
+    slots = []
+    fields.slotId.innerHTML = '<option value="">Checking availability…</option>'
+    dialog.setPrimary({ disabled: true }); dialog.setError(null)
+    const date = fields.date.value
+    if (!dateValid(date)) { fields.slotId.innerHTML = '<option value="">Choose a valid date</option>'; return }
+    const query = new URLSearchParams({ from: date, to: date, rescheduleBookingId: original.externalId })
+    if (fields.unitId.value) query.set('unitId', fields.unitId.value)
+    try {
+      const result = await A.api.get(`/api/calendar?${query}`)
+      if (!alive || version !== epoch) return
+      const preview = result.reschedule
+      if (!preview || !Array.isArray(preview.slots)) throw new Error('The server did not return verified rescheduling options.')
+      const revision = preview.booking?.revision ?? preview.revision
+      if (revision !== undefined && revision !== (original.revision ?? 0)) throw new Error('This tour changed in another session. Close this window and reopen the tour.')
+      slots = preview.slots
+      fields.slotId.innerHTML = '<option value="">Choose a tour time</option>' + slots.map(slot => `<option value="${esc(slot.slotId)}">${esc(A.fmt.timeRange(slot.startsAt, slot.endsAt))}</option>`).join('')
+      if (!slots.length) { fields.slotId.innerHTML = '<option value="">No available tours on this date</option>'; dialog.setError('Try another day or apartment. The original tour is unchanged.') }
+      dialog.setPrimary({ disabled: !slots.length })
+    } catch (error) {
+      if (!alive || version !== epoch || error.signedOut) return
+      fields.slotId.innerHTML = '<option value="">Availability could not be checked</option>'
+      dialog.setError(error.message)
+    }
+  }
+  active = A.dialog({ title: `Reschedule ${original.prospectName || 'tour'}`, secondary: { label: 'Keep original tour' },
+    build(body, api) {
+      dialog = api
+      const unknownUnit = initialUnit && !units().some(unit => unitId(unit) === initialUnit)
+      body.innerHTML = `<p class="cal-action-intro">Current tour: ${esc(A.fmt.dateTime(original.startsAt))}${initialUnit ? ` · Apartment ${esc(initialUnit)}` : ''}. The original appointment stays until the new time is saved.</p><form class="cal-action-form">` +
+        `<label class="field"><span class="field-label">Apartment</span><select class="select" name="unitId">${!initialUnit ? '<option value="">No apartment selected</option>' : ''}${unknownUnit ? `<option value="${esc(initialUnit)}" selected>Apartment ${esc(initialUnit)} — no longer in inventory</option>` : ''}${options(initialUnit)}</select></label>` +
+        field('New date', 'date', 'date', oldDate && oldDate >= today ? oldDate : today, `min="${today}" max="9998-12-31"`) +
+        `<label class="field"><span class="field-label">New tour time</span><select class="select" name="slotId" required><option value="">Checking availability…</option></select></label><p class="field-hint">${esc(A.property.timeZoneLabel)} · availability includes staffing capacity, unit blocks, tour hours and notice.</p><p class="cal-consequence">Contact the prospect with the new time. This action does not send a text or email.</p></form>`
+      fields = Object.fromEntries([...body.querySelectorAll('[name]')].map(element => [element.name, element]))
+      fields.date.addEventListener('input', loadSlots)
+      fields.date.addEventListener('change', loadSlots)
+      fields.unitId.addEventListener('change', loadSlots)
+      body.querySelector('form').addEventListener('submit', event => { event.preventDefault(); api.el.querySelector('.dlg-primary').click() })
+      Promise.resolve().then(loadSlots)
+    },
+    primary: { label: 'Save new time', disabled: true, busyLabel: 'Moving tour…', async onClick(api) {
+      if (!A.can('operate')) throw new Error('Your access is view only.')
+      const form = api.body.querySelector('form')
+      if (!uncertainWrite && !form.reportValidity()) return
+      if (!pendingWrite) {
+        const slot = slots.find(value => value.slotId === fields.slotId.value)
+        if (!slot) throw new Error('Check availability and choose a tour time.')
+        const payload = { action: 'reschedule', externalId: original.externalId, expectedRevision: original.revision ?? 0,
+          slotId: slot.slotId, unitId: fields.unitId.value || null }
+        const fingerprint = JSON.stringify(payload)
+        if (previousPayload && fingerprint !== previousPayload) draftId = requestId()
+        previousPayload = fingerprint
+        pendingWrite = Object.freeze({ ...payload, requestId: draftId })
+        pendingSlot = Object.freeze({ ...slot })
+      }
+      const payload = pendingWrite, slot = pendingSlot
+      lockForm(form, true)
+      try {
+        const result = await A.busy('calendar', A.api.post('/api/calendar', payload, { doing: 'rescheduling a tour' }))
+        verifiedCalendar(result)
+        const receipt = result.reschedule
+        const saved = result.bookings.find(row => row.externalId === payload.externalId)
+        if (!receipt || receipt.externalId !== payload.externalId || receipt.requestId !== payload.requestId
+          || receipt.revision !== payload.expectedRevision + 1 || receipt.notificationSent !== false
+          || !['complete', 'pending_projection', 'superseded'].includes(receipt.status) || !saved
+          || (receipt.status === 'superseded' ? !(saved.revision > receipt.revision)
+            : saved.revision !== receipt.revision || saved.slotId !== payload.slotId || saved.unitId !== payload.unitId
+              || Date.parse(saved.startsAt) !== Date.parse(slot.startsAt) || Date.parse(saved.endsAt) !== Date.parse(slot.endsAt))) {
+          throw unverified('The saved tour change does not match this request.')
+        }
+        A.apply('calendar', result)
+        A.refresh()
+        api.close()
+        if (receipt.status === 'superseded') {
+          A.toast('This request was already applied, and the tour has since changed again. The calendar shows its current time.', { kind: 'info', ms: 10000 })
+          return
+        }
+        const pending = receipt.status === 'pending_projection'
+          || arr(result.rescheduleProjectionPending).some(item => item.externalId === original.externalId)
+        A.toast(`Tour moved to ${A.fmt.dateTime(slot.startsAt)}.${pending ? ' Follow-up records still need to sync.' : ''} Contact the prospect to confirm the change.`, { kind: pending ? 'warn' : 'ok', ms: 10000 })
+      } catch (error) {
+        uncertainWrite = uncertainWrite || uncertain(error)
+        reload().catch(() => {})
+        // Never tell staff the original is unchanged after an ambiguous network failure.
+        if (uncertainWrite) throw new Error('The result could not be fully verified. Retry this same selection, or close and refresh the calendar before making another change.')
+        throw error
+      } finally { if (alive && !uncertainWrite) { pendingWrite = null; pendingSlot = null; lockForm(form, false) } }
+    } },
+    onClose() { alive = false; epoch++; active = null },
+  })
+}
+async function retryProjection(externalId) {
+  if (!allowed()) return
+  const pending = arr(current().rescheduleProjectionPending).find(item => item.externalId === externalId)
+  if (!pending) { A.toast('This tour has no pending follow-up sync. Refresh the calendar if it just changed.', { kind: 'info' }); return }
+  try {
+    const result = await A.busy('calendar', A.api.post('/api/calendar', { action: 'reschedule_sync',
+      externalId, revision: pending.revision, requestId: pending.requestId }, { doing: 'syncing tour follow-ups' }))
+    A.apply('calendar', result)
+    A.refresh()
+    const remains = arr(result.rescheduleProjectionPending).some(item => item.externalId === externalId)
+    A.toast(remains ? 'The tour is saved. Follow-ups still need staff review before they can sync.' : 'Tour follow-ups are up to date.', { kind: remains ? 'warn' : 'ok' })
+  } catch (error) { if (!error.signedOut) A.toast(error.message, { kind: 'error' }); reload().catch(() => {}) }
+}
+A.calendarActions = { openUnitBlocks, openReschedule, retryProjection }
+})()
+</script>
+<script>
 /*
  * Leads view (brief §9). Owner: leads. Registers 'leads' on window.Atrium and renders into the
  * root the shell hands it: two tabs — To do (scheduled follow-ups grouped Overdue / Today /
@@ -5907,9 +6374,14 @@ function todoListHtml(s) {
   const scheduled = all.filter((f) => f.status === 'scheduled').sort(byDue)
   const done = all.filter((f) => (f.status === 'done' || f.status === 'skipped') && (needsReview(f) || (fmt.nyDate(f.dueAt) || '9999') <= today))
     .sort((a, b) => Number(needsReview(b)) - Number(needsReview(a)) || byDueDesc(a, b)).slice(0, 20)
-  let out = ''
-  if (!scheduled.length) {
-    if (!all.length) out += A.html.empty({ icon: 'check-circle', title: 'Nothing to do yet.', text: "When the assistant thinks someone needs a call — a tour to confirm, a question it couldn't answer — it shows up here." })
+  const changes = arr(s.leads && s.leads.tourChangeRequests)
+  const pending = changes.filter(r => r && r.status === 'pending')
+  const reviewed = changes.filter(r => r && r.status === 'reviewed')
+    .sort((a, b) => String(b.lastUpdatedAt).localeCompare(String(a.lastUpdatedAt)))
+  let out = pending.length ? `<h2 class="group-head" data-key="group:tour-changes" tabindex="-1">Tour-change requests${countHtml(pending.length)}</h2><div class="card rows">${pending.map(r => A.html.tourChangeRequest(r)).join('')}</div>` : ''
+  if (!scheduled.length && !pending.length) {
+    if (!all.length && reviewed.length) out += A.html.empty({ icon: 'check-circle', title: 'No pending requests.', text: 'Reviewed tour-change requests remain below. A review does not confirm that a booking changed or the caller was contacted.' })
+    else if (!all.length) out += A.html.empty({ icon: 'check-circle', title: 'Nothing to do yet.', text: "When the assistant thinks someone needs a call — a tour to confirm, a question it couldn't answer — it shows up here." })
     else if (done.some(needsReview)) out += A.html.empty({ icon: 'warning', title: 'Review older tasks.', text: 'Some completed or not-needed tasks have an unclear booking match. Check the booking before contacting the caller.', actionHtml: `<button type="button" class="btn-link" data-action="seedone">See completed tasks</button>` })
     else out += A.html.empty({ icon: 'check-circle', title: 'All caught up.', text: 'Everything on the list is done.', actionHtml: done.length ? `<button type="button" class="btn-link" data-action="seedone">See what's done</button>` : '' })
   } else {
@@ -5922,6 +6394,7 @@ function todoListHtml(s) {
         `<div class="card rows">${items.map((f) => fuRowHtml(f, s, { nameLink: true })).join('')}</div>`
     }
   }
+  if (reviewed.length) out += `<details class="done-list" data-key="reviewed-tour-changes"><summary data-key="reviewed-tour-changes-summary">${ico('chevron-down')}<span>Reviewed tour-change requests</span>${countHtml(reviewed.length)}</summary><div class="card rows">${reviewed.map(r => A.html.tourChangeRequest(r)).join('')}</div></details>`
   if (done.length) {
     out += `<details class="done-list" data-key="done-today"><summary data-key="done-today-summary">${ico('chevron-down')}<span>Done and not needed${done.some(needsReview) ? '' : ' today'}</span>${countHtml(done.length)}${reviewSummary(done)}</summary>` +
       `<div class="card rows">${done.map((f) => doneRowHtml(f, s)).join('')}</div></details>`
@@ -6038,6 +6511,7 @@ function lookingFor(p, s, recById) {
   return out
 }
 function npCardHtml(it, recById) {
+  if (it.type === 'tourChange') return `<div class="card card-warn np-card">${A.html.tourChangeRequest(it.request)}</div>`
   const rec = recById.get(String(it.callId))
   const seeCall = rec && (rec.call || arr(rec.events).length) ? link('calls', { id: it.callId }, 'See the call') : ''
   if (it.type === 'callback') {
@@ -6337,6 +6811,7 @@ const view = {
     A.paintPermissions(this.root)
   },
   fuAction(btn) {
+    if (btn.dataset.action === 'review-tour-change') { A.reviewTourChange(btn.dataset.request); return }
     const a = btn.dataset.action
     const fu = followUpsOf(A.state).find((f) => f.id === btn.dataset.fu)
     if (!fu) return
@@ -6516,6 +6991,235 @@ const view = {
   badge(s) { return derive.dueTodayCount(s) || null },
 }
 A.register('leads', view)
+})()
+</script>
+<script>
+/* Staff-entered unit feedback. Source unit facts stay read-only in the connected PMS. */
+(function () {
+'use strict'
+const A = window.Atrium
+if (!A) return
+const esc = A.escapeHtml, arr = value => Array.isArray(value) ? value : []
+const SENTIMENTS = [['positive', 'Positive'], ['neutral', 'Neutral'], ['negative', 'Negative']]
+const REASONS = [['price', 'Price'], ['layout', 'Layout'], ['light', 'Natural light'], ['noise', 'Noise'], ['condition', 'Condition'], ['amenities', 'Amenities'], ['other', 'Other']]
+const label = (list, value) => list.find(([key]) => key === value)?.[1] || 'Not specified'
+const ico = name => `<span class="ico">${A.icon(name)}</span>`
+const byNewest = (a, b) => String(b.observedDate).localeCompare(String(a.observedDate)) || String(b.createdAt).localeCompare(String(a.createdAt)) || String(a.id).localeCompare(String(b.id))
+const countsFor = entries => entries.reduce((counts, entry) => {
+  if (SENTIMENTS.some(([key]) => key === entry.sentiment)) counts[entry.sentiment]++
+  return counts
+}, { positive: 0, neutral: 0, negative: 0 })
+const unitFacts = unit => [unit.floorPlanName || unit.floorPlanId,
+  Number.isFinite(unit.bedrooms) ? unit.bedrooms === 0 ? 'Studio' : `${unit.bedrooms} bed` : '',
+  Number.isFinite(unit.sqft) ? `${unit.sqft.toLocaleString('en-US')} sq ft` : ''].filter(Boolean).join(' · ')
+
+function feedbackModel(s, options = {}) {
+  const raw = s.leads || {}, catalog = arr(raw.feedbackUnits).filter(u => u && typeof u.unitId === 'string')
+  const all = arr(raw.unitFeedback).filter(f => f && typeof f.id === 'string' && typeof f.unitId === 'string')
+  const since = options.period === '30' ? A.fmt.addDays(A.fmt.nyNow().ymd, -29) : null
+  const entries = all.filter(f => !since || (f.observedDate >= since && f.observedDate <= A.fmt.nyNow().ymd)).sort(byNewest)
+  const units = new Map(catalog.map(unit => [unit.unitId, { ...unit, current: true }]))
+  // Retain saved feedback when a unit is absent from a newer source snapshot.
+  for (const entry of all) if (!units.has(entry.unitId)) units.set(entry.unitId, { unitId: entry.unitId, current: false })
+  const unitRows = [...units.values()].map(unit => {
+    const feedback = entries.filter(entry => entry.unitId === unit.unitId)
+    return { ...unit, feedback, counts: countsFor(feedback) }
+  }).sort((a, b) => a.unitId.localeCompare(b.unitId, 'en', { numeric: true }))
+  const query = String(options.query || '').trim().toLowerCase()
+  const shownUnits = unitRows.filter(unit => !query || [unit.unitId, unit.floorPlanId, unit.floorPlanName].filter(Boolean).join(' ').toLowerCase().includes(query))
+  const selected = options.unitId ? unitRows.find(unit => unit.unitId === options.unitId) || null : null
+  const selectedMissing = Boolean(options.unitId && !selected)
+  const selectedEntries = selectedMissing ? [] : selected ? selected.feedback : entries
+  const reasons = REASONS.map(([category, name]) => {
+    const matching = selectedEntries.filter(entry => entry.category === category)
+    return { category, name, count: matching.length, ...countsFor(matching) }
+  }).filter(reason => reason.count).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+  return { available: Boolean(raw.feedbackInventory), inventory: raw.feedbackInventory, truncated: raw.unitFeedbackTruncated === true,
+    catalog, shownUnits, selected, selectedMissing, entries: selectedEntries, counts: countsFor(selectedEntries), reasons,
+    unitsWithFeedback: new Set(selectedEntries.map(entry => entry.unitId)).size, totalUnits: unitRows.length }
+}
+
+function sourceHtml(model) {
+  if (!model.available) return A.html.banner('warn', 'Unit feedback is not available from this workspace yet. Refresh after the workspace has been updated.')
+  const source = model.inventory, date = source.readAt ? A.fmt.dateTime(source.readAt) : 'date not supplied'
+  const demo = source.fictional === true || source.sourceMode === 'demo'
+  return `<div class="uf-source small muted">${demo ? A.html.chip('chip-neutral', 'info', 'Fictional demo catalogue') + ' ' : ''}` +
+    `Unit facts from ${esc(source.source || 'the configured property source')} · snapshot ${esc(date)}. ` +
+    `${demo ? 'Sample unit facts; not live availability.' : 'Check the source system for current availability.'} Feedback below is entered by staff.</div>`
+}
+function unitsHtml(model, unitId) {
+  let html = `<button type="button" class="uf-unit" data-unit="" data-key="unit:all" aria-current="${unitId ? 'false' : 'true'}"><strong>Whole property</strong><span class="small muted">All saved unit feedback</span></button><div class="uf-unit-list">`
+  for (const unit of model.shownUnits) html += `<button type="button" class="uf-unit" data-unit="${esc(unit.unitId)}" data-key="unit:${esc(unit.unitId)}" aria-current="${unit.unitId === unitId ? 'true' : 'false'}">` +
+    `<strong>Apartment ${esc(unit.unitId)}</strong><span class="small muted">${esc(unit.current ? unitFacts(unit) || 'Source unit' : 'Prior unit reference')}</span>` +
+    `<span class="uf-counts"><span class="uf-up">${unit.counts.positive} positive</span><span class="uf-down">${unit.counts.negative} negative</span><span class="muted">${unit.counts.neutral} neutral</span></span></button>`
+  if (!model.shownUnits.length) html += '<p class="uf-unit-empty muted">No units match this search.</p>'
+  return html + '</div>'
+}
+function entryHtml(entry, s) {
+  const profile = arr(s.leads?.profiles).find(p => p && p.phone === entry.leadPhone)
+  const who = entry.leadPhone ? profile ? `<a href="${esc(A.hashFor('leads', { tab: 'all', phone: entry.leadPhone }))}">${esc(A.derive.displayName(profile))}</a>` : 'Linked prospect no longer in the current list' : 'Staff observation · no prospect linked'
+  const sentimentClass = entry.sentiment === 'positive' ? 'chip-ok' : entry.sentiment === 'negative' ? 'chip-danger' : 'chip-neutral'
+  const changed = entry.updatedAt && entry.updatedAt !== entry.createdAt
+  return `<li class="uf-entry" data-feedback-id="${esc(entry.id)}"><div class="uf-entry-head">` +
+    `<a href="${esc(A.hashFor('units', { unit: entry.unitId }))}">Apartment ${esc(entry.unitId)}</a>` +
+    A.html.chip(sentimentClass, null, label(SENTIMENTS, entry.sentiment)) + `<span class="small muted">${esc(label(REASONS, entry.category))}</span></div>` +
+    (entry.note ? `<p class="uf-entry-note">${esc(entry.note)}</p>` : '') +
+    `<div class="small">${who}</div><div class="uf-entry-meta"><span>Observed ${esc(A.fmt.day(entry.observedDate))}</span>` +
+    `<span>Added by ${esc(entry.createdBy?.label || 'Staff')} · ${esc(A.fmt.dateTime(entry.createdAt))}</span>` +
+    (changed ? `<span>Edited by ${esc(entry.updatedBy?.label || 'Staff')} · ${esc(A.fmt.dateTime(entry.updatedAt))}</span>` : '') +
+    (A.can('operate') && arr(s.leads?.feedbackUnits).some(unit => unit?.unitId === entry.unitId)
+      ? `<button type="button" class="btn-link" data-edit="${esc(entry.id)}" data-key="feedback-edit:${esc(entry.id)}" data-write="leads">Edit</button>` : '') + '</div></li>'
+}
+function detailHtml(model, s) {
+  if (model.selectedMissing) return A.html.empty({ icon: 'home', title: 'This unit is not in the current workspace.', text: 'Choose a unit from the list to see its feedback.' })
+  const title = model.selected ? `Apartment ${model.selected.unitId}` : A.property.name
+  const subtitle = model.selected ? model.selected.current ? unitFacts(model.selected) : 'Saved feedback from a prior unit reference' : `Feedback across ${A.text.plural(model.unitsWithFeedback, 'unit')}`
+  let html = `<div class="uf-detail-head"><h2>${esc(title)}</h2><p class="muted small">${esc(subtitle)}</p></div>` +
+    `<div class="uf-metrics"><div class="card uf-metric"><span>Feedback entries</span><strong>${model.entries.length}</strong><span>${model.counts.neutral} neutral</span></div>` +
+    `<div class="card uf-metric"><span>Positive</span><strong class="uf-up">${model.counts.positive}</strong><span>Saved observations</span></div>` +
+    `<div class="card uf-metric"><span>Negative</span><strong class="uf-down">${model.counts.negative}</strong><span>Saved observations</span></div></div>`
+  html += `<section class="card uf-section"><h3>Recurring reasons</h3><p class="small muted">Counts from the selected feedback period. These are observations, not a property score.</p>`
+  if (!model.reasons.length) html += '<p class="muted" style="margin-top:16px">No reasons recorded for this selection.</p>'
+  else {
+    const maximum = Math.max(...model.reasons.map(reason => reason.count), 1)
+    html += '<div class="uf-reasons">' + model.reasons.map(reason => `<div><div class="uf-reason-line"><span>${esc(reason.name)}</span>` +
+      `<span class="uf-reason-count">${reason.positive} positive · ${reason.negative} negative${reason.neutral ? ` · ${reason.neutral} neutral` : ''}</span></div>` +
+      `<div class="uf-reason-track" aria-hidden="true">${SENTIMENTS.map(([sentiment]) => `<span class="uf-reason-bar ${sentiment}" style="width:${reason[sentiment] / maximum * 100}%"></span>`).join('')}</div></div>`).join('') + '</div>'
+  }
+  html += '</section><section class="card uf-section"><h3>Feedback and notes</h3><p class="small muted">Prospect comments and staff observations, newest observed date first.</p>'
+  html += model.entries.length ? `<ul class="uf-feed">${model.entries.map(entry => entryHtml(entry, s)).join('')}</ul>` :
+    '<div class="empty"><p class="empty-title">No feedback recorded yet.</p><p class="empty-text">Add what a prospect liked, what held them back, or a specific staff observation.</p></div>'
+  return html + '</section>'
+}
+
+function feedbackRequest(values, s, existing, idempotencyKey) {
+  const units = arr(s.leads?.feedbackUnits), profiles = arr(s.leads?.profiles)
+  const unitId = existing?.unitId || String(values.unitId || '')
+  if (!unitId || !units.some(unit => unit?.unitId === unitId)) throw new Error('Choose a unit in this property’s current catalogue.')
+  if (!SENTIMENTS.some(([value]) => value === values.sentiment)) throw new Error('Choose positive, neutral or negative feedback.')
+  if (!REASONS.some(([value]) => value === values.category)) throw new Error('Choose a reason for this feedback.')
+  const observedDate = String(values.observedDate || '')
+  const parsed = new Date(observedDate + 'T12:00:00Z')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(observedDate) || observedDate < '1900-01-01' || !Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== observedDate
+    || observedDate > A.fmt.nyNow().ymd) throw new Error('Choose a valid observed date up to today in the property’s timezone.')
+  const note = String(values.note || '').trim()
+  if (note.length > 1000) throw new Error('Keep the note to 1,000 characters or fewer.')
+  const leadPhone = values.leadPhone ? String(values.leadPhone) : null
+  if (leadPhone && (!/^\+[1-9]\d{7,14}$/.test(leadPhone) || !profiles.some(profile => profile?.phone === leadPhone)))
+    throw new Error('Choose a prospect currently listed in this property, or leave the field empty.')
+  return { action: existing ? 'unit_feedback_edit' : 'unit_feedback_add', idempotencyKey,
+    ...(existing ? { id: existing.id, expectedRevision: existing.revision } : { unitId }),
+    sentiment: values.sentiment, category: values.category, note, leadPhone, observedDate }
+}
+
+function openFeedback(unitId, existing = null) {
+  if (!A.can('operate') || A.busyNow('leads') || !A.state.leads?.feedbackInventory || A.state.errors.leads) return null
+  if (!window.crypto?.randomUUID) { A.toast('Reload this secure workspace before adding feedback.', { kind: 'error' }); return null }
+  const key = window.crypto.randomUUID(), today = A.fmt.nyNow().ymd
+  const units = arr(A.state.leads.feedbackUnits), profiles = arr(A.state.leads.profiles).filter(p => p && /^\+[1-9]\d{7,14}$/.test(p.phone))
+  if (unitId && !units.some(unit => unit.unitId === unitId)) return null
+  const prospectOptions = profiles.map(profile => [profile.phone, `${A.derive.displayName(profile)} · ${A.fmt.phone(profile.phone)}`])
+  if (existing?.leadPhone && !profiles.some(profile => profile.phone === existing.leadPhone)) prospectOptions.unshift([existing.leadPhone, 'Previously linked prospect · no longer available'])
+  let form, closed = false, pending = null, conflicted = false
+  const options = (list, selected, emptyLabel) => `<option value="">${esc(emptyLabel)}</option>` + list.map(([value, name]) => `<option value="${esc(value)}"${value === selected ? ' selected' : ''}>${esc(name)}</option>`).join('')
+  const handle = A.dialog({ title: existing ? `Edit feedback · Apartment ${existing.unitId}` : 'Add unit feedback', secondary: { label: 'Cancel' },
+    onClose() { closed = true; if (view.form === handle) view.form = null },
+    build(body) {
+      body.innerHTML = `<p class="uf-form-intro">${esc(A.property.name)} · Enter a specific observation. Unit details remain in the source system.</p>` +
+        `<form class="uf-form"><fieldset>` +
+        `<label>Apartment<select class="input" name="unitId" required${existing ? ' disabled' : ''}>${options(existing ? [[existing.unitId, `Apartment ${existing.unitId}`]] : units.map(unit => [unit.unitId, `Apartment ${unit.unitId}`]), existing?.unitId || unitId, 'Select a unit')}</select></label>` +
+        `<label>Observed date<input class="input" type="date" name="observedDate" required min="1900-01-01" max="${today}" value="${esc(existing?.observedDate || today)}"><span class="field-hint">${esc(A.property.timeZoneLabel)}</span></label>` +
+        `<label>Sentiment<select class="input" name="sentiment" required>${options(SENTIMENTS, existing?.sentiment, 'Select sentiment')}</select></label>` +
+        `<label>Reason<select class="input" name="category" required>${options(REASONS, existing?.category, 'Select a reason')}</select></label>` +
+        `<label class="uf-full">Link a prospect <span class="muted small">Optional</span><select class="input" name="leadPhone">${options(prospectOptions, existing?.leadPhone, 'No prospect · staff observation')}</select></label>` +
+        `<label class="uf-full">Note <span class="muted small">Optional · 1,000 characters</span><textarea class="input" name="note" maxlength="1000" rows="4" placeholder="What did they like, or what would need to improve?">${esc(existing?.note || '')}</textarea></label>` +
+        '</fieldset></form>'
+      form = body.querySelector('form')
+      form.addEventListener('submit', event => event.preventDefault())
+    },
+    primary: { label: 'Save feedback', busyLabel: 'Saving…', async onClick(dialog) {
+      if (closed || !A.can('operate')) return
+      if (conflicted) { dialog.close(); A.refresh(); return }
+      if (!pending) {
+        if (!form.reportValidity()) return
+        const values = Object.fromEntries(['unitId', 'sentiment', 'category', 'observedDate', 'note', 'leadPhone'].map(name => [name, form.elements.namedItem(name).value]))
+        pending = feedbackRequest(values, A.state, existing, key)
+      }
+      form.querySelector('fieldset').disabled = true
+      dialog.setError('')
+      try {
+        const data = await A.busy('leads', A.api.post('/api/leads', pending, { doing: 'Save unit feedback' }))
+        if (!data.unitFeedback || Array.isArray(data.unitFeedback) || !data.unitFeedback.id) throw Object.assign(new Error('Missing saved feedback'), { badJson: true })
+        A.apply('leads', data)
+        dialog.close(); A.toast(existing ? 'Feedback updated.' : 'Feedback saved.', { kind: 'ok' })
+      } catch (error) {
+        if (closed || error.signedOut || error.propertyAccess || !A.can('operate')) return
+        if (!error.status || error.status >= 500 || error.badJson) {
+          dialog.setError('The save could not be confirmed. Retry to check the same entry; your fields are held to prevent duplicates.')
+          dialog.setPrimary({ label: 'Retry save' })
+        } else if (error.status === 409) {
+          conflicted = true
+          dialog.setError('This feedback changed or the save conflicts with an earlier request. Close this form, refresh, and review the saved entry before editing again.')
+          dialog.setPrimary({ label: 'Close and review' })
+          A.refresh()
+        } else {
+          pending = null; form.querySelector('fieldset').disabled = false
+          dialog.setError(error.status === 404 ? 'The unit or prospect is no longer available. Refresh this workspace and choose a current record.' : error.message || 'Check the feedback fields and try again.')
+        }
+      }
+    } },
+  })
+  view.form = handle
+  return handle
+}
+
+const view = {
+  title: 'Unit feedback', icon: A.icons.units, root: null, source: null, list: null, detail: null, add: null,
+  query: '', period: 'all', form: null,
+  mount(root) {
+    this.root = root
+    root.innerHTML = `<div class="uf-view"><div class="view-head uf-heading"><div><h1 tabindex="-1">Unit feedback</h1>` +
+      `<p class="muted">See what prospects respond to, spot recurring concerns, and keep the team’s observations in one place.</p></div>` +
+      `<button type="button" class="btn btn-primary" data-add-feedback data-key="feedback-add" data-write="leads">${ico('plus')}Add feedback</button></div>` +
+      `<div class="uf-source-region"></div><div class="uf-toolbar"><label class="search">${ico('search')}<span class="vh">Search units or floor plans</span><input type="search" data-feedback-search placeholder="Search units or floor plans" autocomplete="off"></label>` +
+      `<label class="uf-period">Observed period<select class="input" data-feedback-period><option value="all">All saved feedback</option><option value="30">Last 30 days</option></select></label></div>` +
+      `<div class="uf-layout"><nav class="card uf-units" aria-label="Select a unit"></nav><div class="uf-detail"></div></div></div>`
+    this.source = root.querySelector('.uf-source-region'); this.list = root.querySelector('.uf-units'); this.detail = root.querySelector('.uf-detail'); this.add = root.querySelector('[data-add-feedback]')
+    root.querySelector('[data-feedback-search]').addEventListener('input', event => { this.query = event.target.value; this.render(A.state) })
+    root.querySelector('[data-feedback-period]').addEventListener('change', event => { this.period = event.target.value; this.render(A.state) })
+    root.addEventListener('click', event => {
+      const unit = event.target.closest('[data-unit]')
+      if (unit) { A.navigate('units', { unit: unit.dataset.unit || undefined }); return }
+      if (event.target.closest('[data-add-feedback]')) { openFeedback(A.route().params.unit || ''); return }
+      const edit = event.target.closest('[data-edit]')
+      if (edit) {
+        const entry = arr(A.state.leads?.unitFeedback).find(item => item.id === edit.dataset.edit)
+        if (entry) openFeedback(entry.unitId, entry)
+      }
+    })
+    A.on('data', () => { if (this.root && !this.root.hidden) this.render(A.state) })
+    A.on('busy', () => { if (this.root && !this.root.hidden) this.render(A.state) })
+    A.on('minute', () => { if (this.root && !this.root.hidden) this.render(A.state) })
+    A.on('route', route => { if (route.name !== 'units' && this.form && !this.form.isBusy()) this.form.close() })
+  },
+  render(s) {
+    if (!this.root) return
+    const unitId = A.route().params.unit || '', model = feedbackModel(s, { unitId, query: this.query, period: this.period })
+    const replace = (element, html) => { if (element.innerHTML !== html) element.innerHTML = html }
+    this.add.hidden = !A.can('operate')
+    this.add.disabled = !model.available || !model.catalog.length || A.busyNow('leads') || Boolean(s.errors.leads) || model.selectedMissing || Boolean(model.selected && !model.selected.current)
+    if (!s.loaded.leads) {
+      replace(this.source, s.errors.leads ? A.html.banner('warn', 'Unit feedback could not be loaded. Refresh to try again.') : '')
+      replace(this.list, A.html.skeletonRows(3)); replace(this.detail, A.html.skeletonRows(4)); return
+    }
+    replace(this.source, (s.errors.leads ? A.html.banner('warn', 'Unit feedback could not be refreshed. Showing the last loaded records; saving is unavailable until the connection returns.') : '') + sourceHtml(model) +
+      (model.truncated ? A.html.banner('info', 'Showing the latest 500 saved entries. Counts and recurring reasons cover only these loaded records.') : ''))
+    replace(this.list, model.available ? unitsHtml(model, unitId) : '')
+    replace(this.detail, model.available ? detailHtml(model, s) : '')
+    A.paintPermissions(this.root)
+  },
+}
+A.register('units', view)
 })()
 </script>
 </body>
