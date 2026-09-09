@@ -94,7 +94,10 @@ export async function consolidateCall(
 
   // Deterministic ids make this a no-op for follow-ups that already exist, and a done or
   // skipped one is never reopened by a later call.
-  const derived = deriveFollowUps(profile, o.at, o.callId)
+  // A retried report may arrive hours or days later. Its work is still due relative to
+  // the original call, including retries after a partially failed follow-up write.
+  const recordedAt = profile.calls.find((c) => c.callId === o.callId)!.at
+  const derived = deriveFollowUps(profile, new Date(recordedAt), o.callId)
   const followUps: FollowUp[] = []
   for (const f of derived) {
     const stored = await store.update<FollowUp>(followUpKey(f.id), f, (cur) => cur.status === 'scheduled' ? f : cur)

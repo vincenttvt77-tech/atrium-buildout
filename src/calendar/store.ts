@@ -1,4 +1,5 @@
 import { KvClient } from '../store/kv.ts'
+import { currentTenantId, tenantNamespace } from '../tenancy/context.ts'
 import type { CalendarState, CalendarStore } from './types.ts'
 import { emptyCalendar } from './types.ts'
 
@@ -69,13 +70,23 @@ export class KvCalendarStore implements CalendarStore {
  * read the same key — but the fallback has to behave the same way or the local test of
  * the whole feature passes for the wrong reason.
  */
-let sharedMemoryStore: MemoryCalendarStore | null = null
+const tenantMemory = new Map<string, MemoryCalendarStore>()
 
 /** KV when it is configured, memory when it is not. Never throws on startup. */
 export function calendarStoreFromEnv(env: NodeJS.ProcessEnv = process.env): CalendarStore {
-  const url = env.KV_REST_API_URL
-  const token = env.KV_REST_API_TOKEN
-  if (url && token && url.trim() && token.trim()) return new KvCalendarStore(url, token)
-  if (!sharedMemoryStore) sharedMemoryStore = new MemoryCalendarStore()
-  return sharedMemoryStore
+  const kvStores = new Map<string, KvCalendarStore>()
+  const resolve = (): CalendarStore => {
+    const tenantId = currentTenantId()
+    const namespace = tenantNamespace(tenantId)
+    const url = env.KV_REST_API_URL?.trim()
+    const token = env.KV_REST_API_TOKEN?.trim()
+    if (url && token) {
+      const cacheKey = JSON.stringify([url, token, namespace])
+      if (!kvStores.has(cacheKey)) kvStores.set(cacheKey, new KvCalendarStore(url, token, { key: `${namespace}:calendar` }))
+      return kvStores.get(cacheKey)!
+    }
+    if (!tenantMemory.has(tenantId)) tenantMemory.set(tenantId, new MemoryCalendarStore())
+    return tenantMemory.get(tenantId)!
+  }
+  return { read: () => resolve().read(), mutate: (fn) => resolve().mutate(fn), describe: () => resolve().describe() }
 }

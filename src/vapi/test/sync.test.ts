@@ -54,18 +54,20 @@ describe('what the update writes and what it leaves alone', () => {
 })
 
 describe('the round trip to Vapi', () => {
-  test('lists, reads, then patches the chosen assistant with the key', async () => {
+  test('legacy mode lists, reads, patches and verifies the chosen assistant with the key', async () => {
     const calls: Array<{ url: string; method: string; body?: unknown; auth?: string }> = []
+    let saved: Record<string, unknown> = { id: 'a1', name: 'The Larkin — Leasing', model: { provider: 'anthropic', model: 'claude-sonnet-5', temperature: 0.4 } }
     const fetchImpl = (async (url: string, init?: RequestInit) => {
       const method = init?.method ?? 'GET'
       calls.push({ url, method, body: init?.body ? JSON.parse(String(init.body)) : undefined, auth: String((init?.headers as Record<string, string>)?.authorization) })
       if (method === 'GET' && url.endsWith('/assistant')) return new Response(JSON.stringify([{ id: 'a1', name: 'The Larkin — Leasing' }]), { status: 200 })
-      if (method === 'GET') return new Response(JSON.stringify({ id: 'a1', name: 'The Larkin — Leasing', model: { provider: 'anthropic', model: 'claude-sonnet-5', temperature: 0.4 } }), { status: 200 })
+      if (method === 'GET') return new Response(JSON.stringify(saved), { status: 200 })
+      saved = { ...saved, ...JSON.parse(String(init?.body)) }
       return new Response(JSON.stringify({ id: 'a1' }), { status: 200 })
     }) as unknown as typeof fetch
     const r = await syncAssistant({ apiKey: 'sk-test', config, fetchImpl })
     assert.equal(r.ok, true)
-    assert.deepEqual(calls.map((c) => `${c.method} ${c.url}`), ['GET https://api.vapi.ai/assistant', 'GET https://api.vapi.ai/assistant/a1', 'PATCH https://api.vapi.ai/assistant/a1'])
+    assert.deepEqual(calls.map((c) => `${c.method} ${c.url}`), ['GET https://api.vapi.ai/assistant', 'GET https://api.vapi.ai/assistant/a1', 'PATCH https://api.vapi.ai/assistant/a1', 'GET https://api.vapi.ai/assistant/a1'])
     assert.equal(calls[2]!.auth, 'Bearer sk-test')
     assert.equal((calls[2]!.body as { model: { temperature: number } }).model.temperature, 0.4)
     assert.match(r.updated!.join(' '), /7 tools/)
@@ -75,5 +77,84 @@ describe('the round trip to Vapi', () => {
     const r = await syncAssistant({ apiKey: 'pk-public', config, fetchImpl })
     assert.equal(r.ok, false)
     assert.match(r.error!, /401.*private key/)
+  })
+
+  test('an explicit assistant is read directly and success requires independent saved-state verification', async () => {
+    const calls: string[] = []
+    const signals = new Set<AbortSignal | null | undefined>()
+    let saved = { id: 'tenant-assistant', name: 'Larkin', model: { provider: 'anthropic', model: 'claude-sonnet-5' } } as Record<string, unknown>
+    const fetchImpl = (async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET'
+      calls.push(`${method} ${url}`)
+      signals.add(init?.signal)
+      assert.equal(url, 'https://api.vapi.ai/assistant/tenant-assistant')
+      if (method === 'PATCH') {
+        saved = { ...saved, ...JSON.parse(String(init?.body)) }
+        return new Response('{}')
+      }
+      return new Response(JSON.stringify(saved))
+    }) as unknown as typeof fetch
+    const result = await syncAssistant({ apiKey: 'test', assistantId: 'tenant-assistant', config, fetchImpl })
+    assert.equal(result.ok, true)
+    assert.deepEqual(calls.map((call) => call.split(' ')[0]), ['GET', 'PATCH', 'GET'])
+    assert.equal(signals.size, 1)
+    assert.ok([...signals][0] instanceof AbortSignal)
+  })
+
+  test('does not patch or list other assistants when the configured ID is missing or mismatched', async () => {
+    for (const response of [new Response('', { status: 404 }), new Response('{"id":"another-tenant","name":"Private"}')]) {
+      let requests = 0
+      const result = await syncAssistant({
+        apiKey: 'test', assistantId: 'tenant-assistant', config,
+        fetchImpl: (async (input: string, init?: RequestInit) => {
+          requests++
+          assert.equal(input, 'https://api.vapi.ai/assistant/tenant-assistant')
+          assert.notEqual(init?.method, 'PATCH')
+          return response
+        }) as unknown as typeof fetch,
+      })
+      assert.equal(result.ok, false)
+      assert.equal(requests, 1)
+      assert.equal(result.candidates, undefined)
+      assert.equal(result.assistant, undefined)
+    }
+  })
+
+  test('a PATCH acknowledgement cannot hide a stale prompt, changed destination or missing tool', async () => {
+    for (const failure of ['prompt', 'server', 'tools']) {
+      let reads = 0
+      let patch: any
+      const result = await syncAssistant({
+        apiKey: 'test', assistantId: 'a1', config,
+        fetchImpl: (async (_input: string, init?: RequestInit) => {
+          if (init?.method === 'PATCH') { patch = JSON.parse(String(init.body)); return new Response('{}') }
+          reads++
+          if (reads === 1) return new Response('{"id":"a1","name":"Larkin","model":{"provider":"anthropic"}}')
+          if (failure === 'prompt') patch.model.messages[0].content = 'stale prompt'
+          if (failure === 'server') patch.server.url = 'https://wrong.example/api/vapi'
+          if (failure === 'tools') patch.model.tools.pop()
+          return new Response(JSON.stringify({ id: 'a1', ...patch }))
+        }) as unknown as typeof fetch,
+      })
+      assert.equal(result.ok, false, failure)
+      assert.match(result.error!, /saved assistant did not match/)
+      assert.equal(reads, 2)
+    }
+  })
+
+  test('failed readback states that the write was sent without claiming success or retrying', async () => {
+    const methods: string[] = []
+    const result = await syncAssistant({
+      apiKey: 'test', assistantId: 'a1', config,
+      fetchImpl: (async (_input: string, init?: RequestInit) => {
+        methods.push(init?.method ?? 'GET')
+        if (methods.length === 1) return new Response('{"id":"a1","name":"Larkin"}')
+        if (methods.length === 2) return new Response('{}')
+        return new Response('', { status: 503 })
+      }) as unknown as typeof fetch,
+    })
+    assert.equal(result.ok, false)
+    assert.match(result.error!, /update was sent.*503/)
+    assert.deepEqual(methods, ['GET', 'PATCH', 'GET'])
   })
 })

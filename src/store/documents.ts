@@ -1,4 +1,5 @@
 import { KvClient } from './kv.ts'
+import { currentTenantId, tenantNamespace } from '../tenancy/context.ts'
 
 /**
  * A JSON document store: KV when configured, one shared in-process map when not.
@@ -68,7 +69,10 @@ export class KvDocumentStore implements DocumentStore {
     this.client = new KvClient(url, token, opts.fetchImpl)
     this.namespace = opts.namespace ?? 'atrium'
   }
-  private k(key: string) { return `${this.namespace}:${key}` }
+  private k(key: string) {
+    if (this.namespace === 'atrium' && key.startsWith('tenant:')) throw new Error('Reserved tenant namespace')
+    return `${this.namespace}:${key}`
+  }
   async get<T>(key: string): Promise<T | null> { return this.client.read<T>(this.k(key)) }
   async set<T>(key: string, value: T): Promise<void> {
     await this.client.command(['SET', this.k(key), JSON.stringify(value)])
@@ -83,7 +87,12 @@ export class KvDocumentStore implements DocumentStore {
       const result = await this.client.command(['SCAN', cursor, 'MATCH', `${this.k(prefix)}*`, 'COUNT', '100'])
       if (!Array.isArray(result) || !Array.isArray(result[1])) throw new Error('KV returned invalid key list')
       cursor = String(result[0])
-      for (const key of result[1]) if (typeof key === 'string' && key.startsWith(this.k(prefix))) keys.add(key.slice(this.namespace.length + 1))
+      for (const key of result[1]) {
+        if (typeof key !== 'string' || !key.startsWith(this.k(prefix))) continue
+        const logicalKey = key.slice(this.namespace.length + 1)
+        if (this.namespace === 'atrium' && logicalKey.startsWith('tenant:')) continue
+        keys.add(logicalKey)
+      }
     } while (cursor !== '0')
     return [...keys].sort()
   }
@@ -91,13 +100,30 @@ export class KvDocumentStore implements DocumentStore {
   describe() { return this.client.describe() }
 }
 
-let sharedMemory: MemoryDocumentStore | null = null
+const tenantMemory = new Map<string, MemoryDocumentStore>()
 
-/** One memory store per process, so two modules asking for it read the same state. */
+/** Resolve scope on each operation, so a module-level adapter cannot capture another tenant. */
 export function documentStoreFromEnv(env: NodeJS.ProcessEnv = process.env): DocumentStore {
-  const url = env.KV_REST_API_URL
-  const token = env.KV_REST_API_TOKEN
-  if (url && token && url.trim() && token.trim()) return new KvDocumentStore(url, token)
-  if (!sharedMemory) sharedMemory = new MemoryDocumentStore()
-  return sharedMemory
+  const kvStores = new Map<string, KvDocumentStore>()
+  const resolve = (): DocumentStore => {
+    const tenantId = currentTenantId()
+    const namespace = tenantNamespace(tenantId)
+    const url = env.KV_REST_API_URL?.trim()
+    const token = env.KV_REST_API_TOKEN?.trim()
+    if (url && token) {
+      const cacheKey = JSON.stringify([url, token, namespace])
+      if (!kvStores.has(cacheKey)) kvStores.set(cacheKey, new KvDocumentStore(url, token, { namespace }))
+      return kvStores.get(cacheKey)!
+    }
+    if (!tenantMemory.has(tenantId)) tenantMemory.set(tenantId, new MemoryDocumentStore())
+    return tenantMemory.get(tenantId)!
+  }
+  return {
+    get: <T>(key: string) => resolve().get<T>(key),
+    set: <T>(key: string, value: T) => resolve().set(key, value),
+    update: <T>(key: string, initial: T, fn: (current: T) => T) => resolve().update(key, initial, fn),
+    list: (prefix) => resolve().list(prefix),
+    delete: (key) => resolve().delete(key),
+    describe: () => resolve().describe(),
+  }
 }

@@ -4,6 +4,7 @@ import { listProfiles, listFollowUps, profileKey, followUpKey } from '../src/lea
 import type { LeadProfile } from '../src/leads/profile.ts'
 import type { FollowUp } from '../src/leads/followups.ts'
 import { normalisePhone, pinnedName } from '../src/leads/profile.ts'
+import { withTenant } from '../src/tenancy/context.ts'
 
 /**
  * Lead profiles and the follow-up queue, for the operations dashboard.
@@ -27,6 +28,7 @@ export default async function handler(req: any, res: any) {
     return
   }
 
+  return withTenant(auth.tenantId, async () => {
   const now = new Date()
 
   try {
@@ -92,4 +94,5 @@ export default async function handler(req: any, res: any) {
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
   }
+  })
 }

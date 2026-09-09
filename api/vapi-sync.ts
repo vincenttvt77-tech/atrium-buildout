@@ -6,9 +6,8 @@ import { syncAssistant } from '../src/vapi/sync.ts'
 /**
  * "Update the phone assistant" — pushes the repository's script and tools to Vapi.
  *
- * Behind the dashboard passcode, because it rewrites what the phone line says. It uses
- * the deployment's own Vapi key and its own host for the server address, so the assistant
- * it writes points back at the deployment that wrote it.
+ * Authorized by workspace, because it rewrites what the phone line says. The webhook
+ * destination is explicit deployment configuration; browser Host headers are not trusted.
  */
 export default async function handler(req: any, res: any) {
   res.setHeader('cache-control', 'no-store')
@@ -17,7 +16,28 @@ export default async function handler(req: any, res: any) {
 
   const auth = authorizeOps(req.headers ?? {}, new Date())
   if (!auth.ok) {
-    res.status(auth.reason === 'not_configured' ? 503 : 401).json({ error: auth.reason === 'not_configured' ? 'OPS_DASHBOARD_PASSCODE is not set' : 'sign in first' })
+    res.status(auth.reason === 'not_configured' ? 503 : 401).json({ error: auth.reason === 'not_configured' ? 'Portal authentication is not configured.' : 'sign in first' })
+    return
+  }
+
+  if (process.env.VERCEL_ENV === 'preview') {
+    res.status(409).json({ ok: false, error: 'Assistant updates are disabled on preview deployments. Update from the production portal to keep the phone line on its production webhook.' })
+    return
+  }
+  const named = auth.tenantId !== 'legacy'
+  if (named && process.env.VAPI_SYNC_TENANT_ID !== auth.tenantId) {
+    res.status(403).json({ ok: false, error: 'This workspace is not configured to publish the bundled property assistant. Set VAPI_SYNC_TENANT_ID only for the workspace that owns this property configuration.' })
+    return
+  }
+  if (named && auth.assistantIds.length !== 1) {
+    res.status(409).json({ ok: false, error: auth.assistantIds.length === 0
+      ? 'This workspace has no phone assistant connected yet.'
+      : 'This workspace has multiple phone assistants. Configure a single assistant before updating it from the portal.' })
+    return
+  }
+  const origin = configuredServerOrigin()
+  if (!origin) {
+    res.status(503).json({ ok: false, error: 'Set VAPI_SERVER_BASE_URL to the HTTPS origin of the production webhook before updating the assistant.' })
     return
   }
 
@@ -27,13 +47,10 @@ export default async function handler(req: any, res: any) {
     return
   }
 
-  const headers = req.headers ?? {}
-  const host = String(headers['x-forwarded-host'] ?? headers.host ?? 'ghost-building.vercel.app').split(',')[0]!.trim()
-  const proto = String(headers['x-forwarded-proto'] ?? 'https').split(',')[0]!.trim()
-  const config = demoAssistantConfig(rawProperty as Record<string, unknown>, `${proto}://${host}`, new Date())
+  const config = demoAssistantConfig(rawProperty as Record<string, unknown>, origin, new Date())
 
   try {
-    const result = await syncAssistant({ apiKey, assistantId: process.env.VAPI_ASSISTANT_ID, config })
+    const result = await syncAssistant({ apiKey, assistantId: named ? auth.assistantIds[0] : process.env.VAPI_ASSISTANT_ID, config })
     console.log('[vapi-sync]', JSON.stringify({ ok: result.ok, assistant: result.assistant?.id ?? null, error: result.error ?? null }))
     res.status(result.ok ? 200 : 502).json(result)
   } catch (err) {
@@ -41,4 +58,18 @@ export default async function handler(req: any, res: any) {
     console.error('[vapi-sync] failed', message)
     res.status(502).json({ ok: false, error: `Could not reach Vapi: ${message}` })
   }
+}
+
+function configuredServerOrigin(): string | null {
+  const raw = process.env.VAPI_SERVER_BASE_URL?.trim()
+  if (!raw) return null
+  try {
+    const url = new URL(raw)
+    const localhost = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+    const production = Boolean(process.env.VERCEL) || process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production'
+    if (url.username || url.password || url.pathname !== '/' || url.search || url.hash) return null
+    if (localhost && production) return null
+    if (url.protocol !== 'https:' && !(url.protocol === 'http:' && localhost && !production)) return null
+    return url.origin
+  } catch { return null }
 }

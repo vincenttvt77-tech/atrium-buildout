@@ -7,7 +7,7 @@ AI leasing and resident operations for multifamily buildings.
 A working voice leasing agent with the safety machinery built first, plus a demo property
 (**The Larkin**, a fictional 318-residence tower in Long Island City) to exercise it against.
 
-**365 tests, no runtime dependencies.** Node 22 runs the TypeScript directly. Use the latest Node 22 release; run `npm ci` before the checks.
+**Automated unit and handler regression tests, no runtime dependencies.** Node 22 runs the TypeScript directly. Use the latest Node 22 release; run `npm ci` before the checks.
 
 ```
 npm run check         # types, data validation, unit + handler integration tests
@@ -192,7 +192,8 @@ inventory §15.2 and §18.2.
 
 The operations workspace uses a white and navy theme, with shared styling for the Today,
 Calls, Leads, Calendar and Status views. Preview it with `npm run dev:ops`; the local
-passcode is `demo`, and its fixture records reset when the process restarts.
+login is `larkin` / `LarkinDemo123!`, and its fixture records reset when the process restarts.
+The account belongs to an isolated demo tenant; see [TENANCY.md](TENANCY.md).
 
 `npm run build` regenerates the website and embedded dashboard before bundling the APIs.
 GitHub Actions runs checks and a production build on pushes and pull requests.

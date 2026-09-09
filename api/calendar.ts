@@ -2,6 +2,7 @@ import { authorizeOps } from '../src/ops/session.ts'
 import { calendarStoreFromEnv } from '../src/calendar/store.ts'
 import { generateSlots, statusOf, slotDate, blockFor, bookingsFor } from '../src/calendar/slots.ts'
 import rawProperty from '../data/property.json' with { type: 'json' }
+import { withTenant } from '../src/tenancy/context.ts'
 
 /**
  * The tour calendar, for the operations dashboard.
@@ -54,6 +55,7 @@ export default async function handler(req: any, res: any) {
     return
   }
 
+  return withTenant(auth.tenantId, async () => {
   const now = new Date()
 
   try {
@@ -121,4 +123,5 @@ export default async function handler(req: any, res: any) {
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
   }
+  })
 }
