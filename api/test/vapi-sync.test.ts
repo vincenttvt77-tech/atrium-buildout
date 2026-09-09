@@ -38,6 +38,6 @@ describe('updating the phone assistant from the dashboard', () => {
     assert.equal(res.body.ok, true)
     assert.equal(patches.length, 1)
     assert.equal(patches[0]!.body.server.url, 'https://ghost-building.vercel.app/api/vapi')
-    assert.equal(patches[0]!.body.model.tools.length, 6)
+    assert.equal(patches[0]!.body.model.tools.length, 7)
   })
 })

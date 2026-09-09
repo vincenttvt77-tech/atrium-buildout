@@ -1,0 +1,87 @@
+/* Atrium's shared visual layer. All routes use the same controls and surfaces. */
+body { -webkit-font-smoothing: antialiased; }
+h1 { letter-spacing: -.045em; font-size: 2rem; font-weight: 600; }
+h2 { letter-spacing: -.025em; }
+.side { background: #102443; color: #DFE8F7; padding: 28px 16px 20px; border: 0; }
+.brand { padding: 0 14px 28px; }
+.brand-wordmark { display: block; color: white; font-size: 2rem; font-weight: 600; letter-spacing: -.07em; margin-bottom: 30px; line-height: 1; }
+.brand-dot { color: #80ABFF; }
+.brand-name { font-size: 1rem; color: #FFF; }
+.brand-sub, .brand-date { color: #9FB1CB; font-size: .8125rem; }
+.brand-date { margin-top: 10px; }
+.nav-heading { padding: 0 14px; margin-bottom: 12px; color: #9FB1CB; font-size: .75rem; letter-spacing: .12em; font-weight: 600; }
+.nav ul { gap: 7px; }
+.nav-item { color: #BBCBE1; height: 48px; padding: 0 14px; font-size: .9375rem; border-radius: 9px; transition: background var(--motion), color var(--motion); }
+.nav-item:hover { background: #1C3456; color: white; }
+.nav-item[aria-current="page"] { background: #244873; color: #FFF; box-shadow: inset 0 0 0 1px #365982; }
+.nav-item[aria-current="page"]::before { background: #91B8FF; left: 0; top: 15px; bottom: 15px; width: 3px; }
+.side-foot { border-color: #304360; padding: 20px 10px 0; gap: 16px; }
+.side .cluster-l2, .side .staff-only { color: #AABCD6; }
+.side .cluster-warn .cluster-l1, .side .cluster-warn .ico { color: #F5CD8A; }
+.side .cluster-ok .ico { color: #8ED7BC; }
+.workspace-bar { min-height: 72px; display: flex; justify-content: space-between; align-items: center; gap: 20px; padding-bottom: 24px; margin-bottom: 30px; border-bottom: 1px solid var(--line); font-size: .875rem; font-weight: 500; }
+.workspace-label { display: block; font-size: .75rem; color: var(--ink-3); letter-spacing: .1em; margin-bottom: 5px; }
+.workspace-location { color: var(--ink-3); font-weight: 400; padding-left: 8px; }
+.workspace-account { display: flex; align-items: center; gap: 10px; color: var(--ink-2); text-decoration: none; white-space: nowrap; }
+.account-avatar { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid #D2DFF6; border-radius: 50%; color: #245CD4; background: #E8EFFC; font-size: .875rem; }
+.view, .global-banners:not(:empty) { max-width: 1440px; }
+.view-head { margin-bottom: 28px; }
+.dateline { margin-top: 7px; }
+.briefing { margin-top: 10px; }
+.card { box-shadow: 0 2px 5px rgba(16, 39, 76, .025); }
+.tiles { gap: 18px; margin-top: 12px; }
+.big-number { padding: 23px 25px; position: relative; overflow: hidden; min-height: 168px; }
+.big-number::after { content: ''; position: absolute; width: 36px; height: 3px; background: #245CD4; top: 0; left: 25px; border-radius: 0 0 3px 3px; }
+.big-number-label { color: var(--ink-2); font-weight: 500; }
+.big-number-value { font-size: 2.75rem; font-weight: 600; letter-spacing: -.055em; line-height: 1.2; margin: 10px 0 6px; }
+.big-number-warn { background: white; border-color: #E6D7BD; }
+.big-number-warn::after { background: var(--warn); }
+.section { margin-top: 30px; }
+.section-head { margin-bottom: 14px; }
+.row { padding-top: 17px; padding-bottom: 17px; }
+.row-lead-icon { background: var(--accent-soft); color: var(--accent); border-radius: 10px; width: 36px; height: 36px; display: grid; place-items: center; }
+.row-lead-icon.warn-text { background: var(--warn-soft); color: var(--warn); }
+.row-lead-icon.danger-text { background: var(--danger-soft); color: var(--danger); }
+.row-sub { line-height: 1.55; }
+.btn { font-weight: 500; transition: background var(--motion), border-color var(--motion), box-shadow var(--motion); }
+.btn-primary { box-shadow: 0 2px 4px #245CD41A; }
+.btn:focus-visible, .nav-item:focus-visible { outline-width: 3px; }
+.banner { border-radius: 10px; }
+.chip { font-size: .8125rem; }
+.tabs { gap: 4px; }
+.tab[aria-selected="true"] { font-weight: 600; }
+.leads-view, .calls-view { --r-card: 14px; }
+.cal-toolbar { background: white; border-radius: 12px; }
+@media (min-width: 1440px) {
+  main { padding-left: 48px; padding-right: 48px; }
+  .today-list .row { min-height: 78px; }
+}
+@media (max-width: 959px) {
+  .side { padding: 0 18px; height: 64px; }
+  .brand { padding: 0; align-items: center; gap: 12px; }
+  .brand-wordmark { font-size: 1.6rem; margin: 0; }
+  .brand-name { font-size: .875rem; }
+  .brand-view, .nav-heading { display: none; }
+  .side-foot { border: 0; padding: 0; }
+  .side .cluster-mobile { color: #F5CD8A; }
+  .nav { background: white; padding-top: 6px; border-top: 1px solid var(--line); box-shadow: 0 -3px 18px #10244308; }
+  .nav ul { gap: 0; }
+  .nav-item { color: var(--ink-2); font-size: .75rem; height: 56px; padding: 5px 2px; }
+  .nav-item:hover { background: var(--accent-soft); color: var(--accent); }
+  .nav-item[aria-current="page"] { color: var(--accent); background: var(--accent-soft); box-shadow: none; }
+  .nav-item[aria-current="page"]::before { display: none; }
+  .workspace-bar { min-height: 56px; margin-bottom: 22px; padding-bottom: 16px; font-size: .8125rem; }
+  .workspace-label, .workspace-location, .workspace-account { display: none; }
+  .workspace-bar::after { content: 'Leasing workspace'; color: var(--ink-3); font-size: .8125rem; }
+  h1 { font-size: 1.75rem; }
+  .tiles { gap: 10px; }
+  .big-number { min-height: 140px; padding: 17px 14px; }
+  .big-number::after { left: 14px; }
+  .big-number-value { font-size: 2.25rem; }
+  .big-number-label, .big-number-note { font-size: .8125rem; }
+}
+@media (max-width: 420px) {
+  .brand-name { display: none; }
+  .big-number { padding: 16px 10px; }
+  .big-number-label { min-height: 2.6em; }
+}

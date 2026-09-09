@@ -110,12 +110,12 @@ describe('the store degrades honestly', () => {
       'kv')
   })
 
-  test('an unreachable KV yields an empty calendar rather than taking the line down', async () => {
+  test('an unreachable KV refuses availability instead of opening every blocked time', async () => {
     const store = new KvCalendarStore('https://x', 't', {
       fetchImpl: (async () => { throw new Error('ECONNRESET') }) as unknown as typeof fetch,
     })
-    const state = await store.read()
-    assert.deepEqual(state, emptyCalendar())
+    await assert.rejects(store.read(), /ECONNRESET/)
+    assert.equal(store.describe().durable, false)
   })
 })
 

@@ -18,7 +18,6 @@ export const DEFAULT_HOURS: BusinessHours = {
   6: { openHour: 10, closeHour: 17 },
 }
 
-const DAY = 86_400_000
 
 /**
  * Minutes are part of the id. Truncating at the hour gave 2:00 and 2:30 the same id, so a
@@ -52,24 +51,18 @@ export function generateSlots(now: Date, opts: SlotOptions = {}): TourSlot[] {
   const hours = opts.hours ?? DEFAULT_HOURS
   const notice = (opts.minimumNoticeMinutes ?? 120) * 60_000
 
+  if (!Number.isInteger(minutes) || minutes <= 0 || minutes > 1440) throw new Error('slotMinutes must be a positive number of minutes')
+  if (!Number.isInteger(days) || days < 0 || days > 366) throw new Error('days must be between 0 and 366')
   const slots: TourSlot[] = []
+  const start = nyWall(now)
   for (let d = 0; d <= days; d++) {
-    // Step by calendar day in New York, not by 24 UTC hours, so the transition day is
-    // neither skipped nor doubled.
-    const wall = nyWall(new Date(now.getTime() + d * DAY))
-    const window = hours[wall.dayOfWeek]
+    const date = new Date(Date.UTC(start.year, start.month - 1, start.day + d))
+    const window = hours[date.getUTCDay()]
     if (!window) continue
-
-    for (let h = window.openHour; h < window.closeHour; h++) {
-      for (let m = 0; m < 60; m += minutes) {
-        const startsAt = nyInstant(wall.year, wall.month, wall.day, h, m)
-        if (startsAt.getTime() < now.getTime() + notice) continue
-        slots.push({
-          slotId: slotIdFor(startsAt),
-          startsAt,
-          endsAt: new Date(startsAt.getTime() + minutes * 60_000),
-        })
-      }
+    for (let minute = window.openHour * 60; minute + minutes <= window.closeHour * 60; minute += minutes) {
+      const startsAt = nyInstant(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate(), Math.floor(minute / 60), minute % 60)
+      if (startsAt.getTime() < now.getTime() + notice) continue
+      slots.push({ slotId: slotIdFor(startsAt), startsAt, endsAt: new Date(startsAt.getTime() + minutes * 60_000) })
     }
   }
   return slots.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime())

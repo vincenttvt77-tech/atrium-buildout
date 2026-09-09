@@ -3,87 +3,31 @@
    prefers-color-scheme; every colour on the page comes from these tokens. */
 
 :root {
-  color-scheme: light dark;
-  --paper: #F6F3EC;
-  --paper-2: #FFFFFF;
-  --paper-3: #EEEAE0;
-  --ink: #1C1B19;
-  --ink-2: #5E5A52;
-  --ink-3: #68625A;
-  --line: #E3DED2;
-  --line-strong: #CFC8B8;
-  --line-ctrl: #948C7E;
-  --accent: #7F5E33;
-  --accent-strong: #6A4D27;
-  --accent-soft: #F1E7D8;
-  --on-accent: #FFFFFF;
-  --ok: #2F6B4F;
-  --ok-soft: #DDEBE1;
-  --ok-line: #9FC5AF;
-  --warn: #8F5300;
-  --warn-soft: #FBEBC8;
-  --danger: #B23A2E;
-  --danger-soft: #F9E1DD;
-  --blocked: #6B6560;
-  --blocked-soft: #EAE6DD;
-  --blocked-stripe: #DAD4C6;
-  --lost: #6F5F73;
-  --lost-soft: #ECE6EE;
-  --info: #3E6480;
-  --info-soft: #DFE9F0;
-  --focus: #7F5E33;
-  --scrim: rgba(28, 27, 25, .32);
-  --shadow-pop: 0 8px 24px rgba(28, 27, 25, .14), 0 1px 2px rgba(28, 27, 25, .08);
+  color-scheme: light;
+  --paper: #F3F6FB; --paper-2: #FFFFFF; --paper-3: #EAF0F8;
+  --ink: #14233E; --ink-2: #50617B; --ink-3: #60718A;
+  --line: #DFE6F0; --line-strong: #C6D2E2; --line-ctrl: #96A8C0;
+  --accent: #245CD4; --accent-strong: #1848AF; --accent-soft: #EAF1FF; --on-accent: #FFFFFF;
+  --ok: #147452; --ok-soft: #E7F5EF; --ok-line: #9ED4BD;
+  --warn: #8A5109; --warn-soft: #FFF4DF; --danger: #B33143; --danger-soft: #FDECEF;
+  --blocked: #66758D; --blocked-soft: #EDF1F7; --blocked-stripe: #DFE6F0;
+  --lost: #715384; --lost-soft: #F1ECF7; --info: #245CB2; --info-soft: #EAF2FF;
+  --focus: #245CD4; --scrim: rgba(11, 27, 53, .42);
+  --shadow-pop: 0 18px 56px rgba(16, 39, 76, .16), 0 2px 8px rgba(16, 39, 76, .06);
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px;
-  --r-ctrl: 6px; --r-card: 10px; --r-sheet: 14px;
-  --ctrl-h: 36px;
-  --side-w: 232px;
-  --main-pad: 32px;
+  --r-ctrl: 8px; --r-card: 14px; --r-sheet: 18px;
+  --ctrl-h: 40px; --side-w: 244px; --main-pad: 36px;
   --font: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --motion: 140ms;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #15140F;
-    --paper-2: #1E1D18;
-    --paper-3: #1A1914;
-    --ink: #EDE8DC;
-    --ink-2: #B5AE9F;
-    --ink-3: #A8A295;
-    --line: #2E2C25;
-    --line-strong: #3D3A31;
-    --line-ctrl: #716B5E;
-    --accent: #C79A5E;
-    --accent-strong: #D9AE72;
-    --accent-soft: #3A2E1E;
-    --on-accent: #15140F;
-    --ok: #8CC7A5;
-    --ok-soft: #1F3A2C;
-    --ok-line: #3F6B52;
-    --warn: #E0A15A;
-    --warn-soft: #3C2A12;
-    --danger: #E8867A;
-    --danger-soft: #3D1D19;
-    --blocked: #A39B8E;
-    --blocked-soft: #2A2823;
-    --blocked-stripe: #35322B;
-    --lost: #B8A6BE;
-    --lost-soft: #2C2530;
-    --info: #8DB4CF;
-    --info-soft: #1E2E3A;
-    --focus: #C79A5E;
-    --scrim: rgba(0, 0, 0, .6);
-    --shadow-pop: 0 8px 24px rgba(0, 0, 0, .55), 0 1px 2px rgba(0, 0, 0, .4);
-  }
 }
 /* The base size sits here, above the mobile block, so the 15 px mobile rule (same specificity,
    later in the sheet) wins as the brief's §3.2 intends. */
 /* overscroll-behavior-x: none — the calendar's own left/right swipe pages the agenda; the browser must
    never read the same gesture as history navigation and drop the person out of the page. */
-html { font-size: 14px; -webkit-text-size-adjust: 100%; overscroll-behavior-x: none; }
+html { font-size: 16px; -webkit-text-size-adjust: 100%; overscroll-behavior-x: none; }
 @media (max-width: 959px) {
   :root { --ctrl-h: 44px; --main-pad: 16px; }
-  html { font-size: 15px; }
+  html { font-size: 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

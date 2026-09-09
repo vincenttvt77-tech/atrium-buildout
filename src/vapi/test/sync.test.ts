@@ -22,6 +22,17 @@ describe('which assistant is updated', () => {
 })
 
 describe('what the update writes and what it leaves alone', () => {
+  test('preserves webhook credentials when changing the server URL', () => {
+    const patch = assistantPatch({ server: { url: 'https://old.example/api/vapi', credentialId: 'credential-existing', headers: { 'x-custom': 'value' }, secret: 'test-only-secret' } }, config)
+    assert.equal(patch.server.credentialId, 'credential-existing')
+    assert.equal(patch.server.secret, 'test-only-secret')
+    assert.deepEqual(patch.server.headers, { 'x-custom': 'value' })
+    assert.equal(patch.server.url, config.server.url)
+  })
+  test('saved assistants resolve the date on the call, not on the last deployment', () => {
+    assert.match(config.model.messages[0]!.content, /\{\{"now" \| date:/)
+    assert.match(config.model.messages[0]!.content, /America\/New_York/)
+  })
   test('script, tools, server and opening line go in; voice, transcriber and model settings stay', () => {
     const existing = {
       id: 'a1', name: 'The Larkin — Leasing',
@@ -37,7 +48,7 @@ describe('what the update writes and what it leaves alone', () => {
     assert.equal(patch.model.maxTokens, 300)
     assert.deepEqual(patch.model.toolIds, [], 'separately attached tools are detached')
     assert.match(String((patch.model.messages as Array<{ content: string }>)[0]!.content), /You answer the leasing line at The Larkin/)
-    assert.equal((patch.model.tools as unknown[]).length, 6)
+    assert.equal((patch.model.tools as unknown[]).length, 7)
     assert.equal(patch.server.url, 'https://example.vercel.app/api/vapi')
   })
 })
@@ -57,7 +68,7 @@ describe('the round trip to Vapi', () => {
     assert.deepEqual(calls.map((c) => `${c.method} ${c.url}`), ['GET https://api.vapi.ai/assistant', 'GET https://api.vapi.ai/assistant/a1', 'PATCH https://api.vapi.ai/assistant/a1'])
     assert.equal(calls[2]!.auth, 'Bearer sk-test')
     assert.equal((calls[2]!.body as { model: { temperature: number } }).model.temperature, 0.4)
-    assert.match(r.updated!.join(' '), /6 tools/)
+    assert.match(r.updated!.join(' '), /7 tools/)
   })
   test('a refused key is said plainly', async () => {
     const fetchImpl = (async () => new Response('', { status: 401 })) as unknown as typeof fetch

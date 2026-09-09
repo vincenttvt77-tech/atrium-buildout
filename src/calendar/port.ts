@@ -27,6 +27,9 @@ export function storeBackedCalendar(
         const existing = state.bookings.find((b) => b.externalId === intent.idempotencyKey)
         if (existing) return state
 
+        sameUnit = false
+        const available = generateSlots(now(), opts).find((s) => s.slotId === slot.slotId)
+        if (!available || available.startsAt.getTime() !== slot.startsAt.getTime() || available.endsAt.getTime() !== slot.endsAt.getTime()) return state
         if (statusOf(slot, state, opts?.capacity ?? 1) !== 'open') return state
         // Two tours can share a time; one apartment cannot be shown to two parties at once.
         const unit = intent.request.unitId

@@ -15,7 +15,9 @@
     "build:ops": "node scripts/build-ops.mjs",
     "build:site": "node scripts/build-site.mjs",
     "dev:ops": "node scripts/dev-ops.mjs",
-    "simulate": "node scripts/simulate-calls.mjs"
+    "simulate": "node scripts/simulate-calls.mjs",
+    "build": "node scripts/build-site.mjs && node scripts/build-api.mjs",
+    "check": "npm run typecheck && npm run validate && npm test"
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "0.124.0",

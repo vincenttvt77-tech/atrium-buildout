@@ -117,6 +117,7 @@ export async function fetchCalls(
   try {
     const res = await doFetch(`https://api.vapi.ai/call?limit=${opts.limit ?? 20}`, {
       headers: { authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(8000),
     })
     if (!res.ok) {
       return { ok: false, reason: `Vapi returned ${res.status}`, configured: true }

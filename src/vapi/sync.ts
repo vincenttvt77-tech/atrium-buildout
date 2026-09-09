@@ -45,7 +45,9 @@ export function assistantPatch(existing: Record<string, unknown>, config: DemoAs
     // only ones.
     toolIds: [],
   }
-  return { firstMessage: config.firstMessage, server: config.server, model: patched }
+  const server = existing.server && typeof existing.server === 'object' ? existing.server as Record<string, unknown> : {}
+  const nextServer: Record<string, unknown> & { url: string } = { ...server, ...config.server }
+  return { firstMessage: config.firstMessage, server: nextServer, model: patched }
 }
 
 export const KEPT_IN_VAPI = ['voice', 'transcriber', 'start and stop speaking plans', 'model provider and temperature'] as const

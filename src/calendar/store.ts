@@ -1,3 +1,4 @@
+import { KvClient } from '../store/kv.ts'
 import type { CalendarState, CalendarStore } from './types.ts'
 import { emptyCalendar } from './types.ts'
 
@@ -37,52 +38,26 @@ export class MemoryCalendarStore implements CalendarStore {
  * people blocking slots in the same second do not silently drop one of the changes.
  */
 export class KvCalendarStore implements CalendarStore {
-  private readonly url: string
-  private readonly token: string
-  private readonly key: string
-  private readonly fetchImpl: typeof fetch
-
+  private client: KvClient
+  private key: string
   constructor(url: string, token: string, opts: { key?: string; fetchImpl?: typeof fetch } = {}) {
-    this.url = url.replace(/\/$/, '')
-    this.token = token
+    this.client = new KvClient(url, token, opts.fetchImpl)
     this.key = opts.key ?? 'atrium:calendar'
-    this.fetchImpl = opts.fetchImpl ?? fetch
   }
-
-  private async command(parts: string[]): Promise<unknown> {
-    const res = await this.fetchImpl(`${this.url}/${parts.map(encodeURIComponent).join('/')}`, {
-      headers: { authorization: `Bearer ${this.token}` },
-    })
-    if (!res.ok) throw new Error(`KV ${res.status}`)
-    const body = await res.json() as { result?: unknown }
-    return body.result
-  }
-
-  async read(): Promise<CalendarState> {
-    try {
-      const raw = await this.command(['get', this.key])
-      if (typeof raw !== 'string' || raw.length === 0) return emptyCalendar()
-      const parsed = JSON.parse(raw) as Partial<CalendarState>
-      return {
-        blocks: Array.isArray(parsed.blocks) ? parsed.blocks : [],
-        bookings: Array.isArray(parsed.bookings) ? parsed.bookings : [],
-      }
-    } catch {
-      // A calendar that throws when the store is briefly unreachable would take the phone
-      // line down with it. An empty calendar offers no times, which is honest and safe.
-      return emptyCalendar()
+  private validate(state: CalendarState): CalendarState {
+    if (!state || !Array.isArray(state.blocks) || !Array.isArray(state.bookings)) {
+      throw new Error('Calendar data is invalid; availability cannot be verified')
     }
+    return state
   }
-
+  async read(): Promise<CalendarState> {
+    // A missing key is new. An unreachable key is unknown, never an open calendar.
+    return this.validate((await this.client.read<CalendarState>(this.key)) ?? emptyCalendar())
+  }
   async mutate(fn: (s: CalendarState) => CalendarState): Promise<CalendarState> {
-    const next = fn(await this.read())
-    await this.command(['set', this.key, JSON.stringify(next)])
-    return next
+    return this.client.update(this.key, emptyCalendar(), (state) => this.validate(fn(this.validate(state))))
   }
-
-  describe() {
-    return { kind: 'kv' as const, durable: true, note: 'Persisted in KV.' }
-  }
+  describe() { return this.client.describe() }
 }
 
 /*

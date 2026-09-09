@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow, noarchive">
 <meta name="referrer" content="no-referrer">
-<title>The Larkin — Front desk</title>
+<title>Atrium — The Larkin</title>
 <!-- Inter loads without blocking first paint: the stylesheet arrives as media="print" (fetched at low
      priority, never render-blocking) and app.js boot() flips it to media="all" — no inline handler,
      so the page does not lean on script-src 'unsafe-inline' for it; with scripts off the plain link
@@ -20,17 +20,20 @@
 <!-- @include calendar.css -->
 <!-- @include leads.css -->
 <!-- @include calls.css -->
+<!-- @include polish.css -->
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
 <div class="app">
   <aside class="side">
     <div class="brand">
+      <span class="brand-wordmark">atrium<span class="brand-dot">.</span></span>
       <span class="brand-name">The Larkin</span>
       <span class="brand-view" id="brand-view" aria-hidden="true">· Today</span>
-      <span class="brand-sub">Front desk</span>
+      <span class="brand-sub">Leasing workspace</span>
       <span class="brand-date" id="brand-date"></span>
     </div>
+    <div class="nav-heading">WORKSPACE</div>
     <nav class="nav" aria-label="Views">
       <ul>
         <li><a class="nav-item" href="#/today" data-view="today"><span class="nav-icon" data-icon="today"></span><span class="nav-label">Today</span><span class="nav-badge" data-badge="today"></span></a></li>
@@ -46,6 +49,7 @@
     </div>
   </aside>
   <main id="main" tabindex="-1">
+    <header class="workspace-bar"><span><span class="workspace-label">PROPERTY</span> The Larkin <span class="workspace-location">/ Long Island City, NY</span></span><a href="#/status" class="workspace-account"><span class="account-avatar">L</span> Leasing team</a></header>
     <div class="global-banners" id="global-banners"></div>
     <section class="view" data-view="today" hidden></section>
     <section class="view" data-view="calls" hidden></section>

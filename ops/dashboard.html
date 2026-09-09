@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow, noarchive">
 <meta name="referrer" content="no-referrer">
-<title>The Larkin — Front desk</title>
+<title>Atrium — The Larkin</title>
 <!-- Inter loads without blocking first paint: the stylesheet arrives as media="print" (fetched at low
      priority, never render-blocking) and app.js boot() flips it to media="all" — no inline handler,
      so the page does not lean on script-src 'unsafe-inline' for it; with scripts off the plain link
@@ -22,87 +22,31 @@
    prefers-color-scheme; every colour on the page comes from these tokens. */
 
 :root {
-  color-scheme: light dark;
-  --paper: #F6F3EC;
-  --paper-2: #FFFFFF;
-  --paper-3: #EEEAE0;
-  --ink: #1C1B19;
-  --ink-2: #5E5A52;
-  --ink-3: #68625A;
-  --line: #E3DED2;
-  --line-strong: #CFC8B8;
-  --line-ctrl: #948C7E;
-  --accent: #7F5E33;
-  --accent-strong: #6A4D27;
-  --accent-soft: #F1E7D8;
-  --on-accent: #FFFFFF;
-  --ok: #2F6B4F;
-  --ok-soft: #DDEBE1;
-  --ok-line: #9FC5AF;
-  --warn: #8F5300;
-  --warn-soft: #FBEBC8;
-  --danger: #B23A2E;
-  --danger-soft: #F9E1DD;
-  --blocked: #6B6560;
-  --blocked-soft: #EAE6DD;
-  --blocked-stripe: #DAD4C6;
-  --lost: #6F5F73;
-  --lost-soft: #ECE6EE;
-  --info: #3E6480;
-  --info-soft: #DFE9F0;
-  --focus: #7F5E33;
-  --scrim: rgba(28, 27, 25, .32);
-  --shadow-pop: 0 8px 24px rgba(28, 27, 25, .14), 0 1px 2px rgba(28, 27, 25, .08);
+  color-scheme: light;
+  --paper: #F3F6FB; --paper-2: #FFFFFF; --paper-3: #EAF0F8;
+  --ink: #14233E; --ink-2: #50617B; --ink-3: #60718A;
+  --line: #DFE6F0; --line-strong: #C6D2E2; --line-ctrl: #96A8C0;
+  --accent: #245CD4; --accent-strong: #1848AF; --accent-soft: #EAF1FF; --on-accent: #FFFFFF;
+  --ok: #147452; --ok-soft: #E7F5EF; --ok-line: #9ED4BD;
+  --warn: #8A5109; --warn-soft: #FFF4DF; --danger: #B33143; --danger-soft: #FDECEF;
+  --blocked: #66758D; --blocked-soft: #EDF1F7; --blocked-stripe: #DFE6F0;
+  --lost: #715384; --lost-soft: #F1ECF7; --info: #245CB2; --info-soft: #EAF2FF;
+  --focus: #245CD4; --scrim: rgba(11, 27, 53, .42);
+  --shadow-pop: 0 18px 56px rgba(16, 39, 76, .16), 0 2px 8px rgba(16, 39, 76, .06);
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px;
-  --r-ctrl: 6px; --r-card: 10px; --r-sheet: 14px;
-  --ctrl-h: 36px;
-  --side-w: 232px;
-  --main-pad: 32px;
+  --r-ctrl: 8px; --r-card: 14px; --r-sheet: 18px;
+  --ctrl-h: 40px; --side-w: 244px; --main-pad: 36px;
   --font: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --motion: 140ms;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #15140F;
-    --paper-2: #1E1D18;
-    --paper-3: #1A1914;
-    --ink: #EDE8DC;
-    --ink-2: #B5AE9F;
-    --ink-3: #A8A295;
-    --line: #2E2C25;
-    --line-strong: #3D3A31;
-    --line-ctrl: #716B5E;
-    --accent: #C79A5E;
-    --accent-strong: #D9AE72;
-    --accent-soft: #3A2E1E;
-    --on-accent: #15140F;
-    --ok: #8CC7A5;
-    --ok-soft: #1F3A2C;
-    --ok-line: #3F6B52;
-    --warn: #E0A15A;
-    --warn-soft: #3C2A12;
-    --danger: #E8867A;
-    --danger-soft: #3D1D19;
-    --blocked: #A39B8E;
-    --blocked-soft: #2A2823;
-    --blocked-stripe: #35322B;
-    --lost: #B8A6BE;
-    --lost-soft: #2C2530;
-    --info: #8DB4CF;
-    --info-soft: #1E2E3A;
-    --focus: #C79A5E;
-    --scrim: rgba(0, 0, 0, .6);
-    --shadow-pop: 0 8px 24px rgba(0, 0, 0, .55), 0 1px 2px rgba(0, 0, 0, .4);
-  }
 }
 /* The base size sits here, above the mobile block, so the 15 px mobile rule (same specificity,
    later in the sheet) wins as the brief's §3.2 intends. */
 /* overscroll-behavior-x: none — the calendar's own left/right swipe pages the agenda; the browser must
    never read the same gesture as history navigation and drop the person out of the page. */
-html { font-size: 14px; -webkit-text-size-adjust: 100%; overscroll-behavior-x: none; }
+html { font-size: 16px; -webkit-text-size-adjust: 100%; overscroll-behavior-x: none; }
 @media (max-width: 959px) {
   :root { --ctrl-h: 44px; --main-pad: 16px; }
-  html { font-size: 15px; }
+  html { font-size: 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -1125,17 +1069,108 @@ button.cal-dayhead:hover { background: var(--paper-3); }
   .call-panel .panel-head h2 { flex-basis: 100%; order: 3; }
 }
 </style>
+<style>
+/* Atrium's shared visual layer. All routes use the same controls and surfaces. */
+body { -webkit-font-smoothing: antialiased; }
+h1 { letter-spacing: -.045em; font-size: 2rem; font-weight: 600; }
+h2 { letter-spacing: -.025em; }
+.side { background: #102443; color: #DFE8F7; padding: 28px 16px 20px; border: 0; }
+.brand { padding: 0 14px 28px; }
+.brand-wordmark { display: block; color: white; font-size: 2rem; font-weight: 600; letter-spacing: -.07em; margin-bottom: 30px; line-height: 1; }
+.brand-dot { color: #80ABFF; }
+.brand-name { font-size: 1rem; color: #FFF; }
+.brand-sub, .brand-date { color: #9FB1CB; font-size: .8125rem; }
+.brand-date { margin-top: 10px; }
+.nav-heading { padding: 0 14px; margin-bottom: 12px; color: #9FB1CB; font-size: .75rem; letter-spacing: .12em; font-weight: 600; }
+.nav ul { gap: 7px; }
+.nav-item { color: #BBCBE1; height: 48px; padding: 0 14px; font-size: .9375rem; border-radius: 9px; transition: background var(--motion), color var(--motion); }
+.nav-item:hover { background: #1C3456; color: white; }
+.nav-item[aria-current="page"] { background: #244873; color: #FFF; box-shadow: inset 0 0 0 1px #365982; }
+.nav-item[aria-current="page"]::before { background: #91B8FF; left: 0; top: 15px; bottom: 15px; width: 3px; }
+.side-foot { border-color: #304360; padding: 20px 10px 0; gap: 16px; }
+.side .cluster-l2, .side .staff-only { color: #AABCD6; }
+.side .cluster-warn .cluster-l1, .side .cluster-warn .ico { color: #F5CD8A; }
+.side .cluster-ok .ico { color: #8ED7BC; }
+.workspace-bar { min-height: 72px; display: flex; justify-content: space-between; align-items: center; gap: 20px; padding-bottom: 24px; margin-bottom: 30px; border-bottom: 1px solid var(--line); font-size: .875rem; font-weight: 500; }
+.workspace-label { display: block; font-size: .75rem; color: var(--ink-3); letter-spacing: .1em; margin-bottom: 5px; }
+.workspace-location { color: var(--ink-3); font-weight: 400; padding-left: 8px; }
+.workspace-account { display: flex; align-items: center; gap: 10px; color: var(--ink-2); text-decoration: none; white-space: nowrap; }
+.account-avatar { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid #D2DFF6; border-radius: 50%; color: #245CD4; background: #E8EFFC; font-size: .875rem; }
+.view, .global-banners:not(:empty) { max-width: 1440px; }
+.view-head { margin-bottom: 28px; }
+.dateline { margin-top: 7px; }
+.briefing { margin-top: 10px; }
+.card { box-shadow: 0 2px 5px rgba(16, 39, 76, .025); }
+.tiles { gap: 18px; margin-top: 12px; }
+.big-number { padding: 23px 25px; position: relative; overflow: hidden; min-height: 168px; }
+.big-number::after { content: ''; position: absolute; width: 36px; height: 3px; background: #245CD4; top: 0; left: 25px; border-radius: 0 0 3px 3px; }
+.big-number-label { color: var(--ink-2); font-weight: 500; }
+.big-number-value { font-size: 2.75rem; font-weight: 600; letter-spacing: -.055em; line-height: 1.2; margin: 10px 0 6px; }
+.big-number-warn { background: white; border-color: #E6D7BD; }
+.big-number-warn::after { background: var(--warn); }
+.section { margin-top: 30px; }
+.section-head { margin-bottom: 14px; }
+.row { padding-top: 17px; padding-bottom: 17px; }
+.row-lead-icon { background: var(--accent-soft); color: var(--accent); border-radius: 10px; width: 36px; height: 36px; display: grid; place-items: center; }
+.row-lead-icon.warn-text { background: var(--warn-soft); color: var(--warn); }
+.row-lead-icon.danger-text { background: var(--danger-soft); color: var(--danger); }
+.row-sub { line-height: 1.55; }
+.btn { font-weight: 500; transition: background var(--motion), border-color var(--motion), box-shadow var(--motion); }
+.btn-primary { box-shadow: 0 2px 4px #245CD41A; }
+.btn:focus-visible, .nav-item:focus-visible { outline-width: 3px; }
+.banner { border-radius: 10px; }
+.chip { font-size: .8125rem; }
+.tabs { gap: 4px; }
+.tab[aria-selected="true"] { font-weight: 600; }
+.leads-view, .calls-view { --r-card: 14px; }
+.cal-toolbar { background: white; border-radius: 12px; }
+@media (min-width: 1440px) {
+  main { padding-left: 48px; padding-right: 48px; }
+  .today-list .row { min-height: 78px; }
+}
+@media (max-width: 959px) {
+  .side { padding: 0 18px; height: 64px; }
+  .brand { padding: 0; align-items: center; gap: 12px; }
+  .brand-wordmark { font-size: 1.6rem; margin: 0; }
+  .brand-name { font-size: .875rem; }
+  .brand-view, .nav-heading { display: none; }
+  .side-foot { border: 0; padding: 0; }
+  .side .cluster-mobile { color: #F5CD8A; }
+  .nav { background: white; padding-top: 6px; border-top: 1px solid var(--line); box-shadow: 0 -3px 18px #10244308; }
+  .nav ul { gap: 0; }
+  .nav-item { color: var(--ink-2); font-size: .75rem; height: 56px; padding: 5px 2px; }
+  .nav-item:hover { background: var(--accent-soft); color: var(--accent); }
+  .nav-item[aria-current="page"] { color: var(--accent); background: var(--accent-soft); box-shadow: none; }
+  .nav-item[aria-current="page"]::before { display: none; }
+  .workspace-bar { min-height: 56px; margin-bottom: 22px; padding-bottom: 16px; font-size: .8125rem; }
+  .workspace-label, .workspace-location, .workspace-account { display: none; }
+  .workspace-bar::after { content: 'Leasing workspace'; color: var(--ink-3); font-size: .8125rem; }
+  h1 { font-size: 1.75rem; }
+  .tiles { gap: 10px; }
+  .big-number { min-height: 140px; padding: 17px 14px; }
+  .big-number::after { left: 14px; }
+  .big-number-value { font-size: 2.25rem; }
+  .big-number-label, .big-number-note { font-size: .8125rem; }
+}
+@media (max-width: 420px) {
+  .brand-name { display: none; }
+  .big-number { padding: 16px 10px; }
+  .big-number-label { min-height: 2.6em; }
+}
+</style>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
 <div class="app">
   <aside class="side">
     <div class="brand">
+      <span class="brand-wordmark">atrium<span class="brand-dot">.</span></span>
       <span class="brand-name">The Larkin</span>
       <span class="brand-view" id="brand-view" aria-hidden="true">· Today</span>
-      <span class="brand-sub">Front desk</span>
+      <span class="brand-sub">Leasing workspace</span>
       <span class="brand-date" id="brand-date"></span>
     </div>
+    <div class="nav-heading">WORKSPACE</div>
     <nav class="nav" aria-label="Views">
       <ul>
         <li><a class="nav-item" href="#/today" data-view="today"><span class="nav-icon" data-icon="today"></span><span class="nav-label">Today</span><span class="nav-badge" data-badge="today"></span></a></li>
@@ -1151,6 +1186,7 @@ button.cal-dayhead:hover { background: var(--paper-3); }
     </div>
   </aside>
   <main id="main" tabindex="-1">
+    <header class="workspace-bar"><span><span class="workspace-label">PROPERTY</span> The Larkin <span class="workspace-location">/ Long Island City, NY</span></span><a href="#/status" class="workspace-account"><span class="account-avatar">L</span> Leasing team</a></header>
     <div class="global-banners" id="global-banners"></div>
     <section class="view" data-view="today" hidden></section>
     <section class="view" data-view="calls" hidden></section>
@@ -1956,7 +1992,7 @@ function statusRows() {
   const leadsStore = state.leads && state.leads.store
   const calStore = state.calendar && state.calendar.store
   const savingOff = (s) => Boolean(s) && s.durable === false
-  const kvUnreachable = (s) => Boolean(s) && /^KV configured but unreachable/.test(String(s.note ?? ''))
+  const kvUnreachable = (s) => Boolean(s) && s.kind === 'kv' && s.durable === false
   const rows = {
     leadsSaving: !state.loaded.leads ? null : (savingOff(leadsStore) ? (kvUnreachable(leadsStore) ? 'temp' : 'off') : 'on'),
     calendarSaving: !state.loaded.calendar ? null : (savingOff(calStore) ? (kvUnreachable(calStore) ? 'temp' : 'off') : 'on'),
@@ -3292,7 +3328,7 @@ const statusView = {
     const savingRow = (labelText, v) => {
       if (v === null) return `<div class="status-row"><span class="dot dot-neutral"></span><span class="muted">${esc(labelText)}: not loaded yet</span></div>`
       const off = v !== 'on'
-      const word = v === 'on' ? 'Saving on' : v === 'temp' ? 'Saving temporarily off — Atrium has been told' : 'Saving off — changes may be lost'
+      const word = v === 'on' ? 'Saving on' : v === 'temp' ? 'Saving temporarily unavailable — check the connection' : 'Saving off — changes may be lost'
       return `<div class="status-row"><span class="dot${off ? ' dot-warn' : ''}"></span><span class="${off ? 'warn-text' : ''}">${off ? ico('cloud-off') : ico('check')} ${esc(labelText)}: ${esc(word)}</span></div>`
     }
     const rec = rows.recordings
@@ -3300,13 +3336,13 @@ const statusView = {
       : rec === 'off' ? "Not connected yet — calls still show from the leads' records, without recordings or transcripts. Ask Atrium support." : 'Connected, but not answering right now — trying again.'
     const summaryOk = rows.ok
     let out = `<div class="view-head"><h1 tabindex="-1">Status</h1></div><div class="status-col">`
-    out += `<div class="card status-summary ${summaryOk ? 'is-ok' : 'is-warn'}"><div style="display:flex;gap:10px;min-width:0">${ico(summaryOk ? 'check-circle' : 'warning')}<div><div class="summary-title">${summaryOk ? 'Everything is working.' : 'Something needs attention.'}</div>` +
+    out += `<div class="card status-summary ${summaryOk ? 'is-ok' : 'is-warn'}"><div style="display:flex;gap:10px;min-width:0">${ico(summaryOk ? 'check-circle' : 'warning')}<div><div class="summary-title">${summaryOk ? 'All connections are available.' : 'Something needs attention.'}</div>` +
       `<div class="summary-sub">${rows.reconnecting ? `Trying to reconnect…${at ? ` showing what we had at ${esc(at)}` : ''}` : (at ? `Updated ${esc(at)}` : 'Loading…')}</div></div></div>` +
       `<button type="button" class="btn" data-action="refresh" data-key="refresh">Refresh now</button></div>`
     out += `<section class="status-section"><h2>Saving</h2>${savingRow('Callers and to-dos', rows.leadsSaving)}${savingRow('Calendar', rows.calendarSaving)}` +
       (rows.leadsSaving === 'off' || rows.calendarSaving === 'off' ? `<p class="status-p muted small">Ask Atrium support to turn saving on.</p>` : '') + '</section>'
     out += `<section class="status-section"><h2>Call recordings and transcripts</h2><div class="status-row"><span class="dot${rec === 'on' ? '' : rec === null ? ' dot-neutral' : ' dot-warn'}"></span><span class="${rec === 'on' || rec === null ? '' : 'warn-text'}">${esc(recText)}</span></div></section>`
-    out += `<section class="status-section" id="phone-assistant"><h2>Phone assistant</h2><p class="status-p">The script and tools the assistant runs on live in this system. Pushing them to Vapi keeps the phone line in step with every fix here — no more pasting. The voice, timing and model settings you set in Vapi are kept.</p><div class="status-actions"><button type="button" class="btn" data-action="sync-assistant" data-key="sync-assistant">Update the phone assistant</button></div></section>`
+    out += `<section class="status-section" id="phone-assistant"><h2>Phone assistant</h2><p class="status-p">Apply the latest leasing instructions and tools to your phone assistant. Your existing voice, model, and webhook authentication settings are preserved.</p><div class="status-actions"><button type="button" class="btn" data-action="sync-assistant" data-key="sync-assistant">Update the phone assistant</button></div></section>`
     out += `<section class="status-section"><h2>Outgoing calls</h2><div class="status-row"><span class="dot dot-neutral"></span><span>${model.outbound ? 'The assistant can make outgoing calls.' : "The assistant answers calls; it doesn't make them. Everything under To do is for your team."}</span></div></section>`
     out += `<section class="status-section"><h2>Times</h2><p class="status-p">All times on this page are New York time.</p></section>`
     out += `<section class="status-section"><h2>Signed in</h2><p class="status-p">You're signed in on this device. Sessions end after 8 hours; you'll be asked for the passcode again.</p><div class="status-actions"><button type="button" class="btn" data-action="signout" data-key="signout">Sign out</button></div></section>`
@@ -3499,6 +3535,7 @@ function boot() {
   paintChrome()
   applyRoute()
   window.addEventListener('hashchange', applyRoute)
+  window.addEventListener('popstate', applyRoute)
   document.addEventListener('visibilitychange', () => { if (!document.hidden) pollSoon() })
   window.addEventListener('focus', pollSoon)
   setInterval(() => { emit('minute', state); paintChrome() }, 60000)
@@ -5237,6 +5274,9 @@ const view = {
   openSlot(id) {
     const m = cal.model, sl = m.byId.get(id)
     if (!sl) return
+    // A partly filled slot is still open, but a lead's calendar link is about its tour.
+    const tour = m.dayModels.flatMap((d) => d.items).find((it) => it.kind === 'tour' && it.slots.some((s) => s.id === id))
+    if (tour) { const anchor = byKey(tour.key); showDetails('tour', tour, anchor ? focusable(anchor) : null); return }
     if (sl.status === 'open') { openSheet({ date: sl.date, mode: 'range', from: id, to: id }); return }
     const it = itemForSlot(id)
     if (!it) return

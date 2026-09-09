@@ -10,11 +10,14 @@ import {
   checkEmergency, checkAvailability, answerQuestion, captureSignal, captureLossReason,
   type ToolContext,
 } from '../src/conversation/tools.ts'
-import { authorizeOps } from '../src/ops/session.ts'
+import { authorizeOps, constantTimeEquals } from '../src/ops/session.ts'
 import { fetchCalls } from '../src/ops/vapi-calls.ts'
 import { calendarStoreFromEnv } from '../src/calendar/store.ts'
+import { generateSlots } from '../src/calendar/slots.ts'
 import { storeBackedCalendar } from '../src/calendar/port.ts'
 import { documentStoreFromEnv } from '../src/store/documents.ts'
+import { normalisePhone } from '../src/leads/profile.ts'
+import { reconcile } from '../src/leasing/captured.ts'
 import { consolidateCall } from '../src/leads/consolidate.ts'
 import type { LossReason } from '../src/record/store.ts'
 import { bookTour } from '../src/booking/book.ts'
@@ -47,7 +50,7 @@ let cache: {
 } | null = null
 
 function load(now: Date) {
-  if (cache) return cache
+  if (cache && now.getTime() - cache.inventory.readAt.getTime() < 15 * 60_000) return cache
 
   const { snapshot, problems } = loadInventory(
     rawUnits as unknown[], rawPlans as unknown[], now, 'data/inventory.json')
@@ -73,6 +76,7 @@ function load(now: Date) {
  */
 interface CallState {
   qualification: QualificationState
+  phone?: string
   name: string | null
   email: string | null
   unitsDiscussed: string[]
@@ -109,8 +113,23 @@ async function getCall(callId: string): Promise<CallState> {
   return reviveCall(await documents.get<CallState>(callKey(callId)))
 }
 
-async function saveCall(callId: string, state: CallState): Promise<void> {
-  await documents.set(callKey(callId), state)
+async function saveCall(callId: string, state: CallState, before: CallState): Promise<void> {
+  await documents.update<CallState>(callKey(callId), freshCall(), (raw) => {
+    const current = reviveCall(raw)
+    const qualification = { ...current.qualification }
+    for (const key of ['moveInTiming', 'budget', 'bedrooms', 'pets', 'parking', 'source'] as const) {
+      const incoming = state.qualification[key]
+      if (incoming) Object.assign(qualification, { [key]: reconcile(current.qualification[key] as never, incoming as never) })
+    }
+    const next = { ...current, qualification,
+      unitsDiscussed: [...new Set([...current.unitsDiscussed, ...state.unitsDiscussed])],
+      toolsCalled: [...current.toolsCalled, ...state.toolsCalled.slice(before.toolsCalled.length)],
+    }
+    for (const key of ['name', 'email', 'phone', 'booking', 'lossReason', 'escalation'] as const) {
+      if (JSON.stringify(state[key]) !== JSON.stringify(before[key])) Object.assign(next, { [key]: state[key] })
+    }
+    return next
+  })
 }
 
 /*
@@ -225,6 +244,16 @@ async function runTool(
   }
 
   switch (name) {
+    case 'capture_contact': {
+      if (typeof args.excerpt !== 'string' || !args.excerpt.trim()) return 'Ask for the caller’s contact details before recording them.'
+      if (args.email !== undefined && (typeof args.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(args.email))) return 'That email address is incomplete. Ask them to spell it once.'
+      if (args.phone !== undefined && (typeof args.phone !== 'string' || !/^\+?[\d ()+.-]{7,25}$/.test(args.phone))) return 'That callback number is incomplete. Ask them to repeat it once.'
+      if (typeof args.name === 'string' && args.name.trim()) state.name = args.name.trim().slice(0, 120)
+      if (typeof args.email === 'string') state.email = args.email.trim().slice(0, 254)
+      if (typeof args.phone === 'string') state.phone = normalisePhone(args.phone)
+      logEvent(callId, { kind: 'contact_captured', name: state.name, email: state.email, excerpt: args.excerpt.slice(0, 1000) })
+      return 'Contact details saved for the leasing team. Nothing has been sent. Continue helping them.'
+    }
     case 'capture_signal': {
       const r = captureSignal(args as never, ctx)
       if (r.qualificationPatch) state.qualification = r.qualificationPatch
@@ -269,7 +298,7 @@ async function runTool(
     }
 
     case 'book_tour': {
-      const slots = await demoCalendar(now).listSlots(ctx.propertyId, now, now)
+      const slots = generateSlots(now)
       const slot = slots.find((s) => s.slotId === args.slotId)
       if (!slot) return 'That slot is not on the calendar. Call list_tour_slots again and offer a real time.'
 
@@ -281,7 +310,7 @@ async function runTool(
         interactionId: ctx.interactionId,
         personId: null,
         prospectName: state.name || 'there',
-        prospectPhone: callId,
+        prospectPhone: state.phone ?? callId,
         prospectEmail: state.email,
         slot,
         unitId: args.unitId ? String(args.unitId) : null,
@@ -378,10 +407,16 @@ export default async function handler(req: any, res: any) {
   }
 
   // Verify the request is genuinely from Vapi when a secret is configured.
-  const expected = process.env.VAPI_WEBHOOK_SECRET
+  const expected = process.env.VAPI_WEBHOOK_SECRET?.trim()
+  if (!expected && (process.env.VERCEL || process.env.NODE_ENV === 'production')) {
+    res.status(503).json({ error: 'Webhook verification is not configured' })
+    return
+  }
   if (expected) {
-    const provided = req.headers['x-vapi-secret'] ?? req.headers['x-vapi-signature']
-    if (provided !== expected) {
+    const bearer = req.headers?.authorization
+    const provided = req.headers?.['x-vapi-secret'] ?? req.headers?.['x-vapi-signature']
+      ?? (typeof bearer === 'string' && bearer.startsWith('Bearer ') ? bearer.slice(7) : undefined)
+    if (typeof provided !== 'string' || !constantTimeEquals(provided, expected)) {
       res.status(401).json({ error: 'unauthorized' })
       return
     }
@@ -389,6 +424,7 @@ export default async function handler(req: any, res: any) {
 
   const now = new Date()
   let callId = 'unknown-call'
+  let pendingToolIds: unknown[] = []
 
   try {
     // Parsing lives inside the try deliberately. A malformed body thrown here would
@@ -421,6 +457,9 @@ export default async function handler(req: any, res: any) {
       if (emergency) {
         logEvent(callId, emergency.record)
         logEvent(callId, { kind: 'escalated', trigger: 'emergency', detail: emergency.escalate?.detail })
+        if (callId !== 'unknown-call') {
+          await documents.update<CallState>(callKey(callId), freshCall(), (state) => ({ ...state, escalation: { trigger: 'emergency', detail: emergency.escalate?.detail ?? 'Emergency reported' } }))
+        }
       }
       res.status(200).json({})
       return
@@ -435,13 +474,25 @@ export default async function handler(req: any, res: any) {
        * the other's away. That was the "just confirming…" loop on a real call.
        */
       const list = message.toolCallList ?? message.toolCalls ?? []
+      if (!Array.isArray(list)) throw new Error('Invalid tool-call list')
+      pendingToolIds = list.map((tc) => tc?.id ?? tc?.toolCallId).filter((id) => typeof id === 'string')
+      if (callId === 'unknown-call') throw new Error('A call id is required for tool calls')
       const state = await getCall(callId)
+      const before = structuredClone(state)
+      const phone = message.call?.customer?.number ?? body.call?.customer?.number
+      if (!state.phone && typeof phone === 'string' && phone.trim()) state.phone = normalisePhone(phone)
       const results: Array<{ toolCallId: unknown; result: string }> = []
       for (const tc of list) {
         const name = tc.name ?? tc.function?.name
-        const rawArgs = tc.arguments ?? tc.function?.arguments ?? {}
-        const args = typeof rawArgs === 'string' ? JSON.parse(rawArgs) : rawArgs
-        const result = await runTool(String(name), args, callId, now, state)
+        let result: string
+        try {
+          const rawArgs = tc.arguments ?? tc.function?.arguments ?? {}
+          const args = typeof rawArgs === 'string' ? JSON.parse(rawArgs) : rawArgs
+          if (!args || typeof args !== 'object' || Array.isArray(args)) throw new Error('Invalid tool arguments')
+          result = await runTool(String(name), args, callId, now, state)
+        } catch {
+          result = 'I could not verify that action. Ask for clarification or offer a callback; do not claim it succeeded.'
+        }
         results.push({ toolCallId: tc.id ?? tc.toolCallId, result })
         // What each tool decided, for the runtime log — no names, numbers or caller words.
         const last = eventLog[eventLog.length - 1] ?? {}
@@ -453,10 +504,9 @@ export default async function handler(req: any, res: any) {
             signal: last.signal ?? null, captured: last.captured ?? null,
             offered: Array.isArray(last.unitsOffered) ? last.unitsOffered.length : null,
           } : {}),
-          said: result.slice(0, 60),
         }))
       }
-      await saveCall(callId, state)
+      await saveCall(callId, state, before)
       res.status(200).json({ results })
       return
     }
@@ -476,7 +526,7 @@ export default async function handler(req: any, res: any) {
       try {
         const state = await getCall(callId)
         const call = message.call ?? body.call ?? {}
-        const phone = String(call?.customer?.number ?? message.customer?.number ?? 'unknown')
+        const phone = state.phone ?? String(call?.customer?.number ?? message.customer?.number ?? 'unknown')
         const started = call?.startedAt ? Date.parse(call.startedAt) : NaN
         const ended = call?.endedAt ? Date.parse(call.endedAt) : now.getTime()
         await consolidateCall(documents, {
@@ -506,10 +556,10 @@ export default async function handler(req: any, res: any) {
     logEvent(callId, { kind: 'error', message: err instanceof Error ? err.message : String(err) })
     // Never 500 at Vapi — that drops the call. Give the agent something safe to say.
     res.status(200).json({
-      results: [{
-        toolCallId: 'error',
+      results: (pendingToolIds.length ? pendingToolIds : ['error']).map((id) => ({
+        toolCallId: id,
         result: 'Something went wrong on my end. Apologise, offer to have someone call them back, and take their number.',
-      }],
+      })),
     })
   }
 }

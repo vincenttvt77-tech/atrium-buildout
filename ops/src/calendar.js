@@ -1400,6 +1400,9 @@ const view = {
   openSlot(id) {
     const m = cal.model, sl = m.byId.get(id)
     if (!sl) return
+    // A partly filled slot is still open, but a lead's calendar link is about its tour.
+    const tour = m.dayModels.flatMap((d) => d.items).find((it) => it.kind === 'tour' && it.slots.some((s) => s.id === id))
+    if (tour) { const anchor = byKey(tour.key); showDetails('tour', tour, anchor ? focusable(anchor) : null); return }
     if (sl.status === 'open') { openSheet({ date: sl.date, mode: 'range', from: id, to: id }); return }
     const it = itemForSlot(id)
     if (!it) return

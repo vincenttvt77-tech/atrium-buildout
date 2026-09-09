@@ -17,7 +17,7 @@ const POLICY = new Set(['pet_policy', 'parking', 'amenities', 'hours', 'utilitie
   'application_requirements', 'building_access', 'move_logistics', 'general_property_fact'])
 
 const PHONE = '+1 (516) 990-9252'
-const NOW = new Date('2026-09-07T12:00:00Z')
+const NOW = new Date()
 
 const problems = []
 const fail = (where, msg) => problems.push({ severity: 'error', where, msg })
