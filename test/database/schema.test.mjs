@@ -51,7 +51,12 @@ test('schema objects have a separate owner, forced RLS, invoker-only functions a
   const tables = (await db.admin.query(`SELECT c.relname,r.rolname,c.relrowsecurity,c.relforcerowsecurity
     FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_roles r ON r.oid=c.relowner
     WHERE n.nspname='atrium' AND c.relkind='r'`)).rows
-  assert.equal(tables.length, 11)
+  assert.deepEqual(tables.map(row => row.relname).sort(), [
+    'users', 'user_credentials', 'organizations', 'memberships', 'properties',
+    'property_grants', 'property_configurations', 'channel_bindings',
+    'operational_documents', 'calendars', 'audit_events',
+    'inbox_events', 'action_intents', 'outbox_messages', 'workflow_events',
+  ].sort())
   assert.ok(tables.every(row => row.rolname === 'atrium_admin' && row.relrowsecurity && row.relforcerowsecurity))
   const functions = (await db.admin.query(`SELECT p.proname,p.prosecdef
     FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='atrium'`)).rows
