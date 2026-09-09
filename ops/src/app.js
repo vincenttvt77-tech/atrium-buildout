@@ -99,6 +99,9 @@
 
 const LEGACY_TIME_ZONE = 'America/New_York'
 const databaseMode = window.ATRIUM_RUNTIME_MODE === 'postgres'
+// Snapshot the rendered account once. A different tab can replace the shared login cookie.
+const legacyTenantId = databaseMode ? null : window.ATRIUM_ACCOUNT && Object.prototype.hasOwnProperty.call(window.ATRIUM_ACCOUNT, 'tenantId')
+  ? window.ATRIUM_ACCOUNT.tenantId : 'legacy'
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/
 const PERMISSIONS = ['read', 'operate', 'configure', 'manage_members', 'manage_organization']
 let documentScope = null
@@ -140,6 +143,7 @@ function validatedTimeZone(value) {
 let propertyTimeZone
 try {
   if (window.ATRIUM_RUNTIME_MODE !== undefined && !['legacy', 'postgres'].includes(window.ATRIUM_RUNTIME_MODE)) throw new Error('Unknown runtime mode')
+  if (!databaseMode && (typeof legacyTenantId !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(legacyTenantId))) throw new Error('Invalid account identity')
   if (databaseMode) displayProperty = validatedBootstrap(window.ATRIUM_PROPERTY)
   const supplied = window.ATRIUM_PROPERTY && Object.prototype.hasOwnProperty.call(window.ATRIUM_PROPERTY, 'timeZone')
     ? window.ATRIUM_PROPERTY.timeZone : databaseMode ? null : LEGACY_TIME_ZONE
@@ -147,7 +151,7 @@ try {
 } catch {
   document.body.textContent = databaseMode
     ? 'Property configuration needs attention. The property details or timezone are invalid; ask an administrator to correct them, then reload.'
-    : 'Property configuration needs attention. The timezone is invalid; ask an administrator to correct it, then reload.'
+    : 'Property configuration needs attention. The account identity or timezone is invalid; ask an administrator to correct it, then reload.'
   return
 }
 const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -527,6 +531,7 @@ const ICON_PATHS = {
   spinner: '<path d="M21 12a9 9 0 1 1-6.22-8.56"/>',
 }
 ICON_PATHS.phone = ICON_PATHS.calls
+ICON_PATHS.units = ICON_PATHS.home
 const icons = {}
 for (const name of Object.keys(ICON_PATHS)) {
   icons[name] = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${ICON_PATHS[name]}</svg>`
@@ -589,8 +594,8 @@ function invalidateDocument(message, status = 409) {
   return accessError(message, status)
 }
 function checkResponseScope(data) {
-  if (!databaseMode) return
   if (documentAccessIssue) throw accessError(documentAccessIssue.message, documentAccessIssue.status)
+  if (!databaseMode) return
   const scope = data && data.scope
   if (!scope || scope.organizationId !== documentScope.organizationId || scope.propertyId !== documentScope.propertyId
     || scope.configurationVersion !== documentScope.configurationVersion || scope.permissionVersion !== documentScope.permissionVersion) {
@@ -606,24 +611,26 @@ function gate() {
 }
 async function request(path, init) {
   if (gated) throw signedOut()
-  const scoped = databaseMode && propertyEndpoint(path)
-  if (scoped && documentAccessIssue) throw accessError(documentAccessIssue.message, documentAccessIssue.status)
+  const propertyRequest = propertyEndpoint(path), scoped = databaseMode && propertyRequest
+  if (propertyRequest && documentAccessIssue) throw accessError(documentAccessIssue.message, documentAccessIssue.status)
   const epoch = scopeEpoch
   const headers = { ...(init && init.headers), ...(scoped ? {
     'x-atrium-organization-id': documentScope.organizationId, 'x-atrium-property-id': documentScope.propertyId,
     'x-atrium-config-version': String(documentScope.configurationVersion),
-  } : {}) }
+  } : propertyRequest ? { 'x-atrium-tenant-id': legacyTenantId } : {}) }
   let r
   try {
     r = await fetch(path, { credentials: 'same-origin', cache: 'no-store', ...init, headers })
   } catch (e) {
     const err = new Error("Couldn't reach the server"); err.status = 0; err.network = true; throw err
   }
-  if (r.status === 401) { if (databaseMode) invalidateDocument('Your session ended. Sign in again.', 401); gate(); throw signedOut() }
+  if (r.status === 401) { if (propertyRequest) invalidateDocument('Your session ended. Sign in again.', 401); gate(); throw signedOut() }
   let body = null, parsed = false
   try { body = await r.json(); parsed = true } catch (e) { parsed = false }
-  if (scoped && epoch !== scopeEpoch) throw accessError('This response belongs to an earlier property session. Reload the property.')
+  if (propertyRequest && epoch !== scopeEpoch) throw accessError('This response belongs to an earlier property session. Reload the property.')
   if (!r.ok) {
+    if (propertyRequest && r.status === 409 && body && body.code === 'portal_tenant_changed')
+      throw invalidateDocument('The signed-in account changed in another tab. Reload the workspace before viewing or making changes.')
     if (scoped && r.status === 403) throw invalidateDocument('Access to this property or operation is no longer available. Choose a property you can access or reload to refresh your permissions.', 403)
     if (scoped && (r.status === 428 || (r.status === 409 && /property|configuration|scope/.test(String(body && body.code))))) {
       throw invalidateDocument('The property configuration changed. Reload this property before continuing.')
@@ -716,9 +723,14 @@ function snapshot(name, d) {
     return { calls: arr(d.calls), events, callsError: d.callsError ?? null, safetyEventsError: d.safetyEventsError ?? null,
       callsConfigured: typeof d.callsConfigured === 'boolean' ? d.callsConfigured : null }
   }
-  if (name === 'calendar') return { slots: arr(d.slots), blocks: arr(d.blocks), bookings: arr(d.bookings), store: d.store ?? null,
+  if (name === 'calendar') return { slots: arr(d.slots), blocks: arr(d.blocks), bookings: arr(d.bookings), units: arr(d.units), unitBlocks: arr(d.unitBlocks), store: d.store ?? null,
+    rescheduleProjectionPending: arr(d.rescheduleProjectionPending),
     timeZone: d.timeZone ?? LEGACY_TIME_ZONE, range: d.range ?? null, settings: d.settings ?? null, settingsRevision: d.settingsRevision ?? null }
-  return { profiles: arr(d.profiles), followUps: arr(d.followUps), outboundEnabled: d.outboundEnabled === true, store: d.store ?? null }
+  const heldFollowUps = arr(d.heldFollowUps), heldIds = new Set(heldFollowUps.map(f => f && f.id))
+  return { profiles: arr(d.profiles), followUps: arr(d.followUps).filter(f => !f || f.status !== 'scheduled' || !heldIds.has(f.id)), outboundEnabled: d.outboundEnabled === true, store: d.store ?? null,
+    heldFollowUps, rescheduleProjectionPending: arr(d.rescheduleProjectionPending), tourChangeRequests: arr(d.tourChangeRequests),
+    unitFeedback: arr(d.unitFeedback), feedbackUnits: arr(d.feedbackUnits), feedbackInventory: d.feedbackInventory ?? null,
+    unitFeedbackTruncated: d.unitFeedbackTruncated === true }
 }
 function assign(name, snap) {
   if (name === 'calls') { state.calls = snap.calls; state.events = snap.events; state.callsError = snap.callsError; state.callsConfigured = snap.callsConfigured; state.safetyEventsError = snap.safetyEventsError }
@@ -827,6 +839,8 @@ function apply(resource, data) {
       scope: d.scope,
       slots: Array.isArray(d.slots) ? d.slots : cur.slots, blocks: Array.isArray(d.blocks) ? d.blocks : cur.blocks,
       bookings: Array.isArray(d.bookings) ? d.bookings : cur.bookings, store: d.store ?? cur.store,
+      units: Array.isArray(d.units) ? d.units : arr(cur.units), unitBlocks: Array.isArray(d.unitBlocks) ? d.unitBlocks : arr(cur.unitBlocks),
+      rescheduleProjectionPending: Array.isArray(d.rescheduleProjectionPending) ? d.rescheduleProjectionPending : arr(cur.rescheduleProjectionPending),
       timeZone: d.timeZone ?? cur.timeZone ?? LEGACY_TIME_ZONE,
       range: d.range ?? cur.range, settings: d.settings ?? cur.settings, settingsRevision: d.settingsRevision ?? cur.settingsRevision,
     })
@@ -834,6 +848,16 @@ function apply(resource, data) {
     const cur = state.leads || { profiles: [], followUps: [], outboundEnabled: false, store: null }
     let profiles = Array.isArray(d.profiles) ? d.profiles : cur.profiles.slice()
     let followUps = Array.isArray(d.followUps) ? d.followUps : cur.followUps.slice()
+    let tourChangeRequests = Array.isArray(d.tourChangeRequests) ? d.tourChangeRequests : arr(cur.tourChangeRequests).slice()
+    if (d.tourChangeRequest && typeof d.tourChangeRequest === 'object' && d.tourChangeRequest.id != null) {
+      const i = tourChangeRequests.findIndex(r => r && r.id === d.tourChangeRequest.id)
+      if (i >= 0) tourChangeRequests[i] = d.tourChangeRequest; else tourChangeRequests.unshift(d.tourChangeRequest)
+    }
+    let unitFeedback = Array.isArray(d.unitFeedback) ? d.unitFeedback : arr(cur.unitFeedback).slice()
+    if (d.unitFeedback && !Array.isArray(d.unitFeedback) && typeof d.unitFeedback === 'object' && d.unitFeedback.id != null) {
+      const i = unitFeedback.findIndex(f => f && f.id === d.unitFeedback.id)
+      if (i >= 0) unitFeedback[i] = d.unitFeedback; else unitFeedback.unshift(d.unitFeedback)
+    }
     if (d.followUp && typeof d.followUp === 'object' && d.followUp.id != null) {
       const i = followUps.findIndex((f) => f && f.id === d.followUp.id)
       if (i >= 0) followUps[i] = d.followUp; else followUps.push(d.followUp)
@@ -843,7 +867,12 @@ function apply(resource, data) {
       const i = profiles.findIndex((p) => p && p.phone === d.profile.phone)
       if (i >= 0) profiles[i] = d.profile; else profiles.unshift(d.profile)
     }
-    ingest('leads', { scope: d.scope, profiles, followUps, outboundEnabled: typeof d.outboundEnabled === 'boolean' ? d.outboundEnabled : cur.outboundEnabled, store: d.store ?? cur.store })
+    ingest('leads', { scope: d.scope, profiles, followUps, outboundEnabled: typeof d.outboundEnabled === 'boolean' ? d.outboundEnabled : cur.outboundEnabled, store: d.store ?? cur.store,
+      tourChangeRequests, unitFeedback, feedbackUnits: Array.isArray(d.feedbackUnits) ? d.feedbackUnits : arr(cur.feedbackUnits),
+      heldFollowUps: Array.isArray(d.heldFollowUps) ? d.heldFollowUps : arr(cur.heldFollowUps),
+      rescheduleProjectionPending: Array.isArray(d.rescheduleProjectionPending) ? d.rescheduleProjectionPending : arr(cur.rescheduleProjectionPending),
+      feedbackInventory: d.feedbackInventory === undefined ? cur.feedbackInventory : d.feedbackInventory,
+      unitFeedbackTruncated: d.unitFeedbackTruncated === undefined ? cur.unitFeedbackTruncated : d.unitFeedbackTruncated })
   } else if (resource === 'calls') {
     ingest('calls', d)
   } else return
@@ -857,9 +886,9 @@ function apply(resource, data) {
 // Routing and views
 // ---------------------------------------------------------------------------------------
 
-const VIEWS = ['today', 'calls', 'leads', 'calendar', 'status']
-const VIEW_LABEL = { today: 'Today', calls: 'Calls', leads: 'Leads', calendar: 'Calendar', status: 'Status' }
-const VIEW_H1 = { today: 'Today', calls: 'Calls', leads: 'Leads', calendar: 'Tour calendar', status: 'Status' }
+const VIEWS = ['today', 'calls', 'leads', 'units', 'calendar', 'status']
+const VIEW_LABEL = { today: 'Today', calls: 'Calls', leads: 'Leads', units: 'Unit feedback', calendar: 'Calendar', status: 'Status' }
+const VIEW_H1 = { today: 'Today', calls: 'Calls', leads: 'Leads', units: 'Unit feedback', calendar: 'Tour calendar', status: 'Status' }
 const modules = {}
 let current = null
 let booted = false
@@ -1022,9 +1051,13 @@ function paintCluster(rows) {
 function paintGlobalBanners() {
   const host = document.getElementById('global-banners')
   if (!host) return
+  const pending = new Set([...arr(state.leads && state.leads.rescheduleProjectionPending), ...arr(state.calendar && state.calendar.rescheduleProjectionPending)]
+    .filter(Boolean).map(item => `${item.externalId}:${item.requestId}`)).size
   const html = documentAccessIssue ? html_.banner('warn', documentAccessIssue.message, { actionsHtml:
     `<a class="btn" href="${esc(propertyUrl(documentScope))}">Reload property</a><a class="btn btn-quiet" href="/api/dashboard">Choose a property</a>` })
-    : state.notConfigured ? html_.banner('warn', "This page isn't set up yet. Ask Atrium support.") : ''
+    : state.notConfigured ? html_.banner('warn', "This page isn't set up yet. Ask Atrium support.")
+      : pending ? html_.banner('warn', `${pending === 1 ? 'A tour change is' : `${pending} tour changes are`} saved; CRM follow-ups are pending reconciliation. Check the updated calendar before contacting a prospect.`,
+        { actionsHtml: '<a class="btn" href="#/calendar">Review calendar</a>' }) : ''
   if (host.innerHTML !== html) host.innerHTML = html
 }
 
@@ -1077,6 +1110,7 @@ async function openPropertySwitcher() {
 
 const html_ = {
   chip(cls, iconName, txt) { return `<span class="chip ${esc(cls)}">${iconName ? ico(iconName) : ''}<span>${esc(txt)}</span></span>` },
+  tourChangeRequest: tourChangeRequestHtml,
   followUpReview(fu) {
     if (fu?.reconciliation?.status !== 'needs_review' || fu.reconciliation.code !== 'legacy_followup_identity_ambiguous') return ''
     return `<span class="row-chips">${html_.chip('chip-warn', 'warning', 'Review needed')}</span>` +
@@ -1224,7 +1258,7 @@ function dialog(spec) {
   const progEl = el.querySelector('.dlg-progress')
   const primaryBtn = el.querySelector('.dlg-primary')
   const secondaryBtn = el.querySelector('.dlg-secondary')
-  let closed = false, busyText = null
+  let closed = false, busyText = null, idlePrimaryLabel = primary ? String(primary.label || 'OK') : '', primaryDisabled = Boolean(primary && primary.disabled)
   const api_ = {
     el, body,
     close() {
@@ -1251,15 +1285,15 @@ function dialog(spec) {
     },
     setPrimary(p) {
       if (!primaryBtn) return
-      if (p && p.label != null) primaryBtn.textContent = String(p.label)
-      if (p && p.disabled != null) { if (p.disabled) primaryBtn.setAttribute('aria-disabled', 'true'); else primaryBtn.removeAttribute('aria-disabled') }
+      if (p && p.label != null) { idlePrimaryLabel = String(p.label); if (busyText == null) primaryBtn.textContent = idlePrimaryLabel }
+      if (p && p.disabled != null) { primaryDisabled = Boolean(p.disabled); if (primaryDisabled || busyText != null) primaryBtn.setAttribute('aria-disabled', 'true'); else primaryBtn.removeAttribute('aria-disabled') }
       if (p && p.danger != null) { primaryBtn.classList.toggle('btn-danger', Boolean(p.danger)); primaryBtn.classList.toggle('btn-primary', !p.danger) }
     },
     setBusy(t) {
       busyText = t == null ? null : String(t)
       if (!primaryBtn) return
       if (busyText != null) { primaryBtn.textContent = busyText; primaryBtn.setAttribute('aria-busy', 'true'); primaryBtn.setAttribute('aria-disabled', 'true'); secondaryBtn.setAttribute('aria-disabled', 'true') }
-      else { primaryBtn.removeAttribute('aria-busy'); primaryBtn.removeAttribute('aria-disabled'); secondaryBtn.removeAttribute('aria-disabled') }
+      else { primaryBtn.textContent = idlePrimaryLabel; primaryBtn.removeAttribute('aria-busy'); if (primaryDisabled) primaryBtn.setAttribute('aria-disabled', 'true'); else primaryBtn.removeAttribute('aria-disabled'); secondaryBtn.removeAttribute('aria-disabled') }
     },
     setError(t) {
       if (t == null || t === '') { errEl.hidden = true; errEl.querySelector('.dlg-error-text').textContent = '' }
@@ -1472,6 +1506,10 @@ function needsPerson(s) {
       phrase: label(labels.emergency, e.emergencyKind, 'an emergency'), matched: String(e.matched ?? ''), at: e.at, sortAt: toTime(e.at) ?? 0,
       action: emergencyAction(e.emergencyKind, rec && rec.call && rec.call.transcript, e) })
   }
+  const tourChanges = arr(s.leads && s.leads.tourChangeRequests).filter(r => r && r.status === 'pending')
+    .sort((a, b) => (toTime(a.firstRequestedAt) ?? 0) - (toTime(b.firstRequestedAt) ?? 0))
+    .map(request => ({ type: 'tourChange', request, callId: request.callId, phone: request.phone || 'unknown',
+      name: request.name, at: request.firstRequestedAt, sortAt: toTime(request.firstRequestedAt) ?? 0 }))
   const callbacks = followUpsOf(s).filter((f) => f && f.kind === 'callback' && f.status === 'scheduled')
     .sort((a, b) => (toTime(a.dueAt) ?? 0) - (toTime(b.dueAt) ?? 0))
   for (const fu of callbacks) {
@@ -1500,7 +1538,7 @@ function needsPerson(s) {
     }
   }
   stuck.sort((a, b) => b.sortAt - a.sortAt)
-  const value = items.filter((i) => i.type === 'emergency').concat(items.filter((i) => i.type === 'callback'), stuck)
+  const value = items.filter((i) => i.type === 'emergency').concat(tourChanges, items.filter((i) => i.type === 'callback'), stuck)
   npCache = { key, value }
   return value
 }
@@ -1512,6 +1550,7 @@ function callBackToday(s) {
 function dueTodayCount(s) {
   const today = nyNow().ymd
   return followUpsOf(s).filter((f) => f && f.status === 'scheduled' && (nyDate(f.dueAt) || '9999') <= today).length
+    + arr(s.leads && s.leads.tourChangeRequests).filter(r => r && r.status === 'pending').length
 }
 function toursOn(s, ymd) {
   const now = Date.now()
@@ -2078,6 +2117,63 @@ function restoreFocus(keys, toastHandle) {
   if (toastHandle && toastHandle.el && tryFocus(toastHandle.el.querySelector('.toast-action'))) return
   if (view) tryFocus(view.querySelector('h1'))
 }
+function tourChangeRequestHtml(request) {
+  if (!request) return ''
+  const reviewed = request.status === 'reviewed'
+  const contact = [request.name, fmt.phone(request.phone), request.email].filter(Boolean).map(esc).join(' · ')
+  return `<div class="row row-stack tour-change-row" data-key="tour-change:${esc(request.id)}"><span class="row-body">` +
+    `<span class="row-title"><strong>Tour-change request</strong> ${html_.chip(reviewed ? 'chip-neutral' : 'chip-warn', reviewed ? 'check' : 'hand', reviewed ? 'Reviewed' : 'Needs review')}</span>` +
+    `<span class="row-sub">${contact || 'Caller details not provided'} · identity unverified</span>` +
+    `<span class="meta">Requested ${esc(fmt.dateTime(request.firstRequestedAt))}${request.reason === 'existing_future_tour' ? ' · a possible existing tour needs checking' : ''}</span>` +
+    arr(request.excerpts).map(excerpt => `<span class="quote">“${esc(excerpt)}”</span>`).join('') +
+    '<span class="reassure">Verify the caller and the correct booking before changing a tour. No tour change or notification is made by reviewing this request.</span>' +
+    (reviewed ? `<span class="row-sub">Review recorded ${esc(fmt.dateTime(request.review && request.review.at))}. This does not confirm rescheduling or contact.</span>${request.review && request.review.note ? `<span class="row-sub">Review note: ${esc(request.review.note)}</span>` : ''}` : '') +
+    '</span><span class="row-actions">' +
+    (!reviewed && permissionAllowed('operate') ? `<button type="button" class="btn" data-action="review-tour-change" data-request="${esc(request.id)}" data-key="tour-change:${esc(request.id)}:review" data-write="leads">Review request</button>` : '') +
+    '<a class="btn btn-quiet" href="#/calendar">Open calendar</a></span></div>'
+}
+function reviewTourChange(id) {
+  if (!permissionAllowed('operate') || busyNow('leads')) return
+  const request = arr(state.leads && state.leads.tourChangeRequests).find(r => r && r.id === id)
+  if (!request || request.status !== 'pending') return
+  let note, pending = null, closed = false, conflicted = false
+  return window.Atrium.dialog({ title: 'Review tour-change request', secondary: { label: 'Cancel' },
+    build(body) {
+      body.innerHTML = '<p>Verify the caller and the correct booking before moving a tour. Marking this request reviewed only records your review; it does not change a booking or send a notification.</p>' +
+        '<label class="stack">Review note (optional)<textarea class="input tour-change-note" data-review-note maxlength="1000" rows="4" placeholder="Record what you checked or what still needs attention"></textarea></label>'
+      note = body.querySelector('[data-review-note]')
+    },
+    primary: { label: 'Mark reviewed', busyLabel: 'Saving review…', async onClick(d) {
+      if (closed || !permissionAllowed('operate')) return
+      if (conflicted) { d.close(); await reread('leads'); return }
+      if (!pending) pending = Object.freeze({ action: 'review_tour_change', id: request.id, expectedRevision: request.revision, note: note.value.trim() })
+      note.disabled = true
+      d.setError('')
+      try {
+        const result = await busy('leads', api.post('/api/leads', pending, { doing: 'recording a tour-change review' }))
+        const saved = result.tourChangeRequest
+        if (!saved || saved.id !== pending.id || saved.status !== 'reviewed' || saved.revision !== pending.expectedRevision + 1) throw new Error('The review acknowledgement could not be verified.')
+        if (closed) return
+        apply('leads', result)
+        d.close()
+        window.Atrium.toast('Review recorded. No booking changed or notification sent.', { kind: 'ok' })
+      } catch (error) {
+        if (closed || error.signedOut || !permissionAllowed('operate')) return
+        if (error.status === 409 || error.status === 404) {
+          conflicted = true
+          d.setError('This request changed or is no longer available. Close and refresh to review the latest record; this screen cannot confirm your review.')
+          d.setPrimary({ label: 'Close and refresh' })
+        } else if (!error.status || error.status >= 500 || error.badJson || (error.status >= 200 && error.status < 300)) {
+          d.setError('The review could not be confirmed. Retry to check the same review; your note is held so it cannot be submitted as a different review.')
+          d.setPrimary({ label: 'Retry review' })
+        } else {
+          pending = null; note.disabled = false
+          d.setError(error.message || 'Check the note and try again.')
+        }
+      }
+    } }, onClose() { closed = true },
+  })
+}
 async function setFollowUpStatus(fu, status, opts) {
   const o = opts || {}
   if (!fu || !fu.id || busyNow('leads')) return false
@@ -2179,6 +2275,7 @@ function pollBanner(s, resource, what) {
   return html_.banner('warn', `We can't load ${what} right now.${at ? ` Showing what we had at ${fmt.time(at)}.` : ''}`)
 }
 function personRowHtml(item, s) {
+  if (item.type === 'tourChange') return tourChangeRequestHtml(item.request)
   const phone = item.phone, shown = fmt.phone(phone)
   const rec = callRecords(s).find((r) => r.id === item.callId)
   const actions = []
@@ -2296,6 +2393,7 @@ const todayView = {
   onClick(e) {
     const btn = e.target.closest('button[data-action]')
     if (!btn || btn.getAttribute('aria-disabled') === 'true') return
+    if (btn.dataset.action === 'review-tour-change') { reviewTourChange(btn.dataset.request); return }
     const fu = followUpsOf(state).find((f) => f && f.id === btn.dataset.fu)
     if (!fu) return
     if (btn.dataset.action === 'done') setFollowUpStatus(fu, 'done', { button: btn })
@@ -2307,7 +2405,7 @@ const todayView = {
     if (!root) return
     const m = todayModel(s)
     const key = JSON.stringify([m.callsValue, m.callsNote, m.toursBooked, m.nextTour, m.needValue, m.oldest, m.leadsOff, m.calOff, m.briefing, m.errors, m.loaded, m.notConfigured, m.callsConfigured, m.safetyEventsError,
-      m.emergencies.map((x) => [x.callId, x.at, x.matched, x.action, x.name]), m.people.map((x) => [x.type, x.callId, x.respondBy, x.calledAt, fmt.respondPhrase(x.respondBy), x.question, x.name, html_.followUpReview(x.fu)]),
+      m.emergencies.map((x) => [x.callId, x.at, x.matched, x.action, x.name]), m.people.map((x) => [x.type, x.callId, x.respondBy, x.calledAt, fmt.respondPhrase(x.respondBy), x.question, x.name, x.request, html_.followUpReview(x.fu)]),
       m.callBacks.map((f) => [f.id, f.dueAt, f.status, fmt.duePhrase(f.dueAt), todoSentence(f, profileByPhone(s, f.phone), s).text, html_.followUpReview(f)]),
       m.tours.map((t) => [t.slotId, t.name, t.unitId, t.past, t.phone]), m.toursTomorrow.length,
       m.records.slice(0, 5).map((r) => [r.id, r.displayName, fmt.dateTime(r.startedAt), callStory(r, s).sentence]), busyNow('leads')])
@@ -2504,7 +2602,7 @@ const statusView = {
     else if (a === 'sync-assistant') this.syncAssistant(btn)
   },
   async syncAssistant(btn) {
-    const ok = await confirm('This rewrites the phone assistant\'s script and tools in Vapi to match this system. Voice, timing and model settings in Vapi are kept.', { title: 'Update the phone assistant?', confirmLabel: 'Update' })
+    const ok = await confirm('This updates the phone assistant’s workflow, tools and selected timing settings. Your voice and model providers are kept.', { title: 'Update the phone assistant?', confirmLabel: 'Update' })
     if (!ok) return
     btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true')
     try {
@@ -2644,7 +2742,7 @@ window.Atrium = {
   escapeHtml, fmt, api, gate, toast, confirm, prompt, dialog, register, navigate, route, hashFor, state, on,
   busy, busyNow, apply, refresh, calendarUrl, setCalendarRange, icons, icon, property, normalisePhone, labels, label, derive, hint, text, href,
   can: permissionAllowed, paintPermissions, preferenceKey, propertyUrl, databaseMode,
-  html: html_, announce, escape: escape_, setFollowUpStatus, boot, views: VIEWS.slice(),
+  html: html_, announce, escape: escape_, setFollowUpStatus, reviewTourChange, boot, views: VIEWS.slice(),
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot)
 else boot()

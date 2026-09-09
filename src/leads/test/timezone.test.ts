@@ -135,3 +135,17 @@ test('bad property timezone preserves a replayable receipt and never creates inc
   assert.equal(complete.timeZone, 'America/Chicago')
   assert.equal(complete.status, 'complete')
 })
+
+test('future attendance checks respect the contact window across both New York DST transitions', () => {
+  for (const [startsAt, expectedDueAt, now] of [
+    ['2026-11-01T05:30:00.000Z', '2026-11-02T15:00:00.000Z', NOW],
+    ['2026-03-08T06:30:00.000Z', '2026-03-09T14:00:00.000Z', new Date('2026-03-06T18:00:00Z')],
+  ] as const) {
+    const p = booked(startsAt)
+    const task = deriveFollowUps(p, now, 'zone-call', 'America/New_York').find(row => row.kind === 'post_tour')!
+    assert.ok(task)
+    assert.equal(task.dueAt, expectedDueAt)
+    assert.ok(Date.parse(task.dueAt) > Date.parse(startsAt))
+    assert.equal(task.executable, false)
+  }
+})

@@ -10,6 +10,7 @@ import { storeBackedCalendar } from '../calendar/port.ts'
 import type { CalendarPort } from '../booking/types.ts'
 import type { SlotOptions } from '../calendar/slots.ts'
 import { assertAuthorizedScope, AuthorizationError } from '../auth/index.ts'
+import { TransactionQueue } from './transaction-queue.ts'
 
 export interface MutationAttribution { requestId: string; configurationVersion?: number }
 const description = () => ({ kind: 'postgres' as const, durable: true,
@@ -228,6 +229,52 @@ export class PostgresCalendarStore implements CalendarStore {
       [this.scope.organizationId, this.scope.propertyId, serialized])
       await audit(client, this.scope, this.attribution, 'calendar.update', 'calendar')
       return JSON.parse(serialized) as CalendarState
+    }, this.attribution.configurationVersion)
+  }
+  /** Calendar replacement and associated lead/reminder changes share one protected
+   * transaction. Only scoped ports escape to the callback, and both use one queue.
+   * No external connector/network operation belongs inside this callback.
+   */
+  transaction<T>(work: (unit: { calendar: CalendarStore; documents: DocumentStore }) => Promise<T>): Promise<T> {
+    if (typeof work !== 'function') throw new Error('A calendar transaction callback is required.')
+    return propertyTransaction(this.connection, this.scope, this.mutationPermission, async client => {
+      assertAuthorizedScope(this.scope, 'operate')
+      const queue = new TransactionQueue()
+      const rawDocuments = documentsOnClient(client, this.scope, this.attribution)
+      const readCalendar = async (): Promise<CalendarState> => {
+        const row = (await client.query('SELECT state FROM atrium.calendars WHERE organization_id=$1 AND property_id=$2',
+          [this.scope.organizationId, this.scope.propertyId])).rows[0]
+        return validateCalendar(row ? row.state : emptyCalendar())
+      }
+      const describe = () => { queue.assertOpen(); return description() }
+      const calendar: CalendarStore = Object.freeze({
+        read: () => queue.run(readCalendar),
+        mutate: (fn: (state: CalendarState) => CalendarState) => queue.run(async () => {
+          await lock(client, this.scope, 'calendar')
+          const current = await readCalendar()
+          const serialized = serialize(validateCalendar(fn(current)))
+          await client.query(`INSERT INTO atrium.calendars(organization_id,property_id,state) VALUES($1,$2,$3::jsonb)
+            ON CONFLICT(organization_id,property_id) DO UPDATE SET state=EXCLUDED.state`,
+          [this.scope.organizationId, this.scope.propertyId, serialized])
+          await audit(client, this.scope, this.attribution, 'calendar.update', 'calendar')
+          return JSON.parse(serialized) as CalendarState
+        }), describe,
+      })
+      const documents: DocumentStore = Object.freeze({
+        get: <U>(key: string) => queue.run(() => rawDocuments.get<U>(key)),
+        set: <U>(key: string, value: U) => queue.run(() => rawDocuments.set(key, value)),
+        update: <U>(key: string, initial: U, fn: (value: U) => U) => queue.run(() => rawDocuments.update(key, initial, fn)),
+        delete: (key: string) => queue.run(() => rawDocuments.delete(key)),
+        list: (prefix: string) => queue.run(() => rawDocuments.list(prefix)), describe,
+      })
+      try {
+        const result = await work({ calendar, documents })
+        await queue.close()
+        return result
+      } catch (error) {
+        try { await queue.close() } catch { /* Preserve the original failure, after draining queued operations. */ }
+        throw error
+      }
     }, this.attribution.configurationVersion)
   }
   describe = description

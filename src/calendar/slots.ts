@@ -1,6 +1,7 @@
 import type { TourSlot } from '../booking/types.ts'
 import type { CalendarState, SlotBooking, SlotBlock } from './types.ts'
 import { DEFAULT_TIME_ZONE, localDate, localInstant, validateTimeZone, wallTime } from './time.ts'
+import { activeUnitBlocks } from './unit-blocks.ts'
 
 export interface BusinessHours {
   /** 0 = Sunday. Missing day means closed. */
@@ -117,7 +118,7 @@ export function bookingSlot(booking: SlotBooking): TourSlot | null {
   return { slotId: booking.slotId, startsAt, endsAt }
 }
 
-function occupied(booking: SlotBooking): [number, number] | null {
+export function occupied(booking: SlotBooking): [number, number] | null {
   const slot = bookingSlot(booking)
   if (!slot) return null
   const start = booking.occupiedStartsAt ? Date.parse(booking.occupiedStartsAt) : slot.startsAt.getTime()
@@ -159,6 +160,12 @@ export function canBook(slot: TourSlot, state: CalendarState, opts: SlotOptions 
   if (blockFor(slot, state, opts) || occupancyPeak(slot, state, opts) >= capacity) return false
   const unit = unitId?.trim().toUpperCase()
   if (unit && opts.unitIds && !opts.unitIds.some(id => id.trim().toUpperCase() === unit)) return false
+  if (unit && unitBlocksFor(slot, state, opts, unit).length) return false
+  // General staff openings must not imply an apartment can be shown when every
+  // known apartment is unavailable. Never infer inventory from block contents.
+  if (!unit && activeUnitBlocks(state).length) {
+    if (!opts.unitIds?.length || !opts.unitIds.some(id => canBook(slot, state, opts, id))) return false
+  }
   if (unit && opts.sameUnitPolicy !== 'shared') {
     const [start, end] = candidateInterval(slot, opts)
     if (state.bookings.some(b => {
@@ -167,6 +174,18 @@ export function canBook(slot: TourSlot, state: CalendarState, opts: SlotOptions 
     })) return false
   }
   return true
+}
+
+export function unitBlocksFor(slot: TourSlot, state: CalendarState, opts: SlotOptions = {}, unitId?: string | null) {
+  const unit = unitId?.trim().toUpperCase()
+  const [start, end] = candidateInterval(slot, opts)
+  return activeUnitBlocks(state).filter(block => {
+    const from = Date.parse(block.startsAt), to = Date.parse(block.endsAt)
+    if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from || !block.unitId) {
+      throw new Error('Stored apartment unavailability has invalid times or identity.')
+    }
+    return (!unit || block.unitId.toUpperCase() === unit) && from < end && to > start
+  })
 }
 
 export function statusOf(slot: TourSlot, state: CalendarState, capacity = 1, opts: SlotOptions = {}): SlotStatus {

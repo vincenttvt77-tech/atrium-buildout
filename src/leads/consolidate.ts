@@ -6,6 +6,8 @@ import type { LeadProfile, CallSummary } from './profile.ts'
 import { bookingIdentity, deriveFollowUps, legacyFollowUpId } from './followups.ts'
 import type { FollowUp } from './followups.ts'
 import { DEFAULT_TIME_ZONE, validateTimeZone } from '../calendar/time.ts'
+import { resolveRescheduledBooking, reconcileRescheduledTour } from './reschedule.ts'
+import type { RescheduleProjectionInput } from './reschedule.ts'
 
 /**
  * Folds one finished call into the caller's profile, then re-derives their follow-ups.
@@ -25,7 +27,7 @@ export interface CallOutcome {
   name: string | null
   email: string | null
   unitsDiscussed: string[]
-  booking: { slotId: string; startsAt: string; unitId: string | null; status: 'confirmed' | 'arranging' | 'failed' } | null
+  booking: Omit<import('./profile.ts').LeadBooking, 'callId'> | null
   lossReason: LossReason | null
   escalation: { trigger: string; detail: string } | null
   toolsCalled: string[]
@@ -48,9 +50,15 @@ export async function consolidateCall(
   const zone = validateTimeZone(timeZone)
   const phone = normalisePhone(o.phone)
   const at = o.at.toISOString()
+  let reschedule: RescheduleProjectionInput | null = null
+  if (o.booking) {
+    const resolved = await resolveRescheduledBooking(store, phone, o.booking, o.callId)
+    o = { ...o, booking: resolved.booking }
+    reschedule = resolved.projection
+  }
 
   const key = phone === 'unknown' ? `lead:anonymous:${o.callId}` : profileKey(phone)
-  const profile = await store.update<LeadProfile>(key, emptyProfile(phone, o.at), (p) => {
+  let profile = await store.update<LeadProfile>(key, emptyProfile(phone, o.at), (p) => {
     // A human correction on the profile outranks anything a later call extracts; a name
     // the caller gave outranks a null; a later extraction outranks an earlier one.
     if (p.calls.some((c) => c.callId === o.callId)) return p
@@ -80,13 +88,21 @@ export async function consolidateCall(
     next.unitsDiscussed = [...new Set([...p.unitsDiscussed, ...o.unitsDiscussed])]
 
     if (o.booking) {
-      const existing = p.bookings.find((b) => bookingIdentity(b) === bookingIdentity(o.booking!))
+      const existing = p.bookings.find((b) => (b.externalId && o.booking!.externalId ? b.externalId === o.booking!.externalId
+        : bookingIdentity(b) === bookingIdentity(o.booking!) || b.rescheduledFrom?.some(prior => bookingIdentity(prior) === bookingIdentity(o.booking!))))
       if (!existing) next.bookings = [...p.bookings, { ...o.booking, callId: o.callId }]
+      else if ((o.booking.rescheduleRevision ?? 0) > (existing.rescheduleRevision ?? 0)) {
+        next.bookings = p.bookings.map(b => b === existing ? { ...existing, ...o.booking!, callId: existing.callId } : b)
+      }
+      else if (existing.rescheduleRevision) { /* A delayed original result cannot restore the old slot. */ }
       else if (existing.status !== 'confirmed') {
         const priorAt = p.calls.find(c => c.callId === existing.callId)?.at
         if (o.booking.status === 'confirmed' || !priorAt || at >= priorAt) {
           next.bookings = p.bookings.map((b) => b === existing ? { ...o.booking!, callId: o.callId } : b)
         }
+      }
+      else if (o.booking.externalId && !existing.externalId) {
+        next.bookings = p.bookings.map(b => b === existing ? { ...b, externalId: o.booking!.externalId! } : b)
       }
     }
     if (o.lossReason) next.lossReasons = [...p.lossReasons, { ...o.lossReason, callId: o.callId }]
@@ -103,6 +119,12 @@ export async function consolidateCall(
     next.stage = deriveStage(next, o.at)
     return next
   })
+
+  if (reschedule) {
+    const result = await reconcileRescheduledTour(store, reschedule)
+    if (result.status !== 'complete') throw new Error('Tour reschedule projection requires staff review')
+    profile = (await store.get<LeadProfile>(key))!
+  }
 
   // A retried report may arrive hours or days later. Its work is still due relative to
   // the original call, including retries after a partially failed follow-up write.

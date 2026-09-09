@@ -41,6 +41,8 @@ import { initializeCallLifecycle, admitToolBatch, markToolDispatch, completeTool
   requestCallEnd, freezeCall, completeCall, hashCallToolArgs, CallLifecycleError,
   type CallLifecycle, type CallProvenance, type CallToolResult } from '../src/calls/lifecycle.ts'
 import { recordCallSafetyEvent, listCallSafetyEvents, safetyEventForOps } from '../src/calls/safety-events.ts'
+import { holdTourChange, recordTourChangeRequest, tourChangeExcerpt, TourChangeRequiredError,
+  TOUR_CHANGE_SAVED, TOUR_CHANGE_UNSAVED, type TourChangeRequest } from '../src/leads/tour-change.ts'
 
 /**
  * Vapi tool-call webhook.
@@ -105,10 +107,11 @@ interface CallState {
   name: string | null
   email: string | null
   unitsDiscussed: string[]
-  booking: { slotId: string; startsAt: string; unitId: string | null; status: 'confirmed' | 'arranging' | 'failed' } | null
+  booking: { slotId: string; startsAt: string; unitId: string | null; status: 'confirmed' | 'arranging' | 'failed'; externalId?: string } | null
   lossReason: LossReason | null
   escalation: { trigger: string; detail: string } | null
   emergency: EmergencySignal | null
+  tourChangeRequested?: boolean
   toolsCalled: string[]
 }
 
@@ -220,6 +223,7 @@ async function saveCall(callId: string, state: CallState, before: CallState,
       unitsDiscussed: [...new Set([...current.unitsDiscussed, ...state.unitsDiscussed])],
       toolsCalled: [...current.toolsCalled, ...state.toolsCalled.slice(before.toolsCalled.length)],
     }
+    if (current.tourChangeRequested || state.tourChangeRequested) next.tourChangeRequested = true
     for (const key of ['name', 'email', 'phone', 'booking', 'lossReason'] as const) {
       if (JSON.stringify(state[key]) !== JSON.stringify(before[key])) Object.assign(next, { [key]: state[key] })
     }
@@ -230,6 +234,11 @@ async function saveCall(callId: string, state: CallState, before: CallState,
       : current.escalation?.trigger === 'emergency' ? current.escalation
       : state.escalation?.trigger === 'emergency' ? state.escalation
         : JSON.stringify(state.escalation) !== JSON.stringify(before.escalation) ? state.escalation : current.escalation
+    if (next.tourChangeRequested && next.escalation?.trigger !== 'emergency') {
+      next.escalation = state.escalation?.trigger === 'tour_change' ? state.escalation
+        : current.escalation?.trigger === 'tour_change' ? current.escalation
+          : { trigger: 'tour_change', detail: 'Tour change requires staff review. No tour was changed and no notification was sent.' }
+    }
     if (completion) {
       if (!current.work) throw new CallLifecycleError('call_admission_stale')
       next.work = completeToolBatch(current.work, { ...completion, now: new Date().toISOString() })
@@ -267,7 +276,8 @@ async function projectFrozenCall(store: DocumentStore, callId: string, now: Date
     const current = reviveCall(raw)
     if (!current.work) throw new CallLifecycleError('call_revision_conflict')
     const completed = completeCall(current.work, { now: now.toISOString(), frozenRevision: work.frozenRevision! })
-    return { ...freshCall(), phone, completedAt: end.endedAt, work: completed }
+    return { ...freshCall(), phone, completedAt: end.endedAt, work: completed,
+      ...(current.tourChangeRequested ? { tourChangeRequested: true } : {}) }
   })
 }
 
@@ -437,6 +447,41 @@ function callEmergency(state: CallState): EmergencySignal | null {
     ? primaryEmergency(detectEmergency(state.escalation.detail)) : null)
 }
 
+/** Same screening bound as emergencies, including malformed or misnamed tool payloads. */
+function tourChangeInArgs(args: Record<string, unknown> | null, raw: unknown): string | null {
+  const pending: unknown[] = [args ?? raw]
+  let visited = 0, found: string | null = null
+  while (pending.length) {
+    if (++visited > 10_000) throw new Error('Tool arguments exceed the screening limit')
+    const value = pending.pop()
+    if (typeof value === 'string') found ??= tourChangeExcerpt(value.replace(/\\u([0-9a-f]{4})/gi, (_, hex: string) => String.fromCharCode(parseInt(hex, 16))))
+    else if (value && typeof value === 'object') pending.push(...Object.values(value))
+  }
+  return found
+}
+
+class TourChangePersistenceError extends Error {
+  constructor() { super('Tour change request persistence could not be verified') }
+}
+
+/** A separate durable staff record survives ordinary call freezing and late provider events. */
+async function rememberTourChange(callId: string, reason: TourChangeRequest['reason'], excerpt: string | undefined,
+  contact?: { phone?: string | null; name?: string | null; email?: string | null }): Promise<CallState> {
+  try {
+    await holdTourChange(calendarStore, callId, new Date())
+    const current = await getCall(callId)
+    await recordTourChangeRequest(documents, { callId, reason, at: new Date(), ...(excerpt ? { excerpt } : {}),
+      phone: contact?.phone ?? current.phone ?? null, name: contact?.name ?? current.name, email: contact?.email ?? current.email })
+    return await documents.update<CallState>(callKey(callId), freshCall(), raw => {
+      const stored = reviveCall(raw)
+      if (stored.completedAt || stored.work?.phase === 'frozen') return stored
+      return { ...stored, tourChangeRequested: true,
+        escalation: stored.escalation?.trigger === 'emergency' ? stored.escalation
+          : { trigger: 'tour_change', detail: `Tour change requires staff review. No tour was changed and no notification was sent.${excerpt ? ` Caller: ${[...excerpt].slice(0, 1000).join('')}` : ''}` } }
+    })
+  } catch { throw new TourChangePersistenceError() }
+}
+
 /** Recording a report does not deliver a notification or dispatch a responder. */
 async function rememberEmergency(callId: string, signal: EmergencySignal, toolsCalled: string[] = []): Promise<{
   state: CallState | null; hold: EmergencySignal | null; incident: boolean;
@@ -513,6 +558,7 @@ async function runTool(
 
   switch (name) {
     case 'capture_contact': {
+      if (args.requestType !== undefined && args.requestType !== 'tour_change') return 'Invalid request type. Use tour_change only for an actual request to change an existing tour.'
       if (typeof args.excerpt !== 'string' || !args.excerpt.trim()) return 'Ask for the caller’s contact details before recording them.'
       if (args.email !== undefined && (typeof args.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(args.email))) return 'That email address is incomplete. Ask them to spell it once.'
       if (args.phone !== undefined && (typeof args.phone !== 'string' || !/^\+?[\d ()+.-]{7,25}$/.test(args.phone))) return 'That callback number is incomplete. Ask them to repeat it once.'
@@ -520,6 +566,12 @@ async function runTool(
       if (typeof args.email === 'string') state.email = args.email.trim().slice(0, 254)
       if (typeof args.phone === 'string') state.phone = normalisePhone(args.phone)
       logEvent(callId, { kind: 'contact_captured', name: state.name, email: state.email, excerpt: args.excerpt.slice(0, 1000) })
+      if (state.tourChangeRequested || args.requestType === 'tour_change') {
+        const saved = await rememberTourChange(callId, 'caller_requested', args.excerpt, state)
+        state.tourChangeRequested = true
+        state.escalation = saved.escalation
+        return TOUR_CHANGE_SAVED
+      }
       return 'Contact details saved for the leasing team. Nothing has been sent. Continue helping them.'
     }
     case 'capture_signal': {
@@ -555,6 +607,7 @@ async function runTool(
     }
 
     case 'answer_question': {
+      if (state.tourChangeRequested && tourChangeExcerpt(args.question)) return TOUR_CHANGE_SAVED
       const r = answerQuestion(args as never, ctx)
       logEvent(callId, r.record)
       if (r.escalate) {
@@ -566,6 +619,7 @@ async function runTool(
     }
 
     case 'list_tour_slots': {
+      if (state.tourChangeRequested) return TOUR_CHANGE_SAVED
       const timeZone = tourTimeZone(property, callId)
       if (!timeZone) return CALENDAR_CONFIGURATION_UNAVAILABLE
       const preferredDate = args.preferredDate ? String(args.preferredDate) : undefined
@@ -604,6 +658,7 @@ async function runTool(
     }
 
     case 'book_tour': {
+      if (state.tourChangeRequested) return TOUR_CHANGE_SAVED
       const timeZone = tourTimeZone(property, callId)
       if (!timeZone) return CALENDAR_CONFIGURATION_UNAVAILABLE
       const slotId = String(args.slotId ?? '')
@@ -642,6 +697,7 @@ async function runTool(
       state.booking = {
         slotId: slot.slotId, startsAt: slot.startsAt.toISOString(),
         unitId,
+        ...('externalId' in booking.state && booking.state.externalId ? { externalId: booking.state.externalId } : {}),
         status: booking.state.status === 'confirmed' ? 'confirmed'
           : booking.state.status === 'arranging' ? 'arranging' : 'failed',
       }
@@ -681,6 +737,10 @@ export default async function handler(req: any, res: any) {
   if (req.method === 'GET') {
     const auth = authorizeOps(req.headers ?? {}, new Date())
     if (!auth.ok) return scopedHandler(req, res, undefined, auth)
+    if (req.headers?.['x-atrium-tenant-id'] !== undefined && req.headers['x-atrium-tenant-id'] !== auth.tenantId) {
+      res.setHeader('cache-control', 'no-store')
+      return res.status(409).json({error:'The signed-in workspace changed. Reload this page before continuing.',code:'portal_tenant_changed'})
+    }
     return withTenant(auth.tenantId, () => scopedHandler(req, res, undefined, auth))
   }
   if (req.method === 'POST') {
@@ -916,6 +976,21 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
         }
         else logEvent(callId, { ...emergency.record, persisted: false, notificationStatus: 'not_sent' })
       }
+      else {
+        const excerpt = tourChangeExcerpt(message.transcript)
+        if (excerpt) {
+          if (callId === 'unknown-call') {
+            res.status(400).json({ code: 'call_identity_required', error: TOUR_CHANGE_UNSAVED }); return
+          }
+          try {
+            await rememberTourChange(callId, 'caller_requested', excerpt, {
+              phone: message.call?.customer?.number ?? body.call?.customer?.number })
+          } catch {
+            res.setHeader('retry-after', '2')
+            res.status(503).json({ code: 'tour_change_persistence_unavailable', retryable: true, error: TOUR_CHANGE_UNSAVED }); return
+          }
+        }
+      }
       res.status(200).json({})
       return
     }
@@ -938,6 +1013,8 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
         return { toolCallId: tc?.id ?? tc?.toolCallId,
           name: String(tc?.name ?? tc?.function?.name ?? ''), args, raw,
           emergencies: emergencyInArgs(args, raw),
+          tourChange: args?.requestType === 'tour_change' && typeof args.excerpt === 'string' && args.excerpt.trim()
+            ? [...args.excerpt].slice(0, 1000).join('') : tourChangeInArgs(args, raw),
         }
       })
       // Screen the entire batch BEFORE any tool runs: the model may put book_tour
@@ -1016,8 +1093,24 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
       }
       const accepted = admission!
       const cached = new Map(accepted.results.map(item => [item.toolId, item.result]))
+      const batchChange = prepared.find(tc => tc.tourChange)?.tourChange
+      let tourChangeSaveFailed = false
+      const providerPhone = message.call?.customer?.number ?? body.call?.customer?.number
+      if (batchChange || state.tourChangeRequested) {
+        state.tourChangeRequested = true
+        try {
+          state = await rememberTourChange(callId, 'caller_requested', batchChange ?? undefined, {
+            phone: state.phone ?? (typeof providerPhone === 'string' ? providerPhone : null), name: state.name, email: state.email })
+        } catch { tourChangeSaveFailed = true }
+      }
       if (!accepted.admission) {
-        const results = prepared.map(tc => ({ toolCallId: tc.toolCallId, result: cached.get(tc.toolCallId)! }))
+        const results = prepared.map(tc => ({ toolCallId: tc.toolCallId,
+          result: tourChangeSaveFailed ? TOUR_CHANGE_UNSAVED
+            : cached.get(tc.toolCallId) === TOUR_CHANGE_UNSAVED ? TOUR_CHANGE_SAVED : cached.get(tc.toolCallId)! }))
+        if (tourChangeSaveFailed) {
+          res.setHeader('retry-after', '2')
+          res.status(503).json({ results, code: 'tour_change_persistence_unavailable', retryable: true }); return
+        }
         try { await finishEndedCall(callId, state, now, runtime) }
         catch {
           res.setHeader('retry-after', '2')
@@ -1060,6 +1153,9 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
           if (state.emergency || state.escalation?.trigger === 'emergency') {
             result = emergencyToolResponse(callEmergency(state), name)
             outcome = 'blocked'
+          } else if (tourChangeSaveFailed) {
+            result = TOUR_CHANGE_UNSAVED
+            outcome = 'blocked'
           } else if (unresolved) {
             result = 'An earlier action needs staff review. This additional action was not taken.'
             outcome = 'blocked'
@@ -1074,7 +1170,20 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
           }
         } catch (error) {
           errorCode = 'tool_failed'
-          if (error instanceof Error && error.message === 'CALENDAR_INTERACTION_PAUSED') {
+          if (error instanceof TourChangeRequiredError) {
+            // Calendar CAS has authoritatively refused the write. Dispatch was
+            // marked before that check, so complete its known negative result.
+            outcome = 'complete'
+            state.tourChangeRequested = true
+            try {
+              const saved = await rememberTourChange(callId, error.reason, undefined, state)
+              state.tourChangeRequested = true
+              state.escalation = saved.escalation
+              result = TOUR_CHANGE_SAVED
+            } catch { result = TOUR_CHANGE_UNSAVED; tourChangeSaveFailed = true }
+          } else if (error instanceof TourChangePersistenceError) {
+            result = TOUR_CHANGE_UNSAVED; tourChangeSaveFailed = true; outcome = 'blocked'
+          } else if (error instanceof Error && error.message === 'CALENDAR_INTERACTION_PAUSED') {
             state.emergency = error instanceof CalendarInteractionPausedError ? error.signal : callEmergency(state)
             state.escalation = { trigger: 'emergency', detail: 'Leasing paused by the calendar safety guard.' }
             result = emergencyToolResponse(state.emergency, name)
@@ -1116,9 +1225,10 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
           logEvent(callId, { kind: 'error', message: 'Finished-call projection remains pending after admitted work completed.' })
         }
       }
-      if (unresolved || projectionFailed) res.setHeader('retry-after', '2')
-      res.status(pauseUnpersisted || unresolved || projectionFailed ? 503 : 200).json({ results,
+      if (unresolved || projectionFailed || tourChangeSaveFailed) res.setHeader('retry-after', '2')
+      res.status(pauseUnpersisted || unresolved || projectionFailed || tourChangeSaveFailed ? 503 : 200).json({ results,
         ...(pauseUnpersisted ? { code: 'emergency_persistence_unavailable' }
+          : tourChangeSaveFailed ? { code: 'tour_change_persistence_unavailable', retryable: true }
           : unresolved ? { code: 'call_work_unresolved', retryable: true }
             : projectionFailed ? { code: 'call_projection_pending', retryable: true } : {}),
       })

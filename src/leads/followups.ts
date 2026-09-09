@@ -37,6 +37,8 @@ export interface FollowUp {
   source?: FollowUpSource
   /** Original work is retained when an old hour-based ID cannot be mapped safely. */
   reconciliation?: { status: 'needs_review'; code: 'legacy_followup_identity_ambiguous'; candidateIds: string[] }
+  /** Retained history, never an executable reminder for the old tour time. */
+  superseded?: { reason: 'tour_rescheduled'; bookingExternalId: string; revision: number; requestId: string; at: string }
 }
 
 export interface FollowUpSource {
@@ -45,7 +47,7 @@ export interface FollowUpSource {
   key: string
   callId: string
   at: string
-  booking?: { slotId: string; startsAt: string; unitId: string | null }
+  booking?: { slotId: string; startsAt: string; unitId: string | null; externalId?: string; revision?: number }
 }
 
 const HOUR = 3_600_000
@@ -91,7 +93,8 @@ export function deriveFollowUps(p: LeadProfile, now: Date, fromCall: string, tim
   const mk = (kind: FollowUpKind, channel: FollowUp['channel'], dueAt: Date, reason: string,
     origin: Omit<FollowUpSource, 'version' | 'key'> = callSource): FollowUp => {
     const key = createHash('sha256').update(JSON.stringify([identity(p, fromCall), kind, origin.kind,
-      origin.booking ? bookingIdentity(origin.booking) : origin.callId])).digest('hex')
+      origin.booking ? (origin.booking.externalId && origin.booking.revision
+        ? JSON.stringify([origin.booking.externalId, origin.booking.revision]) : bookingIdentity(origin.booking)) : origin.callId])).digest('hex')
     return {
       id: `fu-v2-${key}`, phone: p.phone, kind, channel,
       dueAt: dueAt.toISOString(), reason, status: 'scheduled',
@@ -107,27 +110,35 @@ export function deriveFollowUps(p: LeadProfile, now: Date, fromCall: string, tim
     // An older report must not manufacture work for a booking learned on a newer call.
     if (bookedAt.getTime() > eventAt.getTime()) continue
     const bookingSource = { kind: 'booking' as const, callId: b.callId, at: bookedAt.toISOString(),
-      booking: { slotId: b.slotId, startsAt: new Date(b.startsAt).toISOString(), unitId: b.unitId?.trim().toUpperCase() || null } }
+      booking: { slotId: b.slotId, startsAt: new Date(b.startsAt).toISOString(), unitId: b.unitId?.trim().toUpperCase() || null,
+        ...(b.externalId ? { externalId: b.externalId } : {}), ...(b.rescheduleRevision ? { revision: b.rescheduleRevision } : {}) } }
     const tour = new Date(b.startsAt)
-    if (tour.getTime() < now.getTime()) {
+    // A delayed original call must not create pre-tour work that was already too
+    // late when staff moved this reservation. Keep the original call timestamp intact.
+    const referenceNow = new Date(Math.max(now.getTime(), validAt(b.rescheduledAt, now).getTime()))
+    // Persist future attendance-check work at booking time: no later call or
+    // clock-driven re-derivation is required to make this intention appear.
+    out.push(mk('post_tour', 'call', duringContactHours(new Date(tour.getTime() + 18 * HOUR)),
+      `${who} was scheduled to tour${b.unitId ? ` residence ${b.unitId}` : ''} — confirm whether they attended before discussing next steps.`, bookingSource))
+    if (tour.getTime() < referenceNow.getTime()) {
       // The scheduled time passed; attendance has not been recorded.
-      out.push(mk('post_tour', 'call', duringContactHours(new Date(tour.getTime() + 18 * HOUR)),
-        `${who} was scheduled to tour${b.unitId ? ` residence ${b.unitId}` : ''} — confirm whether they attended before discussing next steps.`, bookingSource))
       continue
     }
 
     // Day-of confirmation, three hours before — "tour at five, call at two".
-    const confirmAt = new Date(tour.getTime() - 3 * HOUR)
-    if (confirmAt.getTime() > now.getTime() + HOUR) {
-      out.push(mk('confirm_tour', 'call', duringContactHours(confirmAt),
+    const confirmAt = duringContactHours(new Date(tour.getTime() - 3 * HOUR))
+    if (confirmAt.getTime() > referenceNow.getTime() + HOUR && confirmAt.getTime() < tour.getTime()) {
+      out.push(mk('confirm_tour', 'call', confirmAt,
         `Confirm ${who} is still coming at ${tour.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: zone })}${b.unitId ? ` to see ${b.unitId}` : ''}.`, bookingSource))
     }
 
     // Day-before reminder when the tour is far enough out to need one.
-    if (tour.getTime() - now.getTime() > DAY + 2 * HOUR) {
+    if (tour.getTime() - referenceNow.getTime() > DAY + 2 * HOUR) {
       const remindAt = duringContactHours(new Date(tour.getTime() - DAY))
-      out.push(mk('remind_tour', p.email ? 'email' : 'sms', remindAt,
-        `Remind ${who} about tomorrow's tour.`, bookingSource))
+      if (remindAt.getTime() > referenceNow.getTime() && remindAt.getTime() < tour.getTime()) {
+        out.push(mk('remind_tour', p.email ? 'email' : 'sms', remindAt,
+          `Remind ${who} about tomorrow's tour.`, bookingSource))
+      }
     }
 
     if (!p.email) {
@@ -140,7 +151,9 @@ export function deriveFollowUps(p: LeadProfile, now: Date, fromCall: string, tim
   // Do not make historical emergency records urgent again on unrelated calls.
   const currentEscalations = p.escalations.filter(e => e.callId === fromCall || (!e.callId && p.calls.length === 0))
   const currentEmergency = currentEscalations.findLast(e => e.trigger === 'emergency')
-  const escalated = currentEmergency ?? currentEscalations.at(-1)
+  // Tour changes have their own durable staff request. Keep unrelated human
+  // review work, including emergencies, even if a tour-change signal came last.
+  const escalated = currentEmergency ?? currentEscalations.findLast(e => e.trigger !== 'tour_change')
   if (escalated) {
     if (escalated.trigger === 'emergency') {
       if (!escalated.callId || escalated.callId === fromCall) {

@@ -6,7 +6,7 @@ export const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'capture_contact',
-      description: 'Save contact information volunteered by the caller, even when they do not book. Does not send messages.',
+      description: 'Save volunteered contact details or a staff request to change an existing tour. For a reschedule or cancellation, set requestType to tour_change and include the caller’s words even without contact details. Does not change a tour or send messages.',
       parameters: {
         type: 'object',
         properties: {
@@ -14,6 +14,7 @@ export const TOOL_DEFINITIONS = [
           email: { type: 'string', description: 'The email address the caller gave.' },
           phone: { type: 'string', description: 'Their preferred callback number, only if they gave one.' },
           excerpt: { type: 'string', description: 'The caller’s exact words supporting these details.' },
+          requestType: { type: 'string', enum: ['tour_change'], description: 'Only for an actual request to reschedule, move or cancel an existing tour. Saves a staff review request; caller identity is not verified and the original tour is not changed.' },
         },
         required: ['excerpt'],
       },
@@ -114,7 +115,7 @@ export const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'book_tour',
-      description: 'Book a tour. Only say it is confirmed if this comes back confirmed.',
+      description: 'Book a NEW tour only. Never use this to reschedule, replace or cancel an existing reservation; save a staff tour-change request instead. Only say confirmed after confirmed readback. An existing future tour may require staff review.',
       parameters: {
         type: 'object',
         properties: {

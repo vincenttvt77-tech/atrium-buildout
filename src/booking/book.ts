@@ -2,6 +2,7 @@ import type {
   BookingRequest, BookingIntent, Booking, BookingState, CalendarPort, TourSlot,
 } from './types.ts'
 import { DEFAULT_TIME_ZONE, validateTimeZone } from '../calendar/time.ts'
+import { TourChangeRequiredError } from '../leads/tour-change.ts'
 
 export interface BookOptions {
   now: Date
@@ -101,6 +102,7 @@ export async function bookTour(
         updatedAt: opts.now,
       }
     } catch (err) {
+      if (err instanceof TourChangeRequiredError) throw err
       lastError = err instanceof Error ? err.message : String(err)
       // This is a safety pause, not calendar unavailability. Preserve it for the
       // caller-facing handler instead of retrying or offering another tour time.

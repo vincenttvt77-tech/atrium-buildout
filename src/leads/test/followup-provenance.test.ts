@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { consolidateCall, followUpKey, listFollowUps } from '../consolidate.ts'
 import type { CallOutcome } from '../consolidate.ts'
-import { legacyFollowUpId } from '../followups.ts'
+import { deriveFollowUps, legacyFollowUpId } from '../followups.ts'
 import type { FollowUp } from '../followups.ts'
 import { emptyProfile } from '../profile.ts'
 import { MemoryDocumentStore } from '../../store/documents.ts'
@@ -32,7 +32,7 @@ test('two tours in the same due hour have distinct booking identities and stable
   await consolidateCall(store, call({ callId: 'second', at: new Date('2026-09-09T14:10:00Z'),
     booking: booking('tour-two', '2026-09-12T21:30:00Z', '7B') }))
   const rows = await listFollowUps(store)
-  for (const kind of ['confirm_tour', 'remind_tour', 'collect_email']) {
+  for (const kind of ['confirm_tour', 'remind_tour', 'collect_email', 'post_tour']) {
     const items = rows.filter(f => f.kind === kind)
     assert.equal(items.length, 2, kind)
     assert.equal(new Set(items.map(f => f.id)).size, 2)
@@ -46,7 +46,7 @@ test('scheduled staff edits, done and skipped work survive later calls and delay
   const store = new MemoryDocumentStore(), original = call({ booking: booking() })
   const first = await consolidateCall(store, original)
   const edited = first.followUps.map((f, index): FollowUp => ({ ...f,
-    status: (['scheduled', 'done', 'skipped'] as const)[index]!,
+    status: (['scheduled', 'done', 'skipped'] as const)[index % 3]!,
     reason: `Staff decision ${index}`, channel: 'sms', dueAt: '2026-09-11T15:17:00.000Z',
   }))
   for (const f of edited) await store.set(followUpKey(f.id), f)
@@ -70,6 +70,31 @@ test('unrelated later calls never recreate historical callbacks or priced-out wa
     const rows = await listFollowUps(store)
     assert.equal(rows.length, 1)
     assert.equal(rows[0]!.status, 'done')
+  }
+})
+
+test('tour-change projection and replay do not create a duplicate generic callback', async () => {
+  const store = new MemoryDocumentStore()
+  const request = call({ escalation: { trigger: 'tour_change', detail: 'Please move my existing tour' } })
+  const first = await consolidateCall(store, request)
+  assert.equal(first.profile.escalations[0]!.trigger, 'tour_change', 'retain the report as call history')
+  assert.equal(first.followUps.some(row => row.kind === 'callback'), false)
+  await consolidateCall(store, { ...request, at: new Date('2026-09-10T14:00:00Z') })
+  assert.equal((await listFollowUps(store)).some(row => row.kind === 'callback'), false)
+})
+
+test('tour-change requests do not suppress separate human-review or emergency callbacks on the same call', () => {
+  for (const trigger of ['human_requested', 'restricted:reasonable_accommodation', 'emergency']) {
+    const p = emptyProfile('+15165551234', AT)
+    p.escalations.push({ trigger, detail: 'Separate staff review is required', callId: 'first', at: AT.toISOString() },
+      { trigger: 'tour_change', detail: 'Move the tour', callId: 'first', at: AT.toISOString() })
+    const rows = deriveFollowUps(p, AT, 'first').filter(row => row.kind === 'callback')
+    assert.equal(rows.length, 1, trigger)
+    assert.match(rows[0]!.reason, /Separate staff review is required/)
+    assert.doesNotMatch(rows[0]!.reason, /Move the tour/)
+    assert.equal(rows[0]!.source!.callId, 'first')
+    assert.equal(rows[0]!.executable, false)
+    if (trigger === 'emergency') assert.equal(rows[0]!.dueAt, AT.toISOString())
   }
 })
 
@@ -178,7 +203,8 @@ test('partial projection replay retains original booking time and recovers only 
   await consolidateCall(store, call({ callId: 'later', at: new Date('2026-09-10T14:00:00Z') }))
   await consolidateCall(store, { ...original, at: new Date('2026-09-11T14:00:00Z') })
   const rows = await listFollowUps(store)
-  assert.equal(rows.length, 3)
+  assert.equal(rows.length, 4)
+  assert.deepEqual(new Set(rows.map(row => row.kind)), new Set(['confirm_tour', 'remind_tour', 'collect_email', 'post_tour']))
   const collection = rows.find(f => f.kind === 'collect_email')!
   assert.equal(collection.dueAt, '2026-09-09T16:00:00.000Z')
   assert.equal(collection.createdFromCall, 'first')

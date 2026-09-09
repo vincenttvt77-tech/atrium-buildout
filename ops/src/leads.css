@@ -149,3 +149,12 @@
   .lead-panel .np-card .actions .btn { flex: 1 1 auto; }
   .lead-panel .panel-head .setname { padding: 0 8px; }
 }
+
+/* Shared Today / Leads request card: caller claims stay readable in narrow columns. */
+.tour-change-row { grid-template-columns: minmax(0, 1fr); }
+.tour-change-row .row-body { gap: 6px; overflow-wrap: anywhere; }
+.tour-change-row .row-actions { grid-column: 1 / -1; justify-content: flex-start; }
+.tour-change-row .row-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.tour-change-row .quote { color: var(--ink-2); font-style: italic; }
+.tour-change-row .reassure, .tour-change-row .meta { color: var(--ink-2); font-size: .929rem; }
+.tour-change-note { width: 100%; min-height: 110px; resize: vertical; }
