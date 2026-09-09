@@ -43,9 +43,9 @@ async function invoke(handler: (req: any, res: any) => unknown, req: any) {
   await handler(req, response)
   return response
 }
-async function webhook(index: number, message: any, authenticated = true) {
+async function webhook(index: number, message: any, authenticated = true, callId = 'same-call-id') {
   return invoke(vapi, { method: 'POST', headers: authenticated ? { 'x-vapi-secret': secret } : {},
-    body: { message: { ...message, call: { id: 'same-call-id', assistantId: accounts[index]!.assistantIds[0] } } } })
+    body: { message: { ...message, call: { id: callId, assistantId: accounts[index]!.assistantIds[0] } } } })
 }
 
 test('identical caller/call IDs stay separate through webhook, leads, notes, events and reset', async () => {
@@ -87,6 +87,52 @@ test('calendar blocks and reset controls affect only the authenticated tenant', 
   assert.equal((await invoke(calendar, { method: 'GET', headers: headers(1) })).body.blocks[0].reason, 'Private reason 1')
   await invoke(calendar, { method: 'POST', headers: headers(0), body: { action: 'clear_blocks', tenantId: accounts[1]!.tenantId } })
   assert.equal((await invoke(calendar, { method: 'GET', headers: headers(1) })).body.blocks.length, 1)
+})
+
+test('tour settings and Vapi availability use each account’s own capacity', async () => {
+  const saved = await Promise.all(accounts.map((account) => withTenant(account.tenantId, () => cal.read())))
+  const from = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)
+  const to = new Date(Date.now() + 37 * 86400000).toISOString().slice(0, 10)
+  const query = { from, to }
+  try {
+    for (const account of accounts) await withTenant(account.tenantId, () => cal.mutate(() => ({ blocks: [], bookings: [] })))
+    const initial = await invoke(calendar, { method: 'GET', headers: headers(0), query })
+    assert.equal(initial.code, 200)
+    assert.equal(initial.body.settings.capacity, 2)
+    const changed = await invoke(calendar, { method: 'POST', headers: headers(0), body: {
+      action: 'settings', settings: { ...initial.body.settings, capacity: 3 }, settingsRevision: initial.body.settingsRevision,
+      tenantId: accounts[1]!.tenantId, ...query,
+    } })
+    assert.equal(changed.code, 200)
+    assert.equal(changed.body.settings.capacity, 3)
+    assert.equal(changed.body.settingsRevision, initial.body.settingsRevision + 1)
+    const bravo = await invoke(calendar, { method: 'GET', headers: headers(1), query })
+    assert.equal(bravo.body.settings.capacity, 2)
+    assert.equal(bravo.body.settingsRevision, 0)
+    const first = changed.body.slots.find((slot: any) => slot.status === 'open')
+    assert.ok(first, 'the future range must include an offered weekday')
+    assert.ok(bravo.body.slots.some((slot: any) => slot.slotId === first.slotId && slot.status === 'open'))
+    for (const account of accounts) await withTenant(account.tenantId, () => cal.mutate((state) => ({ ...state,
+      bookings: [0, 1].map((index) => ({ slotId: first.slotId, externalId: `capacity-test-${index}`,
+        startsAt: first.startsAt, endsAt: first.endsAt, prospectName: `Existing tour ${index}`,
+        prospectPhone: `+1718555010${index + 2}`, prospectEmail: null, unitId: null, bookedAt: new Date().toISOString() })),
+    })))
+    const [alphaView, bravoView] = await Promise.all([0, 1].map((index) => invoke(calendar, { method: 'GET', headers: headers(index), query })))
+    assert.equal(alphaView.body.slots.find((slot: any) => slot.slotId === first.slotId).status, 'open')
+    assert.equal(bravoView.body.slots.find((slot: any) => slot.slotId === first.slotId).status, 'booked')
+    for (let index = 0; index < 2; index++) {
+      const voice = await webhook(index, { type: 'tool-calls', toolCallList: [{ id: 'capacity-times',
+        function: { name: 'list_tour_slots', arguments: { preferredDate: first.date } } }] }, true, 'settings-capacity-call')
+      assert.equal(voice.code, 200)
+      const answer = String(voice.body.results[0].result)
+      assert.match(answer, /Real open tour times/)
+      assert.equal(answer.includes(first.slotId), index === 0, 'Vapi must offer the remaining place only in the capacity-three tenant')
+    }
+    assert.equal((await withTenant(accounts[0]!.tenantId, () => cal.read())).settings?.capacity, 3)
+    assert.equal((await withTenant(accounts[1]!.tenantId, () => cal.read())).settings, undefined)
+  } finally {
+    for (let index = 0; index < accounts.length; index++) await withTenant(accounts[index]!.tenantId, () => cal.mutate(() => saved[index]!))
+  }
 })
 
 test('a known follow-up ID in a different account does not grant mutation access', async () => {

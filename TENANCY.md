@@ -1,6 +1,6 @@
 # Named accounts and isolated workspaces
 
-`npm run dev:ops` creates the local `larkin` account on its first run. Its initial demo-only password is `LarkinDemo123!`. The private `.env.demo-account.json` file stores its salted scrypt hash and an independent session-signing secret, is gitignored, and is written with owner-only permissions. It is reused on restart. No deployed service creates this default account.
+`npm run dev:ops` creates the local demo account on its first run with a random password shown once in the local terminal. The private `.env.demo-account.json` file stores its salted scrypt hash and an independent session-signing secret, is gitignored, and is written with owner-only permissions. It is reused on restart, preserving existing account credentials. No deployed service creates this account. Keep the initial credentials in your password manager; regular logins need only the username and password.
 
 The local account belongs to `demo-larkin`. Only that tenant receives the sample calls, leads, bookings and follow-ups. Local records reset when the preview restarts; the account credentials remain. Live Vapi and Redis credentials are ignored by the local fixture server. The public production portal does not inherit this local account or password.
 
@@ -31,9 +31,34 @@ The authenticated session selects the tenant. Query parameters, request-body ten
 - Named Redis records: `atrium:tenant:<tenantId>:<logicalKey>`.
 - Existing legacy records keep their original `atrium:<logicalKey>` keys. Reserved tenant keys cannot be read through the legacy adapter.
 - In-memory records and event buffers are separate per tenant. Vapi history caches include tenant and assistant bindings.
-- Lists, notes, follow-up status changes, calendar blocks and reset actions use the same scope as reads.
+- Lists, notes, follow-up status changes, tour settings, calendar blocks and reset actions use the same scope as reads.
 
 No automatic data migration is performed. Existing production records remain in the legacy namespace until a reviewed migration assigns them to a client. New named accounts begin with empty operational data unless explicitly seeded.
+
+## Tour settings and calendar API
+
+**Tour settings** belongs to the signed-in workspace. Staff can change the weekly schedule and these booking rules:
+
+| Setting | Accepted value |
+| --- | --- |
+| Simultaneous staff capacity | 1–50 tours |
+| Tour duration | 5–240 whole minutes |
+| Start-time spacing | 5–120 whole minutes |
+| Buffer before and after each tour | 0–120 whole minutes on each side |
+| Minimum booking notice | 0–10,080 whole minutes |
+| Advance booking limit | `null` for unlimited, or 1–730 whole days |
+| Same-apartment policy | `exclusive` or `shared`, always within staff capacity |
+| Weekly hours | Days `0` (Sunday) through `6` (Saturday); omit a day to close it |
+
+Opening and closing hours use decimal hours at whole-minute precision. Each open day must fit a complete tour; a closing hour of `24` means midnight at the end of the day. All scheduling currently uses **America/New_York**. Time-zone selection and property-specific inventory/onboarding are not implemented. The calendar is not connected to a PMS, Google Calendar or another external calendar.
+
+`GET /api/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD` returns the inclusive requested range, up to 62 days per request, together with `settings` and `settingsRevision`. Calendar navigation loads one visible day or week at a time and is independent of the advance booking limit. Historical tours remain visible; past times and times outside the notice/window rules are not bookable. Dates are supported from 1900 through 9998.
+
+To change settings, send `POST /api/calendar` with `action: "settings"`, the complete `settings` object and the `settingsRevision` read when editing began. A concurrent settings change returns HTTP 409 rather than silently overwriting it. Optional `from` and `to` fields keep the response on the displayed range. Settings are stored atomically in the tenant's calendar document. New availability and Vapi's tour tools read those rules from the same document.
+
+Existing bookings retain their original start, end and reserved staff interval after settings change; reducing capacity does not cancel or shorten a saved tour. Blocks refer to their saved targets and intervals, including when they make several overlapping start times unavailable. Reopening a projected start time removes its actual saved block; Undo restores that block's original bounds.
+
+With Redis/KV configured, settings and bookings persist in the tenant namespace. The local fixture preview intentionally uses memory: restarting it resets settings, blocks and sample bookings while retaining the separate local account credentials. These checks do not prove live PMS synchronization or live Vapi call behavior.
 
 ## Vapi ownership
 
@@ -43,6 +68,6 @@ Call history requests are filtered to bound assistants and checked again before 
 
 ## Verification and limits
 
-`api/test/tenant-isolation.test.ts` exercises identical caller/call IDs across two accounts, private notes, follow-up ownership, scoped reset controls, event logs, cached Vapi history, forged tenant inputs and concurrent asynchronous requests. Auth and Vapi suites cover session tampering/revocation and assistant ownership. KV tests exercise actual command namespaces through a Redis test double; they do not claim a live Redis deployment was tested.
+`api/test/tenant-isolation.test.ts` exercises identical caller/call IDs across two accounts, private notes, follow-up ownership, scoped reset controls, event logs, cached Vapi history, forged tenant inputs and concurrent asynchronous requests. It also changes one account's tour capacity from two to three while leaving the other at two, then verifies that authenticated calendar responses and Vapi tool responses offer the remaining place only in the correct account. Auth and Vapi suites cover session tampering/revocation and assistant ownership. KV tests exercise actual command namespaces through a Redis test double; they do not claim a live Redis deployment was tested.
 
 This implements an isolated demo workspace, not the full platform tenancy scope. The property/inventory template is still The Larkin. Client/property onboarding, per-property configuration, membership administration, role permissions, MFA/SSO and verified resident identity remain to be implemented before a multi-property commercial rollout. All named users currently have staff privileges within their tenant.

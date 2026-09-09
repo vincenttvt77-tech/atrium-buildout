@@ -192,8 +192,24 @@ inventory §15.2 and §18.2.
 
 The operations workspace uses a white and navy theme, with shared styling for the Today,
 Calls, Leads, Calendar and Status views. Preview it with `npm run dev:ops`; the local
-login is `larkin` / `LarkinDemo123!`, and its fixture records reset when the process restarts.
+account is created once; initial credentials appear in the local terminal. Fixture records reset when the process restarts.
 The account belongs to an isolated demo tenant; see [TENANCY.md](TENANCY.md).
+
+The Calendar view can browse any supported date with previous/next controls or **Go to
+date**; it loads the displayed day or week instead of stopping after two weeks. **Tour
+settings** controls staff capacity, duration, start-time spacing, preparation/reset
+buffers, minimum notice, advance booking limits, same-apartment sharing and weekly hours.
+Leaving the booking limit empty allows bookings without an advance limit. Settings apply
+to new availability; existing tour times and their reserved staff time remain unchanged.
+Settings and bookings belong to the signed-in tenant, and Vapi uses that same tenant's
+rules when offering or booking a tour.
+
+Scheduling currently uses **America/New_York** for every workspace. Property-specific time
+zones and a Chicago/Miami onboarding flow are not implemented. This is Atrium's own
+calendar, with no PMS or external-calendar synchronization. The local preview resets
+tour settings and sample bookings when it restarts; a configured Redis/KV backend persists
+them. See [tour settings and calendar API](TENANCY.md#tour-settings-and-calendar-api) for
+the request contract and limits.
 
 `npm run build` regenerates the website and embedded dashboard before bundling the APIs.
 GitHub Actions runs checks and a production build on pushes and pull requests.

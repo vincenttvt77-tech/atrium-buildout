@@ -2,7 +2,7 @@
 /**
  * Local preview server for the operations dashboard.
  *
- *   npm run dev:ops              → http://localhost:4300/   (username: larkin; password: LarkinDemo123!)
+ *   npm run dev:ops              → http://localhost:4300/   (initial credentials shown once)
  *   node scripts/dev-ops.mjs --no-seed
  *   PORT=5000 node scripts/dev-ops.mjs
  *

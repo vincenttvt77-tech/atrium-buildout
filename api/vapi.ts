@@ -14,6 +14,8 @@ import { authorizeOps, constantTimeEquals } from '../src/ops/session.ts'
 import { fetchCalls } from '../src/ops/vapi-calls.ts'
 import { calendarStoreFromEnv } from '../src/calendar/store.ts'
 import { generateSlots } from '../src/calendar/slots.ts'
+import { defaultSettings, effectiveOptions } from '../src/calendar/settings.ts'
+import { parseCalendarDate, addCalendarDays } from '../src/calendar/range.ts'
 import { storeBackedCalendar } from '../src/calendar/port.ts'
 import { documentStoreFromEnv } from '../src/store/documents.ts'
 import { normalisePhone } from '../src/leads/profile.ts'
@@ -143,8 +145,8 @@ async function saveCall(callId: string, state: CallState, before: CallState): Pr
  * the test that proves it reads a calendar rather than inventing one.
  */
 const calendarStore = calendarStoreFromEnv()
-const TOUR_CAPACITY = Math.max(1, Number((rawProperty as { tourCapacityPerSlot?: number }).tourCapacityPerSlot ?? 1))
-const demoCalendar = (now: Date) => storeBackedCalendar(calendarStore, () => now, { capacity: TOUR_CAPACITY })
+const TOUR_CAPACITY = defaultSettings().capacity
+const demoCalendar = (now: Date) => storeBackedCalendar(calendarStore, () => now, { capacity: TOUR_CAPACITY, unitIds: rawUnits.map(u => u.unitId) })
 
 const nyDay = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
 const nyHour = (d: Date) => Number(d.toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/New_York' }))
@@ -174,7 +176,7 @@ export function pickSlotsToOffer(open: TourSlot[], preferredDate?: string): { of
 
 const fmtSlot = (s: TourSlot) =>
   s.startsAt.toLocaleString('en-US', {
-    weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit',
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
     timeZone: 'America/New_York',
   })
 
@@ -310,18 +312,39 @@ async function runTool(
     }
 
     case 'list_tour_slots': {
-      const slots = await demoCalendar(now).listSlots(ctx.propertyId, now, now)
-      const { offered, daysOpen } = pickSlotsToOffer(slots, args.preferredDate ? String(args.preferredDate) : undefined)
+      const preferredDate = args.preferredDate ? String(args.preferredDate) : undefined
+      let from = now, to: Date
+      try {
+        if (preferredDate) {
+          from = parseCalendarDate(preferredDate)
+          if (preferredDate < nyDay(now)) return 'That date is in the past. Ask which future date works for the caller.'
+        }
+        to = parseCalendarDate(addCalendarDays(nyDay(from), 15))
+      } catch { return 'That date is invalid. Ask for a real date and call list_tour_slots using YYYY-MM-DD.' }
+      const unitId = args.unitId ? String(args.unitId).trim().toUpperCase() : null
+      if (unitId && !rawUnits.some(u => u.unitId.toUpperCase() === unitId)) return 'That residence is not in the building inventory. Confirm a residence returned by check_availability, or omit unitId for a general building tour.'
+      const slots = await demoCalendar(now).listSlots(ctx.propertyId, from, to, unitId)
+      const { offered, daysOpen } = pickSlotsToOffer(slots, preferredDate)
       logEvent(callId, { kind: 'slots_listed', count: offered.length, daysOpen })
-      if (offered.length === 0) return 'No tour times are open. Offer to have someone call them back.'
-      const more = daysOpen > 3 ? ` Other days are open too (${daysOpen} days in the next two weeks) — if none of these suit, ask which day works and call this again with preferredDate as YYYY-MM-DD.` : ''
-      return `Real open tour times — offer two or three, and use the slotId when booking:\n${offered.map((s) => `${s.slotId} — ${fmtSlot(s)}`).join('\n')}${more}`
+      if (offered.length === 0) {
+        const window = effectiveOptions(await calendarStore.read()).bookingWindowDays
+        return `No bookable tour times were found in this requested date range.${window == null ? '' : ` This building accepts bookings up to ${window} days ahead.`} Ask for another date or offer a leasing-team callback. Do not say the whole calendar is full.`
+      }
+      const preferredClosed = preferredDate && !offered.some(s => nyDay(s.startsAt) === preferredDate)
+      const more = daysOpen > 3 ? ` Other days are open too — ask which date works and call this again with preferredDate as YYYY-MM-DD.` : ''
+      return `${preferredClosed ? `No times are open on ${preferredDate}; these are alternatives on other dates. ` : ''}Real open tour times${unitId ? ` for residence ${unitId}` : ''} — offer two or three, and use the slotId when booking:\n${offered.map((s) => `${s.slotId} — ${fmtSlot(s)}`).join('\n')}${more}`
     }
 
     case 'book_tour': {
-      const slots = generateSlots(now)
+      const slotId = String(args.slotId ?? '')
+      if (!/^slot-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(slotId)) return 'That slot is invalid. Call list_tour_slots again and offer a real time.'
+      const requestedStart = new Date(`${slotId.slice(5)}:00.000Z`)
+      if (!Number.isFinite(requestedStart.getTime()) || requestedStart.toISOString().slice(0, 16) !== slotId.slice(5)) return 'That slot is invalid. Call list_tour_slots again.'
+      const slots = generateSlots(now, { ...effectiveOptions(await calendarStore.read()), from: requestedStart, to: new Date(requestedStart.getTime() + 86400000) })
       const slot = slots.find((s) => s.slotId === args.slotId)
       if (!slot) return 'That slot is not on the calendar. Call list_tour_slots again and offer a real time.'
+      const unitId = args.unitId ? String(args.unitId).trim().toUpperCase() : null
+      if (unitId && !rawUnits.some(u => u.unitId.toUpperCase() === unitId)) return 'That residence is not in the building inventory. Confirm a residence returned by check_availability, or offer a general building tour.'
 
       state.name = String(args.prospectName ?? state.name ?? '')
       state.email = args.prospectEmail ? String(args.prospectEmail) : state.email
@@ -334,18 +357,18 @@ async function runTool(
         prospectPhone: state.phone ?? callId,
         prospectEmail: state.email,
         slot,
-        unitId: args.unitId ? String(args.unitId) : null,
+        unitId,
         floorPlanId: null,
       }, demoCalendar(now), { now, makeIntentId: () => `intent-${callId}-${slot.slotId}` })
 
       logEvent(callId, {
         kind: 'tour_booked', status: booking.state.status,
-        slot: fmtSlot(slot), unitId: args.unitId ?? null,
+        slot: fmtSlot(slot), unitId,
         prospectName: state.name, prospectEmail: state.email,
       })
       state.booking = {
         slotId: slot.slotId, startsAt: slot.startsAt.toISOString(),
-        unitId: args.unitId ? String(args.unitId) : null,
+        unitId,
         status: booking.state.status === 'confirmed' ? 'confirmed'
           : booking.state.status === 'arranging' ? 'arranging' : 'failed',
       }

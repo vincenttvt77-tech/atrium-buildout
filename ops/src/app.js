@@ -539,6 +539,7 @@ const api = {
   get(path) { return request(path, { headers: JSON_HEADERS }) },
   async post(path, body, opts) {
     try {
+      if (path === '/api/calendar') body = { ...body, ...calendarRequestRange() }
       return await request(path, {
         method: 'POST', headers: { ...JSON_HEADERS, 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}),
       })
@@ -562,11 +563,34 @@ const inflight = {}
 const busyMap = {}
 let pollTimer = null
 let lastRoundAt = 0
+let calendarRange = null
+function calendarRequestRange() {
+  const today = nyNow().ymd
+  return calendarRange || { from: today, to: addDays(today, 14) }
+}
+function calendarUrl() { return `/api/calendar?${new URLSearchParams(calendarRequestRange())}` }
+function calendarRangeMatches(data) {
+  const wanted = calendarRequestRange()
+  return !data.range || (data.range.from === wanted.from && data.range.to === wanted.to)
+}
+/** Range changes invalidate older reads; responses never move the operator's selected date. */
+function setCalendarRange(range) {
+  const next = range ? { from: range.from, to: range.to } : null
+  if (JSON.stringify(next) === JSON.stringify(calendarRange)) return Promise.resolve()
+  calendarRange = next
+  seq.calendar += 1
+  delete state.errors.calendar
+  if (gated || busyMap.calendar) return Promise.resolve()
+  return fetchOne('calendar').then((result) => {
+    if (!result.dropped) { emit('data', state, new Set(['calendar'])); paintChrome() }
+  })
+}
 
 /** The comparable shape of a resource: generatedAt and note never take part. */
 function snapshot(name, d) {
   if (name === 'calls') return { calls: arr(d.calls), events: arr(d.events), callsError: d.callsError ?? null, callsConfigured: typeof d.callsConfigured === 'boolean' ? d.callsConfigured : null }
-  if (name === 'calendar') return { slots: arr(d.slots), blocks: arr(d.blocks), bookings: arr(d.bookings), store: d.store ?? null }
+  if (name === 'calendar') return { slots: arr(d.slots), blocks: arr(d.blocks), bookings: arr(d.bookings), store: d.store ?? null,
+    range: d.range ?? null, settings: d.settings ?? null, settingsRevision: d.settingsRevision ?? null }
   return { profiles: arr(d.profiles), followUps: arr(d.followUps), outboundEnabled: d.outboundEnabled === true, store: d.store ?? null }
 }
 function assign(name, snap) {
@@ -585,12 +609,12 @@ function ingest(name, data) {
   return changed
 }
 async function fetchOne(name) {
-  inflight[name] = true
   const mySeq = ++seq[name]
+  inflight[name] = mySeq
   const hadError = Boolean(state.errors[name])
   try {
-    const data = await api.get(RESOURCES[name])
-    if (seq[name] !== mySeq || busyMap[name]) return { name, dropped: true }
+    const data = await api.get(name === 'calendar' ? calendarUrl() : RESOURCES[name])
+    if (seq[name] !== mySeq || busyMap[name] || (name === 'calendar' && !calendarRangeMatches(data))) return { name, dropped: true }
     const changed = ingest(name, data)
     delete state.errors[name]
     state.lastGoodAt[name] = new Date().toISOString()
@@ -600,7 +624,7 @@ async function fetchOne(name) {
     state.errors[name] = { message: e.message, status: e.status ?? null, at: new Date().toISOString() }
     return { name, ok: false, changed: !hadError }
   } finally {
-    inflight[name] = false
+    if (inflight[name] === mySeq) inflight[name] = false
   }
 }
 async function pollRound(force) {
@@ -663,6 +687,7 @@ function paintBusy(resource) {
   }
 }
 function apply(resource, data) {
+  if (resource === 'calendar' && data && !calendarRangeMatches(data)) return
   seq[resource] += 1
   const d = data || {}
   if (resource === 'calendar') {
@@ -670,6 +695,7 @@ function apply(resource, data) {
     ingest('calendar', {
       slots: Array.isArray(d.slots) ? d.slots : cur.slots, blocks: Array.isArray(d.blocks) ? d.blocks : cur.blocks,
       bookings: Array.isArray(d.bookings) ? d.bookings : cur.bookings, store: d.store ?? cur.store,
+      range: d.range ?? cur.range, settings: d.settings ?? cur.settings, settingsRevision: d.settingsRevision ?? cur.settingsRevision,
     })
   } else if (resource === 'leads') {
     const cur = state.leads || { profiles: [], followUps: [], outboundEnabled: false, store: null }
@@ -770,6 +796,7 @@ function applyRoute() {
   const r = route()
   const prev = current
   current = r
+  if (r.name !== 'calendar') setCalendarRange(null)
   const switched = !prev || prev.name !== r.name
   showView(r, switched && Boolean(prev))
   if (switched) window.scrollTo({ top: 0, behavior: 'auto' })
@@ -1296,31 +1323,47 @@ function toursOn(s, ymd) {
   const cal = s.calendar
   const calLoaded = Boolean(cal)
   const calBookingIds = new Set(arr(cal && cal.bookings).map((b) => b && b.slotId))
-  const calBookingBy = new Map(arr(cal && cal.bookings).map((b) => [b && b.slotId, b]))
   const out = [], seen = new Set()
   for (const p of profilesOf(s)) {
     for (const b of arr(p && p.bookings)) {
       if (!b || b.status !== 'confirmed' || nyDate(b.startsAt) !== ymd) continue
       if (calLoaded && !calBookingIds.has(b.slotId)) continue
       // Two tours can share a time (two model residences): dedupe per tour, not per time.
-      const key = `${b.slotId}|${(b.unitId ?? '')}|${(p.name || '').trim()}`
+      const matches = arr(cal && cal.bookings).filter((x) => x && x.slotId === b.slotId && (x.unitId ?? '') === (b.unitId ?? ''))
+      const cb = matches.find((x) => (p.phone && p.phone !== 'unknown' && x.prospectPhone === p.phone) || (p.name && x.prospectName === p.name)) || (matches.length === 1 ? matches[0] : null)
+      const key = (cb && cb.externalId) || `${b.slotId}|${(b.unitId ?? '')}|${(p.name || '').trim()}`
       if (seen.has(key)) continue
       seen.add(key)
-      const cb = arr(cal && cal.bookings).find((x) => x && x.slotId === b.slotId && (x.unitId ?? '') === (b.unitId ?? '')) || calBookingBy.get(b.slotId)
-      out.push({ slotId: b.slotId, startsAt: b.startsAt, endsAt: null, name: p.name || (cb && cb.prospectName) || 'Tour', phone: p.phone, email: p.email || null,
+      out.push({ slotId: b.slotId, startsAt: (cb && cb.startsAt) || b.startsAt, endsAt: (cb && cb.endsAt) || null, name: p.name || (cb && cb.prospectName) || 'Tour', phone: p.phone, email: p.email || null,
         unitId: b.unitId ?? (cb && cb.unitId) ?? null, callId: b.callId, source: 'lead', profile: p, past: (toTime(b.startsAt) ?? 0) < now })
     }
+  }
+  // The staff calendar fetches only its displayed range. Saved bookings still cover every
+  // date, so Today remains correct after someone browses a distant week or removes a lead.
+  for (const b of arr(cal && cal.bookings)) {
+    if (!b) continue
+    const sl = arr(cal && cal.slots).find((slot) => slot && slot.slotId === b.slotId)
+    const legacyStart = /^slot-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(b.slotId || '') ? `${b.slotId.slice(5)}:00.000Z` : null
+    const startsAt = b.startsAt || (sl && sl.startsAt) || legacyStart
+    if (!startsAt || nyDate(startsAt) !== ymd) continue
+    const name = String(b.prospectName ?? '').trim()
+    const key = b.externalId || `${b.slotId}|${b.unitId ?? ''}|${name}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({ slotId: b.slotId, startsAt, endsAt: b.endsAt || (sl && sl.endsAt) || null, name: name || 'Tour',
+      phone: normalisePhone(b.prospectPhone) || null, email: b.prospectEmail || null,
+      unitId: b.unitId ?? null, callId: null, source: 'calendar', profile: null, past: (toTime(startsAt) ?? 0) < now })
   }
   for (const sl of arr(cal && cal.slots)) {
     if (!sl || sl.date !== ymd) continue
     const onSlot = arr(sl.bookings).length ? arr(sl.bookings) : (sl.booking ? [sl.booking] : [])
     for (const b of onSlot) {
-      if (!b) continue
+      if (!b || (b.startsAt && toTime(b.startsAt) !== toTime(sl.startsAt))) continue
       const name = String(b.prospectName ?? '').trim()
-      const key = `${sl.slotId}|${(b.unitId ?? '')}|${name}`
+      const key = b.externalId || `${sl.slotId}|${(b.unitId ?? '')}|${name}`
       if (seen.has(key)) continue
       seen.add(key)
-      out.push({ slotId: sl.slotId, startsAt: sl.startsAt, endsAt: sl.endsAt, name: name || 'Tour', phone: null, email: null,
+      out.push({ slotId: sl.slotId, startsAt: b.startsAt || sl.startsAt, endsAt: b.endsAt || sl.endsAt, name: name || 'Tour', phone: null, email: null,
         unitId: b.unitId ?? null, callId: null, source: 'calendar', profile: null, past: (toTime(sl.startsAt) ?? 0) < now })
     }
   }
@@ -1753,7 +1796,7 @@ const derive = {
 
 function reread(resource) {
   if (!RESOURCES[resource] || gated) return Promise.resolve()
-  return api.get(RESOURCES[resource]).then((d) => { apply(resource, d) }, () => { /* the poll will try again */ })
+  return api.get(resource === 'calendar' ? calendarUrl() : RESOURCES[resource]).then((d) => { apply(resource, d) }, () => { /* the poll will try again */ })
 }
 /**
  * Where keyboard focus goes when the control that started a write leaves the list with its row:
@@ -2348,7 +2391,7 @@ function boot() {
 
 window.Atrium = {
   escapeHtml, fmt, api, gate, toast, confirm, prompt, dialog, register, navigate, route, hashFor, state, on,
-  busy, busyNow, apply, refresh, icons, icon, property, normalisePhone, labels, label, derive, hint, text, href,
+  busy, busyNow, apply, refresh, calendarUrl, setCalendarRange, icons, icon, property, normalisePhone, labels, label, derive, hint, text, href,
   html: html_, announce, escape: escape_, setFollowUpStatus, boot, views: VIEWS.slice(),
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot)

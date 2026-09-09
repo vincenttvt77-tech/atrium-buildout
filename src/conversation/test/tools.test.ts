@@ -277,7 +277,7 @@ describe('a budget as the transcriber writes it', () => {
     assert.equal(parseBudget('$4. 000', ''), 4000)
     assert.equal(parseBudget('4k', ''), 4000)
     assert.equal(parseBudget('four thousand', ''), 4000)
-    assert.equal(parseBudget('forty-two hundred', 'forty-two hundred a month'), null)
+    assert.equal(parseBudget('forty-two hundred', 'forty-two hundred a month'), 4200)
     assert.equal(parseBudget('4,200', ''), 4200)
     assert.equal(parseBudget('nothing', 'whatever it takes'), null)
   })

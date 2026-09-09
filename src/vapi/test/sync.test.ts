@@ -38,11 +38,13 @@ describe('what the update writes and what it leaves alone', () => {
       id: 'a1', name: 'The Larkin — Leasing',
       voice: { provider: '11labs', voiceId: 'someone-else', stability: 0.3 },
       transcriber: { provider: 'deepgram', model: 'nova-2', endpointing: 120 },
-      startSpeakingPlan: { waitSeconds: 0.9 },
+      startSpeakingPlan: { waitSeconds: 0.9, smartEndpointingPlan: { provider: 'livekit' } },
       model: { provider: 'anthropic', model: 'claude-sonnet-5', temperature: 0.7, maxTokens: 300, toolIds: ['tool-x'], messages: [{ role: 'system', content: 'old' }] },
     }
     const patch = assistantPatch(existing, config)
-    assert.ok(!('voice' in patch) && !('transcriber' in patch) && !('startSpeakingPlan' in patch), 'tuned-in-Vapi settings are not sent')
+    assert.ok(!('voice' in patch) && !('transcriber' in patch), 'voice and transcriber are not replaced')
+    assert.equal(patch.startSpeakingPlan.waitSeconds, 0.4)
+    assert.deepEqual((patch.startSpeakingPlan as Record<string, unknown>).smartEndpointingPlan, { provider: 'livekit' })
     assert.equal(patch.model.provider, 'anthropic')
     assert.equal(patch.model.temperature, 0.7, 'the assistant keeps its own temperature')
     assert.equal(patch.model.maxTokens, 300)
@@ -121,7 +123,7 @@ describe('the round trip to Vapi', () => {
   })
 
   test('a PATCH acknowledgement cannot hide a stale prompt, changed destination or missing tool', async () => {
-    for (const failure of ['prompt', 'server', 'tools']) {
+    for (const failure of ['prompt', 'server', 'tools', 'timing']) {
       let reads = 0
       let patch: any
       const result = await syncAssistant({
@@ -133,6 +135,7 @@ describe('the round trip to Vapi', () => {
           if (failure === 'prompt') patch.model.messages[0].content = 'stale prompt'
           if (failure === 'server') patch.server.url = 'https://wrong.example/api/vapi'
           if (failure === 'tools') patch.model.tools.pop()
+          if (failure === 'timing') patch.startSpeakingPlan.waitSeconds = 9
           return new Response(JSON.stringify({ id: 'a1', ...patch }))
         }) as unknown as typeof fetch,
       })

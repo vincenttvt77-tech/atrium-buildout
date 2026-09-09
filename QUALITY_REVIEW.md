@@ -53,3 +53,16 @@ No real voice call, paid model simulation, production deployment, or live Redis 
 - Negative tests exercise matching record IDs across accounts, forged scope inputs, legacy namespace escapes and concurrent KV/memory operations. See TENANCY.md.
 
 Account follow-up validation: 419 tests passed on Node 22.23.2; TypeScript, data validation and the full build passed. Browser sign-in with the named Larkin account was verified, including account identity and sample records. Gitignored credential storage uses owner-only permissions.
+
+## Practical scheduling and voice follow-up
+
+- Calendar navigation requests the visible week or day and supports arbitrary future dates. Booking lead time and an optional advance limit are separate from staff browsing; the default has no advance booking limit.
+- Each workspace can set concurrent showing capacity, duration, start spacing, preparation/reset buffers, minimum notice, daily tour hours and exclusive/shared apartment access in the portal. Revision checks prevent silent settings overwrites.
+- Reservations retain actual start/end and occupancy intervals. Capacity uses peak simultaneous occupancy, including buffers, under the same atomic update as the active settings. Existing bookings survive hours, notice, duration and capacity changes.
+- Availability and booking use the same rules through the portal and Vapi. Apartment-specific conflicts return usable alternatives. Invalid dates/units and changed-apartment retries cannot falsely confirm. DST, interval blocks and midnight-crossing buffers are covered.
+- Staff see each actual tour once, including on Today after distant calendar browsing. Reopen targets the original block and Undo restores its saved interval. Production refuses bulk tour resets.
+- Voice configuration removes avoidable pauses after routine intake, avoids duplicate tool calls, uses the current date, keeps contact email optional and avoids promising automatic messages or callback deadlines. Spoken budgets/bedrooms and conflicting, expired or foreign-property knowledge have regression coverage.
+
+Validation: **465 tests passed**, with TypeScript checking, unchanged data validation and the full build on Node 22. Browser checks covered username/password sign-in, settings save/reload, three-person capacity with 45-minute tours, and June 2032 navigation with repeated paging. Integration tests drove real portal/Vapi handlers using local test data, including capacity three versus a fourth request and tenant-specific settings.
+
+The signed-in live Vapi assistant was inspected. It has a pre-existing unpublished draft that changes the published voice and an old hardcoded date. No assistant publish or call occurred in this pass, and live latency has not been measured. A local rollout review records the concrete pending dashboard changes. The local demo still uses fictional data and resets operational records/settings when the preview restarts; account credentials persist. Scheduling currently uses the Larkin's New York timezone, and the code is not yet a general multi-property configuration/PMS integration.

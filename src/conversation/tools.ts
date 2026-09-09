@@ -9,6 +9,7 @@ import { decideAnswer } from '../knowledge/answer.ts'
 import { retrieve } from '../knowledge/retrieve.ts'
 import { guardTopic } from '../knowledge/guard.ts'
 import type { KnowledgeArticle } from '../knowledge/article.ts'
+import { isServable } from '../knowledge/article.ts'
 import { isPolicy, isVolatile, type Topic } from '../knowledge/topics.ts'
 import { detectEmergency, primaryEmergency, safetyInstruction } from '../escalation/emergency.ts'
 import type { PropertyId, InteractionId } from '../domain/ids.ts'
@@ -67,8 +68,42 @@ export interface CaptureArgs {
 }
 
 const SMALL: Record<string, number> = {
-  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
-  eleven: 11, twelve: 12, fifteen: 15, twenty: 20, thirty: 30, forty: 40, fifty: 50,
+  zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17,
+  eighteen: 18, nineteen: 19, twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60,
+  seventy: 70, eighty: 80, ninety: 90,
+}
+
+const NUMBER_WORD = `(?:${Object.keys(SMALL).join('|')}|hundred|thousand|grand)`
+const NUMBER_PART = `(?:${NUMBER_WORD}|\\d+(?:\\.\\d+)?)`
+const SPOKEN_NUMBER = new RegExp(`\\b${NUMBER_PART}(?:[ -]+(?:and[ -]+)?${NUMBER_PART})*\\b`, 'g')
+
+function expandSpokenNumbers(text: string): string {
+  return text.replace(SPOKEN_NUMBER, (phrase) => {
+    // “Four thousand and five hundred” is one number. “Four thousand and six
+    // thousand” is a range; do not add two independently scaled amounts together.
+    if ((phrase.match(/\b(thousand|grand)\b/g)?.length ?? 0) > 1 ||
+        (/\band\b/.test(phrase) && !/\b(hundred|thousand|grand)\b/.test(phrase))) return phrase
+    let total = 0
+    let group = 0
+    for (const word of phrase.split(/[ -]+/)) {
+      if (word === 'and') continue
+      if (word === 'hundred') group = Math.max(1, group) * 100
+      else if (word === 'thousand' || word === 'grand') { total += Math.max(1, group) * 1000; group = 0 }
+      else group += SMALL[word] ?? Number(word)
+    }
+    return String(total + group)
+  })
+}
+
+/** Accept a stated size; unclear speech and ranges must not silently become a studio. */
+export function parseBedrooms(value: unknown): number | null {
+  const text = String(value ?? '').toLowerCase().replace(/\bstudios?\b/g, '0')
+    .replace(new RegExp(`\\b(${Object.keys(SMALL).join('|')})\\b`, 'g'), (word) => String(SMALL[word]))
+  const counts = [...text.matchAll(/\b(\d+)(?=\b|br\b|bed)/g)].map((match) => Number(match[1]))
+  if (!counts.length || counts.some((count) => !Number.isInteger(count) || count < 0 || count > 10)) return null
+  const unique = [...new Set(counts)]
+  return unique.length === 1 ? unique[0]! : null
 }
 
 /**
@@ -81,10 +116,8 @@ const SMALL: Record<string, number> = {
  */
 export function parseBudget(value: unknown, excerpt: unknown): number | null {
   for (const text of [value, excerpt]) {
-    const s = String(text ?? '').toLowerCase()
-      .replace(/(\d)[\s.,]+(?=\d{3}\b)/g, '$1')
-      .replace(/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|fifty)\s+(thousand|grand|k)\b/g,
-        (_, w: string) => String(SMALL[w]! * 1000))
+    const s = expandSpokenNumbers(String(text ?? '').toLowerCase()
+      .replace(/(\d)[\s.,]+(?=\d{3}\b)/g, '$1'))
       .replace(/\b(\d+)\s+hundred\b/g, (_, d: string) => String(Number(d) * 100))
     for (const m of s.matchAll(/\$?\s*(\d+(?:\.\d+)?)\s*(k|thousand|grand)?\b/g)) {
       let n = Number(m[1])
@@ -109,8 +142,8 @@ export function captureSignal(args: CaptureArgs, ctx: ToolContext): ToolResult {
       captured = true
     }
   } else if (args.signal === 'bedrooms') {
-    const n = /studio/i.test(args.value) ? 0 : Number(String(args.value).replace(/[^0-9]/g, ''))
-    if (Number.isFinite(n)) {
+    const n = parseBedrooms(args.value)
+    if (n !== null) {
       q = captureCore(q, 'bedrooms', extracted({ min: n, max: n }, conf, ctx.interactionId, args.excerpt, ctx.now))
       captured = true
     }
@@ -372,6 +405,7 @@ export interface AnswerArgs {
 }
 
 const ABOUT_RENT_OR_AVAILABILITY = /\b(rent|rents|rental|pricing|price|prices|how much (is|are|for|does|would)|cost of (the|a|an) (studio|apartment|unit|residence|one|two|three)|available|availability|vacanc(y|ies)|what('s| is) open|anything open|move[- ]in date|when can (i|we) move|lease start|specials?|concessions?|discount)\b/i
+const ABOUT_PROMOTIONS = /\b(specials|special offers?|concessions?|rent discounts?|rent incentives?|months? free|free months?)\b/i
 
 /** Property questions. Answers only from approved knowledge; escalates the restricted. */
 export function answerQuestion(args: AnswerArgs, ctx: ToolContext): ToolResult {
@@ -382,6 +416,11 @@ export function answerQuestion(args: AnswerArgs, ctx: ToolContext): ToolResult {
    */
   const guard = guardTopic(args.question)
   let topic = guard ? guard.topic : args.topic
+  // A model-supplied policy label must not make a frozen promotion quotable. A current
+  // concession is owned by inventory regardless of where the model filed the question.
+  if (!guard && ABOUT_PROMOTIONS.test(args.question)) {
+    topic = 'pricing'
+  }
 
   /*
    * The model files "what amenities do you have?" under pricing often enough to matter, and
@@ -391,7 +430,7 @@ export function answerQuestion(args: AnswerArgs, ctx: ToolContext): ToolResult {
    * availability; otherwise it is treated as a policy question and answered from approved
    * text. No article may carry a rent (the validator forbids it), so nothing stale can leak.
    */
-  if (!guard && isVolatile(topic) && !ABOUT_RENT_OR_AVAILABILITY.test(args.question)) {
+  if (!guard && isVolatile(topic) && !ABOUT_RENT_OR_AVAILABILITY.test(args.question) && !ABOUT_PROMOTIONS.test(args.question)) {
     topic = 'general_property_fact'
   }
 
@@ -404,7 +443,7 @@ export function answerQuestion(args: AnswerArgs, ctx: ToolContext): ToolResult {
    * ranking a held draft lets it set ceiling confidence for whatever servable article
    * happens to rank next. Unpublishing text is not the same as removing it.
    */
-  const servable = (a: KnowledgeArticle) => a.status === 'published' && a.approvedBy !== null
+  const servable = (a: KnowledgeArticle) => isServable(a, ctx.propertyId, ctx.jurisdiction, ctx.now)
   const inTopic = ctx.articles.filter((a) => a.topic === topic && servable(a))
   let { ranked, confidence } = retrieve(args.question, inTopic)
 
