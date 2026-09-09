@@ -1,6 +1,8 @@
 import { KvClient } from './kv.ts'
 import { storageConfig } from './config.ts'
 import { currentTenantId, tenantNamespace } from '../tenancy/context.ts'
+import { isPostgresRuntime } from '../database/mode.ts'
+import { requirePropertyRuntime } from '../database/request.ts'
 
 /**
  * A JSON document store: KV in hosted runtimes, tenant-scoped memory for local previews.
@@ -107,6 +109,7 @@ const tenantMemory = new Map<string, MemoryDocumentStore>()
 export function documentStoreFromEnv(env: NodeJS.ProcessEnv = process.env): DocumentStore {
   const kvStores = new Map<string, KvDocumentStore>()
   const resolve = (): DocumentStore => {
+    if (isPostgresRuntime(env)) return requirePropertyRuntime().documents
     const tenantId = currentTenantId()
     const namespace = tenantNamespace(tenantId)
     const config = storageConfig(env)

@@ -39,8 +39,9 @@ test('concurrent document updates do not lose changes; audit failure rolls the m
   const audit = (await db.admin.query("SELECT * FROM atrium.audit_events WHERE operation='document.update'")).rows
   assert.equal(audit.length, 20)
   assert.ok(audit.every(row => /^sha256:/.test(row.record_key) && row.actor_user_id === 'owner-a'))
-  const failing = new PostgresDocumentStore(concurrent, scope, { requestId: 'audit-failure', configurationVersion: 999 })
-  await assert.rejects(failing.set('must-not-commit', { count: 1 }), { code: '23503' })
+  // Invalid audit attribution fails after the document INSERT, proving rollback.
+  const failing = new PostgresDocumentStore(concurrent, scope, { requestId: 'invalid audit request id' })
+  await assert.rejects(failing.set('must-not-commit', { count: 1 }), { code: '23514' })
   assert.equal(await store.get('must-not-commit'), null)
   await assert.rejects(store.update('counter', {count:0}, async () => ({count:999})), /synchronous JSON/)
   assert.deepEqual(await store.get('counter'), {count:20})

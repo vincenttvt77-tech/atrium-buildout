@@ -43,7 +43,7 @@ const dayDiff = (a, b) => Math.round((ymdNoon(b) - ymdNoon(a)) / 86400000)
 const longDay = (ymd) => fmt.dayLong(ymd).split(',')[0]
 const shortDay = (ymd) => fmt.day(ymd).split(',')[0]
 const monthDayNoYear = (ymd) => fmt.monthDay(ymd).split(',')[0]
-const longMonthDay = (ymd) => fmt.dayLong(ymd).split(', ').slice(1).join(', ')
+const longMonthDay = (ymd) => fmt.dayLong(ymd).split(', ')[1]
 /** 'Thursday, Sep 10' (+ ', 2027' when not this year). */
 const dayLabel = (ymd) => `${longDay(ymd)}, ${fmt.monthDay(ymd)}`
 const hourLabel = (h) => { h = ((h % 24) + 24) % 24; return h === 0 ? '12 AM' : h === 12 ? '12 PM' : h < 12 ? `${h} AM` : `${h - 12} PM` }
@@ -296,7 +296,7 @@ const cal = {
   // focusBy: who last set the roving tab stop ('kbd' | 'mouse'), so Tab into the grid lands per §10.7.
   slotBlocksFail: false, picked: null, pickedShown: null, wasCalendar: false, focusBy: null, entering: false,
 }
-try { const v = localStorage.getItem('atrium.calendar.view'); if (v === 'day' || v === 'week') cal.view = v } catch (e) { /* no local state */ }
+try { const v = localStorage.getItem(A.preferenceKey('calendar.view')); if (v === 'day' || v === 'week') cal.view = v } catch (e) { /* no local state */ }
 
 /** The polite live region, never more than once per 2 s (the latest sentence wins). */
 function say(msg) {
@@ -325,7 +325,7 @@ function bannersHtml(s, m) {
   let out = ''
   const store = s.calendar && s.calendar.store
   if (m.loaded && store && store.durable === false) {
-    out += window.ATRIUM_DEMO === true
+    out += window.ATRIUM_DEMO === true && window.ATRIUM_DEMO_PERSISTENT !== true
       ? A.html.banner('info', 'Demo workspace — tour settings and sample bookings reset when the preview restarts.')
       : A.html.banner('warn', '', { raw: '<a class="banner-link" href="#/status">Heads up: calendar changes aren\'t being saved right now. Blocks you add may disappear. Ask Atrium support.</a>' })
   }
@@ -347,7 +347,7 @@ function toolbarHtml(m) {
   return `<div class="cal-toolbar"><div class="cal-nav">${navBtn('prev', `Previous ${unit}`, prevOff)}<button type="button" class="btn" data-action="today" data-key="today">Today</button>${navBtn('next', `Next ${unit}`, nextOff)}</div>` +
     `<h2 class="cal-range" aria-live="polite" data-key="range">${rt.when ? `<span class="cal-range-when">${esc(rt.when)} · </span>` : ''}${esc(rt.range)}</h2><span class="cal-spacer"></span>` +
     `<div class="cal-tools"><div class="seg cal-seg" role="radiogroup" aria-label="Layout"><button type="button" class="tab" role="radio" aria-checked="${m.view === 'week' ? 'true' : 'false'}" data-action="view-week" data-key="view-week">Week</button><button type="button" class="tab" role="radio" aria-checked="${m.view === 'day' ? 'true' : 'false'}" data-action="view-day" data-key="view-day">Day</button></div>` +
-    `<button type="button" class="btn" data-action="goto" data-key="goto">Go to date</button><button type="button" class="btn" data-action="settings" data-key="settings" data-write="calendar"${dis(busy)}>Tour settings</button>` +
+    `<button type="button" class="btn" data-action="goto" data-key="goto">Go to date</button><button type="button" class="btn" data-action="settings" data-key="settings" data-write="calendar" data-permission="configure"${dis(busy)}>Tour settings</button>` +
     `<button type="button" class="btn btn-primary" data-action="block" data-key="block" data-write="calendar"${dis(busy)}>Block time…</button>` +
     `<button type="button" class="btn-icon" data-action="more" data-key="more" aria-label="More calendar actions" aria-haspopup="dialog" data-write="calendar"${dis(busy)}>${A.icon('more')}</button></div></div>` +
     `<div class="cal-progress"${A.busyNow('calendar') ? '' : ' hidden'}></div>`
@@ -676,7 +676,7 @@ async function removeOld() {
 
 /** preset: { date, mode:'day'|'range', from, to, reason, only:Set } */
 function openSheet(preset) {
-  if (A.busyNow('calendar') || cal.inert) return
+  if (!A.can('operate') || A.busyNow('calendar') || cal.inert) return
   if (cal.sheet) return
   closePopover(false)
   const p = preset || {}
@@ -1001,8 +1001,8 @@ function refreshPopover() {
 
 // --- the ⋯ menu ---------------------------------------------------------------------------
 
-const menuButtons = () => `<button type="button" class="btn btn-quiet" data-menu="settings">${ico('calendar')}Tour settings</button><button type="button" class="btn btn-quiet" data-menu="goto">${ico('calendar')}Go to date…</button><button type="button" class="btn btn-quiet" data-menu="remove-all">${ico('slash')}Remove all blocks…</button>`
-function runMenu(a) { if (a === 'remove-all') removeAll(); else if (a === 'goto') goToDate(); else if (a === 'settings') openSettings() }
+const menuButtons = () => `<button type="button" class="btn btn-quiet" data-menu="settings" data-permission="configure">${ico('calendar')}Tour settings</button><button type="button" class="btn btn-quiet" data-menu="goto">${ico('calendar')}Go to date…</button><button type="button" class="btn btn-quiet" data-menu="remove-all" data-write="calendar">${ico('slash')}Remove all blocks…</button>`
+function runMenu(a) { if (a === 'remove-all' && A.can('operate')) removeAll(); else if (a === 'goto') goToDate(); else if (a === 'settings') openSettings() }
 function openMenu(anchorEl) {
   if (A.busyNow('calendar') || cal.inert) return
   if (cal.pop && cal.pop.kind === 'menu') { closePopover(true); return }
@@ -1066,7 +1066,7 @@ async function goToDate() {
 // --- tour settings ------------------------------------------------------------------------
 
 function openSettings() {
-  if (A.busyNow('calendar') || cal.inert) return
+  if (!A.can('configure') || A.busyNow('calendar') || cal.inert) return
   const current = A.state.calendar
   if (!current || !current.settings || !Number.isInteger(current.settingsRevision)) {
     A.toast('Tour settings are still loading. Try again in a moment.', { kind: 'info' }); return
@@ -1157,7 +1157,7 @@ function page(dir) {
 }
 function setView(v) {
   cal.view = v
-  try { localStorage.setItem('atrium.calendar.view', v) } catch (e) { /* no local state */ }
+  try { localStorage.setItem(A.preferenceKey('calendar.view'), v) } catch (e) { /* no local state */ }
   setParams({ view: v })
 }
 
@@ -1319,6 +1319,7 @@ function paintBusy() {
   root.classList.toggle('is-inert', cal.inert)
   const bar = q('.cal-progress'); if (bar) bar.hidden = !on
   for (const el of root.querySelectorAll('[data-write="calendar"]')) { if (on || cal.inert) el.setAttribute('aria-disabled', 'true'); else el.removeAttribute('aria-disabled') }
+  A.paintPermissions(root)
 }
 function paintNow() {
   const grid = q('.cal-grid'); if (!grid || !cal.model) return
@@ -1431,7 +1432,7 @@ const view = {
   },
   onPointerDown(e) {
     const cell = e.target.closest && e.target.closest('.cal-open')
-    if (!cell || e.button !== 0 || e.pointerType === 'touch' || cal.inert || A.busyNow('calendar')) return
+    if (!A.can('operate') || !cell || e.button !== 0 || e.pointerType === 'touch' || cal.inert || A.busyNow('calendar')) return
     const rect = cell.getBoundingClientRect()
     cal.drag = { id: e.pointerId, date: cell.dataset.date, row: Number(cell.dataset.row), x: e.clientX, y: e.clientY, left: rect.left, right: rect.right, moved: false, cell }
     try { cell.setPointerCapture(e.pointerId) } catch (err) { /* ignore */ }
@@ -1491,7 +1492,7 @@ const view = {
     const bodyChanged = setPart('body', body)
     setPart('foot', loading ? '' : footHtml(m))
     // the floating Block time… button owns the bottom edge on mobile; toasts stack above it (calendar.css)
-    document.body.classList.toggle('has-cal-fab', Boolean(m.mobile && !loading && !cal.root.hidden))
+    document.body.classList.toggle('has-cal-fab', Boolean(A.can('operate') && m.mobile && !loading && !cal.root.hidden))
     if (bodyChanged) {
       const grid = q('.cal-grid')
       if (grid) {

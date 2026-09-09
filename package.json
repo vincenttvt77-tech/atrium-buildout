@@ -7,7 +7,7 @@
     "node": "22.x"
   },
   "scripts": {
-    "test": "node --test \"src/**/*.test.ts\" \"api/**/*.test.ts\"",
+    "test": "node --test \"src/**/*.test.ts\" \"api/**/*.test.ts\" \"test/portal/*.test.mjs\"",
     "test:watch": "node --test --watch \"src/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "bundle": "node scripts/build-api.mjs",

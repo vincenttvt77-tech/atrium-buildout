@@ -1,6 +1,16 @@
 import { readAccountsConfig } from '../ops/accounts.ts'
 import { LEGACY_TENANT } from './context.ts'
 
+/** Extract routing only after the transport has verified the webhook credential. */
+export function webhookAssistantId(body: unknown): string | null {
+  const payload = body && typeof body === 'object' ? body as Record<string, any> : {}
+  const nested = payload.message?.call?.assistantId
+  const outer = payload.call?.assistantId
+  if (nested !== undefined && outer !== undefined && nested !== outer) return null
+  const id = nested ?? outer
+  return typeof id === 'string' && id.length > 0 && id.length <= 256 && !/[\u0000-\u0020\u007f]/.test(id) ? id : null
+}
+
 /** Routing identity comes from the verified Vapi call, never a browser tenant parameter. */
 export function webhookTenant(body: unknown, env: NodeJS.ProcessEnv = process.env): string | null {
   const config = readAccountsConfig(env)

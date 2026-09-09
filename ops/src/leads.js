@@ -385,7 +385,7 @@ function leadPanelHtml(p, s) {
     }).join('')}</ul>`
   } else out += `<p class="muted" style="margin-bottom:12px">No notes yet.</p>`
   if (hidden) out += `<p class="muted small">These callers' numbers were hidden, so there's nowhere to save a note.</p>`
-  else {
+  else if (A.can('operate')) {
     out += `<div class="note-form"><input class="input" type="text" maxlength="500" autocomplete="off" placeholder="${esc(notePlaceholder())}" aria-label="Add a note about ${esc(name)}" data-key="note:${esc(p.phone)}" data-phone="${esc(p.phone)}">` +
       `<button type="button" class="btn" data-action="savenote" data-phone="${esc(p.phone)}" data-key="notebtn:${esc(p.phone)}" data-write="leads" aria-disabled="true">Save note</button></div>` +
       `<p class="field-hint">Start with your initials so the team knows who wrote it.</p>`
@@ -521,7 +521,7 @@ const view = {
   },
   setTab(tab) {
     if (!TABS.some(([k]) => k === tab)) return
-    try { localStorage.setItem('atrium.leads.tab', tab) } catch (e) { /* a convenience only */ }
+    try { localStorage.setItem(A.preferenceKey('leads.tab'), tab) } catch (e) { /* a convenience only */ }
     this.setParams({ tab }, true)
   },
   current() { return this.openPhone ? profilesOf(A.state).find((p) => p.phone === this.openPhone) || null : null },
@@ -540,7 +540,7 @@ const view = {
     const btn = this.noteBtn(phone)
     if (!btn) return
     const on = Boolean(String(this.drafts[phone] || '').trim())
-    if (on && !A.busyNow('leads')) btn.removeAttribute('aria-disabled'); else btn.setAttribute('aria-disabled', 'true')
+    if (A.can('operate') && on && !A.busyNow('leads')) btn.removeAttribute('aria-disabled'); else btn.setAttribute('aria-disabled', 'true')
     if (this.saving === phone) { btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true') }
   },
   paintBusy() {
@@ -550,6 +550,7 @@ const view = {
       else if (el.dataset.action === 'savenote') this.paintNote(el.dataset.phone)
       else el.removeAttribute('aria-disabled')
     }
+    A.paintPermissions(this.root)
   },
   fuAction(btn) {
     const a = btn.dataset.action
@@ -614,7 +615,7 @@ const view = {
     const p = this.params()
     let tab = TABS.some(([k]) => k === p.tab) ? p.tab : null
     if (!tab && (p.stage || p.q)) tab = 'all'
-    if (!tab) { try { const v = localStorage.getItem('atrium.leads.tab'); if (TABS.some(([k]) => k === v)) tab = v } catch (e) { /* default */ } }
+    if (!tab) { try { const v = localStorage.getItem(A.preferenceKey('leads.tab')); if (TABS.some(([k]) => k === v)) tab = v } catch (e) { /* default */ } }
     this.tab = tab || 'todo'
     this.q = String(p.q || '').trim()
     this.stage = STAGES.some(([k]) => k === p.stage) ? p.stage : 'all'

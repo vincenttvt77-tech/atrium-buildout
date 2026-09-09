@@ -6,12 +6,16 @@ import { addCalendarDays, calendarRange, parseCalendarDate } from '../src/calend
 import { withTenant } from '../src/tenancy/context.ts'
 import { isHostedRuntime } from '../src/store/config.ts'
 import { propertyTimeZone } from '../src/config/property.ts'
+import { isPostgresRuntime, resolveOpsRuntime, runWithPropertyRuntime, readRuntimeError } from '../src/application/runtime.ts'
+import type { ResolvedPropertyRuntime } from '../src/application/runtime.ts'
+import type { SlotOptions } from '../src/calendar/slots.ts'
+import { randomUUID } from 'node:crypto'
 
 const store = calendarStoreFromEnv()
 export const TOUR_CAPACITY = defaultSettings().capacity
 
-function calendarView(now: Date, state: Awaited<ReturnType<typeof store.read>>, range: ReturnType<typeof calendarRange>, timeZone: string) {
-  const opts = effectiveOptions(state, { timeZone })
+function calendarView(now: Date, state: Awaited<ReturnType<typeof store.read>>, range: ReturnType<typeof calendarRange>, timeZone: string, defaults: SlotOptions = {}) {
+  const opts = effectiveOptions(state, { ...defaults, timeZone })
   const settings = validateSettings(opts)
   const generated = generateSlots(now, { ...opts, from: range.start, to: range.end, enforceBookingRules: false })
   const allowed = new Set(generateSlots(now, { ...opts, from: range.start, to: range.end }).map(s => s.slotId))
@@ -55,21 +59,38 @@ function calendarView(now: Date, state: Awaited<ReturnType<typeof store.read>>, 
 /** Injection is server-owned configuration for tests and the future property resolver. */
 export function createCalendarHandler(options: { property?: Record<string, unknown>; now?: () => Date } = {}) {
 return async function handler(req: any, res: any) {
+  req.atriumRequestId = randomUUID()
+  res.setHeader('x-request-id', req.atriumRequestId)
   res.setHeader('cache-control', 'no-store, no-cache, must-revalidate, private')
   res.setHeader('x-robots-tag', 'noindex, nofollow, noarchive, nosnippet')
-  const auth = authorizeOps(req.headers ?? {}, new Date())
-  if (!auth.ok) {
-    res.status(auth.reason === 'not_configured' ? 503 : 401).json({ error: auth.reason === 'not_configured' ? 'The calendar requires a configured portal account.' : 'unauthorized' })
-    return
-  }
-  return withTenant(auth.tenantId, async () => {
-    const now = options.now?.() ?? new Date()
+  const now = options.now?.() ?? new Date()
+  let runtime: ResolvedPropertyRuntime | undefined
+  let tenantId: string | undefined
+  try {
+    if (isPostgresRuntime()) {
+      let action: unknown
+      try { if (req.method === 'POST') action = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body)?.action }
+      catch { res.status(400).json({error:'Invalid JSON request.'}); return }
+      runtime = await resolveOpsRuntime(req, req.method === 'GET' ? 'read' : action === 'settings' ? 'configure' : 'operate', now)
+      const json = res.json.bind(res)
+      res.json = (body: Record<string, unknown>) => json({...body,scope:runtime!.responseScope})
+    } else {
+      const auth = authorizeOps(req.headers ?? {}, new Date())
+      if (!auth.ok) {
+        res.status(auth.reason === 'not_configured' ? 503 : 401).json({ error: auth.reason === 'not_configured' ? 'The calendar requires a configured portal account.' : 'unauthorized' })
+        return
+      }
+      tenantId = auth.tenantId
+    }
+  } catch (error) { const failure = readRuntimeError(error); res.status(failure.status).json(failure.body); return }
+  const run = async () => {
     let timeZone: string
-    try { timeZone = propertyTimeZone(options.property) }
+    try { timeZone = runtime?.snapshot.timeZone ?? propertyTimeZone(options.property) }
     catch { res.status(503).json({ error: 'The property timezone is invalid. Ask an administrator to correct its IANA timezone.', code: 'property_timezone_invalid' }); return }
     let body: any, range: ReturnType<typeof calendarRange>
     try {
-      body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body ?? {})
+      body = req.method === 'GET' ? {} : typeof req.body === 'string' ? JSON.parse(req.body) : (req.body ?? {})
+      if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('A JSON object is required.')
       range = calendarRange(req.query?.from ?? body.from, req.query?.to ?? body.to, now, timeZone)
     } catch (error) { res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid request' }); return }
     if (req.method === 'POST' && body.expectedTimeZone === undefined) {
@@ -79,7 +100,7 @@ return async function handler(req: any, res: any) {
       res.status(409).json({ error: 'The property timezone changed. Reload the portal before changing tours.' }); return
     }
     try {
-      if (req.method === 'GET') { res.status(200).json(calendarView(now, await store.read(), range, timeZone)); return }
+      if (req.method === 'GET') { res.status(200).json(calendarView(now, await store.read(), range, timeZone, runtime?.tourSettings)); return }
       if (req.method !== 'POST') { res.status(405).json({ error: 'GET or POST only' }); return }
       let state
       switch (String(body.action ?? '')) {
@@ -150,7 +171,7 @@ return async function handler(req: any, res: any) {
               }
               return s
             }
-            return { ...s, blocks: [...s.blocks, { target, reason, blockedAt: now.toISOString(), ...(startsAt ? { startsAt: startsAt.toISOString(), endsAt: (restoredEnd ?? wholeDayEnd ?? new Date(startsAt.getTime() + (effectiveOptions(s, { timeZone }).slotMinutes ?? 30) * 60000)).toISOString() } : {}) }] }
+            return { ...s, blocks: [...s.blocks, { target, reason, blockedAt: now.toISOString(), ...(startsAt ? { startsAt: startsAt.toISOString(), endsAt: (restoredEnd ?? wholeDayEnd ?? new Date(startsAt.getTime() + (effectiveOptions(s, { ...runtime?.tourSettings, timeZone }).slotMinutes ?? 30) * 60000)).toISOString() } : {}) }] }
           })
           break
         }
@@ -161,18 +182,20 @@ return async function handler(req: any, res: any) {
           state = await store.mutate(s => ({ ...s, blocks: [] }))
           break
         case 'clear_bookings':
-          if (isHostedRuntime()) { res.status(403).json({ error: 'Bulk tour reset is only available in local testing' }); return }
+          if (runtime || isHostedRuntime()) { res.status(403).json({ error: 'Bulk tour reset is only available in local testing' }); return }
           state = await store.mutate(s => ({ ...s, bookings: [] }))
           break
         default: res.status(400).json({ error: 'Unknown calendar action' }); return
       }
-      res.status(200).json(calendarView(now, state, range, timeZone))
+      res.status(200).json(calendarView(now, state, range, timeZone, runtime?.tourSettings))
     } catch (error) {
       if (error instanceof Error && error.message === 'BLOCK_CONFLICT') { res.status(409).json({ error: 'The saved block changed or cannot be extended safely. Reload the calendar before changing it.' }); return }
       if (error instanceof Error && error.message === 'SETTINGS_CONFLICT') { res.status(409).json({ error: 'Showing settings changed in another session. Reload and try again.' }); return }
+      if (runtime) { const failure = readRuntimeError(error); res.status(failure.status).json(failure.body); return }
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) })
     }
-  })
+  }
+  return runtime ? runWithPropertyRuntime(runtime,run) : withTenant(tenantId!,run)
 }
 }
 

@@ -157,3 +157,21 @@ test('password rotation and removal invalidate existing credential versions whil
   assert.deepEqual(await db.auth.transaction({ loginUsername: 'owner-a' }, async client =>
     (await client.query('SELECT user_id FROM atrium.user_credentials')).rows), [])
 })
+
+test('provider routing cannot be reassigned or deleted, and staff binding lists stay in the selected property', async () => {
+  await db.admin.query("INSERT INTO atrium.channel_bindings(id,provider,external_id,organization_id,property_id,status,capabilities) VALUES('routing-a','vapi','synthetic-routing-a','organization-a','property-a2','active',ARRAY['read','operate']),('routing-b','vapi','synthetic-routing-b','organization-b','property-b1','active',ARRAY['read','operate'])")
+  for (const statement of [
+    "UPDATE atrium.channel_bindings SET property_id='property-a1' WHERE id='routing-a'",
+    "UPDATE atrium.channel_bindings SET organization_id='organization-b',property_id='property-b1' WHERE id='routing-a'",
+    "UPDATE atrium.channel_bindings SET external_id='replacement-assistant' WHERE id='routing-a'",
+    "UPDATE atrium.channel_bindings SET provider='another-provider' WHERE id='routing-a'",
+    "UPDATE atrium.channel_bindings SET id='another-binding' WHERE id='routing-a'",
+    "DELETE FROM atrium.channel_bindings WHERE id='routing-a'",
+  ]) await assert.rejects(db.admin.query(statement), {code:'23514'})
+  const context={actorUserId:'viewer-a',credentialVersion:1,organizationId:'organization-a',propertyId:'property-a2'}
+  const bindings=await db.app.transaction(context, async client=>(await client.query('SELECT id FROM atrium.channel_bindings')).rows)
+  assert.deepEqual(bindings,[{id:'routing-a'}])
+  assert.deepEqual(await db.app.transaction({...context,propertyId:'property-b1'},async client=>(await client.query('SELECT id FROM atrium.channel_bindings')).rows),[])
+  await db.admin.query("UPDATE atrium.channel_bindings SET status='inactive',permission_version=permission_version+1 WHERE id='routing-a'")
+  assert.deepEqual(await db.app.transaction(context,async client=>(await client.query('SELECT id FROM atrium.channel_bindings')).rows),[])
+})

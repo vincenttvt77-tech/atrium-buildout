@@ -23,6 +23,18 @@ h2 { letter-spacing: -.025em; }
 .workspace-label { display: block; font-size: .75rem; color: var(--ink-3); letter-spacing: .1em; margin-bottom: 5px; }
 .workspace-location { color: var(--ink-3); font-weight: 400; padding-left: 8px; }
 .workspace-account { display: flex; align-items: center; gap: 10px; color: var(--ink-2); text-decoration: none; white-space: nowrap; }
+.workspace-controls { display: flex; align-items: center; gap: 20px; }
+.workspace-identity { min-width: 0; }
+.workspace-permission { display: inline-block; margin-left: 10px; padding: 3px 8px; border-radius: 20px; font-size: .75rem; background: #edf2f9; color: #526580; }
+.workspace-permission[hidden], .property-switch[hidden] { display: none; }
+.property-switch { white-space: nowrap; font-size: .8125rem; }
+.property-list { display: grid; gap: 10px; }
+.property-choice { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); text-decoration: none; }
+.property-choice:hover, .property-choice:focus-visible, .property-choice.is-current { background: #f0f5ff; border-color: #91b8ff; }
+.property-choice strong, .property-choice small { display: block; }
+.property-choice small { margin-top: 5px; color: var(--ink-3); }
+.property-choice > span:last-child { color: #245cd4; font-size: .8125rem; white-space: nowrap; }
+.portal-read-only [data-write], .portal-read-only .note-form, .portal-read-only [data-permission], .portal-no-configure [data-permission="configure"] { display: none !important; }
 .account-avatar { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid #D2DFF6; border-radius: 50%; color: #245CD4; background: #E8EFFC; font-size: .875rem; }
 .view, .global-banners:not(:empty) { max-width: 1440px; }
 .view-head { margin-bottom: 28px; }
@@ -72,7 +84,11 @@ h2 { letter-spacing: -.025em; }
   .nav-item[aria-current="page"]::before { display: none; }
   .workspace-bar { min-height: 56px; margin-bottom: 22px; padding-bottom: 16px; font-size: .8125rem; }
   .workspace-label, .workspace-location, .workspace-account { display: none; }
-  .workspace-bar::after { content: 'Leasing workspace'; color: var(--ink-3); font-size: .8125rem; }
+  .workspace-controls { gap: 8px; }
+  .workspace-bar { gap: 10px; }
+  .property-switch { padding: 8px 10px; }
+  .property-choice { align-items: flex-start; gap: 10px; }
+  .property-choice > span:last-child { white-space: normal; }
   h1 { font-size: 1.75rem; }
   .tiles { gap: 10px; }
   .big-number { min-height: 140px; padding: 17px 14px; }

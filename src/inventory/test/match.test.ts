@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { findMatches } from '../match.ts'
+import { findMatches, inventoryIsFresh } from '../match.ts'
 import { loadInventory } from '../load.ts'
 import type { Unit, FloorPlan, InventorySnapshot } from '../types.ts'
 import { emptyQualification, captureCore } from '../../leasing/qualification.ts'
@@ -31,6 +31,15 @@ const withBeds = (min: number, max: number) => (q: ReturnType<typeof emptyQualif
   captureCore(q, 'bedrooms', extracted({ min, max }, 0.95, CALL, 'one bedroom', NOW))
 
 describe('the agent only offers what it can verify', () => {
+  test('freshness expires at the same boundary and invalid or future stamps fail closed', () => {
+    const s = snap([unit({ unitId: '10A', floorPlanId: 'A1', monthlyRent: 3000 })], [plan('A1', 1, 700)])
+    assert.equal(inventoryIsFresh({ ...s, readAt: new Date(NOW.getTime() - 15 * 60000) }, NOW), true)
+    for (const readAt of [new Date(NOW.getTime() - 15 * 60000 - 1), new Date(NOW.getTime() + 1), new Date('invalid')]) {
+      assert.equal(inventoryIsFresh({ ...s, readAt }, NOW), false)
+      assert.equal(findMatches({ ...s, readAt }, emptyQualification(), { now: NOW }).kind, 'stale')
+    }
+  })
+
   test('a stale snapshot blocks quoting entirely', () => {
     const s = snap([unit({ unitId: '10A', floorPlanId: 'A1', monthlyRent: 3000 })], [plan('A1', 1, 700)],
       new Date('2026-09-07T11:00:00Z'))

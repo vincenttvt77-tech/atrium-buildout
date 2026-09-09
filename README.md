@@ -4,18 +4,24 @@ AI leasing and resident operations for multifamily buildings.
 
 ## Where this is
 
-A working voice leasing agent with the safety machinery built first, plus a demo property
-(**The Larkin**, a fictional 318-residence tower in Long Island City) to exercise it against.
+A voice leasing workflow and staff portal, with an opt-in PostgreSQL runtime for
+persisted users, organizations, property memberships, scoped operations and atomic
+mutation audits. **The Larkin** is a fictional 318-residence building used for local
+sample data. This is an implemented leasing and storage slice, not completion of the
+resident, maintenance, vendor, messaging or wider building-operations product.
 
-**Automated unit and handler regression tests, no runtime dependencies.** Node 22 runs the TypeScript directly. Use the latest Node 22 release; run `npm ci` before the checks.
+Node 22 runs the TypeScript directly; `pg` is the PostgreSQL runtime dependency.
+Run `npm ci` before the checks.
 
 ```
 npm run check         # types, data validation, unit + handler integration tests
-npm run build         # bundle the API function for deploy
+npm run test:database # isolated real PostgreSQL migration, authorization and HTTP tests
+npm run build         # build website/dashboard, bundle every API, smoke-test shipped modules
 node scripts/validate-data.mjs   # check property data against the runtime contracts
 ```
 
-See `SETUP.md` for getting the phone line live.
+See [db/README.md](db/README.md) for the PostgreSQL runtime contract and current
+deployment limits; [SETUP.md](SETUP.md) covers the existing phone integration.
 
 ## The one idea worth understanding
 
@@ -94,8 +100,13 @@ src/record/         the shared operational record
 src/email/          template rendering with escaping
 src/vapi/           system prompt and assistant config
 src/ops/            the session gate in front of the dashboard and its log
+src/auth/           persisted user sessions, membership/grant and channel authorization
+src/properties/     validated immutable published property bundles and request context
+src/database/       restricted PostgreSQL connections and scoped repositories
+src/application/    runtime selection and request-to-property resolution
 api/vapi.ts         the webhook Vapi calls; GET serves the dashboard log, gated
-api/dashboard.ts    serves the operations dashboard, behind the same gate
+api/dashboard.ts    sign-in, property selection and the protected operations dashboard
+api/properties.ts   authenticated catalogue of properties the user may open
 data/               the demo property, inventory, knowledge and policies
 ops/dashboard.html  the dashboard page, compiled into api/dashboard.ts
 public/             the building website — and only what is safe to serve openly
@@ -104,42 +115,56 @@ scripts/            build, deploy manifest, assistant config, data validation
 
 ## Who can read the call log
 
-The event log behind the dashboard is the most sensitive thing this service holds: prospect
-names, email addresses, budget ceilings, and verbatim excerpts of what a caller said. It
-shipped as a page in `public/` polling an open endpoint, which meant anyone who guessed the
-URL read the whole leasing pipeline — a NY SHIELD Act reasonable-safeguards failure, and the
-opposite of what the site's privacy notice promises.
+The portal contains caller names, contact details and conversation excerpts. It is
+served by `api/dashboard.ts` after sign-in and is never copied into `public/`.
 
-Both halves are now gated by `OPS_DASHBOARD_PASSCODE` (`src/ops/session.ts`):
+With `ATRIUM_RUNTIME_MODE=postgres`, sign-in resolves a persisted user. The session
+contains user identity and credential version, not an active property or cached role.
+Each page selects its organization/property explicitly; every operational request
+rechecks membership, grants and published configuration. Separate tabs can operate
+on separate properties with one user session. Viewers can read; staff can operate;
+tour-settings changes require `configure`. The UI follows these permissions and the
+server independently enforces them.
 
-- the page is not a static file any more, it is served by `api/dashboard.ts` after sign-in
-- `GET /api/vapi` returns 401 without a session, and no partial answer — there is
-  deliberately no redacted public shape for someone to add a field to later
-- with no passcode configured, both refuse everyone rather than falling open
-- `public/robots.txt` disallows the routes as well, which is a note to crawlers, not a control
+Without the PostgreSQL opt-in, the legacy named-account or shared-passcode adapter
+remains available. Those modes and their restrictions are documented in
+[TENANCY.md](TENANCY.md). Missing/invalid authentication refuses access. Robots rules
+and no-cache headers supplement authentication; they do not grant or deny access.
 
 ### Environment variables the deployment reads
 
 | Variable | What it is | If it is wrong |
 |---|---|---|
-| `OPS_DASHBOARD_PASSCODE` | The dashboard passcode | Nobody can sign in |
+| `ATRIUM_RUNTIME_MODE=postgres` | Selects the PostgreSQL adapter explicitly | Unknown or present blank modes fail closed; database URLs without this mode also fail |
+| `ATRIUM_DATABASE_URL`, `ATRIUM_AUTH_DATABASE_URL` | Deployment-level URLs using the exact `atrium_app` and `atrium_authenticator` roles | Requests fail; no fallback to another property's bundle or memory |
+| `OPS_SESSION_SECRET` | Independent signing secret, at least 32 characters; required for PostgreSQL and legacy named accounts | Sessions cannot be issued or verified |
+| `ATRIUM_DATABASE_CA` (optional) | PEM CA for a database requiring a custom trusted certificate chain | Untrusted nonlocal TLS connections are refused |
+| `OPS_ACCOUNTS_JSON`, `OPS_DASHBOARD_PASSCODE` | Legacy named accounts or shared passcode; ignored as identity sources in PostgreSQL mode | Invalid legacy configuration refuses sign-in |
 | `VAPI_API_KEY` (or `VAPI_PRIVATE_KEY`) | Vapi **private** key, from Vapi → Organization → API Keys. The public key is refused with 401 | Status shows "call recordings and transcripts: connected, but not answering"; Calls stays empty. `VAPI_PRIVATE_KEY` wins when both exist |
-| `KV_REST_API_URL`, `KV_REST_API_TOKEN` | The Redis/KV database Vercel injects | Status shows "Test mode"; callers and blocks vanish on the next cold start |
-| `VAPI_ASSISTANT_ID` (optional) | Which assistant "Update the phone assistant" writes to. Without it, the one named "<building> — Leasing", or the only one in the account | The Status page says which assistants it found and asks for this |
+| `KV_REST_API_URL`, `KV_REST_API_TOKEN` | Legacy Redis/KV storage; both are required in hosted legacy mode | Missing/partial configuration or a failed connection refuses storage operations; hosted mode never uses memory |
+| `VAPI_ASSISTANT_ID` (optional, legacy only) | Pins the existing bundled-property publisher; PostgreSQL uses authorized `channel_bindings` instead | Legacy publishing refuses an ambiguous assistant selection; PostgreSQL property publishing is not enabled |
 
-Vercel applies a changed variable only to **new** deployments: after editing one, redeploy
-(Deployments → ⋯ → Redeploy) or push a commit. The running functions keep the old value
-until then, which looks exactly like the change having had no effect.
+Configure database URLs and the session secret once for each deployment environment.
+Create additional staff users and client/property access in PostgreSQL, not new
+environment files. URLs contain no query parameters or fragments; runtime roles must
+not be administrators or inherit each other. See [.env.example](.env.example).
+
+PostgreSQL properties require a complete published bundle, including
+`property.tourSettings`; they never inherit bundled Larkin defaults. Stored calendar
+settings can override the published initial tour rules. Publishing new property
+facts advances the configuration version and requires open pages to reload.
 
 ## Working in this repo
 
-Node runs the TypeScript in **strip-only mode** — no runtime dependencies, but also no
+Node runs the TypeScript in **strip-only mode**, without
 TypeScript syntax needing real transformation: no `enum`, no constructor parameter
 properties, no `namespace`, no decorators. Types, interfaces and `satisfies` are fine.
 
-The only dependencies are dev-only: `typescript`, `@types/node`, `esbuild` and
-`@anthropic-ai/sdk` (the simulator below), so that `npm run typecheck` runs here and
-Vercel's build log stays clean. Nothing under `api/` imports the SDK. Run `npm install` once.
+`pg` is a runtime dependency. TypeScript, esbuild, the simulator SDK, and the isolated
+PostgreSQL test tooling are development dependencies. API bundles include their
+JavaScript dependencies and an ESM `createRequire` bridge for CommonJS dependencies.
+Every build imports the actual bundled handlers in a clean child process, outside
+`node_modules`, and checks safe refusal with unconfigured storage.
 
 ### Simulated calls
 
@@ -176,16 +201,18 @@ arguments and real handler behavior; they do not measure speech quality, transcr
 interruptions or voice latency. Vapi-native simulations require every live tool to be
 mocked and event delivery reviewed before running against a saved assistant.
 
-Secrets are read in exactly one place, `src/config/env.ts`. It holds the credential
-inventory, throws by name when one is missing, and exposes `redact()` so a key cannot be
-logged by accident. Never in the repo, never in chat, never in a screenshot.
+Keep secrets out of source, browser bootstrap, logs and reports. The credential
+inventory is in `src/config/env.ts`; runtime configuration is also validated at the
+database, account and webhook boundaries. Provision database-owner credentials only
+to the separate administrative workflow, never to an API connection.
 
 ## What is not real yet
 
 - **SMS** — needs 10DLC, which needs the EIN.
 - **Apple Messages for Business** — needs the entity and Apple's review.
-- **The tour calendar** uses Redis/KV when configured, with atomic booking updates. Without KV it is an in-memory demo. It is not connected to Google Calendar or a PMS.
-- **Decision events** in the dashboard are process-local and reset on cold start. Call history comes from Vapi; lead profiles, follow-ups and active call state persist in KV when configured.
+- **The tour calendar** persists through the selected PostgreSQL or legacy KV adapter. Only nonhosted legacy development may use memory. It is not connected to Google Calendar or a PMS.
+- **Decision events** remain process-local and reset on cold start. Call history comes from Vapi; profiles, follow-ups and active call state use the selected durable adapter. Transactional mutation audits are separate from conversation decision events.
+- **Customer onboarding and operations** still need provisioning/publication UI, normalized operational models, durable workers/outbox, backup/recovery operations, maintenance/vendor/resident workflows, and full product acceptance. No hosted database or production restore is established by the local tests.
 - **The building is fictional.** Every residence, rent and policy is invented.
 
 ## Traceability
@@ -201,9 +228,26 @@ inventory §15.2 and §18.2.
 ## Quality and CRM refresh
 
 The operations workspace uses a white and navy theme, with shared styling for the Today,
-Calls, Leads, Calendar and Status views. Preview it with `npm run dev:ops`; the local
-account is created once; initial credentials appear in the local terminal. Fixture records reset when the process restarts.
-The account belongs to an isolated demo tenant; see [TENANCY.md](TENANCY.md).
+Calls, Leads, Calendar and Status views. The PostgreSQL page uses authoritative
+property branding, timezone and contact details, an authorized property switcher,
+and read-only controls for viewers. Switching properties loads a new page; no shared
+active-property cookie can silently retarget another tab.
+
+Run `npm run dev:ops` for the local preview at `http://localhost:4300/`;
+`npm run dev:ops -- --port 4301` chooses another HTTP port. The preview owns a private
+loopback PostgreSQL database in ignored `.atrium-local/`. It imports the existing
+`larkin` account hash from `.env.demo-account.json` once, preserving that password.
+If no local account exists, startup creates one and shows its generated password
+once in the terminal. Later starts authenticate against persisted database users;
+they do not overwrite password changes, memberships or staff edits.
+
+Sample calls are imported once, with checkpointed progress and retained dates.
+`--no-seed` skips call import without clearing saved data. Only one preview process
+may open the same local database, even on different HTTP ports. Stop it normally
+before reopening. Invalid files or uncertain interrupted imports refuse rather
+than reset data. The preview ignores external database/KV/Vapi credentials and
+does not connect to a PMS; bundled fictional inventory retains its source timestamp.
+See [local database notes](db/README.md#local-preview-and-verification).
 
 The Calendar view can browse any supported date with previous/next controls or **Go to
 date**; it loads the displayed day or week instead of stopping after two weeks. **Tour
@@ -211,23 +255,28 @@ settings** controls staff capacity, duration, start-time spacing, preparation/re
 buffers, minimum notice, advance booking limits, same-apartment sharing and weekly hours.
 Leaving the booking limit empty allows bookings without an advance limit. Settings apply
 to new availability; existing tour times and their reserved staff time remain unchanged.
-Settings and bookings belong to the signed-in tenant, and Vapi uses that same tenant's
-rules when offering or booking a tour.
+Settings and bookings belong to the selected authorized property. The verified Vapi
+channel binding selects that same property's data and showing rules.
 
-Scheduling currently uses **America/New_York** for every workspace. Property-specific time
-zones and a Chicago/Miami onboarding flow are not implemented. This is Atrium's own
-calendar, with no PMS or external-calendar synchronization. The local preview resets
-tour settings and sample bookings when it restarts; a configured Redis/KV backend persists
-them. See [tour settings and calendar API](TENANCY.md#tour-settings-and-calendar-api) for
-the request contract and limits.
+Scheduling and spoken/follow-up times use the property's IANA timezone, including
+daylight-saving transitions. Existing callers without an explicit legacy timezone
+default to New York. This is Atrium's own calendar, without PMS or external-calendar
+synchronization. See [the PostgreSQL request contract](db/README.md#http-and-portal-contract)
+and [legacy calendar API](TENANCY.md#tour-settings-and-calendar-api).
 
-`npm run build` regenerates the website and embedded dashboard before bundling the APIs.
-GitHub Actions runs checks and a production build on pushes and pull requests.
+`npm run build` regenerates the website and embedded dashboard, removes retired API
+bundles, and verifies all current handlers, including `/api/properties`. Git-based
+deployments discover `api/*.ts`; `scripts/deploy-manifest.mjs` packages every bundled
+`api/*.mjs` for the separate manifest path. No rewrite redirects API paths to public
+HTML. API no-cache/no-index headers cover both paths. This follows Vercel's
+[Node.js function file routing](https://vercel.com/docs/functions/runtimes/node-js).
+GitHub Actions runs checks, real database tests and the build on pushes and pull requests.
 
 The Vapi configuration includes `capture_contact`, so callers' names and emails can be
-saved without booking a tour. Regenerate the import files with
-`node scripts/vapi-assistant.mjs https://ghost-building.vercel.app` after prompt or tool
-changes. The saved assistant resolves the current New York date per call; the simulator
-uses its injected clock. Sync preserves existing webhook credentials.
+saved without booking a tour. `scripts/vapi-assistant.mjs` generates artifacts for the
+bundled fictional Larkin assistant and its configured server origin. It is not a
+general PostgreSQL property publisher. Property assistant publication remains disabled
+until the versioned configuration/webhook rollout is implemented. Tool scheduling
+uses the verified property's timezone; the simulator uses its injected clock.
 
 See [QUALITY_REVIEW.md](QUALITY_REVIEW.md) for the fixes, validation and remaining live-service checks.

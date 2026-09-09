@@ -16,13 +16,20 @@ export function scopeContext(scope: AuthorizedScope): DatabaseContext {
 
 /** A scope is short-lived evidence, not a bypass for membership changes since issuance. */
 export async function propertyTransaction<T>(connection: DatabaseConnection, scope: AuthorizedScope,
-  permission: Permission, work: (client: PoolClient) => Promise<T>): Promise<T> {
+  permission: Permission, work: (client: PoolClient) => Promise<T>, expectedConfigurationVersion?: number): Promise<T> {
   assertAuthorizedScope(scope, permission)
   return connection.transaction(scopeContext(scope), async client => {
     const recheck = async () => {
       const allowed = await client.query<{ allowed: boolean }>('SELECT atrium.can_access_property($1, $2, $3) AS allowed',
         [scope.organizationId, scope.propertyId, permission])
       if (allowed.rows[0]?.allowed !== true) throw new AuthorizationError('forbidden')
+      if (expectedConfigurationVersion !== undefined) {
+        const configuration = await client.query('SELECT published_configuration_version FROM atrium.properties WHERE organization_id=$1 AND id=$2',
+          [scope.organizationId,scope.propertyId])
+        if (Number(configuration.rows[0]?.published_configuration_version) !== expectedConfigurationVersion) {
+          throw Object.assign(new Error('Property configuration changed during this request.'), {code:'property_configuration_changed'})
+        }
+      }
     }
     await recheck()
     const result = await work(client)

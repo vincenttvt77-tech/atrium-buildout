@@ -1,6 +1,8 @@
 import pg from 'pg'
 import type { PoolConfig, PoolClient } from 'pg'
 import { isHostedRuntime } from '../store/config.ts'
+import { DatabaseConfigurationError } from './errors.ts'
+export { DatabaseConfigurationError } from './errors.ts'
 
 export type DatabaseRole = 'atrium_app' | 'atrium_authenticator'
 export interface DatabaseContext {
@@ -13,9 +15,6 @@ export interface DatabaseContext {
   channelExternalId?: string
   channelBindingId?: string
   channelBindingVersion?: number
-}
-export class DatabaseConfigurationError extends Error {
-  constructor() { super('The database connection is not configured correctly.'); this.name = 'DatabaseConfigurationError' }
 }
 
 /** One deployment connection per role, never one environment file per staff login. */

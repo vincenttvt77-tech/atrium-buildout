@@ -5,6 +5,138 @@ not a migration that has been applied to a shared database. The migration runner
 the transaction, advisory lock and checksum history. Generate a migration filename
 with `supabase migration new`, then copy the reviewed source into that file. Never
 edit an already applied migration; use a new migration for subsequent changes.
+Apply all reviewed files in `supabase/migrations/` in order; `schema.sql` alone does
+not include later migrations such as immutable channel routing.
+
+## Opt-in runtime
+
+`src/application/runtime.ts` connects the persisted authorization/property repositories
+to the dashboard, property catalogue, lead/calendar APIs and verified Vapi webhook.
+This is a usable vertical slice behind an explicit runtime switch. It is not a
+completed SaaS provisioning system or evidence of a hosted production cutover.
+
+Set these values **once per deployment environment**, using its secret store:
+
+| Variable | Required value |
+| --- | --- |
+| `ATRIUM_RUNTIME_MODE` | Exactly `postgres`. Leave the variable absent for the legacy adapter. |
+| `ATRIUM_DATABASE_URL` | PostgreSQL URL whose login is the restricted `atrium_app` role. |
+| `ATRIUM_AUTH_DATABASE_URL` | Separate PostgreSQL URL whose login is `atrium_authenticator`. |
+| `OPS_SESSION_SECRET` | Independent random signing secret of at least 32 characters. |
+| `ATRIUM_DATABASE_CA` | Optional PEM CA certificate for the database's trusted TLS chain. |
+
+Both database URLs require host, username, password and one database path, with no
+query parameters or fragments. Percent-encode credentials as URL components. The
+driver enforces certificate verification for nonlocal connections; only a loopback
+database in nonhosted development can use plaintext. The connection verifies the
+actual login/current role and rejects administrator privileges or cross-role membership.
+Do not supply a privileged URL and rely on `SET ROLE` to reduce it.
+
+A blank/unknown runtime mode or either URL present without `postgres` fails closed.
+PostgreSQL initialization errors never select KV, memory, environment-defined users
+or bundled Larkin property data. `OPS_ACCOUNTS_JSON` and `OPS_DASHBOARD_PASSCODE` are
+legacy identity sources; adding a PostgreSQL user does not require changing them.
+The admin connection is deliberately absent from HTTP runtime configuration.
+Each role pool currently allows four connections; account for function concurrency
+and the database connection budget when selecting hosting/pooling.
+
+Provision users, scrypt credential hashes, organizations, memberships and explicit
+property grants through a reviewed administrative workflow. Configure channel
+bindings and publish complete property bundles separately. No general customer
+onboarding, password-reset or membership-management UI is included in this slice.
+The hosting project/provider, production backup policy and production restore proof
+remain open; native PostgreSQL test success does not resolve those choices.
+
+## HTTP and portal contract
+
+The PostgreSQL session is a signed user-only token containing `userId`,
+`credentialVersion` and `expiresAt`; it contains no current property or cached role.
+Authentication rereads the active user/credential version. Authorization resolves
+current membership, organization/property status and explicit grants per operation.
+
+| Route | Scope and behavior |
+| --- | --- |
+| `GET/POST /api/dashboard` | Sign-in/logout and protected HTML. A signed-in user with multiple properties sees a picker; an explicit page uses `?organizationId=...&propertyId=...`. |
+| `GET /api/properties` | Authenticated, unscoped catalogue of properties this user can read. It exposes safe labels, role/permissions and navigation links, not property inventories or credentials. |
+| `GET /api/leads`, `/api/calendar`, `/api/vapi` | Require the user session and all three explicit property headers below; permission is `read`. |
+| `POST /api/leads`, `/api/calendar` | Same explicit selection plus `operate`; calendar `settings` requires `configure`. Bulk demo resets are unavailable in PostgreSQL mode. |
+| `POST /api/vapi` | Verified webhook secret and server-owned channel binding select the property. Browser headers or model-supplied property fields are not routing authority. |
+| `POST /api/vapi-sync` | Checks `configure`, but property assistant publishing currently refuses; the bundled Larkin publisher is not reused for another property. |
+| `GET /api/health` | Public minimal infrastructure probe; no user, property, count, password or connection URL disclosure. |
+
+Every staff operational request supplies:
+
+```text
+x-atrium-organization-id: <selected organization ID>
+x-atrium-property-id: <selected property ID>
+x-atrium-config-version: <positive published configuration version>
+```
+
+These headers are selections, never proof of access. The server issues an opaque
+authorized scope after authenticating the user, then loads that property's published
+snapshot. SQL repository checks and RLS independently revalidate current authority
+and configuration before an operation. Success responses echo:
+
+```json
+{
+  "scope": {
+    "organizationId": "selected-organization",
+    "propertyId": "selected-property",
+    "configurationVersion": 1,
+    "permissionVersion": "server-derived-permission-fingerprint"
+  }
+}
+```
+
+The page captures its selection/version once, attaches it to every scoped request,
+and checks the echo before ingesting reads or mutation results. The property switch
+performs full navigation to a newly authorized document. There is no global
+active-property cookie, so changing one tab cannot retarget another tab's writes.
+Presentation preferences are namespaced by organization/property/user.
+
+Missing selection/version returns 428; malformed or ambiguous input returns 400;
+stale configuration returns 409 `property_configuration_changed`; absent/expired
+authentication returns 401; unavailable access returns 403. Invalid/unavailable
+configuration or storage refuses with 503. The page retires cached views and pending
+responses on revocation/mismatched scope, and offers reload/property selection
+instead of repeatedly reloading a 403. Normal calendar conflicts retain their own
+retry behavior. These guards do not cancel work already committed before revocation.
+
+## Published showing rules
+
+A PostgreSQL property must publish `property.tourSettings` in its configuration
+bundle. `DatabaseRuntime.resolve` validates every required field; it does not supply
+the legacy building's defaults. For example:
+
+```json
+{
+  "capacity": 2,
+  "slotMinutes": 30,
+  "startIntervalMinutes": 30,
+  "bufferMinutes": 0,
+  "minimumNoticeMinutes": 120,
+  "bookingWindowDays": null,
+  "sameUnitPolicy": "exclusive",
+  "hours": {
+    "1": { "openHour": 9, "closeHour": 17 },
+    "2": { "openHour": 9, "closeHour": 17 }
+  }
+}
+```
+
+Days use `0` for Sunday through `6` for Saturday; an omitted day is closed. Opening
+hours must fit a complete tour. Numeric limits and accepted policies are enforced
+by `src/calendar/settings.ts`; `null` is the explicit unlimited advance-booking
+window. Timezone is the validated `properties.time_zone` value and is not editable
+inside tour settings. Optional display/contact fields do not fill in another
+building's phone, address or leasing hours.
+
+Published settings supply the initial rules. A saved calendar `settings` object is
+the explicit operational override and wins until changed, using its own
+`settingsRevision` conflict guard. Publishing a new bundle does not silently erase
+that override. Publishing moves the configuration pointer; old document versions
+are rejected before new operations. Existing bookings retain their actual UTC tour
+and reserved buffer intervals when future rules or timezone change.
 
 ## Roles and trust boundary
 
@@ -58,7 +190,7 @@ SELECT atrium.can_access_property($1, $2, $3) AS allowed;
 ```
 
 `$1/$2` are the already authorized organization/property IDs; `$3` is the required
-permission (`read` or `operate` for this slice). Anything other than true is an
+permission (`read`, `operate` or `configure` for this slice). Anything other than true is an
 authorization failure, not an empty or newly open calendar. Every operational query
 also binds the organization/property predicates explicitly. RLS independently checks
 the active user, exact credential version, active organization/property, current
@@ -142,10 +274,43 @@ successful migration or restore test.
 This slice does not normalize people/interactions/bookings, provide membership or
 publication UI, migrate production Redis records, implement SSO/MFA, dispatch jobs,
 or deliver general inbox/outbox/reconciliation. Calendar/document JSON can still
-contain growing arrays and requires repository size/query limits. Runtime audit
+contain growing arrays; current repositories reject oversized serialized documents
+and unpaginated key lists over 5,000, but do not provide a normalized portfolio-query
+API. Runtime audit
 history is append-only but remains editable by a database administrator; it is not
 independently tamper-evident. Backup recovery, retention and production cutover need
 their own verified operational evidence.
+
+## Local preview and verification
+
+`npm run dev:ops` mounts the real HTTP handlers with a private persistent native
+PostgreSQL instance. `.atrium-local/` contains its data, a private configuration file
+and process lock; the directory is ignored by Git and is not a deployment artifact.
+The native process listens only on loopback, with Unix sockets disabled. The helper
+refuses hosted/production/simulation mode and ignores external database/provider
+configuration. It is a local development helper, not a production database manager.
+
+The initial import explicitly maps only the existing `larkin` / `demo-larkin` account
+to the fictional demo organization/property. It preserves the saved scrypt hash and
+then uses the persisted user record. Restarts retain password changes, grants,
+showing settings, records and source dates. It does not import arbitrary legacy
+customer tenants. A first run without a private account creates a random password
+and displays it once; existing passwords are not displayed or regenerated.
+
+Synthetic call import is checkpointed. Completed steps are not replayed. An
+uncertain interrupted step stops for inspection rather than assuming a failed write
+or resetting the database. `--no-seed` skips call import and preserves existing data.
+Changing the HTTP port does not permit concurrent use of one database directory.
+Do not treat deleting `.atrium-local/` as a routine refresh; it contains persisted
+local accounts and staff changes.
+
+`npm run test:database` uses separate disposable native databases and the restricted
+roles. Tests cover SQL ownership/RLS, migration ordering/checksums, synthetic restore
+into a fresh database, current authorization under revocation, transaction audits,
+concurrent bookings, property publication, HTTP scope and local restart behavior.
+`npm run build` separately imports all deployed handler bundles without inherited
+credentials or installed dependencies and checks unconfigured runtime refusal.
+Neither check establishes hosted service health or a production recovery procedure.
 
 References: [PostgreSQL 17 RLS](https://www.postgresql.org/docs/17/ddl-rowsecurity.html),
 [transaction-local SET](https://www.postgresql.org/docs/17/sql-set.html),

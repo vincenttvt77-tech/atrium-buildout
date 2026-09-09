@@ -23,7 +23,7 @@ import { storeBackedCalendar } from '../src/calendar/port.ts'
 import { documentStoreFromEnv } from '../src/store/documents.ts'
 import { normalisePhone } from '../src/leads/profile.ts'
 import { reconcile } from '../src/leasing/captured.ts'
-import { receiveFinishedCall } from '../src/leads/inbox.ts'
+import { receiveFinishedCall, type CallReceiptScope } from '../src/leads/inbox.ts'
 import { randomUUID } from 'node:crypto'
 import type { LossReason } from '../src/record/store.ts'
 import { bookTour } from '../src/booking/book.ts'
@@ -33,6 +33,9 @@ import { propertyId, interactionId } from '../src/domain/ids.ts'
 import { currentTenantId, withTenant } from '../src/tenancy/context.ts'
 import { webhookTenant } from '../src/tenancy/webhook.ts'
 import { detectEmergency, primaryEmergency, safetyInstruction, type EmergencySignal } from '../src/escalation/emergency.ts'
+import { isPostgresRuntime, resolveOpsRuntime, resolveVerifiedChannelRuntime, runWithPropertyRuntime,
+  currentPropertyRuntime, runtimeForRequest, readRuntimeError, RuntimeRequestError, type ResolvedPropertyRuntime } from '../src/application/runtime.ts'
+import { webhookAssistantId } from '../src/tenancy/webhook.ts'
 
 /**
  * Vapi tool-call webhook.
@@ -58,7 +61,8 @@ let cache: {
   property: Record<string, unknown>
 } | null = null
 
-function load(now: Date) {
+function load(now: Date, runtime?: ResolvedPropertyRuntime) {
+  if (runtime) return runtime.snapshot
   if (cache && now.getTime() - cache.inventory.readAt.getTime() < 15 * 60_000) return cache
 
   const { snapshot, problems } = loadInventory(
@@ -84,6 +88,7 @@ function load(now: Date) {
  * qualification. Keyed by call id; consolidated into the caller's profile at end of call.
  */
 interface CallState {
+  routing?: { organizationId: string; propertyId: string; channelBindingId: string }
   qualification: QualificationState
   phone?: string
   /** A compact receipt prevents repeated finished-call reports from recreating a caller. */
@@ -101,7 +106,23 @@ interface CallState {
 const documents = documentStoreFromEnv()
 const callKey = (id: string) => `call:${id}`
 
+function routingIdentity() {
+  const runtime = currentPropertyRuntime()
+  if (!runtime) return undefined
+  if (runtime.scope.actor.kind !== 'channel') throw new Error('Call state requires a verified channel scope')
+  return { organizationId: runtime.scope.organizationId, propertyId: runtime.scope.propertyId,
+    channelBindingId: runtime.scope.actor.bindingId }
+}
+
+function receiptScope(runtime?: ResolvedPropertyRuntime): CallReceiptScope | undefined {
+  if (!runtime) return undefined
+  const routing = routingIdentity()
+  if (!routing) throw new Error('Call routing authority is missing')
+  return { ...routing, configurationVersion: runtime.snapshot.version, timeZone: runtime.snapshot.timeZone }
+}
+
 const freshCall = (): CallState => ({
+  ...(routingIdentity() ? { routing: routingIdentity()! } : {}),
   qualification: emptyQualification(), name: null, email: null, unitsDiscussed: [],
   booking: null, lossReason: null, escalation: null, emergency: null, toolsCalled: [],
 })
@@ -109,6 +130,10 @@ const freshCall = (): CallState => ({
 /** Dates inside QualificationState do not survive JSON; rehydrate them. */
 function reviveCall(raw: CallState | null): CallState {
   if (!raw) return freshCall()
+  const expected = routingIdentity()
+  if (expected && (!raw.routing || Object.entries(expected).some(([key, value]) => raw.routing?.[key as keyof typeof expected] !== value))) {
+    throw new RuntimeRequestError(409, 'call_routing_conflict', 'This call is already assigned to another connection and cannot be reassigned.')
+  }
   const q = raw.qualification as unknown as Record<string, unknown>
   for (const k of ['moveInTiming', 'budget', 'bedrooms', 'pets', 'parking', 'source'] as const) {
     const v = q[k] as { at?: string | Date; value?: Record<string, unknown> } | undefined
@@ -160,6 +185,7 @@ async function saveCall(callId: string, state: CallState, before: CallState): Pr
 const calendarStore = calendarStoreFromEnv()
 const TOUR_CAPACITY = defaultSettings().capacity
 const demoCalendar = (now: Date, timeZone: string) => storeBackedCalendar(calendarStore, () => now, { capacity: TOUR_CAPACITY, unitIds: rawUnits.map(u => u.unitId), timeZone })
+const callCalendar = (now: Date, timeZone: string, runtime?: ResolvedPropertyRuntime) => runtime ? runtime.calendar(now) : demoCalendar(now, timeZone)
 
 const CALENDAR_CONFIGURATION_UNAVAILABLE = "The building's tour calendar needs staff attention, so I can't verify or book a time right now. Offer help from the leasing team; do not suggest that a different date will fix this."
 
@@ -220,10 +246,11 @@ const tenantHistory = new Map<string, HistoryState>()
 type NormalisedCalls = Awaited<ReturnType<typeof fetchCalls>> extends infer R ? R extends { ok: true; calls: infer C } ? C : never : never
 const normaliseCallList = (c: NormalisedCalls) => c
 
-async function callHistory(assistantIds?: string[]): Promise<{ calls: NormalisedCalls; error: string | null; configured: boolean; stale: boolean }> {
+async function callHistory(assistantIds?: string[], runtime?: ResolvedPropertyRuntime): Promise<{ calls: NormalisedCalls; error: string | null; configured: boolean; stale: boolean }> {
   if (assistantIds?.length === 0) return { calls: [], error: null, configured: false, stale: false }
-  const cacheKey = JSON.stringify([currentTenantId(), assistantIds?.slice().sort() ?? null])
+  const cacheKey = JSON.stringify([runtime ? [runtime.scope.organizationId, runtime.scope.propertyId, runtime.bindingFingerprint] : currentTenantId(), assistantIds?.slice().sort() ?? null])
   if (!tenantHistory.has(cacheKey)) tenantHistory.set(cacheKey, { cache: null, failure: null })
+  if (tenantHistory.size > 200) tenantHistory.delete(tenantHistory.keys().next().value!)
   const scoped = tenantHistory.get(cacheKey)!
   let historyCache = scoped.cache
   const historyFailure = scoped.failure
@@ -256,9 +283,16 @@ async function callHistory(assistantIds?: string[]): Promise<{ calls: Normalised
 export const eventLog: Array<Record<string, unknown>> = []
 const tenantEvents = new Map<string, Array<Record<string, unknown>>>([['legacy', eventLog]])
 function scopedEvents(): Array<Record<string, unknown>> {
-  const tenantId = currentTenantId()
+  const runtime = currentPropertyRuntime()
+  const tenantId = runtime ? JSON.stringify(['property', runtime.scope.organizationId, runtime.scope.propertyId]) : currentTenantId()
   if (!tenantEvents.has(tenantId)) tenantEvents.set(tenantId, [])
   return tenantEvents.get(tenantId)!
+}
+
+function diagnosticScope() {
+  const runtime = currentPropertyRuntime()
+  return runtime ? { organizationId: runtime.scope.organizationId, propertyId: runtime.scope.propertyId }
+    : { tenantId: currentTenantId() }
 }
 
 function logEvent(callId: string, e: Record<string, unknown>) {
@@ -347,17 +381,19 @@ function emergencyToolResponse(signal: EmergencySignal | null, name: string): st
  */
 async function runTool(
   name: string, args: Record<string, unknown>, callId: string, now: Date, state: CallState,
+  runtime?: ResolvedPropertyRuntime,
 ): Promise<string> {
-  const { inventory, articles, property } = load(now)
+  const { inventory, articles, property } = load(now, runtime)
+  const unitIds = runtime ? inventory.units.map(unit => unit.unitId) : rawUnits.map(unit => unit.unitId)
   state.toolsCalled.push(name)
 
   const ctx: ToolContext = {
-    propertyId: propertyId(String(property.id ?? 'prop-demo')),
+    propertyId: propertyId(runtime ? runtime.scope.propertyId : String(property.id ?? 'prop-demo')),
     interactionId: interactionId(callId),
     inventory,
     articles,
     qualification: state.qualification,
-    jurisdiction: 'NY',
+    jurisdiction: runtime ? runtime.snapshot.jurisdiction : 'NY',
     confidenceThreshold: 0.7,
     now,
   }
@@ -420,13 +456,14 @@ async function runTool(
         }
         to = parseCalendarDate(addCalendarDays(localDate(from, timeZone), 15), timeZone)
       } catch { return 'That date is invalid. Ask for a real date and call list_tour_slots using YYYY-MM-DD.' }
-      const unitId = args.unitId ? String(args.unitId).trim().toUpperCase() : null
-      if (unitId && !rawUnits.some(u => u.unitId.toUpperCase() === unitId)) return 'That residence is not in the building inventory. Confirm a residence returned by check_availability, or omit unitId for a general building tour.'
-      const slots = await demoCalendar(now, timeZone).listSlots(ctx.propertyId, from, to, unitId)
+      const requestedUnit = args.unitId ? String(args.unitId).trim().toUpperCase() : null
+      const unitId = requestedUnit ? unitIds.find(id => id.toUpperCase() === requestedUnit) ?? null : null
+      if (requestedUnit && !unitId) return 'That residence is not in the building inventory. Confirm a residence returned by check_availability, or omit unitId for a general building tour.'
+      const slots = await callCalendar(now, timeZone, runtime).listSlots(ctx.propertyId, from, to, unitId)
       const { offered, daysOpen } = pickSlotsToOffer(slots, preferredDate, timeZone)
       logEvent(callId, { kind: 'slots_listed', count: offered.length, daysOpen })
       if (offered.length === 0) {
-        const window = effectiveOptions(await calendarStore.read(), { timeZone }).bookingWindowDays
+        const window = effectiveOptions(await calendarStore.read(), { ...runtime?.tourSettings, timeZone }).bookingWindowDays
         return `No bookable tour times were found in this requested date range.${window == null ? '' : ` This building accepts bookings up to ${window} days ahead.`} Ask for another date or offer a leasing-team callback. Do not say the whole calendar is full.`
       }
       const preferredClosed = preferredDate && !offered.some(s => localDate(s.startsAt, timeZone) === preferredDate)
@@ -441,11 +478,12 @@ async function runTool(
       if (!/^slot-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(slotId)) return 'That slot is invalid. Call list_tour_slots again and offer a real time.'
       const requestedStart = new Date(`${slotId.slice(5)}:00.000Z`)
       if (!Number.isFinite(requestedStart.getTime()) || requestedStart.toISOString().slice(0, 16) !== slotId.slice(5)) return 'That slot is invalid. Call list_tour_slots again.'
-      const slots = generateSlots(now, { ...effectiveOptions(await calendarStore.read(), { timeZone }), from: requestedStart, to: new Date(requestedStart.getTime() + 86400000) })
+      const slots = generateSlots(now, { ...effectiveOptions(await calendarStore.read(), { ...runtime?.tourSettings, timeZone }), from: requestedStart, to: new Date(requestedStart.getTime() + 86400000) })
       const slot = slots.find((s) => s.slotId === args.slotId)
       if (!slot) return 'That slot is not on the calendar. Call list_tour_slots again and offer a real time.'
-      const unitId = args.unitId ? String(args.unitId).trim().toUpperCase() : null
-      if (unitId && !rawUnits.some(u => u.unitId.toUpperCase() === unitId)) return 'That residence is not in the building inventory. Confirm a residence returned by check_availability, or offer a general building tour.'
+      const requestedUnit = args.unitId ? String(args.unitId).trim().toUpperCase() : null
+      const unitId = requestedUnit ? unitIds.find(id => id.toUpperCase() === requestedUnit) ?? null : null
+      if (requestedUnit && !unitId) return 'That residence is not in the building inventory. Confirm a residence returned by check_availability, or offer a general building tour.'
 
       state.name = String(args.prospectName ?? state.name ?? '')
       state.email = args.prospectEmail ? String(args.prospectEmail) : state.email
@@ -460,7 +498,7 @@ async function runTool(
         slot,
         unitId,
         floorPlanId: null,
-      }, demoCalendar(now, timeZone), { now, makeIntentId: () => `intent-${callId}-${slot.slotId}` })
+      }, callCalendar(now, timeZone, runtime), { now, makeIntentId: () => `intent-${callId}-${slot.slotId}` })
 
       logEvent(callId, {
         kind: 'tour_booked', status: booking.state.status,
@@ -496,11 +534,20 @@ async function runTool(
 /** Bind the full async request before any document, calendar, event or history operation. */
 export default async function handler(req: any, res: any) {
   res.atriumRequestId = randomUUID()
+  req.atriumRequestId = res.atriumRequestId
   res.setHeader('x-request-id', res.atriumRequestId)
+  let databaseMode: boolean
+  try { databaseMode = isPostgresRuntime() }
+  catch (error) {
+    const result = readRuntimeError(error)
+    res.setHeader('cache-control', 'no-store')
+    return res.status(result.status).json(result.body)
+  }
+  if (databaseMode) return databaseHandler(req, res)
   if (req.method === 'GET') {
     const auth = authorizeOps(req.headers ?? {}, new Date())
-    if (!auth.ok) return scopedHandler(req, res)
-    return withTenant(auth.tenantId, () => scopedHandler(req, res))
+    if (!auth.ok) return scopedHandler(req, res, undefined, auth)
+    return withTenant(auth.tenantId, () => scopedHandler(req, res, undefined, auth))
   }
   if (req.method === 'POST') {
     let body: unknown
@@ -518,7 +565,90 @@ export default async function handler(req: any, res: any) {
   return scopedHandler(req, res)
 }
 
-async function scopedHandler(req: any, res: any) {
+function verifyDatabaseWebhook(req: any, res: any): boolean {
+  const expected = process.env.VAPI_WEBHOOK_SECRET?.trim()
+  if (!expected) {
+    res.status(503).json({ error: 'Webhook verification is not configured' })
+    return false
+  }
+  const bearer = req.headers?.authorization
+  const provided = req.headers?.['x-vapi-secret'] ?? req.headers?.['x-vapi-signature']
+    ?? (typeof bearer === 'string' && bearer.startsWith('Bearer ') ? bearer.slice(7) : undefined)
+  if (typeof provided !== 'string' || !constantTimeEquals(provided, expected)) {
+    res.status(401).json({ error: 'unauthorized' })
+    return false
+  }
+  return true
+}
+
+/** Pure fallback only: never reads property facts, persists a pause, or notifies staff. */
+function unavailableEmergencyResponse(body: any): Record<string, unknown> | null {
+  const message = body?.message
+  if (!message || typeof message !== 'object') return null
+  let signal: EmergencySignal | null = null
+  let toolCalls: any[] = []
+  if (message.type === 'transcript' && message.role === 'user'
+    && (!message.transcriptType || message.transcriptType === 'final') && typeof message.transcript === 'string') {
+    signal = primaryEmergency(detectEmergency(message.transcript))
+  } else if (message.type === 'tool-calls') {
+    const list = message.toolCallList ?? message.toolCalls
+    if (!Array.isArray(list)) return null
+    // Bound the fallback independently of upstream body limits. Each argument tree
+    // uses the same 10,000-node screening limit as normal tool execution.
+    toolCalls = list.slice(0, 100)
+    const signals: EmergencySignal[] = []
+    for (const tc of toolCalls) {
+      const raw = tc?.arguments ?? tc?.function?.arguments ?? {}
+      try { signals.push(...emergencyInArgs(parseToolArgs(raw), raw)) }
+      catch { /* Oversized malformed evidence cannot authorize any action. */ }
+    }
+    signal = primaryEmergency(signals)
+  }
+  if (!signal) return null
+  const instruction = safetyInstruction(signal)
+  return {
+    error: 'The emergency pause could not be verified. Retry is required.',
+    code: 'emergency_persistence_unavailable', retryable: true, safetyInstruction: instruction,
+    ...(toolCalls.length ? { results: toolCalls.filter(tc => typeof (tc?.id ?? tc?.toolCallId) === 'string').map(tc => ({
+      toolCallId: tc.id ?? tc.toolCallId,
+      result: `${instruction} Do not continue with leasing actions. This requested action was not confirmed.`,
+    })) } : {}),
+  }
+}
+
+/** Resolve one server-owned property scope after transport authentication. */
+async function databaseHandler(req: any, res: any) {
+  res.setHeader('cache-control', 'no-store, private')
+  res.setHeader('x-robots-tag', 'noindex, nofollow')
+  if (!['GET', 'POST'].includes(req.method)) return res.status(405).json({ error: 'GET or POST only' })
+  // No property lookup, account query or store access happens before this check.
+  if (req.method === 'POST' && !verifyDatabaseWebhook(req, res)) return
+  let emergencyFallback: Record<string, unknown> | null = null
+  try {
+    let runtime: ResolvedPropertyRuntime
+    if (req.method === 'GET') runtime = await resolveOpsRuntime(req, 'read', new Date())
+    else {
+      let body: unknown
+      try { body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body }
+      catch { return res.status(400).json({ error: 'Invalid webhook body' }) }
+      emergencyFallback = unavailableEmergencyResponse(body)
+      const assistantId = webhookAssistantId(body)
+      if (!assistantId) throw new RuntimeRequestError(403, 'invalid_assistant_identity', 'A valid bound assistant identity is required.')
+      runtime = await resolveVerifiedChannelRuntime('vapi', assistantId, new Date(), res.atriumRequestId, runtimeForRequest(req))
+      req.body = body
+    }
+    const json = res.json
+    res.json = function (body: Record<string, unknown>) { return json.call(this, { ...body, scope: runtime.responseScope }) }
+    try { return await runWithPropertyRuntime(runtime, () => scopedHandler(req, res, runtime)) }
+    finally { res.json = json }
+  } catch (error) {
+    if (emergencyFallback) return res.status(503).json(emergencyFallback)
+    const result = readRuntimeError(error)
+    res.status(result.status).json(result.body)
+  }
+}
+
+async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRuntime, legacyAuth?: ReturnType<typeof authorizeOps>) {
   // The dashboard reads the log from this same function deliberately: on serverless each
   // function gets its own memory, so a separate endpoint would see an empty log. This is
   // warm-instance scoped and resets when the instance recycles — fine for a demo, and the
@@ -534,8 +664,8 @@ async function scopedHandler(req: any, res: any) {
     res.setHeader('x-robots-tag', 'noindex, nofollow, noarchive, nosnippet')
     res.setHeader('referrer-policy', 'no-referrer')
 
-    const auth = authorizeOps(req.headers ?? {}, new Date())
-    if (!auth.ok) {
+    const auth = runtime ? null : legacyAuth ?? authorizeOps(req.headers ?? {}, new Date())
+    if (auth && !auth.ok) {
       res.status(auth.reason === 'not_configured' ? 503 : 401).json({
         error: auth.reason === 'not_configured'
           ? 'The operations log is closed until OPS_DASHBOARD_PASSCODE is set.'
@@ -555,7 +685,10 @@ async function scopedHandler(req: any, res: any) {
      * gate, the priced-out gap, which article answered — that Vapi has no view of. It is
      * supplementary now, not the source.
      */
-    const history = await callHistory(auth.tenantId === 'legacy' ? undefined : auth.assistantIds)
+    const history = await callHistory(runtime ? runtime.assistantIds : auth?.ok && auth.tenantId !== 'legacy' ? auth.assistantIds : undefined, runtime)
+    // An upstream fetch can outlast a membership or assistant-binding change.
+    // Recheck the existing scope before releasing calls or in-process events.
+    if (runtime) await runtime.revalidate()
 
     res.status(200).json({
       calls: history.calls,
@@ -577,18 +710,20 @@ async function scopedHandler(req: any, res: any) {
   }
 
   // Verify the request is genuinely from Vapi when a secret is configured.
-  const expected = process.env.VAPI_WEBHOOK_SECRET?.trim()
-  if (!expected && (process.env.VERCEL || process.env.NODE_ENV === 'production' || currentTenantId() !== 'legacy')) {
-    res.status(503).json({ error: 'Webhook verification is not configured' })
-    return
-  }
-  if (expected) {
-    const bearer = req.headers?.authorization
-    const provided = req.headers?.['x-vapi-secret'] ?? req.headers?.['x-vapi-signature']
-      ?? (typeof bearer === 'string' && bearer.startsWith('Bearer ') ? bearer.slice(7) : undefined)
-    if (typeof provided !== 'string' || !constantTimeEquals(provided, expected)) {
-      res.status(401).json({ error: 'unauthorized' })
+  if (!runtime) {
+    const expected = process.env.VAPI_WEBHOOK_SECRET?.trim()
+    if (!expected && (process.env.VERCEL || process.env.NODE_ENV === 'production' || currentTenantId() !== 'legacy')) {
+      res.status(503).json({ error: 'Webhook verification is not configured' })
       return
+    }
+    if (expected) {
+      const bearer = req.headers?.authorization
+      const provided = req.headers?.['x-vapi-secret'] ?? req.headers?.['x-vapi-signature']
+        ?? (typeof bearer === 'string' && bearer.startsWith('Bearer ') ? bearer.slice(7) : undefined)
+      if (typeof provided !== 'string' || !constantTimeEquals(provided, expected)) {
+        res.status(401).json({ error: 'unauthorized' })
+        return
+      }
     }
   }
 
@@ -615,14 +750,20 @@ async function scopedHandler(req: any, res: any) {
       res.status(200).json({})
       return
     }
+    if (runtime && callId !== 'unknown-call') {
+      if (!callId || callId.length > 256 || /[\u0000-\u0020\u007f]/.test(callId)) throw new Error('Invalid call identity')
+      // Claim the provider call atomically before any calendar hold or tool write.
+      // Existing records with missing/different routing require explicit migration.
+      await documents.update<CallState>(callKey(callId), freshCall(), raw => reviveCall(raw))
+    }
     if (message.type === 'transcript' && message.role === 'user' && message.transcript) {
-      const { inventory, articles, property } = load(now)
+      const { inventory, articles, property } = load(now, runtime)
       const emergency = checkEmergency(String(message.transcript), {
-        propertyId: propertyId(String(property.id ?? 'prop-demo')),
+        propertyId: propertyId(runtime ? runtime.scope.propertyId : String(property.id ?? 'prop-demo')),
         interactionId: interactionId(callId),
         inventory, articles,
         qualification: emptyQualification(),
-        jurisdiction: 'NY', confidenceThreshold: 0.7, now,
+        jurisdiction: runtime ? runtime.snapshot.jurisdiction : 'NY', confidenceThreshold: 0.7, now,
       })
       if (emergency) {
         if (callId !== 'unknown-call' && emergency.emergency) {
@@ -718,7 +859,7 @@ async function scopedHandler(req: any, res: any) {
             continue
           }
           if (!tc.args) throw new Error('Invalid tool arguments')
-          result = await runTool(name, tc.args, callId, now, state)
+          result = await runTool(name, tc.args, callId, now, state, runtime)
           if (state.emergency) {
             const recorded = await rememberEmergency(callId, state.emergency)
             pauseUnpersisted ||= !recorded.hold || !recorded.state
@@ -736,7 +877,7 @@ async function scopedHandler(req: any, res: any) {
         const events = scopedEvents()
         const last = events[events.length - 1] ?? {}
         console.log('[tool]', JSON.stringify({
-          tenantId: currentTenantId(), requestId: res.atriumRequestId, callId,
+          ...diagnosticScope(), requestId: res.atriumRequestId, callId,
           toolCallId: tc.toolCallId, name, durationMs: Math.round(performance.now() - toolStartedAt), errorCode,
           ...(last.callId === callId ? {
             kind: last.kind, outcome: last.outcome ?? last.decision ?? null,
@@ -795,19 +936,19 @@ async function scopedHandler(req: any, res: any) {
           unitsDiscussed: state.unitsDiscussed,
           booking: state.booking, lossReason: state.lossReason, escalation: state.escalation,
           toolsCalled: state.toolsCalled,
-        }, now)
+        }, now, receiptScope(runtime))
         // Delete the working details, but retain the completed call's identity. Vapi can
         // retry its report after a cold start, when no customer number is present and
         // the only callback number was captured by a tool during the call.
         await documents.set<CallState>(callKey(callId), { ...freshCall(), phone, completedAt: finishedAt.toISOString() })
         console.log('[call]', JSON.stringify({
-          tenantId: currentTenantId(), requestId: res.atriumRequestId, callId,
+          ...diagnosticScope(), requestId: res.atriumRequestId, callId,
           consolidated: true, hasPhone: Boolean(phone && phone !== 'unknown'),
           tools: state.toolsCalled.length, booked: state.booking?.status ?? null,
           escalated: Boolean(state.escalation), store: documents.describe().kind,
         }))
       } catch (err) {
-        console.error('[vapi]', JSON.stringify({ tenantId: currentTenantId(), requestId: res.atriumRequestId, callId, errorCode: 'consolidation_failed' }))
+        console.error('[vapi]', JSON.stringify({ ...diagnosticScope(), requestId: res.atriumRequestId, callId, errorCode: 'consolidation_failed' }))
         logEvent(callId, { kind: 'error', message: 'Finished-call processing failed; delivery must be retried.' })
         res.setHeader('retry-after', '30')
         res.status(503).json({ error: 'Finished-call processing failed', retryable: true, requestId: res.atriumRequestId })
@@ -817,6 +958,7 @@ async function scopedHandler(req: any, res: any) {
 
     res.status(200).json({})
   } catch (err) {
+    if (runtime) throw err
     console.error('[vapi] handler error', err)
     logEvent(callId, { kind: 'error', message: err instanceof Error ? err.message : String(err) })
     // Never 500 at Vapi — that drops the call. Give the agent something safe to say.

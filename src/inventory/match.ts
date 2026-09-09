@@ -47,6 +47,12 @@ export type MatchOutcome =
 
 const DAY = 86_400_000
 
+/** One freshness rule for matching and direct residence/floor-plan lookups. */
+export function inventoryIsFresh(snapshot: InventorySnapshot, now: Date, maxAgeMs = 15 * 60_000): boolean {
+  const age = now.getTime() - snapshot.readAt.getTime()
+  return Number.isFinite(age) && age >= 0 && Number.isFinite(maxAgeMs) && maxAgeMs >= 0 && age <= maxAgeMs
+}
+
 /** Available at all: on the market and not pending. Timing is judged separately. */
 function onMarket(u: Unit): boolean {
   return u.status === 'available'
@@ -88,9 +94,8 @@ export function findMatches(
   qual: QualificationState,
   opts: MatchOptions,
 ): MatchOutcome {
-  const maxAge = opts.maxSnapshotAgeMs ?? 15 * 60_000
   const age = opts.now.getTime() - snapshot.readAt.getTime()
-  if (age > maxAge) return { kind: 'stale', readAt: snapshot.readAt, ageMs: age }
+  if (!inventoryIsFresh(snapshot, opts.now, opts.maxSnapshotAgeMs)) return { kind: 'stale', readAt: snapshot.readAt, ageMs: age }
 
   const window = qual.moveInTiming?.value ?? null
   const from = window?.earliest ?? null

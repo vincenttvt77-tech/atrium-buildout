@@ -1,6 +1,7 @@
 import { documentStoreFromEnv } from '../src/store/documents.ts'
 import { StorageConfigurationError } from '../src/store/config.ts'
 import { LEGACY_TENANT, withTenant } from '../src/tenancy/context.ts'
+import { isPostgresRuntime, runtimeForRequest } from '../src/application/runtime.ts'
 
 /**
  * Unauthenticated on purpose, and therefore says almost nothing.
@@ -11,9 +12,26 @@ import { LEGACY_TENANT, withTenant } from '../src/tenancy/context.ts'
  * deployment that looks identical and silently forgets everything. This reports which
  * store the code actually found. It never reports a URL, a token, a count, or a caller.
  */
-export default async function handler(_req: any, res: any) {
+export default async function handler(req: any, res: any) {
   res.setHeader('cache-control', 'no-store')
   res.setHeader('x-robots-tag', 'noindex, nofollow')
+  try {
+    if (isPostgresRuntime()) {
+      const runtime = runtimeForRequest(req)
+      await Promise.all([runtime.app.transaction({}, async client => {
+        await client.query('SELECT 1 FROM atrium.calendars LIMIT 0')
+      }),runtime.auth.transaction({}, async client => {
+        await client.query('SELECT 1 FROM atrium.users LIMIT 0')
+      })])
+      res.status(200).json({ok:true,store:'postgres',durable:true,callHistory:false,
+        hint:'PostgreSQL is connected. Records persist within authorized property workspaces.'})
+      return
+    }
+  } catch {
+    res.status(503).json({ok:false,store:'postgres',durable:false,callHistory:false,
+      code:'workspace_unavailable',hint:'The database connection or runtime configuration is unavailable.'})
+    return
+  }
   const documents = documentStoreFromEnv()
   const callHistory = Boolean(process.env.VAPI_PRIVATE_KEY || process.env.VAPI_API_KEY)
   // An explicit infrastructure probe, independent of any authenticated tenant.

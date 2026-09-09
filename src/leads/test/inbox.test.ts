@@ -55,3 +55,36 @@ test('inbox retains the original received payload if a redelivery omits contact 
   assert.equal(profiles[0]!.phone, initial.phone)
   assert.equal(profiles[0]!.name, initial.name)
 })
+
+test('scoped receipts retain original property timezone and reject another channel or legacy replay', async () => {
+  const base = new MemoryDocumentStore()
+  let fail = true
+  const store: DocumentStore = { get: base.get.bind(base), set: base.set.bind(base), list: base.list.bind(base),
+    delete: base.delete.bind(base), describe: base.describe.bind(base),
+    update: async (key, initial, fn) => {
+      if (fail && key.startsWith('followup:')) throw new Error('projection unavailable')
+      return base.update(key, initial, fn)
+    } }
+  const scope = { organizationId: 'org-a', propertyId: 'property-a', channelBindingId: 'channel-a',
+    configurationVersion: 1, timeZone: 'Pacific/Honolulu' }
+  await assert.rejects(receiveFinishedCall(store, outcome(), at, scope), /projection unavailable/)
+  const pending = await store.get<CallReceipt>(receiptKey('inbox-call'))
+  assert.equal(pending?.timeZone, 'Pacific/Honolulu')
+  assert.equal(pending?.scope?.propertyId, 'property-a')
+  await assert.rejects(replayFinishedCall(store, 'inbox-call', at), /current property authority/)
+  await assert.rejects(receiveFinishedCall(store, outcome(), at, { ...scope, channelBindingId: 'channel-b' }), /routing does not match/)
+  fail = false
+  const completed = await replayFinishedCall(store, 'inbox-call', at, { ...scope, timeZone: 'America/Chicago', configurationVersion: 2 })
+  assert.equal(completed.status, 'complete')
+  assert.equal(completed.timeZone, 'Pacific/Honolulu')
+  assert.equal(completed.scope?.configurationVersion, 1)
+})
+
+test('PostgreSQL receipts never resolve omitted property scope through the demo configuration', async () => {
+  const base = new MemoryDocumentStore()
+  const store: DocumentStore = { get: base.get.bind(base), set: base.set.bind(base), update: base.update.bind(base),
+    list: base.list.bind(base), delete: base.delete.bind(base),
+    describe: () => ({ kind: 'postgres', durable: true, note: 'Synthetic contract adapter' }) }
+  await assert.rejects(receiveFinishedCall(store, outcome(), at), /property scope is required/)
+  assert.deepEqual(await base.list(''), [])
+})

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow, noarchive">
 <meta name="referrer" content="no-referrer">
-<title>Atrium — The Larkin</title>
+<title>Atrium — Operations</title>
 <!-- Inter loads without blocking first paint: the stylesheet arrives as media="print" (fetched at low
      priority, never render-blocking) and app.js boot() flips it to media="all" — no inline handler,
      so the page does not lean on script-src 'unsafe-inline' for it; with scripts off the plain link
@@ -28,7 +28,7 @@
   <aside class="side">
     <div class="brand">
       <span class="brand-wordmark">atrium<span class="brand-dot">.</span></span>
-      <span class="brand-name">The Larkin</span>
+      <span class="brand-name" data-property-name>Operations</span>
       <span class="brand-view" id="brand-view" aria-hidden="true">· Today</span>
       <span class="brand-sub">Leasing workspace</span>
       <span class="brand-date" id="brand-date"></span>
@@ -49,7 +49,7 @@
     </div>
   </aside>
   <main id="main" tabindex="-1">
-    <header class="workspace-bar"><span><span class="workspace-label">WORKSPACE</span> <span data-workspace-name>The Larkin</span> <span class="workspace-location">/ Long Island City, NY</span></span><a href="#/status" class="workspace-account"><span class="account-avatar">L</span> <span data-account-name>Leasing team</span></a></header>
+    <header class="workspace-bar"><div class="workspace-identity"><span class="workspace-label">WORKSPACE</span><span data-workspace-name>Operations</span><span class="workspace-location" data-property-location></span><span class="workspace-permission" data-view-only hidden>View only</span></div><div class="workspace-controls"><button type="button" class="btn property-switch" data-property-switch hidden>Switch property</button><a href="#/status" class="workspace-account"><span class="account-avatar" data-account-avatar>A</span><span data-account-name>Leasing team</span></a></div></header>
     <div class="global-banners" id="global-banners"></div>
     <section class="view" data-view="today" hidden></section>
     <section class="view" data-view="calls" hidden></section>
