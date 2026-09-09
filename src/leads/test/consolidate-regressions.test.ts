@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { consolidateCall, listProfiles } from '../consolidate.ts'
+import { consolidateCall, listProfiles, listFollowUps, followUpKey } from '../consolidate.ts'
 import type { CallOutcome } from '../consolidate.ts'
 import { MemoryDocumentStore } from '../../store/documents.ts'
 import { emptyQualification } from '../../leasing/qualification.ts'
@@ -29,6 +29,30 @@ test('withheld caller IDs remain separate leads', async () => {
   const profiles = await listProfiles(store)
   assert.equal(profiles.length, 2)
   assert.ok(profiles.every((p) => p.calls.length === 1))
+})
+
+test('withheld callers scheduled for the same hour keep separate follow-ups', async () => {
+  const store = new MemoryDocumentStore()
+  await consolidateCall(store, call({ phone: 'unknown', callId: 'anonymous-a', name: 'Ana', escalation: { trigger: 'human_requested', detail: 'Ana requested a person' } }))
+  await consolidateCall(store, call({ phone: 'unknown', callId: 'anonymous-b', name: 'Ben', escalation: { trigger: 'human_requested', detail: 'Ben requested a person' } }))
+  const followUps = await listFollowUps(store)
+  assert.equal(followUps.length, 2)
+  assert.deepEqual(new Set(followUps.map((f) => f.createdFromCall)), new Set(['anonymous-a', 'anonymous-b']))
+  assert.ok(followUps.some((f) => f.reason.includes('Ana')))
+  assert.ok(followUps.some((f) => f.reason.includes('Ben')))
+})
+
+test('a delayed duplicate report does not schedule a second callback or reopen the first', async () => {
+  const store = new MemoryDocumentStore()
+  const original = call({ escalation: { trigger: 'human_requested', detail: 'call me' } })
+  const first = await consolidateCall(store, original)
+  const callback = first.followUps[0]!
+  await store.set(followUpKey(callback.id), { ...callback, status: 'done' })
+  await consolidateCall(store, { ...original, at: new Date('2026-09-11T14:00:00Z') })
+  const followUps = await listFollowUps(store)
+  assert.equal(followUps.length, 1)
+  assert.equal(followUps[0]!.status, 'done')
+  assert.equal(followUps[0]!.dueAt, callback.dueAt)
 })
 
 test('late delivery of an older call preserves newer contact details', async () => {

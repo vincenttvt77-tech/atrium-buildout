@@ -24,6 +24,8 @@ import { bookTour } from '../src/booking/book.ts'
 import type { CalendarPort, TourSlot } from '../src/booking/types.ts'
 import { sayableStatus } from '../src/booking/book.ts'
 import { propertyId, interactionId } from '../src/domain/ids.ts'
+import { currentTenantId, withTenant } from '../src/tenancy/context.ts'
+import { webhookTenant } from '../src/tenancy/webhook.ts'
 
 /**
  * Vapi tool-call webhook.
@@ -77,6 +79,8 @@ function load(now: Date) {
 interface CallState {
   qualification: QualificationState
   phone?: string
+  /** A compact receipt prevents repeated finished-call reports from recreating a caller. */
+  completedAt?: string
   name: string | null
   email: string | null
   unitsDiscussed: string[]
@@ -116,6 +120,7 @@ async function getCall(callId: string): Promise<CallState> {
 async function saveCall(callId: string, state: CallState, before: CallState): Promise<void> {
   await documents.update<CallState>(callKey(callId), freshCall(), (raw) => {
     const current = reviveCall(raw)
+    if (current.completedAt) return current
     const qualification = { ...current.qualification }
     for (const key of ['moveInTiming', 'budget', 'bedrooms', 'pets', 'parking', 'source'] as const) {
       const incoming = state.qualification[key]
@@ -183,12 +188,21 @@ const fmtSlot = (s: TourSlot) =>
  * refresh fails so the page never goes empty, and the reason is written to the log.
  */
 const HISTORY_TTL_MS = 20_000
-let historyCache: { at: number; calls: ReturnType<typeof normaliseCallList>; configured: boolean } | null = null
-let historyFailure: { at: number; reason: string; configured: boolean } | null = null
+type HistoryState = {
+  cache: { at: number; calls: ReturnType<typeof normaliseCallList>; configured: boolean } | null
+  failure: { at: number; reason: string; configured: boolean } | null
+}
+const tenantHistory = new Map<string, HistoryState>()
 type NormalisedCalls = Awaited<ReturnType<typeof fetchCalls>> extends infer R ? R extends { ok: true; calls: infer C } ? C : never : never
 const normaliseCallList = (c: NormalisedCalls) => c
 
-async function callHistory(): Promise<{ calls: NormalisedCalls; error: string | null; configured: boolean; stale: boolean }> {
+async function callHistory(assistantIds?: string[]): Promise<{ calls: NormalisedCalls; error: string | null; configured: boolean; stale: boolean }> {
+  if (assistantIds?.length === 0) return { calls: [], error: null, configured: false, stale: false }
+  const cacheKey = JSON.stringify([currentTenantId(), assistantIds?.slice().sort() ?? null])
+  if (!tenantHistory.has(cacheKey)) tenantHistory.set(cacheKey, { cache: null, failure: null })
+  const scoped = tenantHistory.get(cacheKey)!
+  let historyCache = scoped.cache
+  const historyFailure = scoped.failure
   const now = Date.now()
   if (historyCache && now - historyCache.at < HISTORY_TTL_MS) {
     return { calls: historyCache.calls, error: null, configured: true, stale: false }
@@ -198,17 +212,17 @@ async function callHistory(): Promise<{ calls: NormalisedCalls; error: string | 
   if (historyFailure && now - historyFailure.at < HISTORY_TTL_MS) {
     return { calls: historyCache?.calls ?? [], error: historyFailure.reason, configured: historyFailure.configured, stale: Boolean(historyCache) }
   }
-  const result = await fetchCalls({ limit: 20 })
+  const result = await fetchCalls({ limit: 20, ...(assistantIds ? { assistantIds } : {}) })
   if (result.ok) {
-    historyFailure = null
-    historyCache = { at: now, calls: result.calls, configured: true }
+    scoped.failure = null
+    scoped.cache = { at: now, calls: result.calls, configured: true }
     return { calls: result.calls, error: null, configured: true, stale: false }
   }
-  historyFailure = { at: now, reason: result.reason, configured: result.configured }
+  scoped.failure = { at: now, reason: result.reason, configured: result.configured }
   console.warn('[vapi-history]', JSON.stringify({ reason: result.reason, configured: result.configured, cached: Boolean(historyCache) }))
   if (historyCache) {
     // Do not hammer a service that just said no: treat the failed read as a fresh one.
-    historyCache = { ...historyCache, at: now }
+    scoped.cache = historyCache = { ...historyCache, at: now }
     return { calls: historyCache.calls, error: result.reason, configured: true, stale: true }
   }
   return { calls: [], error: result.reason, configured: result.configured, stale: false }
@@ -216,10 +230,17 @@ async function callHistory(): Promise<{ calls: NormalisedCalls; error: string | 
 
 /** Everything that happened, for the dashboard. */
 export const eventLog: Array<Record<string, unknown>> = []
+const tenantEvents = new Map<string, Array<Record<string, unknown>>>([['legacy', eventLog]])
+function scopedEvents(): Array<Record<string, unknown>> {
+  const tenantId = currentTenantId()
+  if (!tenantEvents.has(tenantId)) tenantEvents.set(tenantId, [])
+  return tenantEvents.get(tenantId)!
+}
 
 function logEvent(callId: string, e: Record<string, unknown>) {
-  eventLog.push({ ...e, callId, at: new Date().toISOString() })
-  if (eventLog.length > 2000) eventLog.splice(0, eventLog.length - 2000)
+  const events = scopedEvents()
+  events.push({ ...e, callId, at: new Date().toISOString() })
+  if (events.length > 2000) events.splice(0, events.length - 2000)
 }
 
 /**
@@ -348,7 +369,30 @@ async function runTool(
   }
 }
 
+/** Bind the full async request before any document, calendar, event or history operation. */
 export default async function handler(req: any, res: any) {
+  if (req.method === 'GET') {
+    const auth = authorizeOps(req.headers ?? {}, new Date())
+    if (!auth.ok) return scopedHandler(req, res)
+    return withTenant(auth.tenantId, () => scopedHandler(req, res))
+  }
+  if (req.method === 'POST') {
+    let body: unknown
+    try { body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body }
+    catch { return scopedHandler(req, res) }
+    const tenantId = webhookTenant(body)
+    if (!tenantId) {
+      res.setHeader('cache-control', 'no-store')
+      res.status(403).json({ error: 'This assistant is not assigned to a workspace.' })
+      return
+    }
+    // scopedHandler still verifies the webhook credential before using this routing scope.
+    return withTenant(tenantId, () => scopedHandler(req, res))
+  }
+  return scopedHandler(req, res)
+}
+
+async function scopedHandler(req: any, res: any) {
   // The dashboard reads the log from this same function deliberately: on serverless each
   // function gets its own memory, so a separate endpoint would see an empty log. This is
   // warm-instance scoped and resets when the instance recycles — fine for a demo, and the
@@ -385,14 +429,14 @@ export default async function handler(req: any, res: any) {
      * gate, the priced-out gap, which article answered — that Vapi has no view of. It is
      * supplementary now, not the source.
      */
-    const history = await callHistory()
+    const history = await callHistory(auth.tenantId === 'legacy' ? undefined : auth.assistantIds)
 
     res.status(200).json({
       calls: history.calls,
       callsError: history.error,
       callsConfigured: history.configured,
       callsStale: history.stale,
-      events: eventLog,
+      events: scopedEvents(),
       generatedAt: new Date().toISOString(),
       note: history.error
         ? (history.stale ? 'Call history is the last good read; Vapi did not answer this time.' : 'Call history unavailable — see callsError.')
@@ -408,7 +452,7 @@ export default async function handler(req: any, res: any) {
 
   // Verify the request is genuinely from Vapi when a secret is configured.
   const expected = process.env.VAPI_WEBHOOK_SECRET?.trim()
-  if (!expected && (process.env.VERCEL || process.env.NODE_ENV === 'production')) {
+  if (!expected && (process.env.VERCEL || process.env.NODE_ENV === 'production' || currentTenantId() !== 'legacy')) {
     res.status(503).json({ error: 'Webhook verification is not configured' })
     return
   }
@@ -478,6 +522,12 @@ export default async function handler(req: any, res: any) {
       pendingToolIds = list.map((tc) => tc?.id ?? tc?.toolCallId).filter((id) => typeof id === 'string')
       if (callId === 'unknown-call') throw new Error('A call id is required for tool calls')
       const state = await getCall(callId)
+      if (state.completedAt) {
+        res.status(200).json({ results: pendingToolIds.map((toolCallId) => ({
+          toolCallId, result: 'This call has already ended. No action was taken.',
+        })) })
+        return
+      }
       const before = structuredClone(state)
       const phone = message.call?.customer?.number ?? body.call?.customer?.number
       if (!state.phone && typeof phone === 'string' && phone.trim()) state.phone = normalisePhone(phone)
@@ -495,7 +545,8 @@ export default async function handler(req: any, res: any) {
         }
         results.push({ toolCallId: tc.id ?? tc.toolCallId, result })
         // What each tool decided, for the runtime log — no names, numbers or caller words.
-        const last = eventLog[eventLog.length - 1] ?? {}
+        const events = scopedEvents()
+        const last = events[events.length - 1] ?? {}
         console.log('[tool]', JSON.stringify({
           call: callId.slice(-6), name,
           ...(last.callId === callId ? {
@@ -516,6 +567,10 @@ export default async function handler(req: any, res: any) {
     }
 
     if (message.type === 'end-of-call-report') {
+      if (callId === 'unknown-call') {
+        res.status(400).json({ error: 'A call id is required for a finished-call report' })
+        return
+      }
       logEvent(callId, { kind: 'call_status', status: 'end-of-call-report' })
       /*
        * The one moment the whole call is known. Fold it into the caller's profile and
@@ -525,20 +580,29 @@ export default async function handler(req: any, res: any) {
        */
       try {
         const state = await getCall(callId)
+        if (state.completedAt) {
+          res.status(200).json({})
+          return
+        }
         const call = message.call ?? body.call ?? {}
-        const phone = state.phone ?? String(call?.customer?.number ?? message.customer?.number ?? 'unknown')
-        const started = call?.startedAt ? Date.parse(call.startedAt) : NaN
-        const ended = call?.endedAt ? Date.parse(call.endedAt) : now.getTime()
+        const phone = normalisePhone(state.phone ?? String(call?.customer?.number ?? message.customer?.number ?? 'unknown'))
+        const started = Date.parse(message.startedAt ?? call.startedAt ?? '')
+        const ended = Date.parse(message.endedAt ?? call.endedAt ?? '')
+        const finishedAt = Number.isFinite(ended) ? new Date(ended) : now
         await consolidateCall(documents, {
-          callId, phone, at: now,
-          durationSeconds: Number.isNaN(started) ? null : Math.round((ended - started) / 1000),
+          callId, phone, at: finishedAt,
+          durationSeconds: !Number.isFinite(started) || !Number.isFinite(ended) || ended < started
+            ? null : Math.round((ended - started) / 1000),
           qualification: state.qualification,
           name: state.name, email: state.email,
           unitsDiscussed: state.unitsDiscussed,
           booking: state.booking, lossReason: state.lossReason, escalation: state.escalation,
           toolsCalled: state.toolsCalled,
         })
-        await documents.delete(callKey(callId))
+        // Delete the working details, but retain the completed call's identity. Vapi can
+        // retry its report after a cold start, when no customer number is present and
+        // the only callback number was captured by a tool during the call.
+        await documents.set<CallState>(callKey(callId), { ...freshCall(), phone, completedAt: finishedAt.toISOString() })
         console.log('[call]', JSON.stringify({
           call: callId.slice(-6), consolidated: true, hasPhone: Boolean(phone && phone !== 'unknown'),
           tools: state.toolsCalled.length, booked: state.booking?.status ?? null,

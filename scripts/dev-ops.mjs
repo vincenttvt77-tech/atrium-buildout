@@ -2,7 +2,7 @@
 /**
  * Local preview server for the operations dashboard.
  *
- *   npm run dev:ops              → http://localhost:4300/   (passcode: demo)
+ *   npm run dev:ops              → http://localhost:4300/   (username: larkin; password: LarkinDemo123!)
  *   node scripts/dev-ops.mjs --no-seed
  *   PORT=5000 node scripts/dev-ops.mjs
  *
@@ -11,11 +11,11 @@
  *   - Mounts the REAL handlers in `api/*.ts` (Node strips the types; no build step) behind a
  *     small Vercel-style req/res shim. Sign-in, cookies, the passcode gate, the calendar and
  *     the lead pipeline are the production code paths, not a mock of them.
- *   - Forces the in-memory stores: `OPS_DASHBOARD_PASSCODE=demo` unless one is already set,
- *     and no KV variables, so nothing here can touch a real database. State resets on restart.
+ *   - Creates an isolated named Larkin demo account and forces in-memory stores. No KV
+ *     or Vapi API credentials are used; fixture state resets on restart.
  *   - `GET /api/vapi` answers from `scripts/dev-fixtures/calls.json` when no Vapi key is set,
- *     so the Calls view has realistic transcripts and tool calls to render. With a key set the
- *     real Vapi history is used unchanged.
+ *     so the Calls view has realistic transcripts and tool calls to render. Only the explicit
+ *     Larkin demo tenant receives these fixtures.
  *   - `--seed` (default) replays the fixture's calls through the real webhook — Vapi-shaped
  *     `transcript`, `tool-calls` and `end-of-call-report` posts — so the leads, follow-ups,
  *     bookings and decision events exist exactly as production would have written them. Each
@@ -29,10 +29,13 @@
  * No npm dependencies. Plain Node 22.
  */
 import { createServer } from 'node:http'
+import { randomBytes } from 'node:crypto'
 import { access, readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
+import { configureDemoAccount, DEMO_TENANT, DEMO_ASSISTANT } from './demo-account.mjs'
+import { authorizeOps, mintAccountSession, OPS_COOKIE } from '../src/ops/session.ts'
 
 const RealDate = Date
 const DAY = 86_400_000
@@ -68,15 +71,14 @@ if (flags.help) {
   process.exit(0)
 }
 
-const defaultPasscode = !(process.env.OPS_DASHBOARD_PASSCODE ?? '').trim()
-if (defaultPasscode) process.env.OPS_DASHBOARD_PASSCODE = 'demo'
-for (const name of ['KV_REST_API_URL', 'KV_REST_API_TOKEN']) {
+const demoAccount = await configureDemoAccount(new URL('../', import.meta.url))
+process.env.VAPI_WEBHOOK_SECRET ??= randomBytes(32).toString('base64url')
+for (const name of ['KV_REST_API_URL', 'KV_REST_API_TOKEN', 'VAPI_API_KEY', 'VAPI_PRIVATE_KEY']) {
   if (process.env[name] !== undefined) {
-    console.warn(`[dev-ops] ignoring ${name}: the preview always uses the in-memory store`)
+    console.warn(`[dev-ops] ignoring ${name}: the preview uses isolated local fixtures`)
     delete process.env[name]
   }
 }
-const PASSCODE = process.env.OPS_DASHBOARD_PASSCODE
 const VAPI_KEY_SET = Boolean((process.env.VAPI_PRIVATE_KEY ?? process.env.VAPI_API_KEY ?? '').trim())
 const WEBHOOK_SECRET = (process.env.VAPI_WEBHOOK_SECRET ?? '').trim()
 const PORT = Number(flags.port ?? process.env.PORT ?? 4300)
@@ -93,9 +95,9 @@ try {
   await buildOps.buildOpsPage()
 }
 
-const [dashboard, calendar, leads, vapi, health, ny, vapiCalls, calendarStore] = await Promise.all([
+const [dashboard, calendar, leads, vapi, health, ny, vapiCalls] = await Promise.all([
   load('api/dashboard.ts'), load('api/calendar.ts'), load('api/leads.ts'), load('api/vapi.ts'),
-  load('api/health.ts'), load('src/time/ny.ts'), load('src/ops/vapi-calls.ts'), load('src/calendar/store.ts'),
+  load('api/health.ts'), load('src/time/ny.ts'), load('src/ops/vapi-calls.ts'),
 ])
 
 const ROUTES = {
@@ -254,7 +256,7 @@ async function invoke(handler, request) {
   return out
 }
 
-const opsHeaders = (extra = {}) => ({ 'x-ops-passcode': PASSCODE, accept: 'application/json', ...extra })
+const opsHeaders = (extra = {}) => ({ cookie: `${OPS_COOKIE}=${mintAccountSession(new Date(), demoAccount)}`, accept: 'application/json', ...extra })
 
 async function api(handler, method, url, body) {
   const headers = opsHeaders(body === undefined ? {} : { 'content-type': 'application/json' })
@@ -409,6 +411,7 @@ async function refreshSlotListings(call) {
 
 const callRef = (call) => ({
   id: call.id,
+  assistantId: DEMO_ASSISTANT,
   type: 'inboundPhoneCall',
   ...(call.customerNumber ? { customer: { number: call.customerNumber } } : {}),
 })
@@ -466,21 +469,8 @@ async function seedBlocks(blocks) {
       if (!slot) { console.warn(`[dev-ops] block "${b.target}": no slot found, skipped`); continue }
       target = slot.slotId
     }
-    try {
-      await api(calendar.default, 'POST', '/api/calendar', { action: 'block', target, reason: b.reason })
-      outcomes.push({ target, via: 'api' })
-    } catch (err) {
-      if (!/^slot-/.test(target)) throw err
-      // Known handler defect: api/calendar.ts validates block targets with a regex written for
-      // hour-precision ids and rejects the minute-precision ids the API itself emits. Until that
-      // is fixed, write the block straight into the same in-memory store so the calendar still
-      // shows what a slot-level block looks like. Loud, so nobody mistakes this for the API.
-      console.warn(`[dev-ops] POST /api/calendar rejected slot block ${target} (${String(err.message).split(': ').pop()}); writing it to the store directly`)
-      const store = calendarStore.calendarStoreFromEnv()
-      await store.mutate((s) => s.blocks.some((x) => x.target === target) ? s
-        : { ...s, blocks: [...s.blocks, { target, reason: String(b.reason ?? 'blocked').slice(0, 120), blockedAt: new RealDate().toISOString() }] })
-      outcomes.push({ target, via: 'store' })
-    }
+    await api(calendar.default, 'POST', '/api/calendar', { action: 'block', target, reason: b.reason })
+    outcomes.push({ target, via: 'api' })
   }
   return outcomes
 }
@@ -508,7 +498,7 @@ async function seed(fixture) {
   // The inventory snapshot is cached with the clock of the first tool call and judged stale
   // after 15 minutes (src/inventory/match.ts). Warm it now, at the latest time any seeded
   // call will see, so calls replayed in the past never trip the stale branch.
-  await postVapi({ type: 'transcript', role: 'user', transcriptType: 'final', transcript: 'hello', call: { id: 'dev-warmup' } })
+  await postVapi({ type: 'transcript', role: 'user', transcriptType: 'final', transcript: 'hello', call: { id: 'dev-warmup', assistantId: DEMO_ASSISTANT } })
 
   const blocks = await seedBlocks(fixture.blocks)
   for (const call of fixture.calls) await seedCall(call)
@@ -586,7 +576,8 @@ const server = createServer(async (req, res) => {
     })
     let body = out.body
 
-    if (path === '/api/vapi' && req.method === 'GET' && !VAPI_KEY_SET && out.status === 200 && out.json) {
+    const auth = authorizeOps(req.headers, new RealDate())
+    if (path === '/api/vapi' && req.method === 'GET' && !VAPI_KEY_SET && out.status === 200 && out.json && auth.ok && auth.tenantId === DEMO_TENANT) {
       body = Buffer.from(JSON.stringify({
         ...out.json,
         calls: fixtureCalls,
@@ -596,7 +587,9 @@ const server = createServer(async (req, res) => {
       }))
     } else if (path === '/api/dashboard' && !flags.built && req.method === 'GET' && out.status === 200
       && String(out.headers.get('content-type') ?? '').includes('text/html')) {
-      body = Buffer.from(await livePage(out.body.toString('utf8')))
+      const html = dashboard.decorateDashboard(await livePage(out.body.toString('utf8')), auth)
+      body = Buffer.from(auth.ok && auth.tenantId === DEMO_TENANT
+        ? html.replace('</head>', '<script>window.ATRIUM_DEMO=true</script></head>') : html)
     }
 
     status = out.status
@@ -629,7 +622,7 @@ server.listen(PORT, () => {
     '',
     'Atrium operations dashboard — local preview',
     `  Open      http://localhost:${PORT}/`,
-    `  Sign in   passcode: ${defaultPasscode ? 'demo' : '(OPS_DASHBOARD_PASSCODE from your environment)'}`,
+    `  Sign in   username: ${demoAccount.username} (password from your local demo account)` ,
     `  Calls     ${fixtureCalls.length} from scripts/dev-fixtures/calls.json` + (VAPI_KEY_SET ? ' — NOT used: a Vapi key is set, GET /api/vapi reads real history' : ''),
     summary
       ? `  Seeded    ${summary.profiles.length} leads (${Object.entries(stages).map(([k, v]) => `${v} ${k.replace('_', ' ')}`).join(', ')}), ` +
@@ -638,7 +631,6 @@ server.listen(PORT, () => {
       : '  Seeded    nothing (--no-seed): the store is empty until something calls the webhook',
     `  Page      ${flags.built ? 'ops/dashboard.page.json as embedded at startup (restart after build:ops)' : 'composed live from ops/src on every load (--built to serve the embedded build)'}`,
     '  Store     in memory — restart to reset; nothing here reaches a real database',
-    `  curl      curl -H 'x-ops-passcode: ${defaultPasscode ? 'demo' : '…'}' http://localhost:${PORT}/api/leads`,
     '',
   ]
   console.log(lines.join('\n'))

@@ -103,6 +103,7 @@ const WD_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const MON_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const DAY_MS = 86400000
+const isDemo = window.ATRIUM_DEMO === true
 const USD = "$"
 
 /** Build-time copy of data/property.json (buildingName, leasingPhone, leasingHoursByDay). Gap G-9/G-10. */
@@ -811,6 +812,11 @@ function badgeFor(name) {
   return 0
 }
 function paintChrome() {
+  const account = window.ATRIUM_ACCOUNT
+  if (account) {
+    document.querySelectorAll('[data-workspace-name]').forEach((node) => { node.textContent = account.displayName })
+    document.querySelectorAll('[data-account-name]').forEach((node) => { node.textContent = account.username })
+  }
   const needs = derive.needsPerson(state)
   const live = needs.some((n) => n.type === 'emergency')
   const badges = {
@@ -839,7 +845,7 @@ function paintCluster(rows) {
   const anyLoaded = state.loaded.leads || state.loaded.calendar || state.loaded.calls
   if (rows.reconnecting) { iconName = 'refresh'; l1 = 'Trying to reconnect…'; l2 = at ? `Showing what we had at ${at}` : ''; mobile = 'Reconnecting…'; cls = 'cluster-warn' }
   else if (anyLoaded && (rows.leadsSaving === 'off' || rows.leadsSaving === 'temp' || rows.calendarSaving === 'off' || rows.calendarSaving === 'temp')) {
-    iconName = 'cloud-off'; l1 = "Changes aren't being saved"; l2 = at ? `Updated ${at}` : ''; mobile = 'Not saving'; cls = 'cluster-warn'
+    iconName = 'cloud-off'; l1 = isDemo ? 'Demo workspace' : "Changes aren't being saved"; l2 = isDemo ? 'Sample data resets on restart' : at ? `Updated ${at}` : ''; mobile = isDemo ? 'Demo' : 'Not saving'; cls = isDemo ? '' : 'cluster-warn'
   } else if (anyLoaded) { iconName = 'check-circle'; l1 = 'Changes are being saved'; l2 = at ? `Updated ${at}` : ''; mobile = at ? `Updated ${at}` : 'Updated'; cls = 'cluster-ok' }
   el.innerHTML = `<span class="cluster-desk ${cls}">${ico(iconName)}<span><span class="cluster-l1">${esc(l1)}</span>${l2 ? `<span class="cluster-l2">${esc(l2)}</span>` : ''}</span></span>` +
     `<span class="cluster-mobile ${cls}">${ico(iconName)}<span>${esc(mobile)}</span></span>`
@@ -874,7 +880,7 @@ const html_ = {
   },
 }
 function hint(key) {
-  const k = `atrium.hint.${String(key)}`
+  const k = `atrium.hint.${window.ATRIUM_ACCOUNT?.tenantId || 'legacy'}.${String(key)}`
   try {
     if (localStorage.getItem(k)) return false
     localStorage.setItem(k, '1')
@@ -2024,7 +2030,7 @@ const todayView = {
     if (m.notConfigured) { root.innerHTML = out; return }
     out += m.emergencies.map((x) => emergencyBannerHtml(x, this.announced)).join('')
     if (m.leadsOff || m.calOff) {
-      const txt = m.leadsOff && m.calOff ? "Heads up: changes aren't being saved right now. Anything you mark may disappear. Ask Atrium support."
+      const txt = isDemo ? 'Demo workspace: explore these sample calls, leads and tours. Changes last until the local preview restarts.' : m.leadsOff && m.calOff ? "Heads up: changes aren't being saved right now. Anything you mark may disappear. Ask Atrium support."
         : m.leadsOff ? "Heads up: callers and to-dos aren't being saved right now. Anything you mark here may disappear. Ask Atrium support."
           : "Heads up: calendar changes aren't being saved right now. Blocks you add may disappear. Ask Atrium support."
       out += html_.banner('warn', '', { raw: `<a class="banner-link" href="#/status" style="color:inherit;text-decoration:none">${esc(txt)}</a>` })
@@ -2125,11 +2131,11 @@ const statusView = {
     const savingRow = (labelText, v) => {
       if (v === null) return `<div class="status-row"><span class="dot dot-neutral"></span><span class="muted">${esc(labelText)}: not loaded yet</span></div>`
       const off = v !== 'on'
-      const word = v === 'on' ? 'Saving on' : v === 'temp' ? 'Saving temporarily unavailable — check the connection' : 'Saving off — changes may be lost'
+      const word = v === 'on' ? 'Saving on' : v === 'temp' ? 'Saving temporarily unavailable — check the connection' : isDemo ? 'Demo data — resets when the preview restarts' : 'Saving off — changes may be lost'
       return `<div class="status-row"><span class="dot${off ? ' dot-warn' : ''}"></span><span class="${off ? 'warn-text' : ''}">${off ? ico('cloud-off') : ico('check')} ${esc(labelText)}: ${esc(word)}</span></div>`
     }
     const rec = rows.recordings
-    const recText = rec === null ? 'Checking…' : rec === 'on' ? 'Connected — recordings and transcripts are available for the 20 most recent calls.'
+    const recText = isDemo ? 'Sample calls and transcripts are included for this demo account.' : rec === null ? 'Checking…' : rec === 'on' ? 'Connected — recordings and transcripts are available for the 20 most recent calls.'
       : rec === 'off' ? "Not connected yet — calls still show from the leads' records, without recordings or transcripts. Ask Atrium support." : 'Connected, but not answering right now — trying again.'
     const summaryOk = rows.ok
     let out = `<div class="view-head"><h1 tabindex="-1">Status</h1></div><div class="status-col">`
@@ -2137,12 +2143,12 @@ const statusView = {
       `<div class="summary-sub">${rows.reconnecting ? `Trying to reconnect…${at ? ` showing what we had at ${esc(at)}` : ''}` : (at ? `Updated ${esc(at)}` : 'Loading…')}</div></div></div>` +
       `<button type="button" class="btn" data-action="refresh" data-key="refresh">Refresh now</button></div>`
     out += `<section class="status-section"><h2>Saving</h2>${savingRow('Callers and to-dos', rows.leadsSaving)}${savingRow('Calendar', rows.calendarSaving)}` +
-      (rows.leadsSaving === 'off' || rows.calendarSaving === 'off' ? `<p class="status-p muted small">Ask Atrium support to turn saving on.</p>` : '') + '</section>'
+      (!isDemo && (rows.leadsSaving === 'off' || rows.calendarSaving === 'off') ? `<p class="status-p muted small">Ask Atrium support to turn saving on.</p>` : '') + '</section>'
     out += `<section class="status-section"><h2>Call recordings and transcripts</h2><div class="status-row"><span class="dot${rec === 'on' ? '' : rec === null ? ' dot-neutral' : ' dot-warn'}"></span><span class="${rec === 'on' || rec === null ? '' : 'warn-text'}">${esc(recText)}</span></div></section>`
-    out += `<section class="status-section" id="phone-assistant"><h2>Phone assistant</h2><p class="status-p">Apply the latest leasing instructions and tools to your phone assistant. Your existing voice, model, and webhook authentication settings are preserved.</p><div class="status-actions"><button type="button" class="btn" data-action="sync-assistant" data-key="sync-assistant">Update the phone assistant</button></div></section>`
+    out += isDemo ? `<section class="status-section" id="phone-assistant"><h2>Phone assistant</h2><p class="status-p">This demo uses sample conversations. It does not update your live phone assistant.</p></section>` : `<section class="status-section" id="phone-assistant"><h2>Phone assistant</h2><p class="status-p">Apply the latest leasing instructions and tools to your phone assistant. Your existing voice, model, and webhook authentication settings are preserved.</p><div class="status-actions"><button type="button" class="btn" data-action="sync-assistant" data-key="sync-assistant">Update the phone assistant</button></div></section>`
     out += `<section class="status-section"><h2>Outgoing calls</h2><div class="status-row"><span class="dot dot-neutral"></span><span>${model.outbound ? 'The assistant can make outgoing calls.' : "The assistant answers calls; it doesn't make them. Everything under To do is for your team."}</span></div></section>`
     out += `<section class="status-section"><h2>Times</h2><p class="status-p">All times on this page are New York time.</p></section>`
-    out += `<section class="status-section"><h2>Signed in</h2><p class="status-p">You're signed in on this device. Sessions end after 8 hours; you'll be asked for the passcode again.</p><div class="status-actions"><button type="button" class="btn" data-action="signout" data-key="signout">Sign out</button></div></section>`
+    out += `<section class="status-section"><h2>Signed in</h2><p class="status-p">${window.ATRIUM_ACCOUNT ? `Signed in as <strong>${esc(window.ATRIUM_ACCOUNT.username)}</strong> to ${esc(window.ATRIUM_ACCOUNT.displayName)}. ` : "You're signed in on this device. "}Sessions end after 8 hours. Sign out before switching accounts.</p><div class="status-actions"><button type="button" class="btn" data-action="signout" data-key="signout">Sign out</button></div></section>`
     out += `<section class="status-section"><h2>Who can see this</h2><p class="status-p">This page has callers' names, numbers and what they said. Keep it to the leasing team, don't screenshot it into a shared channel, and sign out when you're done.</p></section>`
     out += `<section class="status-section"><h2>What the assistant does and doesn't do</h2><p class="status-p">${esc(ASSISTANT_PARA)}</p></section>`
     const support = []

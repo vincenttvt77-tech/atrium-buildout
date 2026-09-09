@@ -29,7 +29,7 @@ This pass improves the existing leasing demo and staff workspace. It does not es
 ## Before a paid production pilot
 
 1. Verify the deployed version, Vapi assistant, phone-number routing, webhook credential and real Redis instance together. Run controlled test calls, including a retry, concurrent booking, escalation and an interrupted conversation.
-2. Add tenant-scoped storage and authorization before onboarding multiple customers. Current storage keys, shared passcode, and property configuration represent one demo property.
+2. Complete multi-property onboarding and role authorization before a commercial portfolio rollout. Named accounts now use tenant-scoped storage and sessions; the bundled property/inventory template still represents The Larkin.
 3. Choose staff identity/roles, durable audit history, retention policy, backups, monitoring and incident ownership. Decision events remain process-local; the dashboard reads call history from Vapi.
 4. Connect the actual inventory/calendar sources with freshness guarantees. Bundled fictional inventory and a standalone tour calendar are not a PMS integration.
 5. Outgoing calls, SMS and email delivery are not wired into the live workflow. The UI must continue to describe follow-ups as staff tasks. The email module is independently tested; that is not evidence of live delivery.
@@ -42,3 +42,14 @@ No real voice call, paid model simulation, production deployment, or live Redis 
 - [Server authentication](https://docs.vapi.ai/server-url/server-authentication)
 - [Server URL priority](https://docs.vapi.ai/server-url/setting-server-urls)
 - [Dynamic current-time template example](https://docs.vapi.ai/tools/go-high-level/)
+
+## Named Larkin account follow-up
+
+- Added username/password sign-in, salted scrypt credentials and independently signed, tenant-bound sessions. Removal, password change and membership change revoke sessions.
+- Separated leads, follow-ups, active/finished calls, calendar records, events and call-history caches by tenant, including reset and deletion controls. Legacy records remain isolated during staged migration.
+- Restricted Vapi reads and publishing to bound assistants. Preview publishing is disabled; publishing requires a canonical server origin and verifies saved configuration.
+- Added an explicit local `larkin` fixture account. Credentials persist locally as a hash; sample operational records reset with the preview. No local account or password is provisioned into production.
+- Further call-identity regressions cover repeated hidden-caller reports, delayed reports, terminal-call mutations and anonymous follow-up collisions.
+- Negative tests exercise matching record IDs across accounts, forged scope inputs, legacy namespace escapes and concurrent KV/memory operations. See TENANCY.md.
+
+Account follow-up validation: 419 tests passed on Node 22.23.2; TypeScript, data validation and the full build passed. Browser sign-in with the named Larkin account was verified, including account identity and sample records. Gitignored credential storage uses owner-only permissions.

@@ -1,8 +1,10 @@
 import page from '../ops/dashboard.page.json' with { type: 'json' }
 import {
   authorizeOps, clearedSessionCookie, constantTimeEquals, isSecureRequest, mintSession,
-  opsPasscode, sessionCookie, SESSION_TTL_MS,
+  mintAccountSession, opsPasscode, sessionCookie, SESSION_TTL_MS,
 } from '../src/ops/session.ts'
+import type { OpsAuth } from '../src/ops/session.ts'
+import { authenticateAccount, readAccountsConfig } from '../src/ops/accounts.ts'
 
 /**
  * Serves the operations dashboard, behind a passcode.
@@ -69,26 +71,37 @@ const shell = (title: string, body: string) => `<!doctype html>
 </html>
 `
 
-const loginPage = (failed: boolean) => shell('Sign in — Atrium Operations', `
+const loginPage = (failed: boolean, accountMode: boolean) => shell('Sign in — Atrium Operations', `
   <h1>Welcome back.</h1>
   <p>Sign in to manage your leasing workspace.</p>
-  ${failed ? '<p class="err" role="alert">That passcode was not right. Please try again.</p>' : ''}
+  ${failed ? `<p class="err" role="alert">${accountMode ? 'The username or password was not right.' : 'That passcode was not right.'} Please try again.</p>` : ''}
   <form method="post" action="/api/dashboard">
+    ${accountMode ? `<label for="username">Username</label>
+    <input id="username" name="username" type="text" autocomplete="username" autocapitalize="none"
+           spellcheck="false" maxlength="64" autofocus required style="margin-bottom:20px">
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" maxlength="256" required>` : `
     <label for="passcode">Operations passcode</label>
     <input id="passcode" name="passcode" type="password" autocomplete="current-password"
-           autofocus required>
+           autofocus required>`}
     <button type="submit">Sign in to workspace</button>
   </form>
   <p class="login-foot">Staff access only. Prospect details and conversations are private.</p>
 `)
 
 const notConfiguredPage = () => shell('Not configured — Atrium Operations', `
-  <h1>The dashboard is closed</h1>
-  <p>No operations passcode is set, so there is no way to authorise anyone — and the log
-  behind this page holds prospect names, email addresses and verbatim call excerpts. It
-  stays shut rather than opening to everyone.</p>
-  <p>Set <code>OPS_DASHBOARD_PASSCODE</code> in the environment and redeploy.</p>
+  <h1>Sign-in is unavailable</h1>
+  <p>The workspace account settings are missing or need attention. Contact your Atrium administrator to restore access.</p>
 `)
+
+/** Only the verified, nonsecret identity reaches the page; it cannot select API storage. */
+export function decorateDashboard(html: string, auth: Extract<OpsAuth, { ok: true }>): string {
+  const identity = JSON.stringify({ username: auth.username, tenantId: auth.tenantId, displayName: auth.displayName })
+    .replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029')
+  const script = `<script>window.ATRIUM_ACCOUNT=Object.freeze(${identity});</script>`
+  return html.includes('</head>') ? html.replace('</head>', `${script}</head>`) : `${script}${html}`
+}
 
 /**
  * Blunts online guessing. Per warm instance and therefore not a real rate limiter — that
@@ -135,11 +148,10 @@ export default async function handler(req: any, res: any) {
   const headers = req.headers ?? {}
   const now = new Date()
   const secure = isSecureRequest(headers)
+  const config = readAccountsConfig()
   const passcode = opsPasscode()
 
   if (req.method === 'POST') {
-    if (passcode === null) { send(res, 503, notConfiguredPage()); return }
-
     const fields = bodyFields(req)
 
     if (fields['action'] === 'logout') {
@@ -148,17 +160,25 @@ export default async function handler(req: any, res: any) {
       return
     }
 
-    const presented = fields['passcode'] ?? ''
-    if (!constantTimeEquals(presented, passcode)) {
+    if (config.mode === 'invalid' || (config.mode === 'legacy' && passcode === null)) {
+      send(res, 503, notConfiguredPage()); return
+    }
+
+    const account = config.mode === 'accounts'
+      ? await authenticateAccount(fields['username'] ?? '', fields['password'] ?? '') : null
+    const authenticated = config.mode === 'accounts'
+      ? account !== null : constantTimeEquals(fields['passcode'] ?? '', passcode!)
+    if (!authenticated) {
       await penalise(clientKey(req))
-      send(res, 401, loginPage(true))
+      send(res, 401, loginPage(true, config.mode === 'accounts'))
       return
     }
 
     failures.delete(clientKey(req))
     // 303 so a refresh after signing in does not re-post the passcode.
     for (const [k, v] of HTML_HEADERS) res.setHeader(k, v)
-    res.setHeader('set-cookie', sessionCookie(mintSession(now, passcode), { secure }))
+    const token = account ? mintAccountSession(now, account) : mintSession(now, passcode!)
+    res.setHeader('set-cookie', sessionCookie(token, { secure }))
     res.setHeader('location', '/api/dashboard')
     res.status(303).send('')
     return
@@ -173,15 +193,18 @@ export default async function handler(req: any, res: any) {
   const auth = authorizeOps(headers, now)
   if (!auth.ok) {
     send(res, auth.reason === 'not_configured' ? 503 : 401,
-      auth.reason === 'not_configured' ? notConfiguredPage() : loginPage(false))
+      auth.reason === 'not_configured' ? notConfiguredPage() : loginPage(false, config.mode === 'accounts'))
     return
   }
 
   // Renew on use, so an operator watching a live call is not signed out mid-tour.
-  if (auth.via === 'session' && passcode !== null) {
+  if (auth.via === 'session') {
+    const account = config.mode === 'accounts'
+      ? config.accounts.find((candidate) => candidate.username === auth.username && candidate.tenantId === auth.tenantId) : null
+    const token = account ? mintAccountSession(now, account) : mintSession(now, passcode!)
     res.setHeader('set-cookie',
-      sessionCookie(mintSession(now, passcode), { secure, ttlMs: SESSION_TTL_MS }))
+      sessionCookie(token, { secure, ttlMs: SESSION_TTL_MS }))
   }
   for (const [k, v] of HTML_HEADERS) res.setHeader(k, v)
-  res.status(200).send(page.html)
+  res.status(200).send(decorateDashboard(page.html, auth))
 }

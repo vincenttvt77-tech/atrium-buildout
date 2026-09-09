@@ -50,8 +50,8 @@ function withinHours(t: Date): Date {
   return nyInstant(nextDay.year, nextDay.month, nextDay.day, 10)
 }
 
-const id = (phone: string, kind: string, due: Date) =>
-  `fu-${phone.replace(/\D/g, '')}-${kind}-${due.toISOString().slice(0, 13)}`
+const id = (identity: string, kind: string, due: Date) =>
+  `fu-${identity}-${kind}-${due.toISOString().slice(0, 13)}`
 
 /**
  * Derives every follow-up this profile should have. Idempotent: the ids are deterministic,
@@ -59,8 +59,13 @@ const id = (phone: string, kind: string, due: Date) =>
  */
 export function deriveFollowUps(p: LeadProfile, now: Date, fromCall: string): FollowUp[] {
   const out: FollowUp[] = []
+  // Withheld numbers are separate callers. Stripping "unknown" down to no digits
+  // made their same-hour callbacks overwrite each other in the follow-up queue.
+  const identity = p.phone === 'unknown'
+    ? `anonymous-${encodeURIComponent(p.calls[0]?.callId ?? fromCall)}`
+    : p.phone.replace(/\D/g, '')
   const mk = (kind: FollowUpKind, channel: FollowUp['channel'], dueAt: Date, reason: string): FollowUp => ({
-    id: id(p.phone, kind, dueAt), phone: p.phone, kind, channel,
+    id: id(identity, kind, dueAt), phone: p.phone, kind, channel,
     dueAt: dueAt.toISOString(), reason, status: 'scheduled',
     createdAt: now.toISOString(), createdFromCall: fromCall, executable: false,
   })

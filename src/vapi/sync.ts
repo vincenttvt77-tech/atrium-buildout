@@ -71,35 +71,70 @@ export async function syncAssistant(opts: {
   const doFetch = opts.fetchImpl ?? fetch
   const base = (opts.baseUrl ?? 'https://api.vapi.ai').replace(/\/$/, '')
   const headers = { authorization: `Bearer ${opts.apiKey}`, 'content-type': 'application/json' }
+  const signal = AbortSignal.timeout(15000)
   const summarise = (a: unknown): VapiAssistantSummary => {
     const r = (a && typeof a === 'object' ? a : {}) as Record<string, unknown>
     return { id: String(r.id ?? ''), name: String(r.name ?? '') }
   }
 
-  const listRes = await doFetch(`${base}/assistant`, { headers })
-  if (!listRes.ok) return { ok: false, error: `Vapi returned ${listRes.status} when listing assistants${listRes.status === 401 ? ' — the key is not the private key' : ''}.` }
-  const listBody = await listRes.json() as unknown
-  const list = (Array.isArray(listBody) ? listBody : []).map(summarise)
-  const chosen = chooseAssistant(list, { id: opts.assistantId, name: config_name(opts.config) })
-  if ('error' in chosen) return { ok: false, error: chosen.error, candidates: chosen.candidates }
-
-  const getRes = await doFetch(`${base}/assistant/${chosen.assistant.id}`, { headers })
-  if (!getRes.ok) return { ok: false, error: `Vapi returned ${getRes.status} when reading "${chosen.assistant.name}".` }
+  let assistantId = opts.assistantId
+  if (assistantId !== undefined && !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(assistantId)) {
+    return { ok: false, error: 'The assistant ID is invalid.' }
+  }
+  // A bound workspace reads only its own assistant. Listing the organization first would
+  // disclose other tenants' names in both ambiguous-selection errors and API responses.
+  if (assistantId === undefined) {
+    const listRes = await doFetch(`${base}/assistant`, { headers, signal })
+    if (!listRes.ok) return { ok: false, error: `Vapi returned ${listRes.status} when listing assistants${listRes.status === 401 ? ' — the key is not the private key' : ''}.` }
+    const listBody = await listRes.json() as unknown
+    if (!Array.isArray(listBody)) return { ok: false, error: 'Vapi returned an invalid assistant list.' }
+    const list = listBody.map(summarise).filter((a) => /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(a.id))
+    const chosen = chooseAssistant(list, { name: config_name(opts.config) })
+    if ('error' in chosen) return { ok: false, error: chosen.error, candidates: chosen.candidates }
+    assistantId = chosen.assistant.id
+  }
+  const endpoint = `${base}/assistant/${encodeURIComponent(assistantId)}`
+  const getRes = await doFetch(endpoint, { headers, signal })
+  if (!getRes.ok) return { ok: false, error: `Vapi returned ${getRes.status} when reading the configured assistant${getRes.status === 401 ? ' — the key is not the private key' : ''}.` }
   const existing = await getRes.json() as Record<string, unknown>
+  if (!existing || typeof existing !== 'object' || Array.isArray(existing) || existing.id !== assistantId) {
+    return { ok: false, error: 'Vapi returned an assistant that does not match the configured ID.' }
+  }
+  const assistant = summarise(existing)
 
   const patch = assistantPatch(existing, opts.config)
-  const patchRes = await doFetch(`${base}/assistant/${chosen.assistant.id}`, { method: 'PATCH', headers, body: JSON.stringify(patch) })
+  const patchRes = await doFetch(endpoint, { method: 'PATCH', headers, body: JSON.stringify(patch), signal })
   if (!patchRes.ok) {
     let detail = ''
     try { const b = await patchRes.json() as { message?: unknown }; if (b?.message) detail = ` — ${Array.isArray(b.message) ? b.message.join('; ') : String(b.message)}` } catch { /* no body */ }
-    return { ok: false, error: `Vapi returned ${patchRes.status} when updating "${chosen.assistant.name}"${detail}.`, assistant: chosen.assistant }
+    return { ok: false, error: `Vapi returned ${patchRes.status} when updating "${assistant.name}"${detail}.`, assistant }
+  }
+  // A successful PATCH response only acknowledges the write. Report success after the
+  // saved assistant independently returns the expected script, tools and destination.
+  const readbackRes = await doFetch(endpoint, { headers, signal })
+  if (!readbackRes.ok) return { ok: false, error: `The update was sent, but Vapi returned ${readbackRes.status} when verifying the saved assistant.`, assistant }
+  const readback = await readbackRes.json() as Record<string, unknown>
+  if (!readback || readback.id !== assistantId || !containsPatch(readback, patch)) {
+    return { ok: false, error: 'The update was sent, but the saved assistant did not match the expected configuration. Check Vapi before retrying.', assistant }
   }
   return {
     ok: true,
-    assistant: chosen.assistant,
+    assistant,
     updated: ['the script', `${(opts.config.model.tools as unknown[]).length} tools with their spoken messages`, 'the server address', 'the opening line'],
     kept: KEPT_IN_VAPI,
   }
 }
 
 const config_name = (c: DemoAssistantConfig) => c.name
+
+/** API defaults may add fields, but every intended field and ordered array must survive. */
+function containsPatch(actual: unknown, expected: unknown): boolean {
+  if (Array.isArray(expected)) {
+    return Array.isArray(actual) && actual.length === expected.length && expected.every((value, index) => containsPatch(actual[index], value))
+  }
+  if (expected && typeof expected === 'object') {
+    if (!actual || typeof actual !== 'object' || Array.isArray(actual)) return false
+    return Object.entries(expected).every(([key, value]) => containsPatch((actual as Record<string, unknown>)[key], value))
+  }
+  return actual === expected
+}

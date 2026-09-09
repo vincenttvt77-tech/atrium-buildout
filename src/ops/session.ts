@@ -15,8 +15,10 @@
  * There is deliberately no redacted-but-public mode. A "safe" summary is a thing someone
  * later adds a field to.
  */
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { hasSecret, requireSecret } from '../config/env.ts'
+import { readAccountsConfig } from './accounts.ts'
+import type { OpsAccount } from './accounts.ts'
 
 export const OPS_COOKIE = 'atrium_ops'
 
@@ -25,6 +27,7 @@ export const SESSION_TTL_MS = 8 * 60 * 60 * 1000
 
 /** Version tag in the signature so a format change invalidates every old cookie. */
 const CONTEXT = 'atrium-ops-session-v1'
+const ACCOUNT_CONTEXT = 'atrium-account-session-v2'
 
 /**
  * Per-process key for comparing untrusted strings.
@@ -85,6 +88,55 @@ export function verifySession(
   return Number(expiresAt) > now.getTime()
 }
 
+function accountFingerprint(account: OpsAccount): string {
+  return createHash('sha256').update(JSON.stringify({
+    username: account.username, tenantId: account.tenantId, passwordHash: account.passwordHash,
+    displayName: account.displayName, assistantIds: [...account.assistantIds].sort(),
+  })).digest('base64url')
+}
+
+function accountSignature(payload: string, account: OpsAccount, sessionSecret: string): string {
+  // Every authorization-relevant configuration change invalidates existing sessions.
+  const configuration = accountFingerprint(account)
+  return createHmac('sha256', sessionSecret)
+    .update(`${ACCOUNT_CONTEXT}|${configuration}|${payload}`).digest('base64url')
+}
+
+export function mintAccountSession(
+  now: Date, account: OpsAccount, env: NodeJS.ProcessEnv = process.env, ttlMs: number = SESSION_TTL_MS,
+): string {
+  const config = readAccountsConfig(env)
+  const configured = config.mode === 'accounts'
+    ? config.accounts.find((candidate) => candidate.username === account.username && candidate.tenantId === account.tenantId)
+    : undefined
+  if (!configured || accountFingerprint(configured) !== accountFingerprint(account)) throw new Error('Account is not configured.')
+  const expiresAt = now.getTime() + ttlMs
+  if (!Number.isSafeInteger(expiresAt) || ttlMs <= 0 || ttlMs > SESSION_TTL_MS) throw new Error('Invalid session lifetime.')
+  const payload = Buffer.from(JSON.stringify({ username: account.username, tenantId: account.tenantId, expiresAt })).toString('base64url')
+  return `a2.${payload}.${accountSignature(payload, configured, env.OPS_SESSION_SECRET!)}`
+}
+
+export function verifyAccountSession(
+  token: string | undefined, now: Date, env: NodeJS.ProcessEnv = process.env,
+): OpsAccount | null {
+  const config = readAccountsConfig(env)
+  if (config.mode !== 'accounts' || !token || token.length > 2048) return null
+  const match = /^a2\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]{43})$/.exec(token)
+  if (!match) return null
+  try {
+    const payload = Buffer.from(match[1]!, 'base64url')
+    if (payload.toString('base64url') !== match[1]) return null
+    const parsed = JSON.parse(payload.toString('utf8'))
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
+        typeof parsed.username !== 'string' || typeof parsed.tenantId !== 'string' ||
+        !Number.isSafeInteger(parsed.expiresAt) || parsed.expiresAt <= now.getTime() ||
+        parsed.expiresAt > now.getTime() + SESSION_TTL_MS) return null
+    const account = config.accounts.find((candidate) => candidate.username === parsed.username && candidate.tenantId === parsed.tenantId)
+    if (!account || !constantTimeEquals(match[2]!, accountSignature(match[1]!, account, env.OPS_SESSION_SECRET!))) return null
+    return account
+  } catch { return null }
+}
+
 export function parseCookies(header: string | string[] | undefined): Record<string, string> {
   const out: Record<string, string> = {}
   const raw = Array.isArray(header) ? header.join('; ') : header
@@ -104,9 +156,10 @@ export function parseCookies(header: string | string[] | undefined): Record<stri
   return out
 }
 
+export type OpsIdentity = Pick<OpsAccount, 'username' | 'tenantId' | 'displayName' | 'assistantIds'>
 export type OpsAuth =
   /** Authorised. `via` is for the audit line, not for branching on trust. */
-  | { ok: true; via: 'session' | 'passcode-header' }
+  | ({ ok: true; via: 'session' | 'passcode-header' } & OpsIdentity)
   /** No passcode is configured, so nothing can be authorised. Serve nothing. */
   | { ok: false; reason: 'not_configured' }
   /** A passcode is configured and this request did not present it. */
@@ -128,16 +181,28 @@ const first = (v: string | string[] | undefined): string | undefined =>
 export function authorizeOps(
   headers: Headers, now: Date, env: NodeJS.ProcessEnv = process.env,
 ): OpsAuth {
+  const config = readAccountsConfig(env)
+  if (config.mode === 'invalid') return { ok: false, reason: 'not_configured' }
+  const token = parseCookies(headers['cookie'])[OPS_COOKIE]
+  if (config.mode === 'accounts') {
+    const account = verifyAccountSession(token, now, env)
+    if (!account) return { ok: false, reason: 'unauthenticated' }
+    const { username, tenantId, displayName, assistantIds } = account
+    return { ok: true, via: 'session', username, tenantId, displayName, assistantIds }
+  }
   const passcode = opsPasscode(env)
   if (passcode === null) return { ok: false, reason: 'not_configured' }
+  const legacy: OpsIdentity = {
+    username: 'legacy', tenantId: 'legacy', displayName: 'Operations',
+    assistantIds: env.VAPI_ASSISTANT_ID?.trim() ? [env.VAPI_ASSISTANT_ID.trim()] : [],
+  }
 
   const presented = first(headers['x-ops-passcode'])
   if (presented !== undefined && constantTimeEquals(presented, passcode)) {
-    return { ok: true, via: 'passcode-header' }
+    return { ok: true, via: 'passcode-header', ...legacy }
   }
 
-  const token = parseCookies(headers['cookie'])[OPS_COOKIE]
-  if (verifySession(token, now, passcode)) return { ok: true, via: 'session' }
+  if (verifySession(token, now, passcode)) return { ok: true, via: 'session', ...legacy }
 
   return { ok: false, reason: 'unauthenticated' }
 }
@@ -150,7 +215,7 @@ export function isSecureRequest(headers: Headers): boolean {
   const proto = first(headers['x-forwarded-proto'])
   if (proto) return proto.split(',')[0]?.trim() === 'https'
   const host = first(headers['host']) ?? ''
-  return !(host.startsWith('localhost') || host.startsWith('127.0.0.1'))
+  return !/^(localhost|127\.0\.0\.1|\[::1\])(?::[0-9]+)?$/i.test(host)
 }
 
 export function sessionCookie(
