@@ -330,7 +330,7 @@ function lookupPlanResult(plan: FloorPlan, ctx: ToolContext): ToolResult {
   const more = rest > 0 ? ` ${rest} more ${plan.name} residence${rest === 1 ? ' is' : 's are'} open — say more exist and offer to go through them.` : ''
 
   return {
-    say: `${plan.name} (${plan.id}): ${size}, ${plan.bathrooms} bath, about ${plan.sqft} sq ft. Open now — quote exactly these:\n${lines.join('\n')}${more}${shown.some(u => u.concession) ? CONCESSION_TIMING_GUIDANCE : ''}`,
+    say: `${plan.name} (${plan.id}): ${size}, ${plan.bathrooms} bath, about ${plan.sqft} sq ft. Available residences — quote exactly these:\n${lines.join('\n')}${more}${shown.some(u => u.concession) ? CONCESSION_TIMING_GUIDANCE : ''}`,
     record: { kind: 'availability_checked', outcome: 'plan_lookup', floorPlanId: plan.id, unitsOffered: shown.map((u) => u.unitId) },
   }
 }
