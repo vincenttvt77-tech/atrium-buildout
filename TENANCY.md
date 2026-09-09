@@ -1,6 +1,6 @@
 # Named accounts and isolated workspaces
 
-`npm run dev:ops` creates the local `larkin` account on its first run. Its initial demo-only password is `LarkinDemo123!`. The private `.env.demo-account.json` file stores its salted scrypt hash and an independent session-signing secret, is gitignored, and is written with owner-only permissions. It is reused on restart. No deployed service creates this default account.
+`npm run dev:ops` creates the local demo account on its first run with a random password shown once in the local terminal. The private `.env.demo-account.json` file stores its salted scrypt hash and an independent session-signing secret, is gitignored, and is written with owner-only permissions. It is reused on restart, preserving existing account credentials. No deployed service creates this account. Keep the initial credentials in your password manager; regular logins need only the username and password.
 
 The local account belongs to `demo-larkin`. Only that tenant receives the sample calls, leads, bookings and follow-ups. Local records reset when the preview restarts; the account credentials remain. Live Vapi and Redis credentials are ignored by the local fixture server. The public production portal does not inherit this local account or password.
 

@@ -16,12 +16,14 @@ export async function configureDemoAccount(root) {
     try { saved = JSON.parse(await readFile(path, 'utf8')) }
     catch (error) {
       if (error.code !== 'ENOENT') throw error
+      const password = randomBytes(18).toString('base64url')
       saved = {
         sessionSecret: randomBytes(48).toString('base64url'),
-        accounts: [{ username: 'larkin', passwordHash: await hashPassword('LarkinDemo123!'),
+        accounts: [{ username: 'larkin', passwordHash: await hashPassword(password),
           tenantId: DEMO_TENANT, displayName: 'The Larkin · Demo', assistantIds: [DEMO_ASSISTANT] }],
       }
       await writeFile(path, JSON.stringify(saved, null, 2) + '\n', { mode: 0o600, flag: 'wx' })
+      console.log(`Created local demo account. Username: larkin. Password: ${password}\nSave these credentials; the password is not stored in plain text or shown again.`)
     }
     process.env.OPS_ACCOUNTS_JSON = JSON.stringify(saved.accounts)
     process.env.OPS_SESSION_SECRET = saved.sessionSecret

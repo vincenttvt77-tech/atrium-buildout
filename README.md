@@ -192,7 +192,7 @@ inventory §15.2 and §18.2.
 
 The operations workspace uses a white and navy theme, with shared styling for the Today,
 Calls, Leads, Calendar and Status views. Preview it with `npm run dev:ops`; the local
-login is `larkin` / `LarkinDemo123!`, and its fixture records reset when the process restarts.
+account is created once; initial credentials appear in the local terminal. Fixture records reset when the process restarts.
 The account belongs to an isolated demo tenant; see [TENANCY.md](TENANCY.md).
 
 The Calendar view can browse any supported date with previous/next controls or **Go to
