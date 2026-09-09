@@ -789,7 +789,7 @@ function statusRows() {
   const leadsStore = state.leads && state.leads.store
   const calStore = state.calendar && state.calendar.store
   const savingOff = (s) => Boolean(s) && s.durable === false
-  const kvUnreachable = (s) => Boolean(s) && /^KV configured but unreachable/.test(String(s.note ?? ''))
+  const kvUnreachable = (s) => Boolean(s) && s.kind === 'kv' && s.durable === false
   const rows = {
     leadsSaving: !state.loaded.leads ? null : (savingOff(leadsStore) ? (kvUnreachable(leadsStore) ? 'temp' : 'off') : 'on'),
     calendarSaving: !state.loaded.calendar ? null : (savingOff(calStore) ? (kvUnreachable(calStore) ? 'temp' : 'off') : 'on'),
@@ -2125,7 +2125,7 @@ const statusView = {
     const savingRow = (labelText, v) => {
       if (v === null) return `<div class="status-row"><span class="dot dot-neutral"></span><span class="muted">${esc(labelText)}: not loaded yet</span></div>`
       const off = v !== 'on'
-      const word = v === 'on' ? 'Saving on' : v === 'temp' ? 'Saving temporarily off — Atrium has been told' : 'Saving off — changes may be lost'
+      const word = v === 'on' ? 'Saving on' : v === 'temp' ? 'Saving temporarily unavailable — check the connection' : 'Saving off — changes may be lost'
       return `<div class="status-row"><span class="dot${off ? ' dot-warn' : ''}"></span><span class="${off ? 'warn-text' : ''}">${off ? ico('cloud-off') : ico('check')} ${esc(labelText)}: ${esc(word)}</span></div>`
     }
     const rec = rows.recordings
@@ -2133,13 +2133,13 @@ const statusView = {
       : rec === 'off' ? "Not connected yet — calls still show from the leads' records, without recordings or transcripts. Ask Atrium support." : 'Connected, but not answering right now — trying again.'
     const summaryOk = rows.ok
     let out = `<div class="view-head"><h1 tabindex="-1">Status</h1></div><div class="status-col">`
-    out += `<div class="card status-summary ${summaryOk ? 'is-ok' : 'is-warn'}"><div style="display:flex;gap:10px;min-width:0">${ico(summaryOk ? 'check-circle' : 'warning')}<div><div class="summary-title">${summaryOk ? 'Everything is working.' : 'Something needs attention.'}</div>` +
+    out += `<div class="card status-summary ${summaryOk ? 'is-ok' : 'is-warn'}"><div style="display:flex;gap:10px;min-width:0">${ico(summaryOk ? 'check-circle' : 'warning')}<div><div class="summary-title">${summaryOk ? 'All connections are available.' : 'Something needs attention.'}</div>` +
       `<div class="summary-sub">${rows.reconnecting ? `Trying to reconnect…${at ? ` showing what we had at ${esc(at)}` : ''}` : (at ? `Updated ${esc(at)}` : 'Loading…')}</div></div></div>` +
       `<button type="button" class="btn" data-action="refresh" data-key="refresh">Refresh now</button></div>`
     out += `<section class="status-section"><h2>Saving</h2>${savingRow('Callers and to-dos', rows.leadsSaving)}${savingRow('Calendar', rows.calendarSaving)}` +
       (rows.leadsSaving === 'off' || rows.calendarSaving === 'off' ? `<p class="status-p muted small">Ask Atrium support to turn saving on.</p>` : '') + '</section>'
     out += `<section class="status-section"><h2>Call recordings and transcripts</h2><div class="status-row"><span class="dot${rec === 'on' ? '' : rec === null ? ' dot-neutral' : ' dot-warn'}"></span><span class="${rec === 'on' || rec === null ? '' : 'warn-text'}">${esc(recText)}</span></div></section>`
-    out += `<section class="status-section" id="phone-assistant"><h2>Phone assistant</h2><p class="status-p">The script and tools the assistant runs on live in this system. Pushing them to Vapi keeps the phone line in step with every fix here — no more pasting. The voice, timing and model settings you set in Vapi are kept.</p><div class="status-actions"><button type="button" class="btn" data-action="sync-assistant" data-key="sync-assistant">Update the phone assistant</button></div></section>`
+    out += `<section class="status-section" id="phone-assistant"><h2>Phone assistant</h2><p class="status-p">Apply the latest leasing instructions and tools to your phone assistant. Your existing voice, model, and webhook authentication settings are preserved.</p><div class="status-actions"><button type="button" class="btn" data-action="sync-assistant" data-key="sync-assistant">Update the phone assistant</button></div></section>`
     out += `<section class="status-section"><h2>Outgoing calls</h2><div class="status-row"><span class="dot dot-neutral"></span><span>${model.outbound ? 'The assistant can make outgoing calls.' : "The assistant answers calls; it doesn't make them. Everything under To do is for your team."}</span></div></section>`
     out += `<section class="status-section"><h2>Times</h2><p class="status-p">All times on this page are New York time.</p></section>`
     out += `<section class="status-section"><h2>Signed in</h2><p class="status-p">You're signed in on this device. Sessions end after 8 hours; you'll be asked for the passcode again.</p><div class="status-actions"><button type="button" class="btn" data-action="signout" data-key="signout">Sign out</button></div></section>`
@@ -2332,6 +2332,7 @@ function boot() {
   paintChrome()
   applyRoute()
   window.addEventListener('hashchange', applyRoute)
+  window.addEventListener('popstate', applyRoute)
   document.addEventListener('visibilitychange', () => { if (!document.hidden) pollSoon() })
   window.addEventListener('focus', pollSoon)
   setInterval(() => { emit('minute', state); paintChrome() }, 60000)

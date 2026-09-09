@@ -7,10 +7,10 @@ AI leasing and resident operations for multifamily buildings.
 A working voice leasing agent with the safety machinery built first, plus a demo property
 (**The Larkin**, a fictional 318-residence tower in Long Island City) to exercise it against.
 
-**149 tests, no dependencies.** Node 22 runs the TypeScript directly.
+**365 tests, no runtime dependencies.** Node 22 runs the TypeScript directly. Use the latest Node 22 release; run `npm ci` before the checks.
 
 ```
-npm test              # unit + handler integration tests
+npm run check         # types, data validation, unit + handler integration tests
 npm run build         # bundle the API function for deploy
 node scripts/validate-data.mjs   # check property data against the runtime contracts
 ```
@@ -174,9 +174,8 @@ logged by accident. Never in the repo, never in chat, never in a screenshot.
 
 - **SMS** — needs 10DLC, which needs the EIN.
 - **Apple Messages for Business** — needs the entity and Apple's review.
-- **The tour calendar** is an in-memory demo, not Google Calendar or a PMS.
-- **The dashboard log** lives in the function's memory and resets on cold start. The
-  `RecordStore` interface in `src/record/store.ts` is waiting for a KV implementation.
+- **The tour calendar** uses Redis/KV when configured, with atomic booking updates. Without KV it is an in-memory demo. It is not connected to Google Calendar or a PMS.
+- **Decision events** in the dashboard are process-local and reset on cold start. Call history comes from Vapi; lead profiles, follow-ups and active call state persist in KV when configured.
 - **The building is fictional.** Every residence, rent and policy is invented.
 
 ## Traceability
@@ -188,3 +187,20 @@ restricted-topic escalation §3.2, §5.2(7) and §10; the quote gate §5.2(4); e
 prospect records §6.3; loss-reason capture §6.2; read-back verification and truthful
 messaging §13.3; emergency routing §8.1; escalation context §10; secrets and credential
 inventory §15.2 and §18.2.
+
+## Quality and CRM refresh
+
+The operations workspace uses a white and navy theme, with shared styling for the Today,
+Calls, Leads, Calendar and Status views. Preview it with `npm run dev:ops`; the local
+passcode is `demo`, and its fixture records reset when the process restarts.
+
+`npm run build` regenerates the website and embedded dashboard before bundling the APIs.
+GitHub Actions runs checks and a production build on pushes and pull requests.
+
+The Vapi configuration includes `capture_contact`, so callers' names and emails can be
+saved without booking a tour. Regenerate the import files with
+`node scripts/vapi-assistant.mjs https://ghost-building.vercel.app` after prompt or tool
+changes. The saved assistant resolves the current New York date per call; the simulator
+uses its injected clock. Sync preserves existing webhook credentials.
+
+See [QUALITY_REVIEW.md](QUALITY_REVIEW.md) for the fixes, validation and remaining live-service checks.

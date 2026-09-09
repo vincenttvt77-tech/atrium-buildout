@@ -37,7 +37,7 @@ function buildingFacts(p: PropertyRecord): string[] {
   return f
 }
 
-export function demoAssistantConfig(property: PropertyRecord, deploymentUrl: string, now: Date = new Date()) {
+export function demoAssistantConfig(property: PropertyRecord, deploymentUrl: string, now: Date = new Date(), opts: { dynamicDate?: boolean } = {}) {
   const buildingName = property.buildingName ?? 'the building'
   return assistantConfig({
     buildingName,
@@ -47,6 +47,7 @@ export function demoAssistantConfig(property: PropertyRecord, deploymentUrl: str
     managementCompany: property.managementCompany ?? 'the management office',
     facts: buildingFacts(property),
     today: now,
+    dynamicDate: opts.dynamicDate ?? true,
     serverUrl: `${deploymentUrl.replace(/\/$/, '')}/api/vapi`,
     firstMessage: `Thanks for calling ${buildingName}. I'm an AI assistant for the building and this call is recorded — how can I help?`,
   })

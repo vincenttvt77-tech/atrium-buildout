@@ -181,7 +181,7 @@ const unitLine = (u: { unitId: string; bedrooms: number; bathrooms: number; sqft
   `Unit ${u.unitId} (${sizeOf(u)}, ${u.bathrooms} bath, ${u.sqft} sq ft, floor ${u.floor}): ${rentPhrase(u)}, available ${availDate(u.availableFrom)}${u.view ? `. ${u.view}` : ''}`
 
 const availDate = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })
+  new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: /^\d{4}-\d{2}-\d{2}$/.test(iso) ? 'UTC' : 'America/New_York' })
 
 /**
  * A caller who has the website open asks about a residence by name. That question does

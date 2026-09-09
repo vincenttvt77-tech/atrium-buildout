@@ -13,6 +13,7 @@ export interface PromptContext {
   facts?: string[]
   /** Injected so the model never has to guess the year when converting "two months". */
   today?: Date
+  dynamicDate?: boolean
 }
 
 /**
@@ -23,7 +24,7 @@ export interface PromptContext {
  * be the safety mechanism. Anything that would be a real problem if ignored lives in code.
  */
 export function systemPrompt(ctx: PromptContext): string {
-  const today = (ctx.today ?? new Date()).toLocaleDateString('en-US', {
+  const today = ctx.dynamicDate ? '{{"now" | date: "%A, %B %d, %Y, %I:%M %p", "America/New_York"}}' : (ctx.today ?? new Date()).toLocaleDateString('en-US', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/New_York',
   })
 
@@ -74,6 +75,8 @@ Before the call ends, whether or not they book, try for:
 - name
 - email
 - best callback number, if it's different from the one they're calling from
+
+Call capture_contact whenever they give their name, email, or callback number, even if they do not book a tour. Never promise an email or message was sent; these are saved for staff follow-up.
 
 Ask for these as a natural part of helping, not as a form. "Let me get your email so the office can send you the floor plan" works. "Can I collect your contact information" does not. If they decline any of it, let it go and move on. Never ask twice.
 

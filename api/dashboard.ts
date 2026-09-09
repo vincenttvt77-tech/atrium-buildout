@@ -47,42 +47,39 @@ const shell = (title: string, body: string) => `<!doctype html>
 <meta name="robots" content="noindex, nofollow">
 <title>${title}</title>
 <style>
-  :root{--ink:#14161a;--paper:#fbfaf8;--panel:#fff;--line:#e6e3de;--muted:#6b6862;--accent:#2f5d50;--danger:#9b2c2c}
-  @media (prefers-color-scheme:dark){:root{--ink:#eceae6;--paper:#101114;--panel:#181a1e;--line:#2a2d33;--muted:#9a968e;--accent:#7fb3a2;--danger:#e08585}}
+  :root{color-scheme:light;--ink:#14233e;--paper:#f3f6fb;--panel:#fff;--line:#dce4f0;--muted:#596a83;--accent:#245cd4;--danger:#b33143}
   *{box-sizing:border-box}
-  body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;
-       background:var(--paper);color:var(--ink);
-       font:15px/1.55 Inter,system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
-  .card{width:100%;max-width:380px;background:var(--panel);border:1px solid var(--line);
-        border-radius:10px;padding:26px 24px}
-  h1{font-size:17px;font-weight:600;letter-spacing:-.01em;margin:0 0 6px}
-  p{color:var(--muted);font-size:13.5px;margin:0 0 18px}
-  label{display:block;font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;
-        color:var(--muted);margin-bottom:6px}
-  input{width:100%;font:inherit;padding:9px 11px;border:1px solid var(--line);border-radius:6px;
-        background:var(--paper);color:var(--ink)}
-  input:focus{outline:2px solid var(--accent);outline-offset:1px}
-  button{width:100%;margin-top:14px;font:inherit;font-weight:500;padding:9px 11px;border:0;
-         border-radius:6px;background:var(--accent);color:var(--paper);cursor:pointer}
-  .err{color:var(--danger);font-size:13px;margin:0 0 14px}
-  code{font:400 12.5px ui-monospace,monospace;background:rgba(120,120,120,.13);
-       padding:1px 5px;border-radius:3px}
+  body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:#102443;color:var(--ink);font:16px/1.55 Inter,system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+  .card{width:100%;max-width:440px;background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:40px;box-shadow:0 24px 80px #06152d55}
+  .wordmark{font-size:32px;font-weight:650;letter-spacing:-.065em;color:#102443;margin-bottom:36px}.wordmark span{color:#245cd4}
+  h1{font-size:26px;font-weight:600;letter-spacing:-.035em;margin:0 0 10px}
+  p{color:var(--muted);font-size:15px;margin:0 0 28px}
+  label{display:block;font-size:14px;font-weight:500;color:var(--ink);margin-bottom:8px}
+  input{width:100%;font:inherit;padding:12px 14px;border:1px solid #a8b8ce;border-radius:8px;background:#fff;color:var(--ink)}
+  input:focus{outline:3px solid #c5d9ff;border-color:var(--accent);outline-offset:1px}
+  button{width:100%;margin-top:20px;font:inherit;font-weight:600;padding:12px 14px;border:0;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer}
+  button:hover{background:#1848af}button:focus-visible{outline:3px solid #91b8ff;outline-offset:3px}
+  .err{color:var(--danger);font-size:14px;margin:0 0 18px}
+  .login-foot{font-size:13px;margin:24px 0 0;padding-top:20px;border-top:1px solid var(--line)}
+  a{color:var(--accent)}code{font:13px ui-monospace,monospace;background:#edf2f9;padding:2px 5px;border-radius:4px}
+  @media(max-width:480px){.card{padding:28px}body{padding:18px}}
 </style>
 </head>
-<body><div class="card">${body}</div></body>
+<body><main class="card"><div class="wordmark">atrium<span>.</span></div>${body}</main></body>
 </html>
 `
 
 const loginPage = (failed: boolean) => shell('Sign in — Atrium Operations', `
-  <h1>Atrium Operations</h1>
-  <p>This dashboard shows prospect details and call excerpts. Staff only.</p>
-  ${failed ? '<p class="err">That passcode was not right.</p>' : ''}
+  <h1>Welcome back.</h1>
+  <p>Sign in to manage your leasing workspace.</p>
+  ${failed ? '<p class="err" role="alert">That passcode was not right. Please try again.</p>' : ''}
   <form method="post" action="/api/dashboard">
     <label for="passcode">Operations passcode</label>
     <input id="passcode" name="passcode" type="password" autocomplete="current-password"
            autofocus required>
-    <button type="submit">Sign in</button>
+    <button type="submit">Sign in to workspace</button>
   </form>
+  <p class="login-foot">Staff access only. Prospect details and conversations are private.</p>
 `)
 
 const notConfiguredPage = () => shell('Not configured — Atrium Operations', `
@@ -127,7 +124,8 @@ function bodyFields(req: any): Record<string, string> {
   if (type.includes('application/json')) {
     try {
       const parsed = JSON.parse(text)
-      return parsed && typeof parsed === 'object' ? parsed : {}
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? Object.fromEntries(Object.entries(parsed).filter(([, value]) => typeof value === 'string')) as Record<string, string> : {}
     } catch { return {} }
   }
   return Object.fromEntries(new URLSearchParams(text))

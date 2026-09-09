@@ -78,3 +78,19 @@ describe('what the transcriber actually hands over', () => {
     assert.equal(parseMoveIn('in a couple of months', now)?.earliest.toISOString().slice(0, 10), '2026-11-07')
   })
 })
+
+
+describe('calendar-date edge cases', () => {
+  test('a specific named day keeps the day instead of becoming the first', () => {
+    assert.equal(iso(parseMoveIn('October 15', NOW)!.earliest), '2026-10-15')
+    assert.equal(parseMoveIn('October 15', NOW)!.latest, null)
+    assert.equal(parseMoveIn('February 30', NOW), null)
+  })
+  test('the current month and current season do not jump to next year', () => {
+    assert.equal(iso(parseMoveIn('September', NOW)!.earliest), '2026-09-01')
+    assert.equal(iso(parseMoveIn('this fall', NOW)!.earliest), '2026-09-01')
+  })
+  test('one month after January 31 lands in February', () => {
+    assert.equal(iso(parseMoveIn('in one month', new Date('2026-01-31T12:00:00Z'))!.earliest), '2026-02-28')
+  })
+})

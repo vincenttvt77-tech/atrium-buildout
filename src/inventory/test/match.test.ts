@@ -241,3 +241,13 @@ describe('a window is measured from its far edge', () => {
     assert.equal(out.gap, 1875)
   })
 })
+
+describe('invalid inventory never becomes a quote', () => {
+  for (const fields of [{ availableFrom: '2026-02-30' }, { status: 'withdrawn' }, { bedrooms: 9 }]) {
+    test(JSON.stringify(fields), () => {
+      const result = loadInventory([{ unitId: '9A', floorPlanId: 'A1', monthlyRent: 3000, availableFrom: '2026-10-01', ...fields }], [{ id: 'A1', bedrooms: 1, bathrooms: 1, sqft: 700 }], NOW, 'test')
+      assert.equal(result.snapshot.units.length, 0)
+      assert.ok(result.problems.length > 0)
+    })
+  }
+})

@@ -47,21 +47,24 @@ export async function consolidateCall(
   const phone = normalisePhone(o.phone)
   const at = o.at.toISOString()
 
-  const profile = await store.update<LeadProfile>(profileKey(phone), emptyProfile(phone, o.at), (p) => {
+  const key = phone === 'unknown' ? `lead:anonymous:${o.callId}` : profileKey(phone)
+  const profile = await store.update<LeadProfile>(key, emptyProfile(phone, o.at), (p) => {
     // A human correction on the profile outranks anything a later call extracts; a name
     // the caller gave outranks a null; a later extraction outranks an earlier one.
-    const next: LeadProfile = { ...p, lastSeenAt: at }
+    if (p.calls.some((c) => c.callId === o.callId)) return p
+    const newest = at >= p.lastSeenAt
+    const next: LeadProfile = { ...p, signals: { ...p.signals }, lastSeenAt: newest ? at : p.lastSeenAt, firstSeenAt: at < p.firstSeenAt ? at : p.firstSeenAt }
     const pinned = pinnedName(p.notes)
     if (pinned) next.name = pinned
-    else if (o.name) next.name = o.name
-    if (o.email) next.email = o.email
+    else if (newest && o.name) next.name = o.name
+    if (newest && o.email) next.email = o.email
 
     const q = o.qualification
     const ev = <T,>(value: T, excerpt: string, confidence: number) =>
       ({ value, excerpt, callId: o.callId, at, confidence })
-    if (q.budget) next.signals.budget = ev(q.budget.value.maxMonthly, q.budget.excerpt, q.budget.confidence)
-    if (q.bedrooms) next.signals.bedrooms = ev(q.bedrooms.value.min, q.bedrooms.excerpt, q.bedrooms.confidence)
-    if (q.moveInTiming) next.signals.moveIn = ev(
+    if (q.budget && newest) next.signals.budget = ev(q.budget.value.maxMonthly, q.budget.excerpt, q.budget.confidence)
+    if (q.bedrooms && newest) next.signals.bedrooms = ev(q.bedrooms.value.min, q.bedrooms.excerpt, q.bedrooms.confidence)
+    if (q.moveInTiming && newest) next.signals.moveIn = ev(
       { earliest: q.moveInTiming.value.earliest.toISOString(),
         latest: q.moveInTiming.value.latest?.toISOString() ?? null,
         said: q.moveInTiming.excerpt },
@@ -69,8 +72,10 @@ export async function consolidateCall(
 
     next.unitsDiscussed = [...new Set([...p.unitsDiscussed, ...o.unitsDiscussed])]
 
-    if (o.booking && !p.bookings.some((b) => b.slotId === o.booking!.slotId)) {
-      next.bookings = [...p.bookings, { ...o.booking, callId: o.callId }]
+    if (o.booking) {
+      const existing = p.bookings.find((b) => b.slotId === o.booking!.slotId)
+      if (!existing) next.bookings = [...p.bookings, { ...o.booking, callId: o.callId }]
+      else if (existing.status !== 'confirmed' || o.booking.status === 'confirmed') next.bookings = p.bookings.map((b) => b === existing ? { ...o.booking!, callId: o.callId } : b)
     }
     if (o.lossReason) next.lossReasons = [...p.lossReasons, { ...o.lossReason, callId: o.callId }]
     if (o.escalation) next.escalations = [...p.escalations, { ...o.escalation, callId: o.callId, at }]
@@ -103,7 +108,7 @@ export async function listProfiles(store: DocumentStore): Promise<LeadProfile[]>
   const out: LeadProfile[] = []
   for (const k of keys) {
     const p = await store.get<LeadProfile>(k)
-    if (p) out.push(p)
+    if (p) out.push({ ...p, stage: deriveStage(p, new Date()) })
   }
   return out.sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt))
 }

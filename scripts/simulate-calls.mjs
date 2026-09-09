@@ -54,7 +54,7 @@ const vapi = await import('../api/vapi.ts')
 
 const property = JSON.parse(await readFile('data/property.json', 'utf8'))
 const now = new Date()
-const config = demoAssistantConfig(property, 'https://ghost-building.vercel.app', now)
+const config = demoAssistantConfig(property, 'https://ghost-building.vercel.app', now, { dynamicDate: false })
 const assistantModel = config.model.model
 const system = config.model.messages[0].content
 const tools = toModelTools(config.model.tools)

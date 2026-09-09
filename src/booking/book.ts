@@ -30,7 +30,7 @@ export function recordIntent(
 }
 
 const sameSlot = (a: TourSlot, b: TourSlot) =>
-  a.slotId === b.slotId && a.startsAt.getTime() === b.startsAt.getTime()
+  a.slotId === b.slotId && a.startsAt.getTime() === b.startsAt.getTime() && a.endsAt.getTime() === b.endsAt.getTime()
 
 /**
  * Books a tour and verifies it landed.

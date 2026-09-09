@@ -5,6 +5,23 @@ export const TOOL_DEFINITIONS = [
   {
     type: 'function',
     function: {
+      name: 'capture_contact',
+      description: 'Save contact information volunteered by the caller, even when they do not book. Does not send messages.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'The name the caller gave.' },
+          email: { type: 'string', description: 'The email address the caller gave.' },
+          phone: { type: 'string', description: 'Their preferred callback number, only if they gave one.' },
+          excerpt: { type: 'string', description: 'The caller’s exact words supporting these details.' },
+        },
+        required: ['excerpt'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'capture_signal',
       description: 'Record something the caller told you about what they need. Call this every time they give you move-in timing, bedroom count, budget, pets or parking.',
       parameters: {
