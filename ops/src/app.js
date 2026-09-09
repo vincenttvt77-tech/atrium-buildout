@@ -1602,14 +1602,31 @@ const sizeNoun = (v) => { const w = sizeWord(v); return w ? w.replace(/^a /, '')
 const bedroomsText = (v) => { const n = (v === 'studio' || v === '0' || v === 0) ? 0 : Number(v); return isNaN(n) ? String(v ?? '') : (n === 0 ? 'Studio or larger' : `${n} or more`) }
 function moveInText(value) {
   if (value == null) return ''
-  if (typeof value === 'string') return value ? `from ${fmt.monthDay(value)}` : ''
+  if (typeof value === 'string') {
+    const day = value ? fmt.monthDay(value) : ''
+    return day && day !== '—' ? `from ${day}` : ''
+  }
   const a = value.earliest, b = value.latest
   if (a && b) return `${fmt.monthDay(a)} – ${fmt.monthDay(b)}`
   if (a) return `from ${fmt.monthDay(a)}`
   return ''
 }
+/** Preserve a stated minimum/range; a premium shopper never becomes priced out. */
+function budgetText(value) {
+  const amount = n => typeof n === 'number' && Number.isFinite(n) && n >= 0 ? n : null
+  if (value && typeof value === 'object') {
+    const min = amount(value.minMonthly), max = amount(value.maxMonthly)
+    if (min != null && max != null && min <= max) return `${fmt.money(min)}–${fmt.money(max)}/mo`
+    if (min != null && max == null) return `${fmt.money(min)}+/mo`
+    if (max != null && min == null) return `up to ${fmt.money(max)}/mo`
+    return ''
+  }
+  if (amount(value) != null) return `up to ${fmt.money(value)}/mo`
+  // Older call events retain the caller's words, not a normalized budget range.
+  return typeof value === 'string' ? value : ''
+}
 function factValue(signal, value) {
-  if (signal === 'budget') return `up to ${fmt.money(value)}/mo`
+  if (signal === 'budget') return budgetText(value)
   if (signal === 'bedrooms') return bedroomsText(value)
   if (signal === 'moveInTiming') return moveInText(typeof value === 'object' ? value : String(value ?? '')) || String(value ?? '')
   return String(value ?? '')
@@ -1641,7 +1658,7 @@ function summarySentence(outcome) {
   if (o === 'Enquired') return 'They asked about apartments.'
   return o ? text.staff(o) : ''
 }
-const PRICED_OUT_RE = /^Nothing(?: \S+)? is available at or below \$/
+const PRICED_OUT_RE = /^Nothing(?: [^\r\n]{1,40})? is available at or below \$/
 const num = (s) => Number(String(s).replace(/,/g, ''))
 /** Budget / cheapest / gap from either wording of the priced-out result; nulls when unreadable. */
 function pricedOutNumbers(res) {
@@ -1667,7 +1684,9 @@ function callStory(record, s) {
   const tools = call ? arr(call.toolCalls).map((tc) => ({
     name: String((tc && tc.name) ?? 'unknown'),
     args: tc && tc.arguments && typeof tc.arguments === 'object' ? tc.arguments : {},
-    result: tc && typeof tc.result === 'string' ? tc.result : null,
+    // Keep the dated demo declaration in raw history, but classify the actual answer.
+    result: tc && typeof tc.result === 'string'
+      ? tc.result.replace(/^\[Inventory source:[^\]\r\n]{1,2000}\]\s*/, '') : null,
   })) : []
   const ev = (kind, pred) => events.filter((e) => e && e.kind === kind && (!pred || pred(e)))
   const f = {
@@ -1713,7 +1732,7 @@ function callStory(record, s) {
         if (!f.pricedOut) f.pricedOut = pricedOutNumbers(res)
       } else if (/^We do not have that bedroom count/.test(res)) f.bedroomMismatch = true
       else if (/^Nothing is available matching that/.test(res) || /^Nothing matches on any of size/.test(res)) f.noMatch = true
-      else if (/^I need to re-check/.test(res)) f.stale = true
+      else if (/^(?:I need to re-check|The inventory source is out of date)/.test(res)) f.stale = true
       else {
         for (const id of unitIdsIn(res, /^Unit ([A-Za-z0-9-]+)/)) if (!f.units.includes(id)) f.units.push(id)
         for (const id of unitIdsIn(res, /Slightly above their range: Unit ([A-Za-z0-9-]+)/)) if (!f.stretch.includes(id)) f.stretch.push(id)
@@ -1776,8 +1795,8 @@ function callStory(record, s) {
     const c = f.captured
     const parts = []
     const size = c.bedrooms ? sizeWord(c.bedrooms.value) : null
-    const budget = c.budget ? fmt.money(c.budget.value) : null
-    if (size || budget) parts.push(`looking for ${size || 'a place'}${budget ? ` under ${budget}` : ''}`)
+    const budget = c.budget ? budgetText(c.budget.value) : null
+    if (size || budget) parts.push(`looking for ${size || 'a place'}${budget ? ` with a budget of ${budget}` : ''}`)
     // Value phrases, not verbatim excerpts: the full quotes live in "What the assistant learned".
     // When only an excerpt exists it is cut to its first clause so the sentence still scans.
     const clause = (s) => { const t = String(s ?? '').trim(); const m = /^(.*?)[.!?](?:\s|$)/.exec(t); return text.truncate(m && m[1].trim() ? m[1].trim() : t, 40) }
@@ -1872,7 +1891,8 @@ function callStory(record, s) {
         steps.push({ icon: 'home', text: size ? `Checked what's available — no ${size} apartments.` : "Checked what's available — no apartments of that size." })
       } else if (/^Nothing is available matching that/.test(res)) steps.push({ icon: 'home', text: "Checked what's available — nothing for what they wanted; offered the waitlist." })
       else if (/^Nothing matches on any of size/.test(res)) steps.push({ icon: 'home', text: "Checked what's available — nothing matched on size, date or budget; asked what they'd be flexible on." })
-      else if (/^I need to re-check/.test(res)) steps.push({ icon: 'home', text: "Checked what's available — the list was out of date, so it didn't quote." })
+      else if (/^No currently listed residences meet that spending minimum/.test(res)) steps.push({ icon: 'home', text: "Checked what's available — none met their spending minimum; asked whether they'd consider a lower price." })
+      else if (/^(?:I need to re-check|The inventory source is out of date)/.test(res)) steps.push({ icon: 'home', text: "Checked what's available — the list was out of date, so it didn't quote." })
       else if ((m = /^Residence (\S+) is available:[^$]*\$([\d,]+)\/month/.exec(res))) steps.push({ icon: 'home', text: `Looked up apartment ${m[1]}: available at ` + USD + m[2] + '.' })
       else if ((m = /^There is no residence (\S+?) /i.exec(res))) steps.push({ icon: 'home', text: `Looked up apartment ${m[1]}: not on the list.` })
       else if ((m = /^Residence (\S+) is pending/.exec(res))) steps.push({ icon: 'home', text: `Looked up apartment ${m[1]}: pending an application.` })
@@ -1944,8 +1964,10 @@ function todoSentence(fu, profile, s) {
     after = ` to check whether they attended the tour${unit ? ` of apartment ${unit}` : ''}. If so, ask how it went and whether they want to apply.`
   } else if (kind === 'priced_out_watch') {
     verb = verbFor(fu.channel); before = `${verb} `
+    const range = p.signals && p.signals.budgetRange && budgetText(p.signals.budgetRange.value)
     const budget = p.signals && p.signals.budget && p.signals.budget.value
-    if (budget != null && !isNaN(Number(budget))) after = ` if anything under ${fmt.money(budget)} opens up`
+    if (range) after = ` if anything in their ${range} range opens up`
+    else if (budget != null && !isNaN(Number(budget))) after = ` if anything under ${fmt.money(budget)} opens up`
     else if ((m = /priced out \((.+?)\)/.exec(reason))) after = ` if anything in their range opens up (${text.staff(m[1])})`
     else after = ' if anything in their range opens up'
   } else if (kind === 'nurture') {
@@ -1977,7 +1999,7 @@ const derive = {
     return block && isYmd(block.target) && !block.startsAt && !block.endsAt ? [block.target] : []
   },
   windowStart, personName, displayName, displayStage, needsPerson, callBackToday, dueTodayCount, toursOn, callRecords, callStory,
-  todoSentence, escalationText, lossText, summarySentence, availabilityText, moveInText, profileByPhone, profileForCall, factValue, bedroomsText, emergencyAction,
+  todoSentence, escalationText, lossText, summarySentence, availabilityText, moveInText, budgetText, profileByPhone, profileForCall, factValue, bedroomsText, emergencyAction,
 }
 
 // ---------------------------------------------------------------------------------------

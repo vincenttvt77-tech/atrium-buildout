@@ -2,6 +2,7 @@ import { documentStoreFromEnv } from '../src/store/documents.ts'
 import { StorageConfigurationError } from '../src/store/config.ts'
 import { LEGACY_TENANT, withTenant } from '../src/tenancy/context.ts'
 import { isPostgresRuntime, runtimeForRequest } from '../src/application/runtime.ts'
+import { VOICE_CONTRACT } from '../src/vapi/contract.ts'
 
 /**
  * Unauthenticated on purpose, and therefore says almost nothing.
@@ -23,7 +24,7 @@ export default async function handler(req: any, res: any) {
       }),runtime.auth.transaction({}, async client => {
         await client.query('SELECT 1 FROM atrium.users LIMIT 0')
       })])
-      res.status(200).json({ok:true,store:'postgres',durable:true,callHistory:false,
+      res.status(200).json({ok:true,store:'postgres',durable:true,callHistory:false,voiceContract:VOICE_CONTRACT,
         hint:'PostgreSQL is connected. Records persist within authorized property workspaces.'})
       return
     }
@@ -40,7 +41,7 @@ export default async function handler(req: any, res: any) {
       await documents.get('health:probe')
       const store = documents.describe()
       res.status(200).json({
-        ok: true, store: store.kind, durable: store.durable, callHistory,
+        ok: true, store: store.kind, durable: store.durable, callHistory, voiceContract: VOICE_CONTRACT,
         hint: store.durable ? 'Storage is connected. Shared records use KV.'
           : 'Local memory only. Records reset when the preview restarts. Deployed environments require KV_REST_API_URL and KV_REST_API_TOKEN.',
       })

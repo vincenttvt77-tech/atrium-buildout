@@ -4,6 +4,7 @@ import health from '../health.ts'
 import leads from '../leads.ts'
 import { documentStoreFromEnv } from '../../src/store/documents.ts'
 import { withTenant } from '../../src/tenancy/context.ts'
+import { VOICE_CONTRACT } from '../../src/vapi/contract.ts'
 
 const originalEnv = { ...process.env }
 const originalFetch = globalThis.fetch
@@ -54,6 +55,7 @@ test('health preserves an honest local preview response without requiring KV', a
   assert.equal(response.body.ok, true)
   assert.equal(response.body.store, 'memory')
   assert.equal(response.body.durable, false)
+  assert.deepEqual(response.body.voiceContract, VOICE_CONTRACT)
   assert.match(response.body.hint, /reset when the preview restarts/)
 })
 

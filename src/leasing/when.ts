@@ -78,6 +78,15 @@ export function parseMoveIn(text: string, now: Date): MoveInWindow | null {
     }
   }
 
+  // Explicit "within/from now to" windows outrank the word "now". Otherwise
+  // "within now to three months" incorrectly shrinks to the ASAP 30-day window.
+  const bounded = /\b(?:within(?:\s+(?:now|today)\s+(?:to|through))?|from\s+(?:now|today)\s+(?:to|through)|between\s+(?:now|today)\s+and)\s+(?:the\s+next\s+)?(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s*(day|week|month)s?\b/.exec(s)
+  if (bounded) {
+    const count = /^\d+$/.test(bounded[1]!) ? Number(bounded[1]) : NUMBER_WORDS[bounded[1]!]!
+    return { earliest: now, latest: bounded[2] === 'month' ? addMonths(now, count)
+      : addDays(now, count * (bounded[2] === 'week' ? 7 : 1)), said }
+  }
+
   // "asap", "right away", "immediately", "now", "yesterday"
   if (/\b(asap|as soon as possible|right away|immediately|now|yesterday|today)\b/.test(s)) {
     return { earliest: now, latest: addDays(now, 30), said }

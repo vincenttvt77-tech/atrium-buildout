@@ -31,6 +31,14 @@ describe('move-in timing as people actually say it', () => {
 })
 
 describe('windows, not points', () => {
+  test('the failed-call within-now-to-three-months wording keeps its full stated window', () => {
+    const now = new Date('2026-09-09T19:12:00Z')
+    for (const text of ['within now to 3 months', 'within three months', 'from now to three months', 'between now and three months', 'within— 3 months. Within now to 3 months.']) {
+      const result = parseMoveIn(text, now)!
+      assert.equal(result.earliest.toISOString(), now.toISOString(), text)
+      assert.equal(result.latest?.toISOString(), '2026-12-09T19:12:00.000Z', text)
+    }
+  })
   test('a range keeps both ends', () => {
     const r = parseMoveIn('2-3 months', NOW)!
     assert.equal(iso(r.earliest), '2026-11-07')

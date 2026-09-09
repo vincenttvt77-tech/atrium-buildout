@@ -83,6 +83,40 @@ test('stale inventory cannot quote a named residence, floor plan, status or none
   assert.equal(inline.qualificationPatch?.budget?.value.maxMonthly, 4200, 'Staleness must preserve caller evidence')
 })
 
+test('higher-price and outside-window searches are explicit, preserve preferences, and named lookups bypass filters', () => {
+  const context = ctx({ qualification: qualified(3500, 1) })
+  const named = checkAvailability(context, { unitId: '21A' })
+  assert.equal(named.record.outcome, 'unit_lookup')
+  assert.match(named.say, /\$4,200/)
+  const plan = checkAvailability(context, { unitId: 'A1' })
+  assert.equal(plan.record.outcome, 'plan_lookup')
+  const broader = checkAvailability(context, { sortBy: 'price_desc', ignoreBudget: true, includeOutsideMoveIn: true })
+  assert.equal(broader.record.outcome, 'matches')
+  assert.deepEqual(broader.record.unitsOffered, ['21A'])
+  assert.equal(context.qualification.budget!.value.maxMonthly, 3500)
+  assert.match(broader.say, /caller-requested broader search/)
+  assert.match(broader.say, /Do not claim they are the only residences/)
+})
+
+test('rent explanations and quotes do not invent upfront concession credit', () => {
+  for (const question of ['Why is net effective different from lease rent?', 'Do I get the free month upfront?', 'When is the concession credited?']) {
+    const result = answerQuestion({ question, topic: 'pricing' }, ctx())
+    assert.equal(result.record.concessionScheduleVerified, false)
+    assert.match(result.say, /does not verify when/)
+    assert.match(result.say, /Do not claim it is upfront/)
+  }
+  assert.match(checkAvailability(ctx(), { unitId: '21A' }).say, /No concession-credit schedule was verified/)
+})
+
+test('when every match is later, the spoken guidance never promises the requested move-in date', () => {
+  const q = captureCore(qualified(4500, 1), 'moveInTiming', extracted({ earliest: NOW, latest: new Date('2026-09-15') },
+    0.9, CALL, 'by September 15', NOW))
+  const result = checkAvailability(ctx({ qualification: q }))
+  assert.match(result.say, /Nothing frees up by their date/)
+  assert.match(result.say, /These open after the requested date/)
+  assert.doesNotMatch(result.say, /we've got this by the time you're looking to move/)
+})
+
 describe('emergency pre-empts every other tool', () => {
   test('a gas report returns the fixed safety instruction and escalates', () => {
     const r = checkEmergency('I smell gas in my kitchen', ctx())

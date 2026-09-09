@@ -1,5 +1,5 @@
 import type { AuthorizedScope } from '../auth/index.ts'
-import type { InventorySnapshot } from '../inventory/types.ts'
+import type { InventoryProvenance, InventorySnapshot } from '../inventory/types.ts'
 import type { KnowledgeArticle } from '../knowledge/article.ts'
 
 /** Published content only. Credentials and connector secrets belong in a separate repository. */
@@ -8,6 +8,8 @@ export interface PropertyBundle {
   inventory: unknown[]
   floorplans: unknown[]
   knowledge: unknown[]
+  /** Explicit source declaration in the immutable published configuration. */
+  inventoryProvenance?: InventoryProvenance
 }
 
 /** The adapter reads timeZone from the property row, not from the configuration JSON. */

@@ -2,11 +2,12 @@ import { test, describe, before, beforeEach, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { mintAccountSession, OPS_COOKIE } from '../../src/ops/session.ts'
 import type { OpsAccount } from '../../src/ops/accounts.ts'
+import { VOICE_CONTRACT } from '../../src/vapi/contract.ts'
 
 const PASSCODE = 'sync-test-passcode'
 let handler: (req: unknown, res: unknown) => Promise<void>
 const realFetch = globalThis.fetch
-const envKeys = ['OPS_DASHBOARD_PASSCODE', 'OPS_ACCOUNTS_JSON', 'OPS_SESSION_SECRET', 'VAPI_API_KEY', 'VAPI_PRIVATE_KEY', 'VAPI_ASSISTANT_ID', 'VAPI_SERVER_BASE_URL', 'VAPI_SYNC_TENANT_ID', 'VERCEL_ENV', 'VERCEL', 'NODE_ENV'] as const
+const envKeys = ['OPS_DASHBOARD_PASSCODE', 'OPS_ACCOUNTS_JSON', 'OPS_SESSION_SECRET', 'VAPI_API_KEY', 'VAPI_PRIVATE_KEY', 'VAPI_ASSISTANT_ID', 'VAPI_SERVER_BASE_URL', 'VAPI_SYNC_TENANT_ID', 'VAPI_WEBHOOK_SECRET', 'VAPI_WEBHOOK_CREDENTIAL_ID', 'VERCEL_ENV', 'VERCEL', 'NODE_ENV'] as const
 const originalEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]))
 
 before(async () => {
@@ -17,6 +18,8 @@ beforeEach(() => {
   process.env.OPS_DASHBOARD_PASSCODE = PASSCODE
   process.env.VAPI_API_KEY = 'sk-test'
   process.env.VAPI_SERVER_BASE_URL = 'https://ghost-building.vercel.app'
+  process.env.VAPI_WEBHOOK_SECRET = 'test-only-webhook-secret'
+  process.env.VAPI_WEBHOOK_CREDENTIAL_ID = 'test-webhook-credential'
   globalThis.fetch = realFetch
 })
 after(() => {
@@ -42,6 +45,7 @@ describe('updating the phone assistant from the dashboard', () => {
     const patches: Array<{ url: string; body: any }> = []
     let saved: Record<string, unknown> = { id: 'a9', name: 'The Larkin — Leasing', model: { provider: 'anthropic', model: 'claude-sonnet-5' } }
     globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      if (String(url).endsWith('/api/health')) return new Response(JSON.stringify({ ok: true, durable: true, voiceContract: VOICE_CONTRACT }))
       const method = init?.method ?? 'GET'
       if (method === 'PATCH') { const body = JSON.parse(String(init!.body)); patches.push({ url, body }); saved = { ...saved, ...body }; return new Response('{}', { status: 200 }) }
       if (url.endsWith('/assistant')) return new Response(JSON.stringify([{ id: 'a9', name: 'The Larkin — Leasing' }]), { status: 200 })
@@ -54,6 +58,8 @@ describe('updating the phone assistant from the dashboard', () => {
     assert.equal(res.body.ok, true)
     assert.equal(patches.length, 1)
     assert.equal(patches[0]!.body.server.url, 'https://ghost-building.vercel.app/api/vapi')
+    assert.equal(patches[0]!.body.server.credentialId, 'test-webhook-credential')
+    assert.ok(!JSON.stringify(patches).includes('test-only-webhook-secret'), 'webhook secret stays in credentials, not the assistant payload')
     assert.equal(patches[0]!.body.model.tools.length, 7)
   })
 
@@ -105,6 +111,7 @@ describe('workspace assistant publishing', () => {
     const urls: string[] = []
     let saved: Record<string, unknown> = { id: 'larkin-assistant', name: 'Larkin', model: { provider: 'anthropic' } }
     globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      if (String(url).endsWith('/api/health')) return new Response(JSON.stringify({ ok: true, durable: true, voiceContract: VOICE_CONTRACT }))
       urls.push(url)
       if (init?.method === 'PATCH') saved = { ...saved, ...JSON.parse(String(init.body)) }
       return new Response(JSON.stringify(saved))
@@ -140,11 +147,38 @@ describe('workspace assistant publishing', () => {
   test('a failed saved-state check is returned as failure, not a successful publish', async () => {
     const larkin = account('larkin', ['larkin-assistant'])
     process.env.VAPI_SYNC_TENANT_ID = 'larkin'
-    globalThis.fetch = (async () => new Response('{"id":"larkin-assistant","name":"Larkin","model":{"messages":[]}}')) as typeof fetch
+    globalThis.fetch = (async (url) => String(url).endsWith('/api/health')
+      ? new Response(JSON.stringify({ ok: true, durable: true, voiceContract: VOICE_CONTRACT }))
+      : new Response('{"id":"larkin-assistant","name":"Larkin","model":{"messages":[]}}')) as typeof fetch
     const res = mockRes()
     await handler({ method: 'POST', headers: accountHeaders([larkin], larkin) }, res)
     assert.equal(res.code, 502)
     assert.equal(res.body.ok, false)
     assert.match(res.body.error, /saved assistant did not match/)
   })
+})
+
+test('publishing refuses an old backend, unavailable storage, or unconfigured webhook authentication before any Vapi write', async () => {
+  for (const failure of ['old-contract', 'storage', 'secret', 'credential']) {
+    let vapiRequests = 0
+    if (failure === 'secret') delete process.env.VAPI_WEBHOOK_SECRET
+    if (failure === 'credential') delete process.env.VAPI_WEBHOOK_CREDENTIAL_ID
+    globalThis.fetch = (async (url, init) => {
+      if (String(url).endsWith('/api/health')) {
+        assert.equal(init?.redirect, 'error')
+        assert.deepEqual(init?.headers, { accept: 'application/json', 'cache-control': 'no-store' }, 'no key or user cookie goes to the probe')
+        return new Response(JSON.stringify({ ok: true, durable: failure !== 'storage',
+          voiceContract: failure === 'old-contract' ? { version: 0 } : VOICE_CONTRACT }))
+      }
+      vapiRequests++
+      throw new Error('Must not reach Vapi')
+    }) as typeof fetch
+    const res = mockRes()
+    await handler({ method: 'POST', headers: { 'x-ops-passcode': PASSCODE } }, res)
+    assert.equal(res.body.ok, false, failure)
+    assert.equal(vapiRequests, 0, failure)
+    assert.match(res.body.code, /voice_(backend_contract_mismatch|authentication_not_configured)/)
+    process.env.VAPI_WEBHOOK_SECRET = 'test-only-webhook-secret'
+    process.env.VAPI_WEBHOOK_CREDENTIAL_ID = 'test-webhook-credential'
+  }
 })

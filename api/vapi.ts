@@ -1,5 +1,6 @@
 import rawProperty from '../data/property.json' with { type: 'json' }
 import rawUnits from '../data/inventory.json' with { type: 'json' }
+import rawInventorySource from '../data/inventory-source.json' with { type: 'json' }
 import rawPlans from '../data/floorplans.json' with { type: 'json' }
 import rawArticles from '../data/knowledge.json' with { type: 'json' }
 import { loadInventory } from '../src/inventory/load.ts'
@@ -63,10 +64,13 @@ let cache: {
 
 function load(now: Date, runtime?: ResolvedPropertyRuntime) {
   if (runtime) return runtime.snapshot
-  if (cache && now.getTime() - cache.inventory.readAt.getTime() < 15 * 60_000) return cache
+  // These files are immutable for the life of a deployment. A cache refresh cannot
+  // refresh their source date; an updated catalogue requires a new published bundle.
+  if (cache) return cache
 
   const { snapshot, problems } = loadInventory(
-    rawUnits as unknown[], rawPlans as unknown[], now, 'data/inventory.json')
+    rawUnits as unknown[], rawPlans as unknown[], new Date(rawInventorySource.catalogAsOf),
+    'data/inventory.json', rawInventorySource, now)
   if (problems.length > 0) console.warn('[inventory] excluded records:', problems)
 
   const articles = (rawArticles as unknown as Record<string, unknown>[]).map((a) => ({
@@ -206,14 +210,23 @@ function tourTimeZone(property: Record<string, unknown>, callId: string): string
  * gets that day; otherwise the next three days with something open, a morning and an
  * afternoon time on each, and a note that other days are open too.
  */
-export function pickSlotsToOffer(open: TourSlot[], preferredDate?: string, timeZone = DEFAULT_TIME_ZONE): { offered: TourSlot[]; daysOpen: number } {
+const VALID_WALL_TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/
+const wallMinutes = (date: Date, timeZone: string) => { const wall = wallTime(date, timeZone); return wall.hour * 60 + wall.minute }
+
+export function pickSlotsToOffer(open: TourSlot[], preferredDate?: string, timeZone = DEFAULT_TIME_ZONE, preferredTime?: string): { offered: TourSlot[]; daysOpen: number } {
   const zone = validateTimeZone(timeZone)
+  if (preferredTime !== undefined && (typeof preferredTime !== 'string' || !VALID_WALL_TIME.test(preferredTime) || !preferredDate)) throw new Error('Use preferredTime as HH:mm with a preferredDate.')
+  const wantedMinutes = preferredTime === undefined ? null : Number(preferredTime.slice(0, 2)) * 60 + Number(preferredTime.slice(3))
+  const nearest = (slots: TourSlot[]) => wantedMinutes === null ? slots : [...slots].sort((a, b) =>
+    Math.abs(wallMinutes(a.startsAt, zone) - wantedMinutes) - Math.abs(wallMinutes(b.startsAt, zone) - wantedMinutes)
+      || a.startsAt.getTime() - b.startsAt.getTime())
   const byDay = new Map<string, TourSlot[]>()
   for (const s of open) { const d = localDate(s.startsAt, zone); if (!byDay.has(d)) byDay.set(d, []); byDay.get(d)!.push(s) }
   const wanted = preferredDate && /^\d{4}-\d{2}-\d{2}$/.test(preferredDate) ? byDay.get(preferredDate) : undefined
-  if (wanted?.length) return { offered: wanted.slice(0, 6), daysOpen: byDay.size }
+  if (wanted?.length) return { offered: nearest(wanted).slice(0, 6), daysOpen: byDay.size }
   const offered: TourSlot[] = []
   for (const [, slots] of [...byDay.entries()].slice(0, 3)) {
+    if (wantedMinutes !== null) { offered.push(...nearest(slots).slice(0, 2)); continue }
     const morning = slots.find((s) => wallTime(s.startsAt, zone).hour < 13)
     const afternoon = slots.find((s) => wallTime(s.startsAt, zone).hour >= 13)
     for (const s of [morning, afternoon]) if (s && !offered.includes(s)) offered.push(s)
@@ -417,6 +430,11 @@ async function runTool(
     }
 
     case 'check_availability': {
+      if ((args.sortBy !== undefined && args.sortBy !== 'price_desc')
+        || (args.includeOutsideMoveIn !== undefined && typeof args.includeOutsideMoveIn !== 'boolean')
+        || (args.ignoreBudget !== undefined && typeof args.ignoreBudget !== 'boolean')) {
+        return 'Invalid availability search options. Use sortBy as price_desc and use true or false for includeOutsideMoveIn and ignoreBudget. Broaden timing or price only when the caller requests it.'
+      }
       // Under exactOptionalPropertyTypes an absent key and an explicit `undefined` are
       // different types, so only include what the model actually sent.
       const r = checkAvailability(ctx, {
@@ -425,6 +443,9 @@ async function runTool(
         ...(args.moveIn ? { moveIn: String(args.moveIn) } : {}),
         ...(args.bedrooms ? { bedrooms: String(args.bedrooms) } : {}),
         ...(args.budget ? { budget: String(args.budget) } : {}),
+        ...(args.sortBy === 'price_desc' ? { sortBy: 'price_desc' as const } : {}),
+        ...(typeof args.includeOutsideMoveIn === 'boolean' ? { includeOutsideMoveIn: args.includeOutsideMoveIn } : {}),
+        ...(typeof args.ignoreBudget === 'boolean' ? { ignoreBudget: args.ignoreBudget } : {}),
       })
       if (r.qualificationPatch) state.qualification = r.qualificationPatch
       logEvent(callId, r.record)
@@ -448,6 +469,11 @@ async function runTool(
       const timeZone = tourTimeZone(property, callId)
       if (!timeZone) return CALENDAR_CONFIGURATION_UNAVAILABLE
       const preferredDate = args.preferredDate ? String(args.preferredDate) : undefined
+      if (args.preferredTime !== undefined && (typeof args.preferredTime !== 'string' || !VALID_WALL_TIME.test(args.preferredTime))) {
+        return 'That time is invalid. Use preferredTime as a 24-hour HH:mm time in the building’s timezone, such as 16:00 for 4 PM.'
+      }
+      const preferredTime = args.preferredTime as string | undefined
+      if (preferredTime !== undefined && !preferredDate) return 'Ask which date the caller wants, then pass preferredDate as YYYY-MM-DD together with preferredTime as HH:mm.'
       let from = now, to: Date
       try {
         if (preferredDate) {
@@ -460,15 +486,21 @@ async function runTool(
       const unitId = requestedUnit ? unitIds.find(id => id.toUpperCase() === requestedUnit) ?? null : null
       if (requestedUnit && !unitId) return 'That residence is not in the building inventory. Confirm a residence returned by check_availability, or omit unitId for a general building tour.'
       const slots = await callCalendar(now, timeZone, runtime).listSlots(ctx.propertyId, from, to, unitId)
-      const { offered, daysOpen } = pickSlotsToOffer(slots, preferredDate, timeZone)
+      const { offered, daysOpen } = pickSlotsToOffer(slots, preferredDate, timeZone, preferredTime)
       logEvent(callId, { kind: 'slots_listed', count: offered.length, daysOpen })
       if (offered.length === 0) {
         const window = effectiveOptions(await calendarStore.read(), { ...runtime?.tourSettings, timeZone }).bookingWindowDays
         return `No bookable tour times were found in this requested date range.${window == null ? '' : ` This building accepts bookings up to ${window} days ahead.`} Ask for another date or offer a leasing-team callback. Do not say the whole calendar is full.`
       }
       const preferredClosed = preferredDate && !offered.some(s => localDate(s.startsAt, timeZone) === preferredDate)
+      const timeMissing = preferredTime && !preferredClosed && !offered.some(s => {
+        const minutes = wallMinutes(s.startsAt, timeZone)
+        return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}` === preferredTime
+      })
+      const explanation = preferredClosed ? `No times are open on ${preferredDate}; these are alternatives on other dates. `
+        : timeMissing ? `No tour starts at ${preferredTime} on ${preferredDate}; these are the nearest available times on that date. ` : ''
       const more = daysOpen > 3 ? ` Other days are open too — ask which date works and call this again with preferredDate as YYYY-MM-DD.` : ''
-      return `${preferredClosed ? `No times are open on ${preferredDate}; these are alternatives on other dates. ` : ''}Real open tour times${unitId ? ` for residence ${unitId}` : ''} in the building's local time — offer two or three, and use the slotId when booking:\n${offered.map((s) => `${s.slotId} — ${fmtSlot(s, timeZone)}`).join('\n')}${more}`
+      return `${explanation}Real open tour times${unitId ? ` for residence ${unitId}` : ''} in the building's local time — offer two or three, and use the slotId when booking:\n${offered.map((s) => `${s.slotId} — ${fmtSlot(s, timeZone)}`).join('\n')}${more}`
     }
 
     case 'book_tour': {
@@ -502,7 +534,7 @@ async function runTool(
 
       logEvent(callId, {
         kind: 'tour_booked', status: booking.state.status,
-        slot: fmtSlot(slot, timeZone), unitId,
+        slot: fmtSlot(slot, timeZone), slotId: slot.slotId, startsAt: slot.startsAt.toISOString(), timeZone, unitId,
         prospectName: state.name, prospectEmail: state.email,
       })
       state.booking = {

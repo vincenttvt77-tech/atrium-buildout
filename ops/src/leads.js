@@ -196,7 +196,8 @@ function leadRowHtml(p, s, open, tab) {
   else if (p.name && fmt.phone(p.phone)) facts.push(fmt.phone(p.phone)) // a nameless row's title is already the number
   const more = []
   if (sig.bedrooms) more.push(bedroomsFact(sig.bedrooms.value))
-  if (sig.budget) more.push(`up to ${fmt.money(sig.budget.value)}/mo`)
+  const budget = sig.budgetRange || sig.budget
+  if (budget) more.push(derive.budgetText(budget.value))
   if (sig.moveIn) more.push(String(sig.moveIn.excerpt || derive.moveInText(sig.moveIn.value) || ''))
   const tour = nextTour(p)
   const cb = items.find((i) => i.type === 'callback' && i.question)
@@ -233,7 +234,8 @@ function lookingFor(p, s, recById) {
   const sig = p.signals || {}
   const out = []
   const push = (label_, e, value, from) => out.push({ label: label_, value: String(value ?? ''), excerpt: String((e && e.excerpt) ?? ''), unsure: e != null && Number(e.confidence) < 0.7, from: from || null, confidence: e && e.confidence })
-  if (sig.budget) push('Budget', sig.budget, `up to ${fmt.money(sig.budget.value)}/mo`)
+  const budget = sig.budgetRange || sig.budget
+  if (budget) push('Budget', budget, derive.budgetText(budget.value))
   if (sig.bedrooms) push('Bedrooms', sig.bedrooms, derive.bedroomsText(sig.bedrooms.value))
   if (sig.moveIn) push('Move-in', sig.moveIn, derive.moveInText(sig.moveIn.value) || String(sig.moveIn.excerpt ?? ''))
   for (const key of ['pets', 'parking']) {

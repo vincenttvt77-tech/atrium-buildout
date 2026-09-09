@@ -34,6 +34,10 @@ test('calendar tool schema carries the apartment filter and keeps email optional
   const slots = TOOL_DEFINITIONS.find((tool) => tool.function.name === 'list_tour_slots')!
   const booking = TOOL_DEFINITIONS.find((tool) => tool.function.name === 'book_tour')!
   assert.ok(Object.hasOwn(slots.function.parameters.properties, 'unitId'))
+  const slotProperties = slots.function.parameters.properties
+  assert.ok('preferredTime' in slotProperties)
+  assert.ok(new RegExp(slotProperties.preferredTime.pattern).test('16:00'))
+  assert.equal(new RegExp(slotProperties.preferredTime.pattern).test('24:00'), false)
   const required = (booking.function.parameters as { required?: readonly string[] }).required ?? []
   assert.ok(!required.includes('prospectEmail'))
   assert.equal(TOOL_MESSAGES.book_tour![0]!.blocking, false)

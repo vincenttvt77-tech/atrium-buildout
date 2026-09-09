@@ -40,6 +40,32 @@ function portal(options = {}) {
     handler(fn) { handler = fn }, reloads: () => reloads }
 }
 
+test('demo catalogue tool results retain priced-out and named-lookup facts after a cold start', async () => {
+  const { checkAvailability } = await import('../../src/conversation/tools.ts')
+  const { loadInventory } = await import('../../src/inventory/load.ts')
+  const { emptyQualification } = await import('../../src/leasing/qualification.ts')
+  const readData = async name => JSON.parse(await readFile(new URL(`../../data/${name}.json`, import.meta.url), 'utf8'))
+  const [units, plans, provenance] = await Promise.all(['inventory', 'floorplans', 'inventory-source'].map(readData))
+  const now = new Date('2026-09-09T19:12:00Z')
+  const inventory = loadInventory(units, plans, new Date(provenance.catalogAsOf), 'bundled demo', provenance, now).snapshot
+  const ctx = { propertyId: 'prop-demo', interactionId: 'portal-source-regression', inventory,
+    articles: [], qualification: emptyQualification(), jurisdiction: 'NY', confidenceThreshold: 0.7, now }
+  const ui = portal()
+  const storyFor = args => {
+    const result = checkAvailability(ctx, args).say
+    assert.match(result, /fictional.*demo/i)
+    // No process-local decision events survive this simulated cold start.
+    return ui.app.derive.callStory({ id: 'call-source-regression', events: [],
+      call: { toolCalls: [{ name: 'check_availability', arguments: args, result }] } }, ui.app.state)
+  }
+  const priced = storyFor({ bedrooms: '3', budget: '1000', moveIn: 'within three months' })
+  assert.equal(priced.findings.pricedOut?.budget, 1000)
+  assert.match(priced.steps[0].text, /nothing under \$1,000/i)
+  assert.match(storyFor({ unitId: '29E' }).steps[0].text, /Looked up apartment 29E: available/)
+  assert.match(storyFor({ unitId: 'NOT-A-UNIT' }).steps[0].text, /not on the list/)
+  assert.equal(storyFor({ bedrooms: '4', budget: '12000', moveIn: 'within three months' }).findings.bedroomMismatch, true)
+})
+
 test('database property facts and timezone come only from the document bootstrap', () => {
   const ui = portal()
   assert.equal(ui.app.property.name, 'Lake House')
@@ -52,6 +78,26 @@ test('database property facts and timezone come only from the document bootstrap
   const legacy = portal({ window: { ATRIUM_RUNTIME_MODE: 'legacy', ATRIUM_PROPERTY: undefined } })
   assert.equal(legacy.app.property.name, 'The Larkin')
   assert.equal(legacy.app.property.timeZone, 'America/New_York')
+})
+
+test('budget displays preserve a minimum, maximum, range, or the caller’s original words', () => {
+  const { derive } = portal().app
+  assert.equal(derive.budgetText({ minMonthly: 8000, maxMonthly: null }), '$8,000+/mo')
+  assert.equal(derive.budgetText({ minMonthly: 8000, maxMonthly: 12000 }), '$8,000–$12,000/mo')
+  assert.equal(derive.budgetText({ minMonthly: null, maxMonthly: 8000 }), 'up to $8,000/mo')
+  assert.equal(derive.budgetText(8000), 'up to $8,000/mo')
+  assert.equal(derive.factValue('budget', 'over eight thousand'), 'over eight thousand')
+  assert.equal(derive.budgetText({ minMonthly: 12000, maxMonthly: 8000 }), '')
+})
+
+test('call facts retain relative move timing when only the original tool words are available', () => {
+  const ui = portal()
+  const said = 'within now to three months'
+  const story = ui.app.derive.callStory({ events: [], call: { toolCalls: [{ name: 'capture_signal',
+    arguments: { signal: 'moveInTiming', value: said, excerpt: said }, result: 'Got it.' }] } }, ui.app.state)
+  assert.doesNotMatch(story.wants, /from —/)
+  assert.match(story.wants, /within now to three months/)
+  assert.equal(story.facts[0].value, said)
 })
 
 test('invalid database bootstrap fails visibly before creating the app or requesting data', () => {

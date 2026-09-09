@@ -5,11 +5,13 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { randomBytes } from 'node:crypto'
 import { createServer } from 'node:net'
+import { isDeepStrictEqual } from 'node:util'
 import { DatabaseConnection } from '../../src/database/connection.ts'
 import { createDatabaseRuntime } from '../../src/application/runtime.ts'
 import { hashPassword, readAccountsConfig } from '../../src/ops/accounts.ts'
 import { defaultSettings, validateSettings } from '../../src/calendar/settings.ts'
 import { applyDatabaseMigrations } from './database-migrations.mjs'
+import { validateInventoryProvenance } from '../../src/inventory/source.ts'
 
 export const LOCAL_ORGANIZATION = 'org-demo-larkin'
 export const LOCAL_PROPERTY = 'prop-demo'
@@ -17,6 +19,7 @@ export const LOCAL_USER = 'user-demo-larkin'
 export const LOCAL_ASSISTANT = 'demo-larkin-assistant'
 // This is bundled fictional source data, not a new PMS observation on each launch.
 export const LOCAL_SOURCE_AT = '2026-09-01T00:00:00.000Z'
+const LOCAL_INVENTORY_SOURCE = 'Bundled fictional demo inventory; no PMS connection'
 const IMPORT_ID = 'legacy-demo-larkin-v1'
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
 
@@ -97,11 +100,13 @@ async function bootstrap(admin, root) {
     const prior = await admin.query('SELECT value FROM atrium_local.imports WHERE id=$1', [IMPORT_ID])
     if (prior.rows.length) { await admin.query('COMMIT'); return { imported: false } }
     const { account } = await localAccount(root)
-    const [property, inventory, floorplans, knowledge] = await Promise.all(['property', 'inventory', 'floorplans', 'knowledge']
+    const [property, inventory, floorplans, knowledge, rawProvenance] = await Promise.all(['property', 'inventory', 'floorplans', 'knowledge', 'inventory-source']
       .map(name => readFile(join(root, 'data', `${name}.json`), 'utf8').then(JSON.parse)))
     if (property.id !== LOCAL_PROPERTY || property.timeZone !== 'America/New_York') throw new Error('The local import requires the explicit fictional Larkin property and New York timezone.')
     const tourSettings = validateSettings(defaultSettings())
-    const configuration = { property: { ...property, organizationId: LOCAL_ORGANIZATION, jurisdiction: 'NY', tourSettings }, inventory, floorplans, knowledge }
+    const inventoryProvenance = validateInventoryProvenance(rawProvenance, new Date(LOCAL_SOURCE_AT))
+    if (inventoryProvenance?.sourceMode !== 'demo') throw new Error('The local fixture requires explicitly fictional demo inventory.')
+    const configuration = { property: { ...property, organizationId: LOCAL_ORGANIZATION, jurisdiction: 'NY', tourSettings }, inventory, floorplans, knowledge, inventoryProvenance }
     await admin.query("INSERT INTO atrium.organizations(id,name,status) VALUES($1,'The Larkin · Local Demo','active')", [LOCAL_ORGANIZATION])
     await admin.query("INSERT INTO atrium.properties(id,organization_id,name,time_zone,status) VALUES($1,$2,'The Larkin · Local Demo','America/New_York','active')", [LOCAL_PROPERTY, LOCAL_ORGANIZATION])
     await admin.query("INSERT INTO atrium.users(id,username,display_name,status) VALUES($1,$2,$3,'active')", [LOCAL_USER, account.username, account.displayName])
@@ -122,6 +127,55 @@ async function bootstrap(admin, root) {
     const commit = await admin.query('COMMIT')
     if (commit.command !== 'COMMIT') throw new Error('Local import did not commit.')
     return { imported: true }
+  } catch (error) { await admin.query('ROLLBACK'); throw error }
+}
+
+/** One local upgrade: append source metadata without replacing any existing content. */
+export async function publishLocalDemoProvenance(admin, root = ROOT) {
+  const rawProvenance = JSON.parse(await readFile(join(root, 'data', 'inventory-source.json'), 'utf8'))
+  const expected = validateInventoryProvenance(rawProvenance, new Date(LOCAL_SOURCE_AT))
+  if (expected?.sourceMode !== 'demo') throw new Error('Local inventory requires explicit fictional demo metadata.')
+  await admin.query('BEGIN')
+  try {
+    const marker = (await admin.query('SELECT value FROM atrium_local.imports WHERE id=$1', [IMPORT_ID])).rows[0]?.value
+    if (marker?.organizationId !== LOCAL_ORGANIZATION || marker?.propertyId !== LOCAL_PROPERTY || marker?.synthetic !== true) {
+      throw new Error('Local inventory source upgrade requires the original fictional Larkin import.')
+    }
+    const row = (await admin.query(`SELECT p.time_zone, p.status AS property_status,
+        c.version, c.schema_version, c.configuration, c.inventory_read_at, c.inventory_source
+      FROM atrium.properties p JOIN atrium.property_configurations c
+        ON c.organization_id=p.organization_id AND c.property_id=p.id AND c.version=p.published_configuration_version
+      WHERE p.organization_id=$1 AND p.id=$2 AND c.status='published' FOR UPDATE OF p`,
+    [LOCAL_ORGANIZATION, LOCAL_PROPERTY])).rows[0]
+    const property = row?.configuration?.property
+    if (!row || row.schema_version !== 1 || row.time_zone !== 'America/New_York' || row.property_status !== 'active'
+      || row.inventory_read_at?.toISOString() !== LOCAL_SOURCE_AT || row.inventory_source !== LOCAL_INVENTORY_SOURCE
+      || property?.id !== LOCAL_PROPERTY || property?.organizationId !== LOCAL_ORGANIZATION
+      || typeof property.sourceNote !== 'string' || !property.sourceNote.startsWith('DEMO PROPERTY — FICTIONAL.')
+      || !property.sourceNote.includes('The Larkin does not exist.')) {
+      throw new Error('The current property source differs from the original fictional local fixture; it was not changed.')
+    }
+    if (Object.hasOwn(row.configuration, 'inventoryProvenance')) {
+      if (!isDeepStrictEqual(row.configuration.inventoryProvenance, expected)) {
+        throw new Error('The existing inventory provenance differs; it was not overwritten.')
+      }
+      await admin.query('COMMIT')
+      return { configurationPublished: false, configurationVersion: Number(row.version) }
+    }
+    const highest = Number((await admin.query('SELECT max(version) AS version FROM atrium.property_configurations WHERE organization_id=$1 AND property_id=$2',
+      [LOCAL_ORGANIZATION, LOCAL_PROPERTY])).rows[0].version)
+    if (!Number.isSafeInteger(highest) || highest < 1 || highest >= Number.MAX_SAFE_INTEGER) throw new Error('Local configuration version needs manual inspection.')
+    const next = highest + 1
+    const configuration = { ...row.configuration, inventoryProvenance: expected }
+    await admin.query(`INSERT INTO atrium.property_configurations
+      (organization_id,property_id,version,schema_version,status,configuration,inventory_read_at,inventory_source,published_at)
+      VALUES($1,$2,$3,$4,'published',$5,$6,$7,clock_timestamp())`,
+    [LOCAL_ORGANIZATION, LOCAL_PROPERTY, next, row.schema_version, JSON.stringify(configuration), row.inventory_read_at, row.inventory_source])
+    await admin.query('UPDATE atrium.properties SET published_configuration_version=$3 WHERE organization_id=$1 AND id=$2',
+      [LOCAL_ORGANIZATION, LOCAL_PROPERTY, next])
+    const commit = await admin.query('COMMIT')
+    if (commit.command !== 'COMMIT') throw new Error('Local inventory source publication did not commit.')
+    return { configurationPublished: true, configurationVersion: next }
   } catch (error) { await admin.query('ROLLBACK'); throw error }
 }
 
@@ -169,6 +223,7 @@ export async function openLocalDatabase({ root = ROOT, directory = join(root, '.
     } catch (error) { await admin.query('ROLLBACK'); throw error }
     const migrations = await applyDatabaseMigrations(admin)
     const imported = await bootstrap(admin, root)
+    const publication = await publishLocalDemoProvenance(admin, root)
     const connection = (user, password) => ({ host: '127.0.0.1', port, user, password, database: 'postgres', ssl: false,
       max: 4, connectionTimeoutMillis: 5000, idleTimeoutMillis: 10000,
       options: '-c search_path=pg_catalog -c statement_timeout=10000 -c lock_timeout=5000 -c idle_in_transaction_session_timeout=15000' })
@@ -178,7 +233,7 @@ export async function openLocalDatabase({ root = ROOT, directory = join(root, '.
     process.env.OPS_SESSION_SECRET = config.sessionSecret
     process.env.VAPI_WEBHOOK_SECRET = config.webhookSecret
     let closed = false
-    return { runtime, admin, directory, port, migrations, ...imported, initialPassword,
+    return { runtime, admin, directory, port, migrations, ...imported, ...publication, initialPassword,
       async readImport(id) { return (await admin.query('SELECT value FROM atrium_local.imports WHERE id=$1', [id])).rows[0]?.value ?? null },
       async writeImport(id, value) { await admin.query('INSERT INTO atrium_local.imports(id,value) VALUES($1,$2) ON CONFLICT(id) DO UPDATE SET value=EXCLUDED.value', [id, JSON.stringify(value)]) },
       async close() {
