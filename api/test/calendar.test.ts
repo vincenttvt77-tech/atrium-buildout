@@ -28,6 +28,7 @@ function mockRes() {
 const headers = { 'x-ops-passcode': OPS_PASSCODE }
 async function call(method: string, body?: unknown) {
   const res = mockRes()
+  if (method === 'POST' && body && typeof body === 'object') body = { expectedTimeZone: 'America/New_York', ...body }
   await handler({ method, headers, body }, res)
   return res
 }

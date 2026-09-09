@@ -13,9 +13,12 @@ import {
 import { authorizeOps, constantTimeEquals } from '../src/ops/session.ts'
 import { fetchCalls } from '../src/ops/vapi-calls.ts'
 import { calendarStoreFromEnv } from '../src/calendar/store.ts'
+import { heldEmergency, holdEmergency, CalendarInteractionPausedError } from '../src/calendar/safety.ts'
 import { generateSlots } from '../src/calendar/slots.ts'
 import { defaultSettings, effectiveOptions } from '../src/calendar/settings.ts'
 import { parseCalendarDate, addCalendarDays } from '../src/calendar/range.ts'
+import { DEFAULT_TIME_ZONE, localDate, validateTimeZone, wallTime } from '../src/calendar/time.ts'
+import { propertyTimeZone } from '../src/config/property.ts'
 import { storeBackedCalendar } from '../src/calendar/port.ts'
 import { documentStoreFromEnv } from '../src/store/documents.ts'
 import { normalisePhone } from '../src/leads/profile.ts'
@@ -29,6 +32,7 @@ import { sayableStatus } from '../src/booking/book.ts'
 import { propertyId, interactionId } from '../src/domain/ids.ts'
 import { currentTenantId, withTenant } from '../src/tenancy/context.ts'
 import { webhookTenant } from '../src/tenancy/webhook.ts'
+import { detectEmergency, primaryEmergency, safetyInstruction, type EmergencySignal } from '../src/escalation/emergency.ts'
 
 /**
  * Vapi tool-call webhook.
@@ -90,6 +94,7 @@ interface CallState {
   booking: { slotId: string; startsAt: string; unitId: string | null; status: 'confirmed' | 'arranging' | 'failed' } | null
   lossReason: LossReason | null
   escalation: { trigger: string; detail: string } | null
+  emergency: EmergencySignal | null
   toolsCalled: string[]
 }
 
@@ -98,7 +103,7 @@ const callKey = (id: string) => `call:${id}`
 
 const freshCall = (): CallState => ({
   qualification: emptyQualification(), name: null, email: null, unitsDiscussed: [],
-  booking: null, lossReason: null, escalation: null, toolsCalled: [],
+  booking: null, lossReason: null, escalation: null, emergency: null, toolsCalled: [],
 })
 
 /** Dates inside QualificationState do not survive JSON; rehydrate them. */
@@ -133,9 +138,16 @@ async function saveCall(callId: string, state: CallState, before: CallState): Pr
       unitsDiscussed: [...new Set([...current.unitsDiscussed, ...state.unitsDiscussed])],
       toolsCalled: [...current.toolsCalled, ...state.toolsCalled.slice(before.toolsCalled.length)],
     }
-    for (const key of ['name', 'email', 'phone', 'booking', 'lossReason', 'escalation'] as const) {
+    for (const key of ['name', 'email', 'phone', 'booking', 'lossReason'] as const) {
       if (JSON.stringify(state[key]) !== JSON.stringify(before[key])) Object.assign(next, { [key]: state[key] })
     }
+    // A stale tool request must not replace a concurrently recorded emergency with
+    // an ordinary policy escalation or silently clear the pause on leasing actions.
+    next.emergency = primaryEmergency([current.emergency, state.emergency].filter((e): e is EmergencySignal => Boolean(e)))
+    next.escalation = next.emergency ? { trigger: 'emergency', detail: `${next.emergency.kind}: "${next.emergency.matched}"` }
+      : current.escalation?.trigger === 'emergency' ? current.escalation
+      : state.escalation?.trigger === 'emergency' ? state.escalation
+        : JSON.stringify(state.escalation) !== JSON.stringify(before.escalation) ? state.escalation : current.escalation
     return next
   })
 }
@@ -147,10 +159,18 @@ async function saveCall(callId: string, state: CallState, before: CallState): Pr
  */
 const calendarStore = calendarStoreFromEnv()
 const TOUR_CAPACITY = defaultSettings().capacity
-const demoCalendar = (now: Date) => storeBackedCalendar(calendarStore, () => now, { capacity: TOUR_CAPACITY, unitIds: rawUnits.map(u => u.unitId) })
+const demoCalendar = (now: Date, timeZone: string) => storeBackedCalendar(calendarStore, () => now, { capacity: TOUR_CAPACITY, unitIds: rawUnits.map(u => u.unitId), timeZone })
 
-const nyDay = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
-const nyHour = (d: Date) => Number(d.toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/New_York' }))
+const CALENDAR_CONFIGURATION_UNAVAILABLE = "The building's tour calendar needs staff attention, so I can't verify or book a time right now. Offer help from the leasing team; do not suggest that a different date will fix this."
+
+/** Resolve at the scheduling boundary so a bad calendar setting cannot suppress safety guidance. */
+function tourTimeZone(property: Record<string, unknown>, callId: string): string | null {
+  try { return propertyTimeZone(property) }
+  catch {
+    logEvent(callId, { kind: 'configuration_error', errorCode: 'property_timezone_invalid' })
+    return null
+  }
+}
 
 /**
  * Which open times to put in front of the model.
@@ -160,25 +180,26 @@ const nyHour = (d: Date) => Number(d.toLocaleString('en-US', { hour: 'numeric', 
  * gets that day; otherwise the next three days with something open, a morning and an
  * afternoon time on each, and a note that other days are open too.
  */
-export function pickSlotsToOffer(open: TourSlot[], preferredDate?: string): { offered: TourSlot[]; daysOpen: number } {
+export function pickSlotsToOffer(open: TourSlot[], preferredDate?: string, timeZone = DEFAULT_TIME_ZONE): { offered: TourSlot[]; daysOpen: number } {
+  const zone = validateTimeZone(timeZone)
   const byDay = new Map<string, TourSlot[]>()
-  for (const s of open) { const d = nyDay(s.startsAt); if (!byDay.has(d)) byDay.set(d, []); byDay.get(d)!.push(s) }
+  for (const s of open) { const d = localDate(s.startsAt, zone); if (!byDay.has(d)) byDay.set(d, []); byDay.get(d)!.push(s) }
   const wanted = preferredDate && /^\d{4}-\d{2}-\d{2}$/.test(preferredDate) ? byDay.get(preferredDate) : undefined
   if (wanted?.length) return { offered: wanted.slice(0, 6), daysOpen: byDay.size }
   const offered: TourSlot[] = []
   for (const [, slots] of [...byDay.entries()].slice(0, 3)) {
-    const morning = slots.find((s) => nyHour(s.startsAt) < 13)
-    const afternoon = slots.find((s) => nyHour(s.startsAt) >= 13)
+    const morning = slots.find((s) => wallTime(s.startsAt, zone).hour < 13)
+    const afternoon = slots.find((s) => wallTime(s.startsAt, zone).hour >= 13)
     for (const s of [morning, afternoon]) if (s && !offered.includes(s)) offered.push(s)
     if (!morning && !afternoon) offered.push(slots[0]!)
   }
   return { offered, daysOpen: byDay.size }
 }
 
-const fmtSlot = (s: TourSlot) =>
+const fmtSlot = (s: TourSlot, timeZone: string) =>
   s.startsAt.toLocaleString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
-    timeZone: 'America/New_York',
+    timeZone,
   })
 
 /**
@@ -246,6 +267,80 @@ function logEvent(callId: string, e: Record<string, unknown>) {
   if (events.length > 2000) events.splice(0, events.length - 2000)
 }
 
+function parseToolArgs(raw: unknown): Record<string, unknown> | null {
+  try {
+    const args: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw
+    return args && typeof args === 'object' && !Array.isArray(args) ? args as Record<string, unknown> : null
+  } catch { return null }
+}
+
+/** Screen string values recursively, including evidence and malformed nested fields. */
+function emergencyInArgs(args: Record<string, unknown> | null, raw: unknown): EmergencySignal[] {
+  if (args) {
+    const pending: unknown[] = [args]
+    const signals: EmergencySignal[] = []
+    let visited = 0
+    while (pending.length) {
+      if (++visited > 10_000) throw new Error('Tool arguments exceed the screening limit')
+      const value = pending.pop()
+      if (typeof value === 'string') signals.push(...detectEmergency(value))
+      else if (value && typeof value === 'object') pending.push(...Object.values(value))
+    }
+    return signals
+  }
+  // A truncated JSON string or accidental array must not allow an earlier booking
+  // to run. This text is screened, never evaluated or treated as valid tool args.
+  const text = typeof raw === 'string' ? raw : JSON.stringify(raw) ?? ''
+  return detectEmergency(text.replace(/\\u([0-9a-f]{4})/gi, (_, hex: string) => String.fromCharCode(parseInt(hex, 16))))
+}
+
+function callEmergency(state: CallState): EmergencySignal | null {
+  // Older call records held only the escalation detail. They still suspend leasing.
+  return state.emergency ?? (state.escalation?.trigger === 'emergency'
+    ? primaryEmergency(detectEmergency(state.escalation.detail)) : null)
+}
+
+/** Recording a report does not deliver a notification or dispatch a responder. */
+async function rememberEmergency(callId: string, signal: EmergencySignal, toolsCalled: string[] = []): Promise<{
+  state: CallState | null; hold: EmergencySignal | null;
+}> {
+  let saved: CallState | null = null
+  let hold: EmergencySignal | null = null
+  // Admission shares the calendar's atomic update. A conversation read alone cannot
+  // prevent a concurrent booking with stale state. Record the pause before acknowledging.
+  try { hold = await holdEmergency(calendarStore, callId, signal, new Date()) }
+  catch { logEvent(callId, { kind: 'emergency_hold_failed', notificationStatus: 'not_sent' }) }
+  try {
+    saved = await documents.update<CallState>(callKey(callId), freshCall(), (raw) => {
+      const current = reviveCall(raw)
+      if (current.completedAt) return current
+      const selected = primaryEmergency([callEmergency(current), signal].filter((e): e is EmergencySignal => Boolean(e)))!
+      return { ...current, emergency: selected,
+        escalation: { trigger: 'emergency', detail: `${selected.kind}: "${selected.matched}"` },
+        toolsCalled: [...current.toolsCalled, ...toolsCalled],
+      }
+    })
+  } catch {
+    // A storage outage must not replace urgent safety guidance with a callback offer.
+    // The independent calendar guard can preserve the pause if this projection fails.
+    logEvent(callId, { kind: 'emergency_record_failed', notificationStatus: 'not_sent' })
+  }
+  if (!saved?.completedAt) {
+    logEvent(callId, { kind: 'emergency', emergencyKind: signal.kind, matched: signal.matched,
+      persisted: saved !== null, bookingHoldPersisted: hold !== null, notificationStatus: 'not_sent' })
+    logEvent(callId, { kind: 'escalated', trigger: 'emergency', detail: `${signal.kind}: "${signal.matched}"`,
+      persisted: saved !== null, notificationStatus: 'not_sent' })
+  }
+  return { state: saved, hold }
+}
+
+function emergencyToolResponse(signal: EmergencySignal | null, name: string): string {
+  const instruction = signal ? safetyInstruction(signal)
+    : 'An emergency was reported during this call. If anyone is in immediate danger, call 911 from a safe location. Contact the building emergency line directly. I have not contacted emergency services or building staff.'
+  return name === 'answer_question' ? instruction
+    : `${instruction} Leasing actions are paused for this call. This requested action was not taken.`
+}
+
 /**
  * Runs one tool against the call's state, mutating it. The caller loads the state once
  * per webhook request, runs every tool in that request in order, and saves once.
@@ -309,39 +404,44 @@ async function runTool(
         logEvent(callId, { kind: 'escalated', trigger: r.escalate.trigger, detail: r.escalate.detail })
         state.escalation = r.escalate
       }
+      if (r.emergency) state.emergency = r.emergency
       return r.say
     }
 
     case 'list_tour_slots': {
+      const timeZone = tourTimeZone(property, callId)
+      if (!timeZone) return CALENDAR_CONFIGURATION_UNAVAILABLE
       const preferredDate = args.preferredDate ? String(args.preferredDate) : undefined
       let from = now, to: Date
       try {
         if (preferredDate) {
-          from = parseCalendarDate(preferredDate)
-          if (preferredDate < nyDay(now)) return 'That date is in the past. Ask which future date works for the caller.'
+          from = parseCalendarDate(preferredDate, timeZone)
+          if (preferredDate < localDate(now, timeZone)) return 'That date is in the past. Ask which future date works for the caller.'
         }
-        to = parseCalendarDate(addCalendarDays(nyDay(from), 15))
+        to = parseCalendarDate(addCalendarDays(localDate(from, timeZone), 15), timeZone)
       } catch { return 'That date is invalid. Ask for a real date and call list_tour_slots using YYYY-MM-DD.' }
       const unitId = args.unitId ? String(args.unitId).trim().toUpperCase() : null
       if (unitId && !rawUnits.some(u => u.unitId.toUpperCase() === unitId)) return 'That residence is not in the building inventory. Confirm a residence returned by check_availability, or omit unitId for a general building tour.'
-      const slots = await demoCalendar(now).listSlots(ctx.propertyId, from, to, unitId)
-      const { offered, daysOpen } = pickSlotsToOffer(slots, preferredDate)
+      const slots = await demoCalendar(now, timeZone).listSlots(ctx.propertyId, from, to, unitId)
+      const { offered, daysOpen } = pickSlotsToOffer(slots, preferredDate, timeZone)
       logEvent(callId, { kind: 'slots_listed', count: offered.length, daysOpen })
       if (offered.length === 0) {
-        const window = effectiveOptions(await calendarStore.read()).bookingWindowDays
+        const window = effectiveOptions(await calendarStore.read(), { timeZone }).bookingWindowDays
         return `No bookable tour times were found in this requested date range.${window == null ? '' : ` This building accepts bookings up to ${window} days ahead.`} Ask for another date or offer a leasing-team callback. Do not say the whole calendar is full.`
       }
-      const preferredClosed = preferredDate && !offered.some(s => nyDay(s.startsAt) === preferredDate)
+      const preferredClosed = preferredDate && !offered.some(s => localDate(s.startsAt, timeZone) === preferredDate)
       const more = daysOpen > 3 ? ` Other days are open too — ask which date works and call this again with preferredDate as YYYY-MM-DD.` : ''
-      return `${preferredClosed ? `No times are open on ${preferredDate}; these are alternatives on other dates. ` : ''}Real open tour times${unitId ? ` for residence ${unitId}` : ''} — offer two or three, and use the slotId when booking:\n${offered.map((s) => `${s.slotId} — ${fmtSlot(s)}`).join('\n')}${more}`
+      return `${preferredClosed ? `No times are open on ${preferredDate}; these are alternatives on other dates. ` : ''}Real open tour times${unitId ? ` for residence ${unitId}` : ''} in the building's local time — offer two or three, and use the slotId when booking:\n${offered.map((s) => `${s.slotId} — ${fmtSlot(s, timeZone)}`).join('\n')}${more}`
     }
 
     case 'book_tour': {
+      const timeZone = tourTimeZone(property, callId)
+      if (!timeZone) return CALENDAR_CONFIGURATION_UNAVAILABLE
       const slotId = String(args.slotId ?? '')
       if (!/^slot-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(slotId)) return 'That slot is invalid. Call list_tour_slots again and offer a real time.'
       const requestedStart = new Date(`${slotId.slice(5)}:00.000Z`)
       if (!Number.isFinite(requestedStart.getTime()) || requestedStart.toISOString().slice(0, 16) !== slotId.slice(5)) return 'That slot is invalid. Call list_tour_slots again.'
-      const slots = generateSlots(now, { ...effectiveOptions(await calendarStore.read()), from: requestedStart, to: new Date(requestedStart.getTime() + 86400000) })
+      const slots = generateSlots(now, { ...effectiveOptions(await calendarStore.read(), { timeZone }), from: requestedStart, to: new Date(requestedStart.getTime() + 86400000) })
       const slot = slots.find((s) => s.slotId === args.slotId)
       if (!slot) return 'That slot is not on the calendar. Call list_tour_slots again and offer a real time.'
       const unitId = args.unitId ? String(args.unitId).trim().toUpperCase() : null
@@ -360,11 +460,11 @@ async function runTool(
         slot,
         unitId,
         floorPlanId: null,
-      }, demoCalendar(now), { now, makeIntentId: () => `intent-${callId}-${slot.slotId}` })
+      }, demoCalendar(now, timeZone), { now, makeIntentId: () => `intent-${callId}-${slot.slotId}` })
 
       logEvent(callId, {
         kind: 'tour_booked', status: booking.state.status,
-        slot: fmtSlot(slot), unitId,
+        slot: fmtSlot(slot, timeZone), unitId,
         prospectName: state.name, prospectEmail: state.email,
       })
       state.booking = {
@@ -373,7 +473,7 @@ async function runTool(
         status: booking.state.status === 'confirmed' ? 'confirmed'
           : booking.state.status === 'arranging' ? 'arranging' : 'failed',
       }
-      return sayableStatus(booking)
+      return sayableStatus(booking, timeZone)
     }
 
     case 'capture_loss_reason': {
@@ -525,11 +625,15 @@ async function scopedHandler(req: any, res: any) {
         jurisdiction: 'NY', confidenceThreshold: 0.7, now,
       })
       if (emergency) {
-        logEvent(callId, emergency.record)
-        logEvent(callId, { kind: 'escalated', trigger: 'emergency', detail: emergency.escalate?.detail })
-        if (callId !== 'unknown-call') {
-          await documents.update<CallState>(callKey(callId), freshCall(), (state) => ({ ...state, escalation: { trigger: 'emergency', detail: emergency.escalate?.detail ?? 'Emergency reported' } }))
+        if (callId !== 'unknown-call' && emergency.emergency) {
+          const recorded = await rememberEmergency(callId, emergency.emergency)
+          if (!recorded.hold || !recorded.state) {
+            res.status(503).json({ error: 'Emergency pause could not be persisted; retry required.',
+              code: 'emergency_persistence_unavailable', safetyInstruction: safetyInstruction(emergency.emergency) })
+            return
+          }
         }
+        else logEvent(callId, { ...emergency.record, persisted: false, notificationStatus: 'not_sent' })
       }
       res.status(200).json({})
       return
@@ -547,38 +651,93 @@ async function scopedHandler(req: any, res: any) {
       if (!Array.isArray(list)) throw new Error('Invalid tool-call list')
       pendingToolIds = list.map((tc) => tc?.id ?? tc?.toolCallId).filter((id) => typeof id === 'string')
       if (callId === 'unknown-call') throw new Error('A call id is required for tool calls')
-      const state = await getCall(callId)
+      const prepared = list.map((tc) => {
+        const raw = tc?.arguments ?? tc?.function?.arguments ?? {}
+        const args = parseToolArgs(raw)
+        return { toolCallId: tc?.id ?? tc?.toolCallId,
+          name: String(tc?.name ?? tc?.function?.name ?? ''), args,
+          emergencies: emergencyInArgs(args, raw),
+        }
+      })
+      // Screen the entire batch BEFORE any tool runs: the model may put book_tour
+      // before answer_question("I smell gas"). Ordering cannot permit that booking.
+      const batchEmergency = primaryEmergency(prepared.flatMap((tc) => tc.emergencies))
+      if (batchEmergency) {
+        const recorded = await rememberEmergency(callId, batchEmergency, prepared.map((tc) => tc.name))
+        const saved = recorded.state
+        const signal = primaryEmergency([saved && callEmergency(saved), recorded.hold, batchEmergency].filter((e): e is EmergencySignal => Boolean(e)))!
+        const persisted = recorded.hold !== null && saved !== null
+        res.status(persisted ? 200 : 503).json({
+          ...(!persisted ? { code: 'emergency_persistence_unavailable' } : {}),
+          results: prepared.map((tc) => ({ toolCallId: tc.toolCallId,
+          result: saved?.completedAt ? 'This call has already ended. No action was taken.' : emergencyToolResponse(signal, tc.name),
+        })) })
+        return
+      }
+      // Independent from the call projection, so a failed call-record write cannot
+      // clear an acknowledged pause when another instance handles the next request.
+      const [holdRead, callRead] = await Promise.allSettled([
+        calendarStore.read().then(calendar => heldEmergency(calendar, callId)), getCall(callId),
+      ])
+      const activeHold = holdRead.status === 'fulfilled' ? holdRead.value : null
+      const state = callRead.status === 'fulfilled' ? callRead.value : freshCall()
       if (state.completedAt) {
         res.status(200).json({ results: pendingToolIds.map((toolCallId) => ({
           toolCallId, result: 'This call has already ended. No action was taken.',
         })) })
         return
       }
+      if (activeHold || state.emergency || state.escalation?.trigger === 'emergency') {
+        const signal = primaryEmergency([activeHold, callEmergency(state)].filter((e): e is EmergencySignal => Boolean(e)))
+        let incomplete = holdRead.status === 'rejected' || callRead.status === 'rejected'
+        if (signal && signal.kind !== activeHold?.kind) {
+          try { await holdEmergency(calendarStore, callId, signal, now) }
+          catch { incomplete = true }
+        }
+        for (const tc of prepared) logEvent(callId, { kind: 'tool_blocked', name: tc.name, reason: 'emergency_active' })
+        res.status(incomplete ? 503 : 200).json({
+          ...(incomplete ? { code: 'emergency_persistence_unavailable' } : {}), results: prepared.map((tc) => ({
+          toolCallId: tc.toolCallId, result: emergencyToolResponse(signal, tc.name),
+        })) })
+        return
+      }
+      if (holdRead.status === 'rejected' || callRead.status === 'rejected') throw new Error('Call safety state could not be verified')
       const before = structuredClone(state)
       const phone = message.call?.customer?.number ?? body.call?.customer?.number
       if (!state.phone && typeof phone === 'string' && phone.trim()) state.phone = normalisePhone(phone)
       const results: Array<{ toolCallId: unknown; result: string }> = []
-      for (const tc of list) {
-        const name = tc.name ?? tc.function?.name
+      let pauseUnpersisted = false
+      for (const tc of prepared) {
+        const name = tc.name
         const toolStartedAt = performance.now()
         let result: string
         let errorCode: string | null = null
         try {
-          const rawArgs = tc.arguments ?? tc.function?.arguments ?? {}
-          const args = typeof rawArgs === 'string' ? JSON.parse(rawArgs) : rawArgs
-          if (!args || typeof args !== 'object' || Array.isArray(args)) throw new Error('Invalid tool arguments')
-          result = await runTool(String(name), args, callId, now, state)
-        } catch {
+          if (state.emergency || state.escalation?.trigger === 'emergency') {
+            results.push({ toolCallId: tc.toolCallId, result: emergencyToolResponse(callEmergency(state), name) })
+            continue
+          }
+          if (!tc.args) throw new Error('Invalid tool arguments')
+          result = await runTool(name, tc.args, callId, now, state)
+          if (state.emergency) {
+            const recorded = await rememberEmergency(callId, state.emergency)
+            pauseUnpersisted ||= !recorded.hold || !recorded.state
+          }
+        } catch (error) {
           errorCode = 'tool_failed'
-          result = 'I could not verify that action. Ask for clarification or offer a callback; do not claim it succeeded.'
+          if (error instanceof Error && error.message === 'CALENDAR_INTERACTION_PAUSED') {
+            state.emergency = error instanceof CalendarInteractionPausedError ? error.signal : callEmergency(state)
+            state.escalation = { trigger: 'emergency', detail: 'Leasing paused by the calendar safety guard.' }
+            result = emergencyToolResponse(state.emergency, name)
+          } else result = 'I could not verify that action. Ask for clarification or offer a callback; do not claim it succeeded.'
         }
-        results.push({ toolCallId: tc.id ?? tc.toolCallId, result })
+        results.push({ toolCallId: tc.toolCallId, result })
         // What each tool decided, for the runtime log — no names, numbers or caller words.
         const events = scopedEvents()
         const last = events[events.length - 1] ?? {}
         console.log('[tool]', JSON.stringify({
           tenantId: currentTenantId(), requestId: res.atriumRequestId, callId,
-          toolCallId: tc.id ?? tc.toolCallId, name, durationMs: Math.round(performance.now() - toolStartedAt), errorCode,
+          toolCallId: tc.toolCallId, name, durationMs: Math.round(performance.now() - toolStartedAt), errorCode,
           ...(last.callId === callId ? {
             kind: last.kind, outcome: last.outcome ?? last.decision ?? null,
             topic: last.topic ?? null, confidence: last.confidence ?? null,
@@ -587,8 +746,16 @@ async function scopedHandler(req: any, res: any) {
           } : {}),
         }))
       }
-      await saveCall(callId, state, before)
-      res.status(200).json({ results })
+      try { await saveCall(callId, state, before) }
+      catch (error) {
+        if (!state.emergency && state.escalation?.trigger !== 'emergency') throw error
+        // Do not replace an already known safety instruction with generic failure copy.
+        pauseUnpersisted = true
+        logEvent(callId, { kind: 'emergency_record_failed', notificationStatus: 'not_sent' })
+      }
+      res.status(pauseUnpersisted ? 503 : 200).json({ results,
+        ...(pauseUnpersisted ? { code: 'emergency_persistence_unavailable' } : {}),
+      })
       return
     }
 

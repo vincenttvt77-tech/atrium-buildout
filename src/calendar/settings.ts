@@ -1,6 +1,7 @@
 import rawProperty from '../../data/property.json' with { type: 'json' }
 import { DEFAULT_HOURS, type BusinessHours, type SlotOptions } from './slots.ts'
 import type { CalendarState } from './types.ts'
+import { DEFAULT_TIME_ZONE, validateTimeZone } from './time.ts'
 
 export interface TourSettings {
   capacity: number
@@ -58,5 +59,7 @@ export function effectiveOptions(state: CalendarState, fallback: SlotOptions = {
     // Before configurable settings, a custom tour duration also set its start grid.
     ...(fallback.slotMinutes !== undefined && fallback.startIntervalMinutes === undefined ? { startIntervalMinutes: fallback.slotMinutes } : {}),
     ...(state.settings ? validateSettings(state.settings) : {}),
+    // Timezone is property identity, not a showing-rule override from a settings form.
+    timeZone: validateTimeZone(fallback.timeZone ?? DEFAULT_TIME_ZONE),
   }
 }

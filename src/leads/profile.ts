@@ -22,7 +22,7 @@ export type LeadStage =
   | 'new'            // called, told us little
   | 'qualified'      // two of timing / bedrooms / budget captured
   | 'tour_scheduled' // a confirmed booking exists
-  | 'toured'         // the tour time has passed
+  | 'toured'         // reserved for verified attendance; never inferred from elapsed time
   | 'lost'           // a loss reason was recorded and nothing booked
   | 'escalated'      // waiting on a human
 
@@ -91,10 +91,11 @@ export function emptyProfile(phone: string, now: Date): LeadProfile {
 /**
  * Stage is derived, never set by hand, so it cannot drift from the facts underneath it.
  * A profile with a confirmed booking is tour_scheduled whatever anyone typed.
+ * A scheduled time passing is not evidence that the caller attended. The current
+ * booking model records confirmation only, so it cannot derive a toured stage.
  */
-export function deriveStage(p: LeadProfile, now: Date): LeadStage {
+export function deriveStage(p: LeadProfile, _now: Date): LeadStage {
   const confirmed = p.bookings.filter((b) => b.status === 'confirmed')
-  if (confirmed.some((b) => Date.parse(b.startsAt) < now.getTime())) return 'toured'
   if (confirmed.length > 0) return 'tour_scheduled'
   if (p.escalations.length > 0) return 'escalated'
   if (p.lossReasons.length > 0) return 'lost'

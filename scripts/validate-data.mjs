@@ -8,6 +8,7 @@
 import { readFile } from 'node:fs/promises'
 import { findRentFigure } from './rent-guard.mjs'
 import { findRestrictedContent } from './restricted-guard.mjs'
+import { propertyTimeZone } from '../src/config/property.ts'
 
 const VOLATILE = new Set(['unit_availability', 'pricing', 'tour_slot_availability',
   'application_status', 'account_status', 'work_order_status'])
@@ -32,6 +33,10 @@ const articles = await read('knowledge.json')
 
 if (!property) fail('property.json', 'missing')
 else if (property.leasingPhone !== PHONE) fail('property.json', `leasingPhone is "${property.leasingPhone}", must be "${PHONE}"`)
+if (property) {
+  try { propertyTimeZone(property) }
+  catch { fail('property.json', 'timeZone must be a valid IANA timezone') }
+}
 
 // ---- the residential stack has to close
 // A residence count that does not add up is invisible on the page and fatal on the phone:

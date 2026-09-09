@@ -1,6 +1,7 @@
 import type {
   BookingRequest, BookingIntent, Booking, BookingState, CalendarPort, TourSlot,
 } from './types.ts'
+import { DEFAULT_TIME_ZONE, validateTimeZone } from '../calendar/time.ts'
 
 export interface BookOptions {
   now: Date
@@ -101,6 +102,9 @@ export async function bookTour(
       }
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err)
+      // This is a safety pause, not calendar unavailability. Preserve it for the
+      // caller-facing handler instead of retrying or offering another tour time.
+      if (lastError === 'CALENDAR_INTERACTION_PAUSED') throw err
       if (/taken|conflict|unavailable|already booked/i.test(lastError)) {
         const alternatives = await alternativesFor(req, calendar)
         return { intent, state: { status: 'slot_taken', alternatives }, updatedAt: opts.now }
@@ -119,7 +123,8 @@ export async function bookTour(
  * What the agent is allowed to say about a booking. Derived from state rather than chosen
  * by the model, so no amount of conversational pressure produces a false confirmation.
  */
-export function sayableStatus(booking: Booking): string {
+export function sayableStatus(booking: Booking, timeZone = DEFAULT_TIME_ZONE): string {
+  const zone = validateTimeZone(timeZone)
   const s = booking.state
   const name = booking.intent.request.prospectName
   switch (s.status) {
@@ -127,14 +132,14 @@ export function sayableStatus(booking: Booking): string {
       const when = s.slot.startsAt
       return `You're all set, ${name}. I've got you down for ${when.toLocaleString('en-US', {
         weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
-        timeZone: 'America/New_York',
+        timeZone: zone,
       })}. Your tour is confirmed.`
     }
     case 'arranging':
       return `I haven't been able to verify that booking yet, ${name}, so it isn't confirmed. The leasing team will need to check it with you.`
     case 'slot_taken':
       return s.alternatives.length > 0
-        ? `That time isn't available. I do have ${s.alternatives.slice(0, 3).map((a) => a.startsAt.toLocaleString('en-US', { weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })).join(', or ')}. Would any of those work?`
+        ? `That time isn't available. I do have ${s.alternatives.slice(0, 3).map((a) => a.startsAt.toLocaleString('en-US', { weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: zone })).join(', or ')}. Would any of those work?`
         : `That time isn't available, and I couldn't find another opening in the dates I checked. Would you like help from the leasing team?`
     case 'failed':
       return `I'm having trouble reaching the calendar right now, ${name}, so I couldn't confirm a tour. The leasing team will need to help arrange a time.`

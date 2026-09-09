@@ -7,6 +7,7 @@
  */
 
 import type { TourSettings } from './settings.ts'
+import type { EmergencyKind } from '../escalation/emergency.ts'
 
 export interface SlotBlock {
   /** Slot id, or an ISO date (YYYY-MM-DD) to block the whole day. */
@@ -37,6 +38,8 @@ export interface CalendarState {
   bookings: SlotBooking[]
   settings?: TourSettings
   settingsRevision?: number
+  /** Admission guard shares the booking CAS; it is not a notification or cancellation. */
+  emergencyHolds?: Array<{ interactionId: string; kind: EmergencyKind; recordedAt: string }>
 }
 
 export const emptyCalendar = (): CalendarState => ({ blocks: [], bookings: [] })

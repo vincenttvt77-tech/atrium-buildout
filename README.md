@@ -143,9 +143,10 @@ Vercel's build log stays clean. Nothing under `api/` imports the SDK. Run `npm i
 
 ### Simulated calls
 
-`npm run simulate` plays scripted callers against the real webhook handler, in-process,
-with the assistant side answered by the same model the Vapi assistant is configured with
-(`src/vapi/assistant.ts` decides which), the same system prompt and the same tool schemas.
+`npm run simulate` plays synthetic callers against the real webhook handler in a dedicated
+worker for each scenario. It uses the model, prompt and tool schemas from the repository's
+assistant configuration (`src/vapi/assistant.ts`), which may differ from the published Vapi
+assistant until a coordinated release.
 Every tool call goes through `api/vapi.ts`, so the quote gate, the calendar and the
 knowledge guard are the real ones. The scenarios in `src/sim/scenarios.ts` are the calls
 that went badly: a two bedroom on a four thousand budget, a tour booking, a specific
@@ -161,10 +162,19 @@ scenario expects) and then by a stronger model as a judge. The report is written
 ANTHROPIC_API_KEY=… npm run simulate                  # everything, judged
 npm run simulate -- --scenario evan --no-judge        # one call, rules only
 npm run simulate -- --list
+npm run simulate -- --preflight                      # no model key or model calls
 ```
 
-The key is read by the SDK from the environment only. It is never an argument, never
-logged, and never in a report.
+Each worker uses a new synthetic tenant, memory storage and generated local credentials.
+It does not inherit production environment variables; application network transports are
+blocked before the handler loads. This is application isolation, not an operating-system
+sandbox for untrusted code. Model requests run in the parent process against the fixed
+Anthropic Messages endpoint; their API key is not passed to workers or written to reports.
+
+The preflight checks isolation without evaluating an assistant. Full runs test text, tool
+arguments and real handler behavior; they do not measure speech quality, transcription,
+interruptions or voice latency. Vapi-native simulations require every live tool to be
+mocked and event delivery reviewed before running against a saved assistant.
 
 Secrets are read in exactly one place, `src/config/env.ts`. It holds the credential
 inventory, throws by name when one is missing, and exposes `redact()` so a key cannot be

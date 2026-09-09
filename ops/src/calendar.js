@@ -2,7 +2,7 @@
  * Tour calendar view (brief §10). Owner: calendar. Registers 'calendar' on window.Atrium at
  * load; app.js boots on DOMContentLoaded after every module script ran, so this module is
  * mounted the first time #/calendar is shown. Constraint 7 holds throughout: the grid draws
- * exactly the slots /api/calendar returned, positioned by their New York minutes; slot ids and
+ * exactly the slots /api/calendar returned, positioned by their property-local minutes; slot ids and
  * times are never computed; merged bands are presentation only; every write targets a slotId
  * or a YYYY-MM-DD the API gave us. Nothing here calls fetch — Atrium.api/busy/apply only.
  *
@@ -27,7 +27,7 @@ const QUICK = ['Painting', 'Staff out', 'Maintenance', 'Holiday', 'Private showi
 const KEYS_HINT = 'Use the arrow keys to move, Enter to open, Shift + arrows to select a range.'
 
 // ---------------------------------------------------------------------------------------
-// Words — every date word comes from Atrium.fmt (New York); the hour label is an integer
+// Words — every date word comes from Atrium.fmt (property timezone); the hour label is an integer
 // formatter for the gutter only (layout, not data).
 // ---------------------------------------------------------------------------------------
 
@@ -135,7 +135,7 @@ function buildModel(s, opts) {
   const ws = weekStart(date)
   const days = view === 'week' ? [0, 1, 2, 3, 4, 5, 6].map((i) => fmt.addDays(ws, i)) : [date]
   const dayBlocks = new Map()
-  for (const b of blocks) if (isYmd(b.target) && !dayBlocks.has(b.target)) dayBlocks.set(b.target, b)
+  for (const b of blocks) for (const date of derive.wholeDayBlockDates(b)) if (!dayBlocks.has(date)) dayBlocks.set(date, b)
   const bookingBySlot = new Map()
   for (const b of bookings) if (!bookingBySlot.has(String(b.slotId))) bookingBySlot.set(String(b.slotId), b)
 
@@ -515,7 +515,7 @@ function footHtml(m) {
     `<span class="cal-lg" role="listitem"><span class="cal-sw cal-sw-na" aria-hidden="true"></span>Not offered (past, or outside tour hours)</span>` +
     `<span class="cal-lg cal-lg-tour" role="listitem"><span class="cal-sw cal-sw-tour" aria-hidden="true"></span>${ico('person')}Tour</span>` +
     `<span class="cal-lg cal-lg-blocked" role="listitem"><span class="cal-sw cal-sw-blocked" aria-hidden="true"></span>${ico('slash')}Blocked</span></div>`
-  if (m.settings) out += `<p class="cal-through small">${esc(m.settings.slotMinutes)}-minute tours · ${esc(plural(m.settings.capacity, 'place'))} at a time · ${m.settings.bookingWindowDays == null ? 'No advance booking limit' : `${esc(m.settings.bookingWindowDays)}-day booking window`} · New York time</p>`
+  if (m.settings) out += `<p class="cal-through small">${esc(m.settings.slotMinutes)}-minute tours · ${esc(plural(m.settings.capacity, 'place'))} at a time · ${m.settings.bookingWindowDays == null ? 'No advance booking limit' : `${esc(m.settings.bookingWindowDays)}-day booking window`} · ${esc(A.property.timeZoneLabel)}</p>`
   if (m.old.length) {
     const n = m.old.length, allDates = m.old.every((b) => isYmd(b.target))
     const desc = (b) => `${monthDayNoYear(b.target)}${reasonOf(b.reason) ? ` · ${reasonOf(b.reason)}` : ''}`
@@ -573,6 +573,12 @@ function undoBlocks(targets) {
     if (r.failed) { if (!signedOut(r.failed.error)) reread(); throw r.failed.error }
   })())
 }
+/** Restore a partial block after extending its date, without deleting prior coverage. */
+function undoDayExtension(previous, extended) {
+  return A.busy('calendar', post({ ...blockBody(previous), expectedBlock: {
+    startsAt: extended.startsAt, endsAt: extended.endsAt,
+  } }, 'undoing a block extension').then(res => { A.apply('calendar', res) }))
+}
 /** Undo of a reopen / of removing old blocks: block each target again with its original reason. */
 function reblock(targets, handle) {
   return A.busy('calendar', (async () => {
@@ -610,7 +616,8 @@ async function reopen(it) {
     closePopover(true)
     const ok = await A.confirm(`The assistant will offer tour times on ${longDay(ymd)} again.`, { title: `Reopen ${dayLabel(ymd)}?`, confirmLabel: `Reopen ${longDay(ymd)}` })
     if (!ok) return
-    await runReopen([{ target: ymd, reason: it.block ? it.block.reason : rawReasonFor(ymd) }], `Reopened ${longDay(ymd)}`, `day:${ymd}`, ymd)
+    const target = it.block ? it.block.target : ymd
+    await runReopen([savedBlock(target)], `Reopened ${longDay(ymd)}`, `day:${ymd}`, ymd)
     return
   }
   const targets = reopenTargets(it)
@@ -763,13 +770,17 @@ function openSheet(preset) {
     if (st.mode === 'day' || st.fallback) {
       const body = { action: 'block', target: date }
       if (reason) body.reason = reason
+      const previous = savedBlock(date)
       try {
         const res = await A.busy('calendar', post(body, `blocking ${longDay(date)}`))
+        const extended = arr(res.blocks).find(block => block.target === date)
+        const undo = previous.startsAt && previous.endsAt && extended
+          ? () => undoDayExtension(previous, extended) : () => undoBlocks([date])
         A.apply('calendar', res)
         d.close()
         cal.sel = null; cal.focusKey = `dayband:${date}`; cal.focusDate = date
         focusKeyNow()
-        A.toast(`Blocked ${longDay(date)}${reason ? ` (${reasonOf(reason)})` : ''}`, { kind: 'ok', key: `cal:${date}`, actions: [{ label: 'Undo', fn: () => undoBlocks([date]) }] })
+        A.toast(`Blocked ${longDay(date)}${reason ? ` (${reasonOf(reason)})` : ''}`, { kind: 'ok', key: `cal:${date}`, actions: [{ label: 'Undo', fn: undo }] })
       } catch (e) {
         if (signedOut(e)) return
         reread()
@@ -1083,7 +1094,7 @@ function openSettings() {
         numeric('minimumNoticeMinutes', 'Minimum notice (minutes)', 0, 10080, '120 minutes means at least two hours ahead.') +
         numeric('bookingWindowDays', 'Book up to (days ahead)', 1, 730, 'Leave empty to accept bookings without an advance limit.', true) +
         `</div><div class="field"><label class="field-label" for="${base}-sameUnitPolicy">Same apartment at the same time</label><select class="select" name="sameUnitPolicy" id="${base}-sameUnitPolicy"><option value="exclusive"${settings.sameUnitPolicy === 'exclusive' ? ' selected' : ''}>One tour at a time per apartment</option><option value="shared"${settings.sameUnitPolicy === 'shared' ? ' selected' : ''}>Allow shared tours within staff capacity</option></select></div></fieldset>` +
-        `<fieldset><legend>Weekly tour hours</legend><p class="field-hint">All times are New York time. An end time of 12:00 AM means midnight at the end of that day.</p><div class="cal-hours">` +
+        `<fieldset><legend>Weekly tour hours</legend><p class="field-hint">All times use ${esc(A.property.timeZoneLabel)}. An end time of 12:00 AM means midnight at the end of that day.</p><div class="cal-hours">` +
         week.map((day, i) => {
           const hours = settings.hours && settings.hours[i]
           return `<div class="cal-hours-row" data-hours-day="${i}"><label class="cal-hours-day" for="${base}-day-${i}"><input type="checkbox" id="${base}-day-${i}" name="day-${i}"${hours ? ' checked' : ''}>${day}</label><span class="cal-hours-state">${hours ? 'Open' : 'Closed'}</span><div class="cal-hours-times"><label class="vh" for="${base}-open-${i}">${day} opens</label><input class="input" id="${base}-open-${i}" type="time" name="open-${i}" value="${hours ? timeValue(hours.openHour) : '09:00'}" step="60"${hours ? ' required' : ' disabled'}><span>to</span><label class="vh" for="${base}-close-${i}">${day} closes</label><input class="input" id="${base}-close-${i}" type="time" name="close-${i}" value="${hours ? timeValue(hours.closeHour) : '17:00'}" step="60"${hours ? ' required' : ' disabled'}></div></div>`

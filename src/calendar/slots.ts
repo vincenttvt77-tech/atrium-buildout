@@ -1,13 +1,13 @@
 import type { TourSlot } from '../booking/types.ts'
 import type { CalendarState, SlotBooking, SlotBlock } from './types.ts'
-import { nyWall, nyInstant, nyDate } from '../time/ny.ts'
+import { DEFAULT_TIME_ZONE, localDate, localInstant, validateTimeZone, wallTime } from './time.ts'
 
 export interface BusinessHours {
   /** 0 = Sunday. Missing day means closed. */
   [dayOfWeek: number]: { openHour: number; closeHour: number } | undefined
 }
 
-/** Parsed from the property's leasing hours; New York, because the building is. */
+/** Legacy default hours; evaluated in the supplied building timezone. */
 export const DEFAULT_HOURS: BusinessHours = {
   0: { openHour: 11, closeHour: 16 },
   1: { openHour: 10, closeHour: 18 },
@@ -26,11 +26,13 @@ export const DEFAULT_HOURS: BusinessHours = {
 export const slotIdFor = (startsAt: Date) => `slot-${startsAt.toISOString().slice(0, 16)}`
 
 /** The ISO date a slot falls on in building time — what a day block matches against. */
-export function slotDate(startsAt: Date): string {
-  return nyDate(startsAt)
+export function slotDate(startsAt: Date, timeZone = DEFAULT_TIME_ZONE): string {
+  return localDate(startsAt, timeZone)
 }
 
 export interface SlotOptions {
+  /** Validated building timezone, independent of the host machine's timezone. */
+  timeZone?: string
   days?: number
   slotMinutes?: number
   hours?: BusinessHours
@@ -55,6 +57,7 @@ export interface SlotOptions {
 
 /** Every slot the calendar could offer, before blocks and bookings are applied. */
 export function generateSlots(now: Date, opts: SlotOptions = {}): TourSlot[] {
+  const timeZone = validateTimeZone(opts.timeZone ?? DEFAULT_TIME_ZONE)
   const days = opts.days ?? 14
   const minutes = opts.slotMinutes ?? 30
   const hours = opts.hours ?? DEFAULT_HOURS
@@ -73,11 +76,11 @@ export function generateSlots(now: Date, opts: SlotOptions = {}): TourSlot[] {
   const to = opts.to
   if (!Number.isFinite(from.getTime()) || (to && (!Number.isFinite(to.getTime()) || to < from))) throw new Error('Invalid calendar date range')
   if (to && to.getTime() - from.getTime() > 366 * 86400000) throw new Error('Calendar range must be at most 366 days')
-  const start = nyWall(from)
+  const start = wallTime(from, timeZone)
   const count = to ? Math.ceil((to.getTime() - from.getTime()) / 86400000) + 1 : days
   const horizon = opts.bookingWindowDays == null ? null : (() => {
-    const w = nyWall(now)
-    return nyInstant(w.year, w.month, w.day + opts.bookingWindowDays + 1, 0).getTime()
+    const w = wallTime(now, timeZone)
+    return localInstant(w.year, w.month, w.day + opts.bookingWindowDays + 1, 0, 0, timeZone).getTime()
   })()
   for (let d = 0; d <= count; d++) {
     const date = new Date(Date.UTC(start.year, start.month - 1, start.day + d))
@@ -85,11 +88,11 @@ export function generateSlots(now: Date, opts: SlotOptions = {}): TourSlot[] {
     if (!window) continue
     if (![window.openHour, window.closeHour].every(value => Number.isFinite(value) && Math.abs(value * 60 - Math.round(value * 60)) < 0.000001) || window.openHour < 0 || window.closeHour > 24 || window.closeHour <= window.openHour) throw new Error('Invalid business hours')
     const closingMinute = Math.round(window.closeHour * 60)
-    const closesAt = nyInstant(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate(), Math.floor(closingMinute / 60), closingMinute % 60)
+    const closesAt = localInstant(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate(), Math.floor(closingMinute / 60), closingMinute % 60, timeZone)
     for (let minute = Math.round(window.openHour * 60); minute + minutes <= Math.round(window.closeHour * 60); minute += interval) {
-      const startsAt = nyInstant(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate(), Math.floor(minute / 60), minute % 60)
+      const startsAt = localInstant(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate(), Math.floor(minute / 60), minute % 60, timeZone)
       // A skipped wall time on the spring DST transition must not normalize into a duplicate.
-      const actual = nyWall(startsAt)
+      const actual = wallTime(startsAt, timeZone)
       if (actual.hour * 60 + actual.minute !== minute || actual.day !== date.getUTCDate()) continue
       const endsAt = new Date(startsAt.getTime() + minutes * 60_000)
       // An elapsed-hour tour can cross the spring clock jump. Its real end must
@@ -177,7 +180,15 @@ export function statusOf(slot: TourSlot, state: CalendarState, capacity = 1, opt
  * dashboard shows the more specific reason, rather than whichever happened to be added
  * first.
  */
-function blockInterval(block: SlotBlock): [number, number] {
+function blockInterval(block: SlotBlock, timeZone: string): [number, number] {
+  // Newly saved all-day blocks can preserve their real boundaries even if the
+  // property's configured timezone is later corrected. Legacy dates use its zone.
+  if (!block.target.startsWith('slot-') && (block.startsAt !== undefined || block.endsAt !== undefined)) {
+    const start = typeof block.startsAt === 'string' ? Date.parse(block.startsAt) : NaN
+    const end = typeof block.endsAt === 'string' ? Date.parse(block.endsAt) : NaN
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) throw new Error('Stored block has invalid times; availability cannot be verified')
+    return [start, end]
+  }
   if (block.target.startsWith('slot-')) {
     const start = Date.parse(block.startsAt ?? `${block.target.slice(5)}:00.000Z`)
     // Legacy blocks predate configurable durations and reserved thirty minutes.
@@ -187,16 +198,17 @@ function blockInterval(block: SlotBlock): [number, number] {
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(block.target)) throw new Error('Stored block has an invalid date; availability cannot be verified')
   const [year, month, day] = block.target.split('-').map(Number) as [number, number, number]
-  const start = nyInstant(year, month, day, 0)
-  if (slotDate(start).padStart(10, '0') !== block.target) throw new Error('Stored block has an invalid date; availability cannot be verified')
+  const start = localInstant(year, month, day, 0, 0, timeZone)
+  if (slotDate(start, timeZone).padStart(10, '0') !== block.target) throw new Error('Stored block has an invalid date; availability cannot be verified')
   // Local midnight boundaries make all-day reservations 23 or 25 real hours at DST.
-  return [start.getTime(), nyInstant(year, month, day + 1, 0).getTime()]
+  return [start.getTime(), localInstant(year, month, day + 1, 0, 0, timeZone).getTime()]
 }
 
 export function blockFor(slot: TourSlot, state: CalendarState, opts: SlotOptions = {}) {
+  const timeZone = validateTimeZone(opts.timeZone ?? DEFAULT_TIME_ZONE)
   const [start, end] = candidateInterval(slot, opts)
   const overlapping = state.blocks.filter(block => {
-    const interval = blockInterval(block)
+    const interval = blockInterval(block, timeZone)
     return interval[0] < end && interval[1] > start
   })
   return overlapping.find(block => block.target === slot.slotId)

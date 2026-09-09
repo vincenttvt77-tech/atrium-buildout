@@ -5,6 +5,7 @@ import {
 } from '../src/ops/session.ts'
 import type { OpsAuth } from '../src/ops/session.ts'
 import { authenticateAccount, readAccountsConfig } from '../src/ops/accounts.ts'
+import { propertyTimeZone } from '../src/config/property.ts'
 
 /**
  * Serves the operations dashboard, behind a passcode.
@@ -95,11 +96,12 @@ const notConfiguredPage = () => shell('Not configured — Atrium Operations', `
 `)
 
 /** Only the verified, nonsecret identity reaches the page; it cannot select API storage. */
-export function decorateDashboard(html: string, auth: Extract<OpsAuth, { ok: true }>): string {
+export function decorateDashboard(html: string, auth: Extract<OpsAuth, { ok: true }>, property?: Record<string, unknown>): string {
   const identity = JSON.stringify({ username: auth.username, tenantId: auth.tenantId, displayName: auth.displayName })
     .replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026')
     .replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029')
-  const script = `<script>window.ATRIUM_ACCOUNT=Object.freeze(${identity});</script>`
+  const timeZone = JSON.stringify(propertyTimeZone(property))
+  const script = `<script>window.ATRIUM_ACCOUNT=Object.freeze(${identity});window.ATRIUM_PROPERTY=Object.freeze({"timeZone":${timeZone}});</script>`
   return html.includes('</head>') ? html.replace('</head>', `${script}</head>`) : `${script}${html}`
 }
 
@@ -205,6 +207,11 @@ export default async function handler(req: any, res: any) {
     res.setHeader('set-cookie',
       sessionCookie(token, { secure, ttlMs: SESSION_TTL_MS }))
   }
-  for (const [k, v] of HTML_HEADERS) res.setHeader(k, v)
-  res.status(200).send(decorateDashboard(page.html, auth))
+  try {
+    const html = decorateDashboard(page.html, auth)
+    for (const [k, v] of HTML_HEADERS) res.setHeader(k, v)
+    res.status(200).send(html)
+  } catch {
+    send(res, 503, shell('Property configuration unavailable', '<h1>Property configuration needs attention</h1><p>The property timezone is invalid. Ask an administrator to correct its IANA timezone, then reload the portal.</p>'))
+  }
 }

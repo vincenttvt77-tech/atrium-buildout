@@ -99,6 +99,25 @@ describe('life-safety outranks everything else present', () => {
     const p = primaryEmergency(detectEmergency('there is a fire'))!
     assert.match(safetyInstruction(p), /stairs, not the elevator/i)
   })
+
+  test('every safety response distinguishes guidance from notifications or dispatch', () => {
+    for (const utterance of ['I smell gas', 'there is a fire', 'carbon monoxide alarm', 'someone is injured',
+      'someone broke in', 'my bathroom is flooding', 'we have no heat', 'the ceiling collapsed']) {
+      const p = primaryEmergency(detectEmergency(utterance))!
+      assert.ok(p, utterance)
+      const instruction = safetyInstruction(p)
+      assert.match(instruction, /I have not contacted emergency services or building staff/, utterance)
+      assert.doesNotMatch(instruction, /I.?m (alerting|dispatching)|I (have )?(alerted|dispatched|notified)|on (their|the) way/i, utterance)
+    }
+  })
+
+  test('flooding does not ask a caller to handle electrical equipment in water', () => {
+    const text = safetyInstruction(primaryEmergency(detectEmergency('my bathroom is flooding'))!)
+    assert.match(text, /Stay out of the water/)
+    assert.match(text, /Don't touch switches, plugs, or appliances while wet or standing in water/)
+    assert.match(text, /Contact the building.*directly/i)
+    assert.doesNotMatch(text, /move anything electrical|shut off the water|dispatching/i)
+  })
 })
 
 describe('escalation carries everything the human needs', () => {
