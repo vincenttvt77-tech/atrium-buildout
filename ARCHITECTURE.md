@@ -10,21 +10,26 @@ This file contains technical architecture only. Customer agreements, the detaile
 
 | Area | Implemented boundary | Current limitation |
 | --- | --- | --- |
-| Runtime and delivery | Node 22, strict TypeScript, Vercel-style handlers in `api/`; `scripts/build-api.mjs` creates API bundles; `scripts/build-site.mjs` and `scripts/build-ops.mjs` generate artifacts. | No database migration runner, infrastructure definition, staged rollout controller or automated restore procedure exists in this tree. Build success does not prove what is deployed. |
+| Runtime and delivery | Node 22, strict TypeScript, Vercel-style handlers in `api/`; `scripts/build-api.mjs` creates API bundles; `scripts/build-site.mjs` and `scripts/build-ops.mjs` generate artifacts. `scripts/lib/database-migrations.mjs` applies ordered SQL migrations with a transaction lock and checksum history. | The migration runner is exercised against temporary local databases. No production database, infrastructure definition, staged rollout controller or production backup/restore automation has been activated by this slice. Build success does not prove what is deployed. |
 | Staff experience | `ops/src/` contains the authored HTML, CSS and browser JavaScript. The protected page is generated into `ops/dashboard.page.json` and served by `api/dashboard.ts`. | Feature code and API fetching remain concentrated in large browser modules. The console is a staff workspace, not separate role-authorized owner, vendor and platform-admin products. |
-| Identity | `src/ops/accounts.ts` validates named accounts from `OPS_ACCOUNTS_JSON`, with salted scrypt hashes. `src/ops/session.ts` issues signed tenant-bound sessions and rechecks configured membership. | Accounts are environment configuration, not database-backed users/memberships. Each account has one tenant; all named users have staff powers in that tenant. No MFA/SSO, role policy or property grants are implemented. |
-| Tenant scope | `src/tenancy/context.ts` provides request-local scope. Protected handlers and verified webhook routing choose it. Document/calendar adapters resolve scope per operation; named tenants use separate Redis namespaces. Missing tenant context fails closed in hosted runtimes. | Scope is a tenant string, not an authorized organization/property principal. Local compatibility code still has a `legacy` fallback. Key namespaces are not database row-level authorization. |
-| Property data | `data/property.json`, `inventory.json`, `floorplans.json` and `knowledge.json` provide the bundled Larkin template. Loaders reject unusable records; knowledge rules check publication, scope, approval and review date. `src/config/property.ts` validates the configured building timezone for scheduling, portal formatting and follow-up processing. | Every workspace still uses one bundled property template. Re-reading that bundle does not refresh a PMS. Timezone configuration is server-owned; no customer property catalogue or onboarding UI exists. |
+| Identity | Live handlers still use `src/ops/accounts.ts` and `src/ops/session.ts`: environment-configured accounts, scrypt hashes and tenant-bound sessions. The separate `src/auth/` foundation implements database identity/session contracts, current organization/property authorization, roles, explicit property grants and channel capabilities; `src/database/authorization.ts` supplies its PostgreSQL repository. | The new identity path is not selected by the portal or APIs. Existing users still have one environment-configured tenant and staff powers there. Credential/account migration, membership administration and portal integration remain open; MFA/SSO is not implemented. |
+| Tenant and property scope | Existing handlers use `src/tenancy/context.ts`; named tenants have separate Redis namespaces and hosted requests require explicit tenant context. New `src/auth/` scopes have runtime issuance checks; `src/properties/context.ts` binds a validated snapshot separately. `src/database/scope.ts` checks current DB permission before and after scoped work. | New scopes and PostgreSQL row policies are tested foundations, not the current HTTP boundary. Local legacy fallback remains in the old adapter. Scope rechecks do not cancel work already committed or guarantee instantaneous revocation during a statement. |
+| Property data | Live code uses bundled `data/property.json`, `inventory.json`, `floorplans.json` and `knowledge.json`. The new `src/properties/` snapshot validator checks ownership, IDs, timezone, jurisdiction, inventory and knowledge metadata while preserving source timestamps. `src/database/properties.ts` reads the current published pointer and content together. | Every current portal workspace still uses the bundled property template. The new repository has no bundled fallback but is not wired into handlers. Property selection/onboarding, runtime cache conversion and validated existing-data migration remain open. Re-reading configuration is not a PMS refresh. |
 | Domain rules | `src/leasing/`, `inventory/`, `knowledge/`, `escalation/` and `conversation/` contain qualification, matching, answer guards and escalation logic. Branded IDs exist in `src/domain/ids.ts`. | Branded IDs are compile-time helpers; they do not validate ownership or persistence. Several workflows receive property context assembled directly in the HTTP handler. |
 | Booking | `CalendarPort` separates booking orchestration from the calendar adapter. `bookTour` verifies read-back. The stored calendar atomically checks capacity, overlap, apartment policy, settings and per-interaction emergency holds, and preserves actual reservation intervals. | The calendar is Atrium's standalone schedule, not a connected PMS/calendar. `recordIntent` constructs an in-memory intent; there is no durable action-intent transaction before an arbitrary external write. A safety hold prevents later booking commits; it does not cancel a booking committed earlier. |
-| Operational storage | `DocumentStore` and `CalendarStore` have local memory and Redis REST implementations. `src/store/config.ts` requires configured durable storage in hosted runtimes. Redis updates use compare-and-set; failed reads do not become empty availability. Health returns 503 for missing/unreachable hosted storage. Bulk lead and tour reset controls are refused in hosted runtimes. | Atomicity is per JSON document/key. There are no transactions spanning a call, lead, action, audit and job. Calendar changes rewrite a whole tenant calendar document. Prefix scans and whole-profile arrays are not a portfolio query model. |
+| Operational storage | Current runtime factories select memory locally or configured Redis in hosted environments, with compare-and-set updates and no silent hosted-memory fallback. New `src/database/operations.ts` provides property-scoped PostgreSQL document/calendar adapters: locks preserve mutation semantics and each write appends actor-attributed audit in the same transaction. `db/schema.sql` supplies ownership constraints, forced row policies and separate roles. | The PostgreSQL adapters are not selected by runtime factories or handlers. Transitional JSON rows still contain whole profiles/calendars; they are not normalized portfolio queries. No transaction yet spans call, lead, action intent and outbox job. Existing public health reports the old operational store. |
 | Voice integration | `api/vapi.ts` validates webhook credentials, resolves bound assistant ownership, runs tools and merges call state. `src/vapi/` generates and synchronizes assistant configuration with read-back. Call history is filtered to allowed assistants. `src/leads/inbox.ts` records a finished-call receipt before projection, supports explicit replay and compacts completed receipts; failed projection returns retryable HTTP 503 and retains working call state. | The handler also owns orchestration, property loading and diagnostics. The finished-call inbox is a bounded first step, not a general event inbox/action outbox. No scheduled recovery worker, job leasing, general connector registry or provider-event reconciliation exists yet. Redis receipt/projection writes are separate operations with idempotent recovery, not a multi-record transaction. |
-| History and work queues | Call/lead/follow-up documents persist when Redis is configured. Domain event types exist in `src/record/store.ts`; Vapi history is fetched separately. | Dashboard decision events are a process-local bounded array. `RecordStore` only has a memory implementation; its comment referring to `src/record/kv.ts` does not establish such a file. Follow-ups have `executable: false`. A status named `queued` or `queuedForHuman` is not proof that a durable worker or notification exists. |
+| History and work queues | Call/lead/follow-up documents persist when Redis is configured. Domain event types exist in `src/record/store.ts`; Vapi history is fetched separately. The new PostgreSQL operational adapters append scoped mutation audit, with application updates/deletes to audit denied. | Dashboard decision events remain process-local. The new audit covers adapter mutations, not every workflow, privileged read or external effect, and is not independently tamper-evident. `RecordStore` still has only a memory implementation. Follow-ups are not executable; no general outbox, worker or notification delivery is implemented. |
 | Email and other channels | Email rendering/transport abstractions and simulations exist. | Email is not connected to the live booking workflow. Outbound SMS/calls, Apple Messages for Business, resident identity, maintenance/vendor/amenity lifecycle execution and billing are not delivered by the current leasing demo. |
-| Runtime diagnostics | Vapi responses have request IDs; tool logs include tenant, request, full call/tool IDs, duration and error codes without caller words. Finished-call failures expose the request ID and retry status. | This is partial structured logging, not centralized traces, a durable audit ledger, tenant-level operational metrics, alert routing or an operator recovery console. |
-| Verification | `npm run check` runs types, data validation and Node tests; GitHub Actions runs clean install, check and build. Tests cover handler behavior, tenancy attacks, retries, rules and scheduling. | CI does not currently prove a live database restore, real provider integration, voice latency, production load, MFA, continuous security monitoring or all contractual workflow acceptance. |
+| Runtime diagnostics | Vapi responses have request IDs; tool logs include tenant, request, full call/tool IDs, duration and error codes without caller words. PostgreSQL mutation audit records request/actor/scope and a digest of document keys. | Existing HTTP logging has not been converted to the new property scope. Centralized traces, complete workflow audit, operational metrics, alert routing and an operator recovery console remain open. |
+| Verification | `npm run check` covers types, data validation and Node tests. `npm run test:database` exercises native temporary PostgreSQL databases, actual restricted roles, ownership, publication, authorization/revocation, concurrency, atomic audit and migrations. The CI workflow includes this database gate before build. `test/database/migrations.test.mjs` restores a synthetic snapshot into a fresh test database and checks exact records and rollback on invalid ownership. | Synthetic local restore is not production backup/restore, point-in-time recovery or a customer-data migration. These checks do not prove deployed database readiness, real provider behavior, voice latency, production load, MFA or complete contractual acceptance. |
 
-`TENANCY.md` describes current account isolation and tour settings. `QUALITY_REVIEW.md` records specific past verification runs and their limitations; its dated counts are historical evidence, not a live certification.
+`TENANCY.md` describes current environment-account isolation and tour settings. `db/README.md` documents the new SQL roles and constraints; [ADR 0001](docs/adr/0001-operational-postgres.md) records the engine decision and deployment gates. `QUALITY_REVIEW.md` records specific past verification runs and their limitations; its dated counts are historical evidence, not a live certification.
+
+The PostgreSQL foundation has **not** replaced the portal/API account or storage paths. Adding
+database connection settings alone does not select the new adapters. No remote database or
+hosting project was connected for this work. Keep this distinction explicit in deployment
+and customer-readiness claims until the full request-to-repository integration is verified.
 
 The emergency admission hold and call projection are separate writes. Both must succeed
 before the handler acknowledges emergency persistence; failures return HTTP 503 with safety
@@ -88,20 +93,15 @@ The target hierarchy is **client organization → property**, with portfolios gr
 | Interaction and workflow | Carries organization, property, person when known, channel, source identity and workflow ID. Unknown callers remain distinct until verified linkage is established. |
 | Channel/connector binding | Server-owned binding from provider identity to organization/property and permitted capabilities. Provider IDs from model-generated arguments never choose scope. |
 
-The server must resolve a request into an immutable **authorized scope** after identity verification and current membership/policy evaluation. Repositories and use cases receive that scope explicitly. A target interface may look like this; it is illustrative, not existing code:
+The server must resolve a request into an immutable **authorized scope** after identity verification and current membership/policy evaluation. The new `src/auth/model.ts` defines `AuthorizedScope`; `src/auth/authorization.ts` issues and checks its runtime provenance. The PostgreSQL adapters receive this scope explicitly, but current HTTP handlers have not adopted it. A later normalized booking repository can use the existing scope:
 
 ```ts
-interface AuthorizedPropertyScope {
-  organizationId: OrganizationId
-  propertyId: PropertyId
-  actor: { kind: 'staff' | 'service'; id: string }
-  permissionVersion: string
-  requestId: string
-}
+import type { AuthorizedScope } from './src/auth/index.ts'
 
+// Target application contract, not an existing normalized repository.
 interface BookingRepository {
-  reserve(scope: AuthorizedPropertyScope, command: ReserveTour): Promise<BookingOutcome>
-  findByIdempotencyKey(scope: AuthorizedPropertyScope, key: string): Promise<Booking | null>
+  reserve(scope: AuthorizedScope, command: ReserveTour): Promise<BookingOutcome>
+  findByIdempotencyKey(scope: AuthorizedScope, key: string): Promise<Booking | null>
 }
 ```
 
@@ -111,11 +111,11 @@ Switching properties means requesting and receiving a newly authorized scope, no
 
 ## 4. Durable data and transaction design
 
-Use a transactional relational store as the target operational system of record for Atrium-owned data. Select the engine and hosting through a recorded architecture decision covering constraints, transaction isolation, backup/restore, residency, cost, operational ownership and testability. No database vendor, ORM or migration tool has been selected or installed by this document.
+PostgreSQL is the selected relational engine, with the `pg` driver, private `atrium` schema and separate application/authenticator/maintenance roles; see [ADR 0001](docs/adr/0001-operational-postgres.md). `src/database/` and the initial migration implement the first repository slice. Native local tests use the pinned PostgreSQL 17.10 fixture package. This does not select a production host or establish its currently appropriate patch version. Provider/project, cost, residency, backup/recovery and operating ownership reviews remain open; no remote Supabase or other hosted database is connected by this decision.
 
 The client PMS remains authoritative for the records it owns. Atrium stores operational intent, verified projections, workflow history and reconciliation evidence; it must not silently become a competing source of truth for leases, balances or work orders.
 
-Start the schema with organizations, properties, users, memberships, property grants, configuration versions, connector/channel bindings, people/contact claims, interactions, booking intents/reservations, webhook receipts, workflow actions, outbox jobs and audit events. Add resident, lease, vendor, maintenance, amenity, recommendation/intervention and outcome records when their workflows are implemented, retaining the same identity and audit envelope.
+The initial schema contains organizations, properties, users/credentials, memberships, property grants, configuration versions, channel bindings, transitional operational documents/calendars and mutation audit. People/contact claims, normalized interactions, booking intents/reservations, webhook receipts, workflow actions and outbox jobs still need dedicated repositories and migrations. Add resident, lease, vendor, maintenance, amenity, recommendation/intervention and outcome records with their workflows, retaining the same identity and audit envelope.
 
 Enforce these invariants in storage as well as services:
 
@@ -129,7 +129,7 @@ Enforce these invariants in storage as well as services:
 - Indexed, bounded queries and scope-bound pagination cursors. Avoid full tenant scans or loading every call/profile to render a page. Cursor validation must not allow a cursor from another organization to reveal rows.
 - Schema validation and explicit serialization at boundaries. JSON payloads may hold provider extensions, but ownership, workflow state, timestamps, keys and relational references must be typed columns with constraints.
 
-Introduce versioned migrations with a history table, checksums, one migration executor and a tested upgrade from the previous release. Use expand → backfill → verify → cut over → contract changes so old and new application versions can coexist during rollout. Backfills must be scoped, restartable and report counts and exceptions.
+`scripts/lib/database-migrations.mjs` now supplies ordered migrations, a private history table, checksums and a transaction advisory lock. `supabase/migrations/` holds the generated initial migration; the directory format is compatible with Supabase tooling and does not imply a hosted project. Tests exercise first application, idempotent rerun and refusal of checksum/history drift. Upgrade/backfill/cutover from existing operational data remains unimplemented. Use expand → backfill → verify → cut over → contract changes so old and new application versions can coexist during rollout. Backfills must be scoped, restartable and report counts and exceptions.
 
 Migrating current Redis data needs an explicit mapping of legacy/named tenant IDs to organization and property IDs, source backup, dry run, duplicate/ownership reconciliation and a reversible cutover. Do not infer that all legacy data belongs to the new Larkin account. Compare counts, booking intervals, contact associations and ownership before enabling writes. Avoid uncoordinated dual writes; if parallel reads are used to verify migration, define which store is authoritative and how divergence is resolved.
 
@@ -165,6 +165,12 @@ Publish service objectives and alert routing only after owners approve measurabl
 
 Maintain separate development, staging and production resources and credentials. The fixture server intentionally ignores live Redis/Vapi credentials and resets operational data; keep that behavior. A demo seed belongs only to its designated demo organization/property. Build artifacts and test fixtures must never include production credentials or resident data.
 
+The new test fixture starts a private temporary native PostgreSQL instance and removes it
+after testing. Its synthetic snapshot/restore test verifies schema-level round-trip and
+ownership rollback, not a persistent development preview, production backup service or
+restore runbook. A durable local preview and hash-preserving Larkin account import still
+need an explicit integration path separate from disposable fixture mode.
+
 Before a production activation, establish approved recovery-point and recovery-time objectives, encrypted backups, restoration credentials and a restore drill into an isolated environment. Verify schema version, record counts, ownership constraints, booking intervals, required audit history and connector mappings. A successful backup job is not a restore demonstration. A rollback must account for both application and schema compatibility, and must not replay external actions blindly.
 
 Retention requires scheduled, auditable jobs for raw audio, transcripts, attachments, exports and expired sessions/receipts, according to approved policy and legal holds. Deletion must cover replicas, derived stores and provider-held copies where supported, while preserving permitted audit evidence. Tenant offboarding must revoke users, service credentials, sender bindings and queued work before export/deletion completion is claimed.
@@ -174,12 +180,13 @@ Keep the current fast gate:
 ```sh
 npm ci
 npm run check
+npm run test:database
 npm run build
 ```
 
 Add release gates in stages, with evidence tied to the exact commit, configuration and schema versions:
 
-1. Repository contract tests against memory and the real database engine, migration tests, direct database scope violations, transaction concurrency and two-organization/two-property authorization tests.
+1. Extend the implemented native database/repository, migration, direct row-scope, concurrency and multi-property authorization tests through the actual HTTP/portal paths and future normalized workflow repositories.
 2. Handler-to-worker-to-provider contract tests, including duplicate/out-of-order events, uncertain writes, expired credentials, authority revocation, stopped workers, dead-letter replay and reconciliation.
 3. Browser smoke tests of login, property switching, role restrictions, configuration changes, booking, failure visibility and operator recovery. Test compiled artifacts as well as source mode.
 4. Approved staging provider scenarios and post-deployment synthetic checks; voice tests must measure the actual channel, interruptions and latency rather than treating text simulations as equivalent.
@@ -192,15 +199,24 @@ Critical invariant failures block promotion. Feature flags and staged property a
 
 ### Milestone 1 — explicit property scope and configurable property records
 
-This is the next foundation priority. Deliver one vertical slice from authenticated request through authorization, property configuration, repository and existing leasing/calendar rules. It should support **two organizations with two distinct properties each**, without changing the application source for the fourth property.
+**In progress; not complete.** The domain/repository foundation now exists and has native PostgreSQL coverage. The portal and APIs still use legacy environment accounts, tenant namespaces and bundled property data. Completion requires a vertical slice from authenticated HTTP request through authorization, property configuration, repository and existing leasing/calendar rules, supporting **two organizations with two distinct properties each** without changing application source for the fourth property.
 
-- Introduce validated organization/property/membership records and a scope resolver behind the current account/session adapter. Preserve the existing demo login during migration.
-- Add versioned property configuration for identity, location/timezone, inventory/knowledge source bindings, showing rules, escalation contacts and channel bindings. Keep secrets as references to protected server-side storage.
-- Add scoped `PropertyRepository` and `InventoryPort` boundaries; move direct `data/*.json` imports into an explicit fixture adapter. Empty customer configuration must fail visibly rather than inherit Larkin facts.
-- Select and document the transactional store, add initial schema/migrations, and implement the same repository contracts against an isolated test database. An in-memory implementation alone does not finish this milestone.
-- Move context assembly out of `api/vapi.ts` into an application use case. Resolve scope once from an authenticated staff membership or verified provider binding; pass it through every read and mutation.
-- Prove identical unit labels, contact numbers and provider-like record IDs cannot leak across organizations or unauthorized properties. Verify revocation, scoped caches, calendar rules, timezone-dependent times and unknown-property refusal.
-- Document the migration and restore procedure for this slice. Cut over one demo/test organization first and retain evidence of the old/new record mapping.
+Implemented foundation:
+
+- `src/auth/`: validated organization/property/membership/grant/channel records, user sessions, explicit access policy and runtime-issued scope. `src/database/authorization.ts` re-reads the corresponding records through the authenticator role.
+- `src/properties/` and `src/database/properties.ts`: validated published property snapshots, explicit timezone/jurisdiction and ownership checks, preserved inventory source timestamps, immutable raw configuration and isolated request context. Missing database configuration never falls back to the bundle.
+- `db/schema.sql`, `supabase/migrations/` and `scripts/lib/database-migrations.mjs`: constrained PostgreSQL schema, forced row policies, separate roles and initial migration/checksum history. Engine selection is documented in ADR 0001.
+- `src/database/operations.ts`: transitional property-scoped JSON document/calendar adapters, concurrency locks, current permission rechecks and atomic mutation audit. The scoped calendar wrapper rejects mismatched domain property arguments.
+- `test/database/`: actual-role isolation, repeated IDs across organizations/properties, revoked authority and mid-request races, property publication, concurrent writes/bookings, audit rollback, migration drift and synthetic fresh-database snapshot restore.
+
+Remaining before milestone completion:
+
+- Preserve the existing Larkin credential through a validated one-time account/organization/property import; migrate operational data with explicit source-to-target mapping, backup, dry-run reconciliation and rollback.
+- Wire every protected API, verified provider binding, history cache, receipt replay and calendar operation into the same authorized property snapshot. Remove global bundled facts from DB paths, including nested defaults. Complete property configuration for showing rules, escalation contacts and channel ownership; keep secrets separately protected.
+- Add authorized property discovery and safe per-tab property selection to the actual portal. Return and check organization/property/configuration identity on reads and writes; demonstrate role restrictions and stale-page refusal in browser tests.
+- Move Vapi context assembly into an application boundary. Preserve emergency guidance and booking safety while replacing hard-coded property/jurisdiction/inventory choices.
+- Select runtime adapters explicitly and implement a durable local preview separately from disposable fixtures. Prove login, data and settings survive restart without reseeding or password changes.
+- Verify the complete HTTP-to-database path and migration/cutover on one isolated demo organization before broader activation. Production hosting, patch/support review and operational restore evidence remain separate release gates.
 
 ### Milestone 2 — durable workflow and operator recovery
 

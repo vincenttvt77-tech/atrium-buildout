@@ -55,5 +55,5 @@ export interface CalendarStore {
   read(): Promise<CalendarState>
   mutate(fn: (state: CalendarState) => CalendarState): Promise<CalendarState>
   /** What this store actually is, so the dashboard can say when blocks will not persist. */
-  describe(): { kind: 'memory' | 'kv'; durable: boolean; note: string }
+  describe(): { kind: 'memory' | 'kv' | 'postgres'; durable: boolean; note: string }
 }

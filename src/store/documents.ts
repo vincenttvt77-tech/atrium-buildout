@@ -23,7 +23,7 @@ export interface DocumentStore {
   /** Keys under a prefix, for listing profiles and follow-ups. */
   list(prefix: string): Promise<string[]>
   delete(key: string): Promise<void>
-  describe(): { kind: 'memory' | 'kv'; durable: boolean; note: string }
+  describe(): { kind: 'memory' | 'kv' | 'postgres'; durable: boolean; note: string }
 }
 
 export class MemoryDocumentStore implements DocumentStore {
