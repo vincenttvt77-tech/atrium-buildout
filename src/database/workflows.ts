@@ -7,10 +7,18 @@ import type { ClaimDecision, JsonObject, WorkflowAction, WorkflowClaim, Workflow
   WorkflowReceiptInput, WorkflowReceiptResult, WorkflowRepository, WorkflowSettlement, WorkflowState } from '../workflows/model.ts'
 import { canonicalJson, hashJson, validateReceiptInput } from '../workflows/validation.ts'
 import type { DatabaseConnection, DatabaseContext } from './connection.ts'
-import { propertyTransaction, scopeContext } from './scope.ts'
+import { assertCurrentPropertyAccess, propertyTransaction, scopeContext } from './scope.ts'
+import type { DocumentStore } from '../store/documents.ts'
+import { createTransactionDocumentStore } from './operations.ts'
+import { TransactionQueue } from './transaction-queue.ts'
 
 type Row = Record<string, any>
 export interface WorkflowAttribution { requestId: string; configurationVersion: number }
+export interface WorkflowTransaction {
+  readonly documents: DocumentStore
+  readonly workflows: WorkflowRepository
+}
+type TransactionExecutor = <T>(permission: Permission, work: (client: PoolClient) => Promise<T>, admission: boolean) => Promise<T>
 const STATES: WorkflowState[] = ['queued','running','retry_wait','verifying','succeeded','needs_review','cancelled']
 const ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/
 const TOKEN = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i
@@ -68,6 +76,7 @@ export class PostgresWorkflowRepository implements WorkflowRepository {
   private readonly connection: DatabaseConnection
   private readonly scope: AuthorizedScope
   private readonly attribution: WorkflowAttribution
+  private transactionExecutor: TransactionExecutor | undefined
   constructor(connection: DatabaseConnection, scope: AuthorizedScope, attribution: WorkflowAttribution) {
     assertAuthorizedScope(scope)
     if (!ID.test(attribution.requestId) || !integer(attribution.configurationVersion, 1, Number.MAX_SAFE_INTEGER)) invalid()
@@ -75,8 +84,59 @@ export class PostgresWorkflowRepository implements WorkflowRepository {
   }
   private ids(): string[] { return [this.scope.organizationId, this.scope.propertyId] }
   private tx<T>(permission: Permission, work: (client: PoolClient) => Promise<T>, admission = false): Promise<T> {
+    if (this.transactionExecutor) return this.transactionExecutor(permission, work, admission)
     return propertyTransaction(this.connection, this.scope, permission, work,
       admission ? this.attribution.configurationVersion : undefined)
+  }
+
+  /** Atomic local composition. Never perform provider IO in this callback.
+   * Both ports use this one property transaction and expire when its callback ends.
+   * Complete operations are serialized so temporary original-actor checks cannot
+   * leak their transaction-local context into a concurrent document operation.
+   */
+  transaction<T>(work: (unit: WorkflowTransaction) => Promise<T>): Promise<T> {
+    if (typeof work !== 'function') throw new WorkflowError('workflow_invalid_input', 'A workflow transaction callback is required.')
+    return propertyTransaction(this.connection, this.scope, 'operate', async client => {
+      const queue = new TransactionQueue()
+      const documentUnit = createTransactionDocumentStore(client, this.scope, this.attribution)
+      const raw = documentUnit.documents
+      const documents: DocumentStore = Object.freeze({
+        get: <U>(key: string) => queue.run(() => raw.get<U>(key)),
+        set: <U>(key: string, value: U) => queue.run(() => raw.set(key, value)),
+        update: <U>(key: string, initial: U, fn: (current: U) => U) => queue.run(() => raw.update(key, initial, fn)),
+        list: (prefix: string) => queue.run(() => raw.list(prefix)),
+        delete: (key: string) => queue.run(() => raw.delete(key)),
+        describe: () => { queue.assertOpen(); return raw.describe() },
+      })
+      const bound = new PostgresWorkflowRepository(this.connection, this.scope, this.attribution)
+      bound.transactionExecutor = async (permission, operation, admission) => {
+        const version = admission ? this.attribution.configurationVersion : undefined
+        await assertCurrentPropertyAccess(client, this.scope, permission, version)
+        const result = await operation(client)
+        await assertCurrentPropertyAccess(client, this.scope, permission, version)
+        return result
+      }
+      const workflows = Object.freeze<WorkflowRepository>({
+        accept: input => queue.run(() => bound.accept(input)),
+        get: id => queue.run(() => bound.get(id)), list: options => queue.run(() => bound.list(options)),
+        claim: options => queue.run(() => bound.claim(options)),
+        startDispatch: claim => queue.run(() => bound.startDispatch(claim)),
+        startVerification: claim => queue.run(() => bound.startVerification(claim)),
+        settle: (claim, result) => queue.run(() => bound.settle(claim, result)),
+        replay: (id, reason) => queue.run(() => bound.replay(id, reason)),
+        cancel: (id, reason) => queue.run(() => bound.cancel(id, reason)),
+      })
+      try {
+        const result = await work(Object.freeze({ documents, workflows }))
+        await queue.close()
+        await documentUnit.close()
+        return result
+      } catch (error) {
+        try { await queue.close() } catch { /* Preserve the first callback/operation failure. */ }
+        try { await documentUnit.close() } catch { /* Drain before the owner releases its client. */ }
+        throw error
+      }
+    }, this.attribution.configurationVersion)
   }
   private async row(client: PoolClient, id: string, locked = false): Promise<Row | null> {
     return (await client.query(`${SELECT} WHERE ${WHERE} AND a.id=$3${locked ? ' FOR UPDATE OF o' : ''}`, [...this.ids(), id])).rows[0] ?? null

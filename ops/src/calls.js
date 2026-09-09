@@ -121,7 +121,7 @@ function panelHtml(rec, story, s) {
     out += `<section class="panel-section"><h3 data-key="panel-np" tabindex="-1">Needs a person</h3><div class="card card-warn needs-card">` +
       (t ? `<div class="${t.quote === null ? 'quote' : ''}">${t.quote === null ? esc(t.headline.replace(/^asked /, '')) : esc(text.capitalise(t.headline))}</div>${t.quote ? `<div class="quote">"${esc(t.quote)}"</div>` : ''}<div class="reassure">${esc(t.reassurance)}</div>`
         : `<div>They wanted a tour but it couldn't be booked.</div><div class="reassure">The assistant said someone would call back with times.</div>`) +
-      `<div class="handling">${handling}</div></div></section>`
+      A.html.followUpReview(fu) + `<div class="handling">${handling}</div></div></section>`
   }
   out += `<section class="panel-section"><h3>What the assistant learned</h3>`
   if (story.facts.length) {
@@ -244,6 +244,7 @@ const view = {
     else if (s.errors.calls) banners += A.html.banner('warn', "We can't load calls right now.")
     if (s.callsConfigured === false) banners += A.html.banner('info', '', { raw: `<strong>Call history isn't connected yet.</strong> Calls the assistant handled still show here from the leads' records. Recordings and transcripts need a connection — <a href="#/status">see Status</a>.` })
     else if (s.callsError && s.callsConfigured) banners += A.html.banner('warn', '', { raw: `<strong>Call history is temporarily unavailable — trying again.</strong>${s.lastGoodAt.calls ? ` Showing what we had at ${esc(fmt.time(s.lastGoodAt.calls))}.` : ''}` })
+    if (s.safetyEventsError) banners += A.html.banner('warn', 'Safety reports are temporarily unavailable. The list may be incomplete. Trying again.')
     if (banners !== this.bannerHtml) { this.bannerHtml = banners; this.banners.innerHTML = banners; this.banners.style.marginBottom = banners ? '16px' : '0' }
     // chips
     for (const b of this.chipsEl.querySelectorAll('.chip-filter')) {

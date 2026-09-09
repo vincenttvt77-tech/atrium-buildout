@@ -1,6 +1,7 @@
 import { before, after, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createServer, request } from 'node:http'
+import { createHash } from 'node:crypto'
 import handler from '../../api/vapi.ts'
 import syncHandler from '../../api/vapi-sync.ts'
 import { createFoundationTestDatabase, seedFoundationTestDatabase } from '../../scripts/lib/foundation-test.mjs'
@@ -396,4 +397,76 @@ test('invalid database runtime selection fails closed at both HTTP routes withou
     }
   } finally { process.env.ATRIUM_RUNTIME_MODE = 'postgres' }
   assert.equal(runtimeLookups, before)
+})
+
+test('finished-call projection failure rolls back receipt/profile/followups and leaves the accepted call ending', async () => {
+  const callId = 'atomic-finish-failure', phone = '+15555550193'
+  const captured = await post('synthetic-assistant-b', callId, [
+    tool('capture_contact', { name: 'Atomic Fixture', phone, excerpt: 'My name is Atomic Fixture and that is my callback number.' }),
+    tool('capture_loss_reason', { kind: 'priced_out', detail: 'The stated rent exceeds my budget', evidence: 'That rent is above my budget' }),
+  ])
+  assert.equal(captured.status,200)
+  const transaction = db.app.transaction
+  let failed = 0
+  db.app.transaction = function (context, work) {
+    return transaction.call(this, context, async client => {
+      const guarded=Object.create(client)
+      guarded.query=(...args)=>{
+        if (/INSERT INTO atrium\.operational_documents/.test(String(args[0])) && String(args[1]?.[2]).startsWith('followup:')) {
+          failed++; throw new Error('Synthetic follow-up projection failure')
+        }
+        return client.query(...args)
+      }
+      return work(guarded)
+    })
+  }
+  const endedAt=NOW.toISOString()
+  let response
+  try { response=await http('POST','/api/vapi',{message:{type:'end-of-call-report',call:{id:callId,assistantId:'synthetic-assistant-b'},endedAt}},{'x-vapi-secret':secret}) }
+  finally { db.app.transaction=transaction }
+  assert.equal(response.status,503)
+  assert.equal(failed,1)
+  const call=(await db.admin.query("SELECT value FROM atrium.operational_documents WHERE property_id='property-b1' AND key=$1",[`call:${callId}`])).rows[0].value
+  assert.equal(call.work.phase,'ending')
+  assert.equal(call.completedAt,undefined)
+  assert.equal(call.phone,phone)
+  const rolledBack=(await db.admin.query("SELECT key FROM atrium.operational_documents WHERE property_id='property-b1' AND (key=$1 OR key=$2 OR value->>'createdFromCall'=$3)",[`call-receipt:${callId}`,`lead:${phone}`,callId])).rows
+  assert.deepEqual(rolledBack,[])
+  const failureAudit=(await db.admin.query('SELECT record_key FROM atrium.audit_events WHERE request_id=$1',[response.headers['x-request-id']])).rows
+  assert.ok(failureAudit.length>0)
+  assert.ok(failureAudit.every(row=>row.record_key===`sha256:${createHash('sha256').update(`call:${callId}`).digest('hex')}`),
+    'only durable call admission/ending audit may survive failed projection')
+  // Retry omits all report dates/contact; the first accepted event remains authoritative.
+  const retry=await http('POST','/api/vapi',{message:{type:'end-of-call-report',call:{id:callId,assistantId:'synthetic-assistant-b'}}},{'x-vapi-secret':secret})
+  assert.equal(retry.status,200)
+  const projected=(await db.admin.query(`SELECT key,value,xmin::text AS xid FROM atrium.operational_documents
+    WHERE property_id='property-b1' AND (key=$1 OR key=$2 OR key=$3 OR value->>'createdFromCall'=$4)`,
+  [`call:${callId}`,`call-receipt:${callId}`,`lead:${phone}`,callId])).rows
+  assert.ok(projected.length>=4)
+  assert.equal(new Set(projected.map(row=>row.xid)).size,1)
+  const complete=projected.find(row=>row.key===`call:${callId}`).value
+  assert.equal(complete.work.phase,'complete')
+  assert.equal(complete.completedAt,endedAt)
+  assert.equal(complete.work.intents.length,2)
+  assert.equal(projected.find(row=>row.key===`call-receipt:${callId}`).value.outcome,null)
+  assert.equal(projected.find(row=>row.key===`lead:${phone}`).value.calls[0].at,endedAt)
+  const projectionAudit=(await db.admin.query("SELECT xmin::text AS xid FROM atrium.audit_events WHERE request_id=$1",[retry.headers['x-request-id']])).rows
+  assert.ok(projectionAudit.filter(row=>row.xid===projected[0].xid).length>=5)
+})
+
+test('completed PostgreSQL calls retain exact tool result cache and reject contradictory report timestamps', async () => {
+  const callId='atomic-finish-cache', args={name:'Cached Fixture',phone:'+15555550194',excerpt:'My name is Cached Fixture and this is my number.'}
+  const original=await post('synthetic-assistant-b',callId,[tool('capture_contact',args)])
+  assert.equal(original.status,200)
+  const end={message:{type:'end-of-call-report',call:{id:callId,assistantId:'synthetic-assistant-b'},endedAt:NOW.toISOString()}}
+  assert.equal((await http('POST','/api/vapi',end,{'x-vapi-secret':secret})).status,200)
+  const duplicate=await post('synthetic-assistant-b',callId,[tool('capture_contact',args)])
+  assert.equal(duplicate.status,200)
+  assert.deepEqual(duplicate.body.results,original.body.results)
+  const changed=structuredClone(end)
+  changed.message.endedAt=new Date(NOW.getTime()+60000).toISOString()
+  assert.equal((await http('POST','/api/vapi',changed,{'x-vapi-secret':secret})).status,409)
+  const profile=(await db.admin.query("SELECT value FROM atrium.operational_documents WHERE property_id='property-b1' AND key='lead:+15555550194'")).rows[0].value
+  assert.equal(profile.calls.length,1)
+  assert.equal(profile.calls[0].at,NOW.toISOString())
 })

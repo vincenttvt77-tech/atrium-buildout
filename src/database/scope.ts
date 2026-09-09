@@ -14,28 +14,32 @@ export function scopeContext(scope: AuthorizedScope): DatabaseContext {
   }
 }
 
+/** Recheck an issued scope on the client already owned by this property transaction. */
+export async function assertCurrentPropertyAccess(client: PoolClient, scope: AuthorizedScope,
+  permission: Permission, expectedConfigurationVersion?: number): Promise<void> {
+  assertAuthorizedScope(scope, permission)
+  const allowed = await client.query<{ allowed: boolean }>('SELECT atrium.can_access_property($1, $2, $3) AS allowed',
+    [scope.organizationId, scope.propertyId, permission])
+  if (allowed.rows[0]?.allowed !== true) throw new AuthorizationError('forbidden')
+  if (expectedConfigurationVersion !== undefined) {
+    const configuration = await client.query('SELECT published_configuration_version FROM atrium.properties WHERE organization_id=$1 AND id=$2',
+      [scope.organizationId,scope.propertyId])
+    if (Number(configuration.rows[0]?.published_configuration_version) !== expectedConfigurationVersion) {
+      throw Object.assign(new Error('Property configuration changed during this request.'), {code:'property_configuration_changed'})
+    }
+  }
+}
+
 /** A scope is short-lived evidence, not a bypass for membership changes since issuance. */
 export async function propertyTransaction<T>(connection: DatabaseConnection, scope: AuthorizedScope,
   permission: Permission, work: (client: PoolClient) => Promise<T>, expectedConfigurationVersion?: number): Promise<T> {
   assertAuthorizedScope(scope, permission)
   return connection.transaction(scopeContext(scope), async client => {
-    const recheck = async () => {
-      const allowed = await client.query<{ allowed: boolean }>('SELECT atrium.can_access_property($1, $2, $3) AS allowed',
-        [scope.organizationId, scope.propertyId, permission])
-      if (allowed.rows[0]?.allowed !== true) throw new AuthorizationError('forbidden')
-      if (expectedConfigurationVersion !== undefined) {
-        const configuration = await client.query('SELECT published_configuration_version FROM atrium.properties WHERE organization_id=$1 AND id=$2',
-          [scope.organizationId,scope.propertyId])
-        if (Number(configuration.rows[0]?.published_configuration_version) !== expectedConfigurationVersion) {
-          throw Object.assign(new Error('Property configuration changed during this request.'), {code:'property_configuration_changed'})
-        }
-      }
-    }
-    await recheck()
+    await assertCurrentPropertyAccess(client, scope, permission, expectedConfigurationVersion)
     const result = await work(client)
     // Revocation between admission and a later RLS-filtered read must not become
     // an empty/new calendar. A failed exit check also rolls back writes and audit.
-    await recheck()
+    await assertCurrentPropertyAccess(client, scope, permission, expectedConfigurationVersion)
     return result
   })
 }

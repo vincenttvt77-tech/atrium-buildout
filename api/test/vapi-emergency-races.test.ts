@@ -133,7 +133,7 @@ test('a stronger call emergency survives a failed hold upgrade and repairs the w
   assert.deepEqual((await calendar.read()).bookings, [])
 })
 
-test('a call-record save failure after a concurrent safety pause preserves guidance with a retryable response', async () => {
+test('a call admission write failure after a concurrent safety pause preserves guidance with a retryable response', async () => {
   const id = 'emergency-regression-post-pause-save-failure'
   const originalGet = MemoryDocumentStore.prototype.get, originalUpdate = MemoryDocumentStore.prototype.update
   let emergencyCommitted = false, failSave = false, failedSaves = 0
@@ -153,7 +153,7 @@ test('a call-record save failure after a concurrent safety pause preserves guida
   let response: any
   try { response = await tools(id, [booking()]) }
   finally { get.mock.restore(); update.mock.restore() }
-  assert.equal(failedSaves, 1, 'fail only the final save after the independent emergency request committed')
+  assert.equal(failedSaves, 1, 'the admission write fails after the independent emergency request committed')
   assert.equal(response.code, 503)
   assert.equal(response.body.code, 'emergency_persistence_unavailable')
   assertGasGuidance(response)
@@ -163,16 +163,18 @@ test('a call-record save failure after a concurrent safety pause preserves guida
 
 test('the booking pause carries safety guidance without needing another readable calendar', async () => {
   const id = 'emergency-regression-post-pause-read-failure'
-  const originalGet = MemoryDocumentStore.prototype.get
+  const originalUpdate = MemoryDocumentStore.prototype.update
   const originalRead = MemoryCalendarStore.prototype.read, originalMutate = MemoryCalendarStore.prototype.mutate
-  let emergencyCommitted = false, bookingPaused = false, readsAfterPause = 0
-  const get = mock.method(MemoryDocumentStore.prototype, 'get', async function(this: MemoryDocumentStore, key: string) {
-    const stale = await originalGet.call(this, key)
-    if (key === `call:${id}` && !emergencyCommitted) {
+  let emergencyCommitted = false, bookingPaused = false, readsAfterPause = 0, emergencyResponse: any
+  const update = mock.method(MemoryDocumentStore.prototype, 'update', async function(this: MemoryDocumentStore, key: string, initial: unknown, fn: (state: any) => any) {
+    const stored: any = await originalUpdate.call(this, key, initial, fn)
+    // Admission itself now refreshes call state. Commit the racing emergency only
+    // after the dispatch marker, when the pending request is about to hit calendar CAS.
+    if (key === `call:${id}` && !emergencyCommitted && stored.work?.intents.some((intent: any) => intent.status === 'dispatch_started')) {
       emergencyCommitted = true
-      assert.equal((await transcript(id)).code, 200)
+      emergencyResponse = await transcript(id)
     }
-    return stale
+    return stored
   })
   const mutation = mock.method(MemoryCalendarStore.prototype, 'mutate', async function(this: MemoryCalendarStore, fn: (state: CalendarState) => CalendarState) {
     try { return await originalMutate.call(this, fn) }
@@ -187,7 +189,9 @@ test('the booking pause carries safety guidance without needing another readable
   })
   let response: any
   try { response = await tools(id, [booking()]) }
-  finally { get.mock.restore(); mutation.mock.restore(); read.mock.restore() }
+  finally { update.mock.restore(); mutation.mock.restore(); read.mock.restore() }
+  assert.equal(emergencyCommitted, true)
+  assert.equal(emergencyResponse.code, 200)
   assert.equal(bookingPaused, true, 'the real calendar callback rejected the pending stale booking')
   assert.equal(readsAfterPause, 0, 'the already-known signal must not depend on another calendar read')
   assert.equal(response.code, 200)

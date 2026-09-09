@@ -37,8 +37,9 @@ async function invoke(message: Record<string, unknown>): Promise<any> {
   assert.equal(res.code, 200, JSON.stringify(res.body))
   return res.body
 }
+let toolSequence = 0
 async function tool(name: string, args: Record<string, unknown>): Promise<string> {
-  return (await invoke({ type: 'tool-calls', toolCallList: [{ id: name, name, arguments: args }] })).results[0].result
+  return (await invoke({ type: 'tool-calls', toolCallList: [{ id: `tool-${++toolSequence}`, name, arguments: args }] })).results[0].result
 }
 
 test('failed-call inputs retain a spending floor, find West Collection homes and book next Wednesday at four', async () => {

@@ -6,6 +6,7 @@ import { runInNewContext } from 'node:vm'
 const source = await readFile(new URL('../../ops/src/app.js', import.meta.url), 'utf8')
 const calendarSource = await readFile(new URL('../../ops/src/calendar.js', import.meta.url), 'utf8')
 const leadsSource = await readFile(new URL('../../ops/src/leads.js', import.meta.url), 'utf8')
+const callsSource = await readFile(new URL('../../ops/src/calls.js', import.meta.url), 'utf8')
 const property = (overrides = {}) => ({
   organizationId: 'organization-one', propertyId: 'chicago-one', buildingName: 'Lake House',
   locationLabel: 'Chicago, IL', timeZone: 'America/Chicago', configurationVersion: 7,
@@ -34,7 +35,7 @@ function portal(options = {}) {
     location: { hash: '', reload() { reloads++ } },
     fetch: async (path, init) => { requests.push({ path, ...init }); return handler(path, init) } }
   runInNewContext(source.replace('window.Atrium = {',
-    'window.testPortal = { showView, paintCluster, markBooted() { booted = true } }; window.Atrium = {'), context)
+    'window.testPortal = { showView, paintCluster, todayView, followUpRowHtml, markBooted() { booted = true } }; window.Atrium = {'), context)
   return { app: window.Atrium, context, document, controls, classes, requests, bootstrap,
     scope: scopeOf(bootstrap), payload: () => payload, respond(data, status = 200) { payload = data; handler = () => response(payload, status) },
     handler(fn) { handler = fn }, reloads: () => reloads }
@@ -317,4 +318,175 @@ test('viewer calendar gestures cannot open editing dialogs and lead details omit
     assert.equal(html.includes('class="note-form"'), hasEditor)
     assert.ok(html.includes('Test Caller'), 'viewer retains read access to lead details')
   }
+})
+
+const reviewProvenance = { status: 'needs_review', code: 'legacy_followup_identity_ambiguous',
+  candidateIds: ['private-candidate-one', '<img src=x onerror=alert(1)>'] }
+const followUpFixture = (overrides = {}) => ({
+  id: 'fu-legacy-review', phone: '+13125550101', kind: 'confirm_tour', channel: 'call',
+  dueAt: '2020-06-01T15:00:00.000Z', reason: 'Staff retained this original reason.', status: 'scheduled',
+  createdAt: '2020-05-31T15:00:00.000Z', createdFromCall: 'old-call', executable: false, ...overrides,
+})
+function loadLeadRenderers(ui) {
+  runInNewContext(leadsSource.replace("A.register('leads', view)",
+    "window.testLeads = { fuRowHtml, doneRowHtml, todoListHtml, leadPanelHtml }; A.register('leads', view)"), ui.context)
+  return ui.context.window.testLeads
+}
+function assertReviewWarning(html) {
+  assert.match(html, /Review needed/)
+  assert.match(html, /This older task may refer to more than one tour\. Check the booking before contacting the caller\./)
+  assert.doesNotMatch(html, /private-candidate|onerror=alert|<img/)
+}
+
+test('ambiguous follow-ups show safe review guidance in scheduled rows, completed rows and lead details without changing saved work', () => {
+  const ui = portal(), render = loadLeadRenderers(ui)
+  const profile = { phone: '+13125550101', name: 'Caller <strong>example</strong>', stage: 'new',
+    calls: [], bookings: [], notes: [], escalations: [] }
+  for (const status of ['scheduled', 'done', 'skipped']) {
+    const followUp = followUpFixture({ status, dueAt: '2200-06-01T15:00:00.000Z', reconciliation: reviewProvenance })
+    const original = structuredClone(followUp)
+    ui.app.apply('leads', { scope: ui.scope, profiles: [profile], followUps: [followUp] })
+    const row = status === 'scheduled' ? render.fuRowHtml(followUp, ui.app.state, { nameLink: true })
+      : render.doneRowHtml(followUp, ui.app.state)
+    assertReviewWarning(row)
+    assert.doesNotMatch(row, /<strong>example<\/strong>/)
+    assert.match(row, /&lt;strong&gt;example&lt;\/strong&gt;/)
+    assertReviewWarning(render.leadPanelHtml(profile, ui.app.state))
+    const list = render.todoListHtml(ui.app.state)
+    assertReviewWarning(list)
+    if (status !== 'scheduled') {
+      assert.match(row, status === 'done' ? />Done</ : />Not needed</)
+      assert.match(list, /<summary[^>]*>[\s\S]*?Review needed[\s\S]*?<\/summary>/)
+      assert.match(list, /Review older tasks/)
+      assert.doesNotMatch(list, /All caught up/)
+    }
+    assert.deepEqual(followUp, original)
+    assert.deepEqual(plain(ui.app.state.leads.followUps[0]), original)
+  }
+  const normal = followUpFixture()
+  assert.doesNotMatch(render.fuRowHtml(normal, ui.app.state), /Review needed/)
+})
+
+test('Today repaints both ordinary tasks and callback cards when polling adds only reconciliation status', () => {
+  for (const kind of ['confirm_tour', 'callback']) {
+    const ui = portal(), today = ui.context.window.testPortal.todayView
+    const profile = { phone: '+13125550101', name: 'Caller', stage: 'new', calls: [], bookings: [], notes: [], escalations: [] }
+    let html = '', writes = 0
+    today.root = { contains: () => false, querySelector: () => null, querySelectorAll: () => [],
+      get innerHTML() { return html }, set innerHTML(value) { html = value; writes++ } }
+    const followUp = followUpFixture({ kind })
+    ui.app.apply('leads', { scope: ui.scope, profiles: [profile], followUps: [followUp] })
+    today.render(ui.app.state)
+    assert.doesNotMatch(html, /Review needed/)
+    const before = writes
+    ui.app.apply('leads', { scope: ui.scope, followUp: { ...followUp, reconciliation: reviewProvenance } })
+    today.render(ui.app.state)
+    assert.equal(writes, before + 1, `${kind} must repaint the new warning`)
+    assertReviewWarning(html)
+    today.render(ui.app.state)
+    assert.equal(writes, before + 1, 'an unchanged poll does not replace the view again')
+    assert.equal(ui.requests.length, 0, 'rendering a review warning cannot dispatch a contact action')
+  }
+})
+
+test('the call detail keeps review guidance visible even when its callback was marked done', () => {
+  const ui = portal()
+  runInNewContext(callsSource.replace("A.register('calls', view)",
+    "window.testCallPanel = panelHtml; A.register('calls', view)"), ui.context)
+  const profile = { phone: '+13125550101', name: 'Caller', stage: 'escalated', bookings: [], notes: [],
+    escalations: [{ callId: 'old-call', trigger: 'restricted:reasonable_accommodation', detail: 'A person was requested', at: '2020-05-31T15:00:00Z' }],
+    calls: [{ callId: 'old-call', at: '2020-05-31T15:00:00Z', toolsCalled: [], outcome: 'Escalated' }] }
+  const followUp = followUpFixture({ kind: 'callback', status: 'done', reconciliation: reviewProvenance })
+  ui.app.apply('leads', { scope: ui.scope, profiles: [profile], followUps: [followUp] })
+  const record = { id: 'old-call', phone: profile.phone, displayName: profile.name, profile,
+    events: [{ kind: 'escalated', ...profile.escalations[0] }], call: null }
+  const story = ui.app.derive.callStory(record, ui.app.state)
+  assert.equal(story.needsPerson, true)
+  const html = ui.context.window.testCallPanel(record, story, ui.app.state)
+  assertReviewWarning(html)
+  assert.match(html, /Handled — a person marked this done/)
+})
+
+test('same-day v2 tour tasks name their exact source booking while legacy rows retain date matching', () => {
+  const { app } = portal()
+  const bookings = [
+    { slotId: 'same-slot-label', startsAt: '2032-06-01T15:00:00.000Z', unitId: '4A', status: 'confirmed' },
+    { slotId: 'same-slot-label', startsAt: '2032-06-01T15:30:00.000Z', unitId: '7B', status: 'confirmed' },
+  ]
+  const profile = { phone: '+13125550101', name: 'Caller', bookings }
+  for (const kind of ['confirm_tour', 'remind_tour', 'post_tour']) {
+    for (const booking of bookings) {
+      const followUp = followUpFixture({ kind, dueAt: kind === 'remind_tour' ? '2032-05-31T15:00:00Z' : '2032-06-01T12:00:00Z',
+        source: { version: 2, kind: 'booking', booking: { ...booking, unitId: booking.unitId.toLowerCase() } } })
+      const sentence = app.derive.todoSentence(followUp, profile, app.state).text
+      assert.match(sentence, new RegExp(`apartment ${booking.unitId}`))
+      assert.doesNotMatch(sentence, new RegExp(`apartment ${booking.unitId === '4A' ? '7B' : '4A'}`))
+    }
+  }
+  for (const changed of [{ slotId: 'missing' }, { startsAt: '2032-06-01T15:45:00Z' }, { unitId: '99Z' }]) {
+    const followUp = followUpFixture({ dueAt: '2032-06-01T12:00:00Z',
+      source: { version: 2, kind: 'booking', booking: { ...bookings[1], ...changed } } })
+    assert.doesNotMatch(app.derive.todoSentence(followUp, profile, app.state).text, /apartment (4A|7B)/)
+  }
+  const legacy = followUpFixture({ dueAt: '2032-06-01T12:00:00Z' })
+  assert.match(app.derive.todoSentence(legacy, profile, app.state).text, /apartment 4A/)
+})
+
+test('durable late or anonymous safety reports appear in Today and call details without a notification claim', async () => {
+  const { MemoryDocumentStore } = await import('../../src/store/documents.ts')
+  const { recordCallSafetyEvent, listCallSafetyEvents, safetyEventForOps } = await import('../../src/calls/safety-events.ts')
+  for (const known of [false, true]) {
+    const ui = portal(), store = new MemoryDocumentStore(), callId = 'original-safety-call'
+    const oldCall = { id: callId, startedAt: '2020-01-01T12:00:00Z', customerNumber: '+13125550101',
+      transcript: 'User: Just checking the address.\nAI: Thank you for calling.', toolCalls: [] }
+    await recordCallSafetyEvent(store, { callId, at: new Date(), signal: { kind: 'gas',
+      matched: 'smell gas <img src=x onerror=alert(1)>', callEmergencyServices: true } })
+    const events = (await listCallSafetyEvents(store)).map(safetyEventForOps)
+    // Process-local events and profile history are absent after the simulated cold start.
+    ui.app.apply('calls', { scope: ui.scope, calls: known ? [oldCall] : [], events, callsConfigured: true })
+    ui.app.apply('leads', { scope: ui.scope, profiles: [], followUps: [] })
+    const records = ui.app.derive.callRecords(ui.app.state)
+    assert.equal(records.length, 1); assert.equal(records[0].id, callId)
+    assert.equal(records[0].profile, null)
+    if (known) assert.equal(records[0].startedAt, oldCall.startedAt)
+    else assert.equal(records[0].displayName, 'Hidden number')
+    const items = ui.app.derive.needsPerson(ui.app.state)
+    assert.equal(items.length, 1); assert.equal(items[0].type, 'emergency')
+    assert.match(items[0].action, /Emergency report saved for staff review\. No automatic notification has been sent\./)
+    const today = ui.context.window.testPortal.todayView
+    today.root = { contains: () => false, querySelector: () => null, querySelectorAll: () => [], innerHTML: '' }
+    today.render(ui.app.state)
+    assert.match(today.root.innerHTML, /Emergency report saved for staff review/)
+    assert.match(today.root.innerHTML, /No automatic notification has been sent/)
+    assert.match(today.root.innerHTML, /&lt;img src=x onerror=alert\(1\)&gt;/)
+    assert.doesNotMatch(today.root.innerHTML, /<img src=x|assistant told them|staff (?:was|were|has been) notified/i)
+    runInNewContext(callsSource.replace("A.register('calls', view)",
+      "window.testCallPanel = panelHtml; A.register('calls', view)"), ui.context)
+    const story = ui.app.derive.callStory(records[0], ui.app.state)
+    const panel = ui.context.window.testCallPanel(records[0], story, ui.app.state)
+    assert.match(panel, /No automatic notification has been sent/)
+    assert.doesNotMatch(panel, /assistant told them|<img src=x/i)
+    assert.deepEqual(plain(ui.app.state.leads.profiles), [])
+    assert.deepEqual(plain(ui.app.state.leads.followUps), [])
+    assert.equal(ui.requests.length, 0)
+  }
+})
+
+test('a failed safety feed preserves known incidents and repaints an explicit incomplete-list warning', () => {
+  const ui = portal(), event = { id: 'call-safety:known', kind: 'emergency', durable: true,
+    callId: 'known', at: new Date().toISOString(), emergencyKind: 'gas', matched: 'smell gas', notificationStatus: 'not_sent' }
+  ui.app.apply('calls', { scope: ui.scope, calls: [], events: [event] })
+  ui.app.apply('leads', { scope: ui.scope, profiles: [], followUps: [] })
+  const today = ui.context.window.testPortal.todayView
+  today.root = { contains: () => false, querySelector: () => null, querySelectorAll: () => [], innerHTML: '' }
+  today.render(ui.app.state)
+  assert.doesNotMatch(today.root.innerHTML, /Safety reports are temporarily unavailable/)
+  ui.app.apply('calls', { scope: ui.scope, calls: [], events: [], safetyEventsError: 'unavailable' })
+  today.render(ui.app.state)
+  assert.match(today.root.innerHTML, /Safety reports are temporarily unavailable\. The list may be incomplete\./)
+  assert.match(today.root.innerHTML, /Emergency report saved/)
+  assert.deepEqual(plain(ui.app.state.events), [event])
+  ui.app.apply('calls', { scope: ui.scope, calls: [], events: [event], safetyEventsError: null })
+  today.render(ui.app.state)
+  assert.doesNotMatch(today.root.innerHTML, /Safety reports are temporarily unavailable/)
 })
