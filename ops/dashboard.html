@@ -634,7 +634,7 @@ body.has-dialog { overflow: hidden; }
 .cal-grid {
   display: grid;
   grid-template-columns: 56px repeat(var(--cal-cols, 7), minmax(0, 1fr));
-  grid-template-rows: 76px repeat(var(--cal-rows, 18), 40px);
+  grid-template-rows: 76px repeat(var(--cal-rows, 18), var(--cal-row-height, 40px));
   column-gap: 1px; background: var(--line);
   position: relative; min-width: 0;
 }
@@ -726,7 +726,7 @@ button.cal-dayhead:hover { background: var(--paper-3); }
 .cal-band-text .ico { width: 13px; height: 13px; flex: none; margin-top: 2px; }
 .cal-band-text .cal-band-words { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cal-band.is-tall .cal-band-text .cal-band-words { white-space: normal; display: -webkit-box; -webkit-line-clamp: var(--cal-lines, 2); -webkit-box-orient: vertical; overflow-wrap: anywhere; }
-.cal-band-hit { position: absolute; left: 0; right: 0; height: 40px; }
+.cal-band-hit { position: absolute; left: 0; right: 0; height: var(--cal-row-height, 40px); }
 .cal-band-seg {
   position: absolute; left: 0; right: 0; height: 40px; z-index: 1; pointer-events: none;
   border-top: 1px solid var(--line-strong); background: rgba(0, 0, 0, .04);
@@ -790,6 +790,30 @@ button.cal-dayhead:hover { background: var(--paper-3); }
 .cal-sheet .cal-notes .ico { width: 14px; height: 14px; margin-top: 2px; flex: none; }
 .cal-sheet .cal-consequence { margin-top: 12px; font-size: .929rem; color: var(--ink-2); }
 @media (max-width: 959px) { .cal-sheet .cal-chips .chip-filter { height: 36px; } }
+
+/* Tour settings use the same authenticated workspace and saving feedback as calendar writes. */
+.dlg.cal-settings { width: min(760px, calc(100vw - 32px)); max-width: 760px; }
+.cal-settings-intro { color: var(--ink-2); margin: 0 0 20px; line-height: 1.5; }
+.cal-settings-form fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.cal-settings-form fieldset + fieldset { border-top: 1px solid var(--line); margin-top: 24px; padding-top: 20px; }
+.cal-settings-form legend { font-weight: 650; padding: 0; margin-bottom: 12px; }
+.cal-settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px; }
+.cal-settings-form .field-hint { margin: 6px 0 0; color: var(--ink-3); font-size: .857rem; line-height: 1.4; }
+.cal-settings-form .input, .cal-settings-form .select { width: 100%; }
+.cal-hours { margin-top: 12px; }
+.cal-hours-row { display: grid; grid-template-columns: 126px 44px 1fr; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.cal-hours-day { display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 550; }
+.cal-hours-day input { width: 17px; height: 17px; accent-color: var(--accent); }
+.cal-hours-state { color: var(--ink-3); font-size: .857rem; }
+.cal-hours-times { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
+.cal-hours-times > span { color: var(--ink-3); font-size: .857rem; }
+.cal-hours-times input:disabled { opacity: .45; }
+@media (max-width: 599px) {
+  .dlg.cal-settings { width: 100%; max-width: none; }
+  .cal-settings-grid { grid-template-columns: 1fr; }
+  .cal-hours-row { grid-template-columns: 1fr auto; gap: 8px; }
+  .cal-hours-times { grid-column: 1 / -1; }
+}
 
 /* ---------- mobile agenda ---------- */
 .cal-agenda-head {
@@ -1742,6 +1766,7 @@ const api = {
   get(path) { return request(path, { headers: JSON_HEADERS }) },
   async post(path, body, opts) {
     try {
+      if (path === '/api/calendar') body = { ...body, ...calendarRequestRange() }
       return await request(path, {
         method: 'POST', headers: { ...JSON_HEADERS, 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}),
       })
@@ -1765,11 +1790,34 @@ const inflight = {}
 const busyMap = {}
 let pollTimer = null
 let lastRoundAt = 0
+let calendarRange = null
+function calendarRequestRange() {
+  const today = nyNow().ymd
+  return calendarRange || { from: today, to: addDays(today, 14) }
+}
+function calendarUrl() { return `/api/calendar?${new URLSearchParams(calendarRequestRange())}` }
+function calendarRangeMatches(data) {
+  const wanted = calendarRequestRange()
+  return !data.range || (data.range.from === wanted.from && data.range.to === wanted.to)
+}
+/** Range changes invalidate older reads; responses never move the operator's selected date. */
+function setCalendarRange(range) {
+  const next = range ? { from: range.from, to: range.to } : null
+  if (JSON.stringify(next) === JSON.stringify(calendarRange)) return Promise.resolve()
+  calendarRange = next
+  seq.calendar += 1
+  delete state.errors.calendar
+  if (gated || busyMap.calendar) return Promise.resolve()
+  return fetchOne('calendar').then((result) => {
+    if (!result.dropped) { emit('data', state, new Set(['calendar'])); paintChrome() }
+  })
+}
 
 /** The comparable shape of a resource: generatedAt and note never take part. */
 function snapshot(name, d) {
   if (name === 'calls') return { calls: arr(d.calls), events: arr(d.events), callsError: d.callsError ?? null, callsConfigured: typeof d.callsConfigured === 'boolean' ? d.callsConfigured : null }
-  if (name === 'calendar') return { slots: arr(d.slots), blocks: arr(d.blocks), bookings: arr(d.bookings), store: d.store ?? null }
+  if (name === 'calendar') return { slots: arr(d.slots), blocks: arr(d.blocks), bookings: arr(d.bookings), store: d.store ?? null,
+    range: d.range ?? null, settings: d.settings ?? null, settingsRevision: d.settingsRevision ?? null }
   return { profiles: arr(d.profiles), followUps: arr(d.followUps), outboundEnabled: d.outboundEnabled === true, store: d.store ?? null }
 }
 function assign(name, snap) {
@@ -1788,12 +1836,12 @@ function ingest(name, data) {
   return changed
 }
 async function fetchOne(name) {
-  inflight[name] = true
   const mySeq = ++seq[name]
+  inflight[name] = mySeq
   const hadError = Boolean(state.errors[name])
   try {
-    const data = await api.get(RESOURCES[name])
-    if (seq[name] !== mySeq || busyMap[name]) return { name, dropped: true }
+    const data = await api.get(name === 'calendar' ? calendarUrl() : RESOURCES[name])
+    if (seq[name] !== mySeq || busyMap[name] || (name === 'calendar' && !calendarRangeMatches(data))) return { name, dropped: true }
     const changed = ingest(name, data)
     delete state.errors[name]
     state.lastGoodAt[name] = new Date().toISOString()
@@ -1803,7 +1851,7 @@ async function fetchOne(name) {
     state.errors[name] = { message: e.message, status: e.status ?? null, at: new Date().toISOString() }
     return { name, ok: false, changed: !hadError }
   } finally {
-    inflight[name] = false
+    if (inflight[name] === mySeq) inflight[name] = false
   }
 }
 async function pollRound(force) {
@@ -1866,6 +1914,7 @@ function paintBusy(resource) {
   }
 }
 function apply(resource, data) {
+  if (resource === 'calendar' && data && !calendarRangeMatches(data)) return
   seq[resource] += 1
   const d = data || {}
   if (resource === 'calendar') {
@@ -1873,6 +1922,7 @@ function apply(resource, data) {
     ingest('calendar', {
       slots: Array.isArray(d.slots) ? d.slots : cur.slots, blocks: Array.isArray(d.blocks) ? d.blocks : cur.blocks,
       bookings: Array.isArray(d.bookings) ? d.bookings : cur.bookings, store: d.store ?? cur.store,
+      range: d.range ?? cur.range, settings: d.settings ?? cur.settings, settingsRevision: d.settingsRevision ?? cur.settingsRevision,
     })
   } else if (resource === 'leads') {
     const cur = state.leads || { profiles: [], followUps: [], outboundEnabled: false, store: null }
@@ -1973,6 +2023,7 @@ function applyRoute() {
   const r = route()
   const prev = current
   current = r
+  if (r.name !== 'calendar') setCalendarRange(null)
   const switched = !prev || prev.name !== r.name
   showView(r, switched && Boolean(prev))
   if (switched) window.scrollTo({ top: 0, behavior: 'auto' })
@@ -2499,31 +2550,47 @@ function toursOn(s, ymd) {
   const cal = s.calendar
   const calLoaded = Boolean(cal)
   const calBookingIds = new Set(arr(cal && cal.bookings).map((b) => b && b.slotId))
-  const calBookingBy = new Map(arr(cal && cal.bookings).map((b) => [b && b.slotId, b]))
   const out = [], seen = new Set()
   for (const p of profilesOf(s)) {
     for (const b of arr(p && p.bookings)) {
       if (!b || b.status !== 'confirmed' || nyDate(b.startsAt) !== ymd) continue
       if (calLoaded && !calBookingIds.has(b.slotId)) continue
       // Two tours can share a time (two model residences): dedupe per tour, not per time.
-      const key = `${b.slotId}|${(b.unitId ?? '')}|${(p.name || '').trim()}`
+      const matches = arr(cal && cal.bookings).filter((x) => x && x.slotId === b.slotId && (x.unitId ?? '') === (b.unitId ?? ''))
+      const cb = matches.find((x) => (p.phone && p.phone !== 'unknown' && x.prospectPhone === p.phone) || (p.name && x.prospectName === p.name)) || (matches.length === 1 ? matches[0] : null)
+      const key = (cb && cb.externalId) || `${b.slotId}|${(b.unitId ?? '')}|${(p.name || '').trim()}`
       if (seen.has(key)) continue
       seen.add(key)
-      const cb = arr(cal && cal.bookings).find((x) => x && x.slotId === b.slotId && (x.unitId ?? '') === (b.unitId ?? '')) || calBookingBy.get(b.slotId)
-      out.push({ slotId: b.slotId, startsAt: b.startsAt, endsAt: null, name: p.name || (cb && cb.prospectName) || 'Tour', phone: p.phone, email: p.email || null,
+      out.push({ slotId: b.slotId, startsAt: (cb && cb.startsAt) || b.startsAt, endsAt: (cb && cb.endsAt) || null, name: p.name || (cb && cb.prospectName) || 'Tour', phone: p.phone, email: p.email || null,
         unitId: b.unitId ?? (cb && cb.unitId) ?? null, callId: b.callId, source: 'lead', profile: p, past: (toTime(b.startsAt) ?? 0) < now })
     }
+  }
+  // The staff calendar fetches only its displayed range. Saved bookings still cover every
+  // date, so Today remains correct after someone browses a distant week or removes a lead.
+  for (const b of arr(cal && cal.bookings)) {
+    if (!b) continue
+    const sl = arr(cal && cal.slots).find((slot) => slot && slot.slotId === b.slotId)
+    const legacyStart = /^slot-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(b.slotId || '') ? `${b.slotId.slice(5)}:00.000Z` : null
+    const startsAt = b.startsAt || (sl && sl.startsAt) || legacyStart
+    if (!startsAt || nyDate(startsAt) !== ymd) continue
+    const name = String(b.prospectName ?? '').trim()
+    const key = b.externalId || `${b.slotId}|${b.unitId ?? ''}|${name}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({ slotId: b.slotId, startsAt, endsAt: b.endsAt || (sl && sl.endsAt) || null, name: name || 'Tour',
+      phone: normalisePhone(b.prospectPhone) || null, email: b.prospectEmail || null,
+      unitId: b.unitId ?? null, callId: null, source: 'calendar', profile: null, past: (toTime(startsAt) ?? 0) < now })
   }
   for (const sl of arr(cal && cal.slots)) {
     if (!sl || sl.date !== ymd) continue
     const onSlot = arr(sl.bookings).length ? arr(sl.bookings) : (sl.booking ? [sl.booking] : [])
     for (const b of onSlot) {
-      if (!b) continue
+      if (!b || (b.startsAt && toTime(b.startsAt) !== toTime(sl.startsAt))) continue
       const name = String(b.prospectName ?? '').trim()
-      const key = `${sl.slotId}|${(b.unitId ?? '')}|${name}`
+      const key = b.externalId || `${sl.slotId}|${(b.unitId ?? '')}|${name}`
       if (seen.has(key)) continue
       seen.add(key)
-      out.push({ slotId: sl.slotId, startsAt: sl.startsAt, endsAt: sl.endsAt, name: name || 'Tour', phone: null, email: null,
+      out.push({ slotId: sl.slotId, startsAt: b.startsAt || sl.startsAt, endsAt: b.endsAt || sl.endsAt, name: name || 'Tour', phone: null, email: null,
         unitId: b.unitId ?? null, callId: null, source: 'calendar', profile: null, past: (toTime(sl.startsAt) ?? 0) < now })
     }
   }
@@ -2956,7 +3023,7 @@ const derive = {
 
 function reread(resource) {
   if (!RESOURCES[resource] || gated) return Promise.resolve()
-  return api.get(RESOURCES[resource]).then((d) => { apply(resource, d) }, () => { /* the poll will try again */ })
+  return api.get(resource === 'calendar' ? calendarUrl() : RESOURCES[resource]).then((d) => { apply(resource, d) }, () => { /* the poll will try again */ })
 }
 /**
  * Where keyboard focus goes when the control that started a write leaves the list with its row:
@@ -3551,7 +3618,7 @@ function boot() {
 
 window.Atrium = {
   escapeHtml, fmt, api, gate, toast, confirm, prompt, dialog, register, navigate, route, hashFor, state, on,
-  busy, busyNow, apply, refresh, icons, icon, property, normalisePhone, labels, label, derive, hint, text, href,
+  busy, busyNow, apply, refresh, calendarUrl, setCalendarRange, icons, icon, property, normalisePhone, labels, label, derive, hint, text, href,
   html: html_, announce, escape: escape_, setFollowUpStatus, boot, views: VIEWS.slice(),
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot)
@@ -3901,6 +3968,7 @@ const arr = (v) => (Array.isArray(v) ? v : [])
 const isMobile = () => matchMedia('(max-width: 959px)').matches
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches
 const isYmd = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)
+const calendarDate = (v) => isYmd(v) && Number(v.slice(0, 4)) >= 1900 && Number(v.slice(0, 4)) <= 9998 && fmt.addDays(v, 0) === v
 const ROW_H = 40, HEAD_H = 76
 const QUICK = ['Painting', 'Staff out', 'Maintenance', 'Holiday', 'Private showing']
 const KEYS_HINT = 'Use the arrow keys to move, Enter to open, Shift + arrows to select a range.'
@@ -3911,6 +3979,12 @@ const KEYS_HINT = 'Use the arrow keys to move, Enter to open, Shift + arrows to 
 // ---------------------------------------------------------------------------------------
 
 const weekStart = (ymd) => fmt.addDays(ymd, -fmt.dayOfWeek(ymd))
+function visibleRange(opts) {
+  const date = calendarDate(opts.date) ? opts.date : fmt.nyNow().ymd
+  const day = isMobile() || opts.view === 'day'
+  const from = day ? date : weekStart(date)
+  return { from, to: day ? date : fmt.addDays(from, 6) }
+}
 const ymdNoon = (ymd) => { const [y, m, d] = ymd.split('-').map(Number); return Date.UTC(y, m - 1, d, 12) }
 const dayDiff = (a, b) => Math.round((ymdNoon(b) - ymdNoon(a)) / 86400000)
 const longDay = (ymd) => fmt.dayLong(ymd).split(',')[0]
@@ -3939,12 +4013,14 @@ const plural = (n, one, many) => text.plural(n, one, many)
 // ---------------------------------------------------------------------------------------
 
 function buildModel(s, opts) {
-  const c = s.calendar
+  const range = visibleRange(opts)
+  const matches = s.calendar && s.calendar.range && s.calendar.range.from <= range.from && s.calendar.range.to >= range.to
+  const c = matches ? s.calendar : null
   const today = fmt.nyNow().ymd
   const rawSlots = c ? arr(c.slots) : []
   const blocks = c ? arr(c.blocks).filter((b) => b && b.target != null) : []
   const bookings = c ? arr(c.bookings).filter((b) => b && b.slotId != null) : []
-  const slots = [], byId = new Map(), byDate = new Map()
+  const slots = [], byId = new Map(), byDate = new Map(), seenTours = new Set()
   let lo = Infinity, hi = -Infinity, lastDate = null
   for (const raw of rawSlots) {
     if (!raw || raw.slotId == null) continue
@@ -3954,19 +4030,26 @@ function buildModel(s, opts) {
     const startMin = ps.minutes
     let endMin = pe ? pe.minutes + (pe.ymd !== ps.ymd ? 1440 : 0) : startMin + 30
     if (endMin <= startMin) endMin = startMin + 30
-    const status = raw.status === 'booked' || raw.status === 'blocked' ? raw.status : 'open'
+    const status = ['open', 'booked', 'blocked', 'unavailable'].includes(raw.status) ? raw.status : 'unavailable'
     // Every tour on this time — two callers can tour at once as long as it is not the same
     // apartment — so a time with one of two places taken is still open and still shows the tour.
     const onSlot = arr(raw.bookings).length ? arr(raw.bookings) : (raw.booking ? [raw.booking] : [])
-    const tours = onSlot.filter(Boolean).map((b, i) => ({
-      i, name: String((b && b.prospectName) ?? '').trim(),
-      unitId: b && b.unitId != null && b.unitId !== '' ? String(b.unitId) : null,
-      booking: bookings.find((x) => String(x.slotId) === String(raw.slotId) && String(x.prospectName ?? '').trim() === String((b && b.prospectName) ?? '').trim()) || null,
+    const tours = onSlot.filter((b) => {
+      if (!b || (b.startsAt && Date.parse(b.startsAt) !== Date.parse(raw.startsAt))) return false
+      const key = b.externalId || `${raw.slotId}|${b.prospectName || ''}|${b.unitId || ''}`
+      if (seenTours.has(key)) return false
+      seenTours.add(key); return true
+    }).map((b, i) => ({
+      i, name: String(b.prospectName ?? '').trim(),
+      unitId: b.unitId != null && b.unitId !== '' ? String(b.unitId) : null,
+      startsAt: b.startsAt || raw.startsAt, endsAt: b.endsAt || raw.endsAt,
+      booking: bookings.find((x) => b.externalId ? x.externalId === b.externalId : String(x.slotId) === String(raw.slotId) && String(x.prospectName ?? '').trim() === String(b.prospectName ?? '').trim()) || null,
     }))
     const sl = {
       id: String(raw.slotId), date, startsAt: raw.startsAt, endsAt: raw.endsAt, startMin, endMin, status,
-      capacity: Number(raw.capacity) > 0 ? Number(raw.capacity) : 1, tours,
+      capacity: Number(raw.capacity) > 0 ? Number(raw.capacity) : 1, tours, unavailableReason: String(raw.reason || 'Not offered'),
       rawReason: status === 'blocked' ? String((raw.block && raw.block.reason) ?? '') : '',
+      blockTarget: status === 'blocked' && raw.block && raw.block.target ? String(raw.block.target) : null,
       reason: status === 'blocked' ? reasonOf(raw.block && raw.block.reason) : '',
       wholeDay: status === 'blocked' && Boolean(raw.block && raw.block.wholeDay),
       name: tours[0] ? tours[0].name : '',
@@ -3976,23 +4059,26 @@ function buildModel(s, opts) {
     if (!byDate.has(date)) byDate.set(date, [])
     byDate.get(date).push(sl)
     lo = Math.min(lo, startMin); hi = Math.max(hi, endMin)
+    for (const tour of tours) { const end = fmt.nyParts(tour.endsAt); if (end) hi = Math.max(hi, end.minutes + (end.ymd !== date ? 1440 : 0)) }
     if (!lastDate || date > lastDate) lastDate = date
   }
   for (const list of byDate.values()) list.sort((a, b) => a.startMin - b.startMin)
   const minM = lo === Infinity ? 600 : Math.floor(lo / 60) * 60
   const maxM = hi === -Infinity ? 1140 : Math.max(minM + 60, Math.ceil(hi / 60) * 60)
-  const rows = Math.round((maxM - minM) / 30)
-  const rowOf = (sl) => Math.max(0, Math.min(rows - 1, Math.round((sl.startMin - minM) / 30)))
-  const spanOf = (sl) => Math.max(1, Math.min(rows - rowOf(sl), Math.round((sl.endMin - sl.startMin) / 30)))
+  const gcd = (a, b) => b ? gcd(b, a % b) : a
+  const stepMin = slots.reduce((step, sl) => sl.tours.reduce((value, tour) => gcd(value, Math.round((Date.parse(tour.endsAt) - Date.parse(tour.startsAt)) / 60000)),
+    gcd(gcd(step, Math.round(sl.startMin - minM)), Math.round(sl.endMin - sl.startMin))), 30) || 30
+  const rowHeight = ROW_H * stepMin / 30
+  const rows = Math.round((maxM - minM) / stepMin)
+  const rowOf = (sl) => Math.max(0, Math.min(rows - 1, Math.round((sl.startMin - minM) / stepMin)))
+  const spanOf = (sl) => Math.max(1, Math.min(rows - rowOf(sl), Math.round((sl.endMin - sl.startMin) / stepMin)))
   const lastSlotDate = lastDate || today
   const firstWeek = weekStart(today)
   const lastWeek = weekStart(lastSlotDate > today ? lastSlotDate : today)
   const lastDay = fmt.addDays(lastWeek, 6)
   const mobile = isMobile()
   const view = mobile ? 'day' : (opts.view === 'day' ? 'day' : 'week')
-  let date = isYmd(opts.date) ? opts.date : today
-  if (date < firstWeek) date = firstWeek
-  if (date > lastDay) date = lastDay
+  const date = calendarDate(opts.date) ? opts.date : today
   const ws = weekStart(date)
   const days = view === 'week' ? [0, 1, 2, 3, 4, 5, 6].map((i) => fmt.addDays(ws, i)) : [date]
   const dayBlocks = new Map()
@@ -4001,17 +4087,18 @@ function buildModel(s, opts) {
   for (const b of bookings) if (!bookingBySlot.has(String(b.slotId))) bookingBySlot.set(String(b.slotId), b)
 
   /** One item per tour. The item's slot is a copy carrying that tour's name and apartment. */
-  const tourItems = (sl) => sl.tours.map((t) => ({
-    kind: 'tour', key: `tour:${sl.id}:${t.i}`, ymd: sl.date,
-    slot: { ...sl, name: t.name, unitId: t.unitId, booking: t.booking, tourIndex: t.i, shared: sl.tours.length > 1 || sl.status === 'open' },
-    slots: [sl], row: rowOf(sl), span: spanOf(sl),
-  }))
+  const tourItems = (sl) => sl.tours.map((t) => {
+    const end = fmt.nyParts(t.endsAt)
+    const actual = { ...sl, startsAt: t.startsAt, endsAt: t.endsAt, endMin: end ? end.minutes + (end.ymd !== sl.date ? 1440 : 0) : sl.endMin,
+      name: t.name, unitId: t.unitId, booking: t.booking, tourIndex: t.i, shared: sl.tours.length > 1 || sl.status === 'open' }
+    return { kind: 'tour', key: `tour:${sl.id}:${t.i}`, ymd: sl.date, slot: actual, slots: [sl], row: rowOf(actual), span: spanOf(actual) }
+  })
   /** Consecutive own-block slots with one reason inside a day band are one labelled segment (presentation only). */
   function mergeSegs(own, first) {
     const out = []
     for (const x of own) {
       const prev = out[out.length - 1]
-      if (prev && prev.slot.rawReason === x.rawReason && x.startMin === prev.slots[prev.slots.length - 1].endMin) { prev.slots.push(x); prev.span += spanOf(x); continue }
+      if (prev && prev.slot.blockTarget === x.blockTarget && prev.slot.rawReason === x.rawReason && x.startMin <= prev.slots[prev.slots.length - 1].endMin) { prev.slots.push(x); prev.span = rowOf(x) + spanOf(x) - rowOf(prev.slot); continue }
       out.push({ slot: x, slots: [x], row: rowOf(x) - rowOf(first), span: spanOf(x) })
     }
     return out
@@ -4034,33 +4121,59 @@ function buildModel(s, opts) {
       let i = 0
       while (i < list.length) {
         const sl = list[i]
-        if (sl.status === 'open') { items.push({ kind: 'open', key: `cell:${sl.id}`, ymd, slot: sl, slots: [sl], row: rowOf(sl), span: spanOf(sl) }); for (const t of tourItems(sl)) items.push(t); i++; continue }
+        if (sl.status === 'open') {
+          const nextStart = list.slice(i + 1).find((next) => next.startMin > sl.startMin)
+          const span = nextStart ? Math.min(spanOf(sl), rowOf(nextStart) - rowOf(sl)) : spanOf(sl)
+          items.push({ kind: 'open', key: `cell:${sl.id}`, ymd, slot: sl, slots: [sl], row: rowOf(sl), span })
+          for (const t of tourItems(sl)) items.push(t); i++; continue
+        }
+        if (sl.status === 'unavailable') { for (const t of tourItems(sl)) items.push(t); i++; continue }
         if (sl.status === 'booked') { for (const t of tourItems(sl)) items.push(t); i++; continue }
         const run = [sl]
         let j = i + 1
-        while (j < list.length && list[j].status === 'blocked' && list[j].rawReason === sl.rawReason && list[j].wholeDay === sl.wholeDay && list[j].startMin === list[j - 1].endMin) { run.push(list[j]); j++ }
+        while (j < list.length && list[j].status === 'blocked' && list[j].blockTarget === sl.blockTarget && list[j].rawReason === sl.rawReason && list[j].wholeDay === sl.wholeDay && list[j].startMin <= list[j - 1].endMin) { run.push(list[j]); j++ }
         const last = run[run.length - 1]
         items.push({ kind: 'band', key: `band:${sl.id}`, ymd, slots: run, first: sl, last, row: rowOf(sl), span: rowOf(last) + spanOf(last) - rowOf(sl), reason: sl.reason, rawReason: sl.rawReason, wholeDay: sl.wholeDay })
         i = j
       }
     }
     items.sort((a, b) => a.row - b.row || (a.kind === 'dayband' ? -1 : b.kind === 'dayband' ? 1 : 0))
+    // Overlapping tours need independent columns even when they start at different times.
+    let group = [], groupEnd = -1
+    const arrangeTours = () => {
+      if (!group.length) return
+      const ends = []
+      for (const item of group) {
+        let lane = ends.findIndex((end) => end <= item.row)
+        if (lane < 0) lane = ends.length
+        ends[lane] = item.row + item.span
+        item.lane = lane
+      }
+      const reserve = group.some((item) => open.some((sl) => sl.startMin < item.slot.endMin && sl.endMin > item.slot.startMin)) ? 1 : 0
+      for (const item of group) { item.lane += reserve; item.lanes = ends.length + reserve }
+      group = []
+    }
+    for (const item of items.filter((item) => item.kind === 'tour')) {
+      if (item.row >= groupEnd) { arrangeTours(); groupEnd = -1 }
+      group.push(item); groupEnd = Math.max(groupEnd, item.row + item.span)
+    }
+    arrangeTours()
     const stops = items.filter((x) => x.kind !== 'tour' || true).slice().sort((a, b) => a.row - b.row)
     let status
     if (ymd < today) status = { text: 'Past', kind: 'past', sr: 'past' }
     else if (dayBlock) { const r = reasonOf(dayBlock.reason); status = { text: r ? `Blocked · ${r}` : 'Blocked', kind: 'blocked', sr: `blocked all day${r ? `, ${r}` : ''}` } }
     else if (ymd === today && !open.length && !tours.length) status = { text: 'No more times today', kind: 'none', sr: 'no more times today' }
+    else if (list.length && !open.length && list.every((x) => x.status === 'unavailable')) status = { text: tours.length ? plural(tours.length, 'tour') : 'Not offered', kind: 'none', sr: tours.length ? plural(tours.length, 'tour') : 'not offered' }
     else if (list.length && !open.length && tours.length) status = { text: 'Fully booked', kind: 'full', sr: `fully booked, ${plural(tours.length, 'tour')}` }
-    else if (ymd > lastSlotDate) status = { text: 'Not open yet', kind: 'none', sr: 'not open yet' }
     else if (!list.length) status = { text: 'Closed', kind: 'none', sr: 'closed' }
     else status = { text: `${open.length} open${tours.length ? ` · ${plural(tours.length, 'tour')}` : ''}`, kind: 'open', sr: `${plural(open.length, 'open time')}${tours.length ? `, ${plural(tours.length, 'tour')}` : ''}` }
     const operable = ymd < today ? null : dayBlock ? 'blocked' : list.length ? 'block' : null
     return { ymd, list, open, tours, dayBlock, items, stops, status, operable, hasBlock: Boolean(dayBlock) || list.some((x) => x.status === 'blocked') }
   }
   const dayModels = days.map(dayModel)
-  const old = blocks.filter((b) => (isYmd(b.target) ? b.target < today : !byId.has(String(b.target))))
+  const old = blocks.filter((b) => (isYmd(b.target) ? b.target < today : /^slot-(\d{4}-\d{2}-\d{2})T/.exec(String(b.target))?.[1] < today))
   return {
-    loaded: Boolean(c), today, slots, byId, byDate, blocks, bookings, bookingBySlot, dayBlocks, minM, maxM, rows, rowOf, spanOf,
+    loaded: Boolean(c), range, settings: c && c.settings, today, slots, byId, byDate, blocks, bookings, bookingBySlot, dayBlocks, minM, maxM, rows, stepMin, rowHeight, rowOf, spanOf,
     lastSlotDate, hasSlots: slots.length > 0, firstWeek, lastWeek, lastDay, mobile, view, date, weekStart: ws, days, dayModels, dayModel, old,
     nowMin: fmt.nyNow().minutes,
   }
@@ -4159,7 +4272,9 @@ function bannersHtml(s, m) {
   let out = ''
   const store = s.calendar && s.calendar.store
   if (m.loaded && store && store.durable === false) {
-    out += A.html.banner('warn', '', { raw: '<a class="banner-link" href="#/status">Heads up: calendar changes aren\'t being saved right now. Blocks you add may disappear. Ask Atrium support.</a>' })
+    out += window.ATRIUM_DEMO === true
+      ? A.html.banner('info', 'Demo workspace — tour settings and sample bookings reset when the preview restarts.')
+      : A.html.banner('warn', '', { raw: '<a class="banner-link" href="#/status">Heads up: calendar changes aren\'t being saved right now. Blocks you add may disappear. Ask Atrium support.</a>' })
   }
   const err = s.errors.calendar
   if (err && m.loaded) out += A.html.banner('info', `Showing the calendar as of ${s.lastGoodAt.calendar ? fmt.time(s.lastGoodAt.calendar) : 'a moment ago'} — trying to reconnect.`)
@@ -4173,19 +4288,20 @@ const dis = (on) => (on ? ' aria-disabled="true"' : '')
 function toolbarHtml(m) {
   const rt = rangeText(m)
   const unit = m.view === 'week' ? 'week' : 'day'
-  const prevOff = m.view === 'week' ? m.weekStart <= m.firstWeek : m.date <= m.firstWeek
-  const nextOff = m.view === 'week' ? m.weekStart >= m.lastWeek : m.date >= m.lastDay
+  const prevOff = Number(m.date.slice(0, 4)) <= 1900
+  const nextOff = Number(m.date.slice(0, 4)) >= 9998
   const busy = A.busyNow('calendar') || cal.inert
   return `<div class="cal-toolbar"><div class="cal-nav">${navBtn('prev', `Previous ${unit}`, prevOff)}<button type="button" class="btn" data-action="today" data-key="today">Today</button>${navBtn('next', `Next ${unit}`, nextOff)}</div>` +
     `<h2 class="cal-range" aria-live="polite" data-key="range">${rt.when ? `<span class="cal-range-when">${esc(rt.when)} · </span>` : ''}${esc(rt.range)}</h2><span class="cal-spacer"></span>` +
     `<div class="cal-tools"><div class="seg cal-seg" role="radiogroup" aria-label="Layout"><button type="button" class="tab" role="radio" aria-checked="${m.view === 'week' ? 'true' : 'false'}" data-action="view-week" data-key="view-week">Week</button><button type="button" class="tab" role="radio" aria-checked="${m.view === 'day' ? 'true' : 'false'}" data-action="view-day" data-key="view-day">Day</button></div>` +
+    `<button type="button" class="btn" data-action="goto" data-key="goto">Go to date</button><button type="button" class="btn" data-action="settings" data-key="settings" data-write="calendar"${dis(busy)}>Tour settings</button>` +
     `<button type="button" class="btn btn-primary" data-action="block" data-key="block" data-write="calendar"${dis(busy)}>Block time…</button>` +
     `<button type="button" class="btn-icon" data-action="more" data-key="more" aria-label="More calendar actions" aria-haspopup="dialog" data-write="calendar"${dis(busy)}>${A.icon('more')}</button></div></div>` +
     `<div class="cal-progress"${A.busyNow('calendar') ? '' : ' hidden'}></div>`
 }
 
 function itemHtml(m, it, col) {
-  const r = it.row, isHour = (m.minM + r * 30) % 60 === 0
+  const r = it.row, isHour = (m.minM + r * m.stepMin) % 60 === 0
   const place = `grid-row:${r + 2} / span ${it.span};grid-column:${col}`
   const common = `data-key="${esc(it.key)}" data-date="${esc(it.ymd)}" data-row="${r}" data-col="${col - 2}" data-kind="${it.kind}"`
   if (it.kind === 'open') {
@@ -4207,11 +4323,7 @@ function itemHtml(m, it, col) {
     const short = m.view === 'day' ? full : `${clock(sl.startsAt)} ${firstName(sl.name)}`
     // Tours sharing one time split the cell; a lone tour on a time with a place still open
     // keeps to the right so the open cell beside it can be clicked.
-    const n = Math.max(1, arr(sl.tours).length)
-    // Grid items: split the cell with width + justify-self (left/top would do nothing here).
-    const lay = !sl.shared ? '' : sl.status === 'booked'
-      ? `;width:${Math.floor(100 / n)}%;justify-self:${sl.tourIndex === 0 ? 'start' : sl.tourIndex === n - 1 ? 'end' : 'center'}`
-      : ';width:60%;justify-self:end'
+    const lay = it.lanes > 1 ? `;width:${100 / it.lanes}%;justify-self:start;transform:translateX(${it.lane * 100}%)` : ''
     return `<div class="cal-cell cal-slot${isHour ? '' : ' is-half'}${over ? ' is-over' : ''}${sl.shared ? ' is-shared' : ''}" role="presentation" style="${place}${lay}">` +
       `<button type="button" class="cal-tour${past ? ' is-past' : ''}" role="gridcell" aria-colindex="${col}" ${common} data-slot="${esc(sl.id)}" tabindex="-1" aria-label="${esc(itemLabel(m, it))}">${ico('person')}<span class="cal-ev-text"><span class="cal-ev-name-full">${esc(full)}</span><span class="cal-ev-name-short">${esc(short)}</span></span></button></div>`
   }
@@ -4219,7 +4331,7 @@ function itemHtml(m, it, col) {
   const n = it.span
   const topSegs = it.kind === 'dayband' ? it.segs.filter((sg) => sg.row === 0) : []
   const nextSeg = it.kind === 'dayband' ? it.segs.find((sg) => sg.row > 0) : null
-  const linesFor = (rows) => Math.max(2, Math.min(6, Math.floor((rows * ROW_H - 8) / 15)))
+  const linesFor = (rows) => Math.max(2, Math.min(6, Math.floor((rows * m.rowHeight - 8) / 15)))
   // A segment on the band's first row takes the second line, so the day's own label keeps to one.
   const lines = topSegs.length ? 1 : (nextSeg ? Math.max(1, Math.min(linesFor(n), linesFor(nextSeg.row))) : linesFor(n))
   let words
@@ -4231,8 +4343,8 @@ function itemHtml(m, it, col) {
   let hits = ''
   for (let i = 0; i < n; i++) hits += i === 0
     ? `<div class="cal-band-hit" role="gridcell" aria-colindex="${col}" aria-rowspan="${n}" tabindex="-1" aria-label="${esc(itemLabel(m, it))}" style="top:0"></div>`
-    : `<div class="cal-band-hit" aria-hidden="true" style="top:${i * ROW_H}px"></div>`
-  const segs = it.kind === 'dayband' ? it.segs.map((sg) => `<div class="cal-band-seg" aria-hidden="true" style="top:${sg.row * ROW_H}px;height:${sg.span * ROW_H}px" data-seg="${esc(sg.slot.id)}"><span class="cal-band-words${sg.row === 0 ? ' cal-band-words-2' : ''}">${esc(segWords(sg))}</span></div>`).join('') : ''
+    : `<div class="cal-band-hit" aria-hidden="true" style="top:${i * m.rowHeight}px"></div>`
+  const segs = it.kind === 'dayband' ? it.segs.map((sg) => `<div class="cal-band-seg" aria-hidden="true" style="top:${sg.row * m.rowHeight}px;height:${sg.span * m.rowHeight}px" data-seg="${esc(sg.slot.id)}"><span class="cal-band-words${sg.row === 0 ? ' cal-band-words-2' : ''}">${esc(segWords(sg))}</span></div>`).join('') : ''
   const slotList = it.slots.map((x) => x.id).join(' ')
   return `<div class="cal-cell cal-slot${isHour ? '' : ' is-half'}" role="presentation" style="${place}">` +
     `<div class="cal-band${n >= 2 ? ' is-tall' : ''}" ${common} data-slots="${esc(slotList)}" style="--cal-lines:${lines}"><span class="cal-band-text">${ico('slash')}<span class="cal-band-words">${esc(words).replace(/\n/g, '<br>')}</span></span>${segs}${hits}</div></div>`
@@ -4245,7 +4357,7 @@ function gridHtml(m) {
     const [sm, sd] = longMonthDay(m.weekStart).split(' '), [em, ed] = longMonthDay(fmt.addDays(m.weekStart, 6)).split(' ')
     label = `Tour calendar, week of ${sm === em ? `${sm} ${sd} to ${ed}` : `${sm} ${sd} to ${em} ${ed}`}`
   } else label = `Tour calendar, ${fmt.dayLong(m.date)}`
-  let out = `<div class="cal-grid" role="grid" aria-label="${esc(label)}" aria-rowcount="${m.rows + 1}" aria-colcount="${cols + 1}" aria-describedby="cal-keys-hint" style="--cal-cols:${cols};--cal-rows:${m.rows}">`
+  let out = `<div class="cal-grid" role="grid" aria-label="${esc(label)}" aria-rowcount="${m.rows + 1}" aria-colcount="${cols + 1}" aria-describedby="cal-keys-hint" style="--cal-cols:${cols};--cal-rows:${m.rows};--cal-row-height:${m.rowHeight}px">`
   out += '<div role="row" aria-rowindex="1" style="display:contents"><div class="cal-corner" role="columnheader" aria-colindex="1" aria-label="Time" style="grid-row:1;grid-column:1"></div>'
   m.dayModels.forEach((d, i) => {
     const isToday = d.ymd === m.today, col = i + 2
@@ -4262,8 +4374,8 @@ function gridHtml(m) {
   const covered = m.dayModels.map((d) => { const c = new Array(m.rows).fill(false); for (const it of d.items) for (let r = it.row; r < Math.min(m.rows, it.row + it.span); r++) c[r] = true; return c })
   const starts = m.dayModels.map((d) => { const map = new Map(); for (const it of d.items) { if (!map.has(it.row)) map.set(it.row, []); map.get(it.row).push(it) } return map })
   for (let r = 0; r < m.rows; r++) {
-    const min = m.minM + r * 30, isHour = min % 60 === 0
-    const gl = isHour ? hourLabel(min / 60) : hourLabel(Math.floor(min / 60)).replace(' ', ':30 ')
+    const min = m.minM + r * m.stepMin, isHour = min % 60 === 0
+    const gl = isHour ? hourLabel(min / 60) : hourLabel(Math.floor(min / 60)).replace(' ', `:${String(min % 60).padStart(2, '0')} `)
     out += `<div role="row" aria-rowindex="${r + 2}" style="display:contents"><div class="cal-gutter ${isHour ? 'is-hour' : 'is-half'}" role="rowheader" aria-colindex="1" aria-label="${esc(gl)}" style="grid-row:${r + 2};grid-column:1">${isHour ? `<span class="num">${esc(gl)}</span>` : ''}</div>`
     m.dayModels.forEach((d, i) => {
       const col = i + 2
@@ -4280,7 +4392,7 @@ function nowHtml(m) {
   const col = m.days.indexOf(m.today)
   const nowMin = fmt.nyNow().minutes
   if (col < 0 || nowMin < m.minM || nowMin >= m.maxM) return ''
-  const row = Math.floor((nowMin - m.minM) / 30), off = Math.round(((nowMin - m.minM) % 30) / 30 * ROW_H)
+  const row = Math.floor((nowMin - m.minM) / m.stepMin), off = Math.round(((nowMin - m.minM) % m.stepMin) / m.stepMin * m.rowHeight)
   return `<div class="cal-now-faint" aria-hidden="true" style="grid-row:${row + 2};grid-column:2 / -1;transform:translateY(${off}px)"></div>` +
     `<div class="cal-now" aria-hidden="true" style="grid-row:${row + 2};grid-column:${col + 2};transform:translateY(${off}px)"></div>`
 }
@@ -4289,8 +4401,8 @@ function agendaHtml(m) {
   const d = m.dayModels[0]
   const diff = dayDiff(m.today, d.ymd)
   const when = diff === 0 ? 'Today' : diff === 1 ? 'Tomorrow' : ''
-  let out = `<div class="cal-agenda-head"><div class="cal-agenda-nav">${navBtn('prev', 'Previous day', m.date <= m.firstWeek)}` +
-    `<h2 class="cal-range" aria-live="polite" data-key="range">${esc(fmt.day(d.ymd))}${when ? ` <span class="cal-range-when">· ${when}</span>` : ''}</h2>${navBtn('next', 'Next day', m.date >= m.lastDay)}</div>`
+  let out = `<div class="cal-agenda-head"><div class="cal-agenda-nav">${navBtn('prev', 'Previous day', Number(m.date.slice(0, 4)) <= 1900)}` +
+    `<h2 class="cal-range" aria-live="polite" data-key="range">${esc(fmt.day(d.ymd))}${when ? ` <span class="cal-range-when">· ${when}</span>` : ''}</h2>${navBtn('next', 'Next day', Number(m.date.slice(0, 4)) >= 9998)}</div>`
   out += '<div class="cal-strip" role="group" aria-label="Days this week">'
   for (let i = 0; i < 7; i++) {
     const ymd = fmt.addDays(m.weekStart, i), dm = m.dayModel(ymd)
@@ -4303,9 +4415,9 @@ function agendaHtml(m) {
   const inert = (txt, lead) => `<div class="row cal-arow is-inert"><span class="row-lead num">${esc(lead || '')}</span><span class="row-body">${esc(txt)}</span></div>`
   const arow = (cls, lead, body, attrs, label) => `<button type="button" class="row row-click cal-arow ${cls}" ${attrs} aria-label="${esc(label)}"><span class="row-lead num"><span class="row-lead-bar">${esc(lead)}</span></span><span class="row-body">${body}</span><span class="cal-chev" aria-hidden="true">${ico('chevron-right')}</span></button>`
   const rows = []
-  if (d.ymd < m.today) rows.push(inert('Past — not offered'))
-  else if (d.ymd > m.lastSlotDate && !d.dayBlock) rows.push(inert(`Not open yet — the assistant offers tour times through ${fmt.day(m.lastSlotDate)}.`))
-  else {
+  if (d.ymd < m.today) rows.push(inert('Past tour times — existing bookings are shown below.'))
+  if (d.list.length && d.list.every((sl) => sl.status === 'unavailable') && !d.tours.length) rows.push(inert(d.list[0].unavailableReason))
+  {
     // "Earlier today" exists only once the day's first listed time has passed; before that (at
     // midnight, say) nothing has been withheld and the row would claim otherwise.
     if (d.ymd === m.today) { if (!d.list.length) rows.push(inert('No more times today')); else if (m.nowMin >= d.list[0].startMin) rows.push(inert('Earlier today · Not offered')) }
@@ -4350,7 +4462,7 @@ function footHtml(m) {
     `<span class="cal-lg" role="listitem"><span class="cal-sw cal-sw-na" aria-hidden="true"></span>Not offered (past, or outside tour hours)</span>` +
     `<span class="cal-lg cal-lg-tour" role="listitem"><span class="cal-sw cal-sw-tour" aria-hidden="true"></span>${ico('person')}Tour</span>` +
     `<span class="cal-lg cal-lg-blocked" role="listitem"><span class="cal-sw cal-sw-blocked" aria-hidden="true"></span>${ico('slash')}Blocked</span></div>`
-  if (m.hasSlots) out += `<p class="cal-through small">The assistant offers tour times through ${esc(fmt.day(m.lastSlotDate))}.</p>`
+  if (m.settings) out += `<p class="cal-through small">${esc(m.settings.slotMinutes)}-minute tours · ${esc(plural(m.settings.capacity, 'place'))} at a time · ${m.settings.bookingWindowDays == null ? 'No advance booking limit' : `${esc(m.settings.bookingWindowDays)}-day booking window`} · New York time</p>`
   if (m.old.length) {
     const n = m.old.length, allDates = m.old.every((b) => isYmd(b.target))
     const desc = (b) => `${monthDayNoYear(b.target)}${reasonOf(b.reason) ? ` · ${reasonOf(b.reason)}` : ''}`
@@ -4365,7 +4477,7 @@ function footHtml(m) {
 }
 
 const skeletonHtml = () => `<div class="cal-skeleton" aria-busy="true"><span class="vh">Loading the calendar…</span><div class="cal-sk-col"><div class="skeleton-line"></div></div>${'<div class="cal-sk-col"><div class="skeleton-line"></div><div class="skeleton-line"></div><div class="skeleton-line"></div><div class="skeleton-line"></div></div>'.repeat(7)}</div>`
-const emptyHtml = () => `<div class="cal-empty-card">${A.html.empty({ icon: 'calendar', title: 'No tour times to show.', text: 'The assistant only offers times during tour hours and at least a couple of hours out. As soon as some are open they appear here.' })}</div>`
+const emptyHtml = () => `<div class="cal-empty-card">${A.html.empty({ icon: 'calendar', title: 'No tour times in this range.', text: 'Try another date or review your tour hours and booking window in Tour settings.' })}</div>`
 
 // ---------------------------------------------------------------------------------------
 // Writes (§10.5, §10.6, §12.2) — every one inside Atrium.busy('calendar', …), painted from
@@ -4374,7 +4486,7 @@ const emptyHtml = () => `<div class="cal-empty-card">${A.html.empty({ icon: 'cal
 
 const post = (body, doing) => A.api.post('/api/calendar', body, { doing })
 const signedOut = (e) => Boolean(e && e.signedOut)
-function reread() { return A.api.get('/api/calendar').then((d) => { A.apply('calendar', d) }, () => { /* the poll will try again */ }) }
+function reread() { return A.api.get(A.calendarUrl()).then((d) => { A.apply('calendar', d) }, () => { /* the poll will try again */ }) }
 const isKnown400 = (e) => Boolean(e) && e.status === 400 && /^target must be/i.test(String(e.message))
 
 /** One POST after another, each 200 applied at once so the calendar grows as blocks land. */
@@ -4392,7 +4504,14 @@ async function sequential(bodies, doing, onEach) {
 }
 
 const rawReasonFor = (target) => { const b = arr(A.state.calendar && A.state.calendar.blocks).find((x) => x && x.target === target); return b ? b.reason : undefined }
-const blockBody = (t) => { const b = { action: 'block', target: t.target }; if (t.reason != null && String(t.reason).trim() && !/^blocked$/i.test(String(t.reason).trim())) b.reason = String(t.reason).slice(0, 120); return b }
+const savedBlock = (target) => ({ ...arr(A.state.calendar && A.state.calendar.blocks).find((block) => block && block.target === target), target })
+const reopenTargets = (it) => [...new Set(it.slots.map((slot) => slot.blockTarget || slot.id))].map(savedBlock)
+const blockBody = (t) => {
+  const b = { action: 'block', target: t.target }
+  if (t.reason != null && String(t.reason).trim() && !/^blocked$/i.test(String(t.reason).trim())) b.reason = String(t.reason).slice(0, 120)
+  if (t.startsAt && t.endsAt) { b.startsAt = t.startsAt; b.endsAt = t.endsAt }
+  return b
+}
 
 /** Undo of a block: unblock each target. Rejects so the toast reads "Couldn't undo that". */
 function undoBlocks(targets) {
@@ -4441,8 +4560,9 @@ async function reopen(it) {
     await runReopen([{ target: ymd, reason: it.block ? it.block.reason : rawReasonFor(ymd) }], `Reopened ${longDay(ymd)}`, `day:${ymd}`, ymd)
     return
   }
-  const targets = it.slots.map((sl) => ({ target: sl.id, reason: rawReasonFor(sl.id) }))
-  const label = it.slots.length > 1 ? `${shortDay(ymd)} ${fmt.timeRange(it.first.startsAt, it.last.endsAt)}` : `${shortDay(ymd)} ${fmt.time(it.first.startsAt)}`
+  const targets = reopenTargets(it)
+  const single = targets.length === 1 && targets[0].startsAt && targets[0].endsAt ? targets[0] : null
+  const label = single ? `${shortDay(ymd)} ${fmt.timeRange(single.startsAt, single.endsAt)}` : it.slots.length > 1 ? `${shortDay(ymd)} ${fmt.timeRange(it.first.startsAt, it.last.endsAt)}` : `${shortDay(ymd)} ${fmt.time(it.first.startsAt)}`
   await runReopen(targets, `Reopened ${label}`, `cell:${it.first.id}`, ymd)
 }
 async function runReopen(targets, toastText, focusKey, ymd) {
@@ -4485,7 +4605,7 @@ async function removeOld() {
   if (!old.length) return
   const ok = await A.confirm("They're on days that have passed.", { title: `Remove ${plural(old.length, 'old block')}?`, confirmLabel: 'Remove old blocks' })
   if (!ok) return
-  const targets = old.map((b) => ({ target: String(b.target), reason: b.reason }))
+  const targets = old.map((b) => ({ ...b, target: String(b.target) }))
   const r = await A.busy('calendar', sequential(targets.map((t) => ({ action: 'unblock', target: t.target })), 'removing old blocks'))
   if (r.failed) { if (signedOut(r.failed.error)) return; A.toast("Couldn't do that. Nothing changed — try again.", { kind: 'error' }); reread(); return }
   const canUndo = !(cal.slotBlocksFail && targets.some((t) => !isYmd(t.target)))
@@ -4503,17 +4623,16 @@ function openSheet(preset) {
   const m0 = cal.model || buildModel(A.state, {})
   // With no day preset, start on the first day from today that still has an open time (late in the
   // day that is tomorrow), so the sheet never opens with nothing to block.
-  const firstOpenDay = (m) => { for (let d = m.today; d <= m.lastSlotDate; d = fmt.addDays(d, 1)) if ((m.byDate.get(d) || []).some((x) => x.status === 'open')) return d; return m.today }
+  const firstOpenDay = (m) => { for (let d = m.range.from > m.today ? m.range.from : m.today; d <= m.range.to; d = fmt.addDays(d, 1)) if ((m.byDate.get(d) || []).some((x) => x.status === 'open')) return d; return m.date }
   const st = { date: isYmd(p.date) ? p.date : firstOpenDay(m0), mode: p.mode === 'range' && !cal.slotBlocksFail ? 'range' : 'day', from: p.from || null, to: p.to || null, only: p.only || null, fallback: false, reason: String(p.reason || '') }
   const base = `cal-sheet-${Date.now()}`
   const model = () => cal.model || buildModel(A.state, {})
   const daySlots = () => model().byDate.get(st.date) || []
   const dayList = () => {
     const m = model(), out = []
-    const end = m.hasSlots ? m.lastSlotDate : fmt.addDays(m.today, 14)
-    for (let d = m.today; d <= end; d = fmt.addDays(d, 1)) {
+    for (let d = m.range.from; d <= m.range.to; d = fmt.addDays(d, 1)) {
       const has = (m.byDate.get(d) || []).length > 0
-      out.push({ ymd: d, label: d === m.today ? `Today · ${fmt.day(d)}` : dayLabel(d), disabled: m.hasSlots && !has })
+      out.push({ ymd: d, label: d === m.today ? `Today · ${fmt.day(d)}` : dayLabel(d), disabled: d < m.today || (m.hasSlots && !has) })
     }
     return out
   }
@@ -4692,7 +4811,7 @@ function showEl(el) { if (el && el.scrollIntoView) { try { el.scrollIntoView({ b
 // ---------------------------------------------------------------------------------------
 
 let popSeq = 0
-const popSig = (it) => JSON.stringify([it.kind, it.slots.map((x) => [x.id, x.status, x.rawReason, x.name, x.unitId]), it.reason || '', it.kind === 'dayband' && it.block ? it.block.blockedAt : ''])
+const popSig = (it) => JSON.stringify([it.kind, it.slots.map((x) => [x.id, x.status, x.blockTarget, x.rawReason, x.name, x.unitId]), it.reason || '', it.kind === 'dayband' && it.block ? it.block.blockedAt : ''])
 
 function closePopover(returnFocus) {
   const p = cal.pop
@@ -4740,15 +4859,15 @@ function blockedContent(m, it, seg) {
   let title, reopenLabel, block
   if (it.kind === 'dayband' || it.kind === 'day') { title = `Blocked all day · ${dayLabel(ymd)}`; reopenLabel = `Reopen ${longDay(ymd)}`; block = it.block }
   else {
-    const rangeTxt = it.slots.length > 1 ? fmt.timeRange(it.first.startsAt, it.last.endsAt) : fmt.time(it.first.startsAt)
-    title = `Blocked · ${fmt.day(ymd)} · ${rangeTxt}`; reopenLabel = `Reopen ${rangeTxt}`
-    const all = arr(A.state.calendar && A.state.calendar.blocks)
-    const entries = it.slots.map((x) => all.find((b) => b && b.target === x.id)).filter(Boolean).sort((a, b) => String(a.blockedAt).localeCompare(String(b.blockedAt)))
+    const entries = reopenTargets(it).sort((a, b) => String(a.blockedAt).localeCompare(String(b.blockedAt)))
     block = entries[0] || null
+    const rangeTxt = entries.length === 1 && block.startsAt && block.endsAt ? fmt.timeRange(block.startsAt, block.endsAt) : it.slots.length > 1 ? fmt.timeRange(it.first.startsAt, it.last.endsAt) : fmt.time(it.first.startsAt)
+    title = `Blocked · ${fmt.day(ymd)} · ${rangeTxt}`; reopenLabel = `Reopen ${rangeTxt}`
   }
   const reason = reasonOf(block && block.reason) || it.reason || ''
   const added = block && block.blockedAt && fmt.dateTime(block.blockedAt) !== '—' ? ` · added ${fmt.dateTime(block.blockedAt, { inSentence: true })}` : ''
   let body = `<p>${reason ? esc(reason) : 'No reason given'}${esc(added)}</p>`
+  if (block && block.startsAt && block.endsAt && it.slots.length > 1) body += '<p>Tour start times that overlap this block are unavailable. Reopening removes the saved block from all of those times.</p>'
   if (it.kind === 'dayband' && it.tours) body += `<p>Tours already booked on ${esc(longDay(ymd))} stay on the calendar.</p>`
   if (seg) body += `<p>This time also has its own block: ${seg.reason ? esc(seg.reason) : 'no reason given'}.</p>`
   const actions = `<button type="button" class="btn" data-pop="reopen" data-write="calendar"${dis(A.busyNow('calendar'))}>${esc(reopenLabel)}</button><button type="button" class="btn btn-quiet" data-pop="close">Close</button>`
@@ -4818,8 +4937,8 @@ function refreshPopover() {
 
 // --- the ⋯ menu ---------------------------------------------------------------------------
 
-const menuButtons = () => `<button type="button" class="btn btn-quiet" data-menu="remove-all">${ico('slash')}Remove all blocks…</button><button type="button" class="btn btn-quiet" data-menu="goto">${ico('calendar')}Go to date…</button>`
-function runMenu(a) { if (a === 'remove-all') removeAll(); else if (a === 'goto') goToDate() }
+const menuButtons = () => `<button type="button" class="btn btn-quiet" data-menu="settings">${ico('calendar')}Tour settings</button><button type="button" class="btn btn-quiet" data-menu="goto">${ico('calendar')}Go to date…</button><button type="button" class="btn btn-quiet" data-menu="remove-all">${ico('slash')}Remove all blocks…</button>`
+function runMenu(a) { if (a === 'remove-all') removeAll(); else if (a === 'goto') goToDate(); else if (a === 'settings') openSettings() }
 function openMenu(anchorEl) {
   if (A.busyNow('calendar') || cal.inert) return
   if (cal.pop && cal.pop.kind === 'menu') { closePopover(true); return }
@@ -4875,10 +4994,84 @@ async function goToDate() {
   if (v === null) return
   const ymd = parseDate(v)
   if (!ymd) { A.toast('Try a date like "Sep 10".', { kind: 'warn' }); return }
-  const m = cal.model || buildModel(A.state, {})
-  if (ymd < m.firstWeek || ymd > m.lastDay) { A.toast('The calendar only shows the next two weeks.', { kind: 'info' }); return }
+  if (!calendarDate(ymd)) { A.toast('Enter a valid calendar date.', { kind: 'warn' }); return }
   cal.picked = ymd
   setParams({ date: ymd }, undefined, { keepPicked: true })
+}
+
+// --- tour settings ------------------------------------------------------------------------
+
+function openSettings() {
+  if (A.busyNow('calendar') || cal.inert) return
+  const current = A.state.calendar
+  if (!current || !current.settings || !Number.isInteger(current.settingsRevision)) {
+    A.toast('Tour settings are still loading. Try again in a moment.', { kind: 'info' }); return
+  }
+  closePopover(false)
+  const settings = structuredClone(current.settings), revision = current.settingsRevision
+  const base = `tour-settings-${Date.now()}`
+  const week = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+  const timeValue = (hour) => {
+    const minutes = Math.round(Number(hour) * 60) % 1440
+    return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
+  }
+  const numeric = (key, label, min, max, hint, blank) => `<div class="field"><label class="field-label" for="${base}-${key}">${esc(label)}</label>` +
+    `<input class="input" id="${base}-${key}" name="${key}" type="number" min="${min}" max="${max}" step="1" value="${settings[key] == null ? '' : esc(settings[key])}"${blank ? ' placeholder="Unlimited"' : ' required'} aria-describedby="${base}-${key}-hint"><p class="field-hint" id="${base}-${key}-hint">${esc(hint)}</p></div>`
+  A.dialog({
+    title: 'Tour settings',
+    build(body, d) {
+      d.el.classList.add('cal-settings')
+      body.innerHTML = `<p class="cal-settings-intro">Set when new tours can be booked. Existing bookings stay on the calendar when you change these settings.</p>` +
+        `<form class="cal-settings-form"><fieldset><legend>Tour availability</legend><div class="cal-settings-grid">` +
+        numeric('capacity', 'Tours at the same time', 1, 50, 'Total staff capacity across apartments.') +
+        numeric('slotMinutes', 'Tour duration (minutes)', 5, 240, 'How long each tour lasts.') +
+        numeric('startIntervalMinutes', 'Start times every (minutes)', 5, 120, 'For example, every 30 minutes.') +
+        numeric('bufferMinutes', 'Buffer before and after (minutes)', 0, 120, 'Staff preparation and reset time on each side of a tour.') +
+        numeric('minimumNoticeMinutes', 'Minimum notice (minutes)', 0, 10080, '120 minutes means at least two hours ahead.') +
+        numeric('bookingWindowDays', 'Book up to (days ahead)', 1, 730, 'Leave empty to accept bookings without an advance limit.', true) +
+        `</div><div class="field"><label class="field-label" for="${base}-sameUnitPolicy">Same apartment at the same time</label><select class="select" name="sameUnitPolicy" id="${base}-sameUnitPolicy"><option value="exclusive"${settings.sameUnitPolicy === 'exclusive' ? ' selected' : ''}>One tour at a time per apartment</option><option value="shared"${settings.sameUnitPolicy === 'shared' ? ' selected' : ''}>Allow shared tours within staff capacity</option></select></div></fieldset>` +
+        `<fieldset><legend>Weekly tour hours</legend><p class="field-hint">All times are New York time. An end time of 12:00 AM means midnight at the end of that day.</p><div class="cal-hours">` +
+        week.map((day, i) => {
+          const hours = settings.hours && settings.hours[i]
+          return `<div class="cal-hours-row" data-hours-day="${i}"><label class="cal-hours-day" for="${base}-day-${i}"><input type="checkbox" id="${base}-day-${i}" name="day-${i}"${hours ? ' checked' : ''}>${day}</label><span class="cal-hours-state">${hours ? 'Open' : 'Closed'}</span><div class="cal-hours-times"><label class="vh" for="${base}-open-${i}">${day} opens</label><input class="input" id="${base}-open-${i}" type="time" name="open-${i}" value="${hours ? timeValue(hours.openHour) : '09:00'}" step="60"${hours ? ' required' : ' disabled'}><span>to</span><label class="vh" for="${base}-close-${i}">${day} closes</label><input class="input" id="${base}-close-${i}" type="time" name="close-${i}" value="${hours ? timeValue(hours.closeHour) : '17:00'}" step="60"${hours ? ' required' : ' disabled'}></div></div>`
+        }).join('') + '</div></fieldset></form>'
+      body.querySelector('form').addEventListener('submit', (event) => event.preventDefault())
+      body.addEventListener('change', (event) => {
+        d.setError(null)
+        const row = event.target.closest('[data-hours-day]')
+        if (!row || event.target.type !== 'checkbox') return
+        const open = event.target.checked
+        row.querySelector('.cal-hours-state').textContent = open ? 'Open' : 'Closed'
+        for (const input of row.querySelectorAll('input[type="time"]')) { input.disabled = !open; input.required = open }
+      })
+    },
+    primary: { label: 'Save tour settings', busyLabel: 'Saving settings…', async onClick(d) {
+      const form = d.body.querySelector('form')
+      if (!form.reportValidity()) return
+      const values = new FormData(form)
+      const next = { ...settings, hours: {} }
+      for (const key of ['capacity', 'slotMinutes', 'startIntervalMinutes', 'bufferMinutes', 'minimumNoticeMinutes']) next[key] = Number(values.get(key))
+      next.bookingWindowDays = String(values.get('bookingWindowDays') || '').trim() === '' ? null : Number(values.get('bookingWindowDays'))
+      next.sameUnitPolicy = values.get('sameUnitPolicy')
+      for (let day = 0; day < 7; day++) {
+        if (!values.has(`day-${day}`)) continue
+        const minutes = (name) => String(values.get(name)).split(':').reduce((total, value) => total * 60 + Number(value), 0)
+        const open = minutes(`open-${day}`), close = minutes(`close-${day}`) || 1440
+        if (!Number.isFinite(open) || !Number.isFinite(close) || close <= open) { d.setError(`${week[day]} must close after it opens.`); return }
+        next.hours[day] = { openHour: open / 60, closeHour: close / 60 }
+      }
+      try {
+        const result = await A.busy('calendar', post({ action: 'settings', settings: next, settingsRevision: revision }, 'saving tour settings'))
+        A.apply('calendar', result)
+        d.close()
+        A.toast('Tour settings saved. Existing bookings are preserved.', { kind: 'ok' })
+      } catch (error) {
+        if (signedOut(error)) return
+        await reread()
+        d.setError(error.status === 409 ? 'Someone changed tour settings while this window was open. Close and reopen it to review the latest settings before saving.' : `Could not save tour settings. ${error.message || 'Try again in a moment.'}`)
+      }
+    } },
+  })
 }
 
 // --- navigation ---------------------------------------------------------------------------
@@ -4893,9 +5086,8 @@ function setParams(patch, replace, opts) {
 }
 function page(dir) {
   const m = cal.model; if (!m) return
-  let next = m.view === 'week' ? fmt.addDays(m.date, 7 * dir) : fmt.addDays(m.date, dir)
-  if (next < m.firstWeek) next = m.firstWeek
-  if (next > m.lastDay) next = m.lastDay
+  const next = m.view === 'week' ? fmt.addDays(m.date, 7 * dir) : fmt.addDays(m.date, dir)
+  if (!calendarDate(next)) return
   if (next === m.date || (m.view === 'week' && weekStart(next) === m.weekStart)) return
   setParams({ date: next })
 }
@@ -4982,7 +5174,7 @@ function activate(el, seg) {
 }
 function segAt(bandEl, it, clientY) {
   if (!it || it.kind !== 'dayband' || !it.segs.length) return null
-  const r = Math.floor((clientY - bandEl.getBoundingClientRect().top) / ROW_H)
+  const r = Math.floor((clientY - bandEl.getBoundingClientRect().top) / cal.model.rowHeight)
   const sg = it.segs.find((x) => r >= x.row && r < x.row + x.span)
   return sg ? sg.slot : null
 }
@@ -5153,6 +5345,8 @@ const view = {
       else if (a === 'today') setParams({ date: cal.model ? cal.model.today : undefined })
       else if (a === 'view-week') setView('week')
       else if (a === 'view-day') setView('day')
+      else if (a === 'goto') goToDate()
+      else if (a === 'settings') openSettings()
       else if (a === 'block') openSheet({ date: cal.model && cal.model.view === 'day' ? cal.model.date : undefined, mode: 'day' })
       else if (a === 'more') openMenu(btn)
       else if (a === 'remove-old') removeOld()
@@ -5186,7 +5380,7 @@ const view = {
     if (e.clientX < d.left - 2 || e.clientX > d.right + 2) { cal.drag = null; cal.dragEnded = Date.now(); clearSel(); return }
     const grid = q('.cal-grid'); if (!grid) return
     const top = grid.getBoundingClientRect().top + HEAD_H
-    const row = Math.max(0, Math.min(cal.model.rows - 1, Math.floor((e.clientY - top) / ROW_H)))
+    const row = Math.max(0, Math.min(cal.model.rows - 1, Math.floor((e.clientY - top) / cal.model.rowHeight)))
     const ids = runBetween(d.date, d.row, row)
     cal.sel = ids.length ? { date: d.date, slotIds: ids } : null
     paintSelection()
@@ -5202,7 +5396,9 @@ const view = {
   render(s) {
     if (!cal.root) return
     const p = params()
-    const m = buildModel(s, { date: p.date, view: p.view === 'day' || p.view === 'week' ? p.view : cal.view })
+    const opts = { date: p.date, view: p.view === 'day' || p.view === 'week' ? p.view : cal.view }
+    A.setCalendarRange(visibleRange(opts))
+    const m = buildModel(s, opts)
     cal.model = m
     cal.inert = !m.loaded || Boolean(s.notConfigured)
     const loading = !m.loaded && !s.errors.calendar && !s.notConfigured
@@ -5241,8 +5437,8 @@ const view = {
           if (!cal.scrolled) {
             const tcol = m.days.indexOf(m.today)
             const firstOpen = tcol >= 0 ? m.dayModels[tcol].open[0] : null
-            const row = firstOpen ? m.rowOf(firstOpen) : Math.max(0, Math.round((600 - m.minM) / 30))
-            sc.scrollTop = row * ROW_H
+            const row = firstOpen ? m.rowOf(firstOpen) : Math.max(0, Math.round((600 - m.minM) / m.stepMin))
+            sc.scrollTop = row * m.rowHeight
             cal.scrolled = true
           } else if (scrollTop != null) sc.scrollTop = scrollTop
         }

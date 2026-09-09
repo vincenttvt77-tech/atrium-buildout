@@ -23,7 +23,7 @@ export const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'capture_signal',
-      description: 'Record something the caller told you about what they need. Call this every time they give you move-in timing, bedroom count, budget, pets or parking.',
+      description: 'Save a volunteered preference while gathering information, or pets/parking evidence. When checking residences now, pass timing, bedrooms and budget directly to check_availability instead of duplicating capture calls.',
       parameters: {
         type: 'object',
         properties: {
@@ -95,10 +95,13 @@ export const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'list_tour_slots',
-      description: 'Get real available tour times. Offer only these.',
+      description: 'Get real tour times under the property’s current hours, capacity, apartment-sharing policy, duration, buffers and notice rules. Pass the selected residence to filter its conflicts. Ask for any future preferred date; do not assume a fixed two-week booking limit. Offer only returned times.',
       parameters: {
         type: 'object',
-        properties: { preferredDate: { type: 'string', description: 'ISO date the caller asked for, if any.' } },
+        properties: {
+          preferredDate: { type: 'string', description: 'Building-local date YYYY-MM-DD the caller asked for, if any.' },
+          unitId: { type: 'string', description: 'Selected residence ID returned by check_availability, if known. Keep it the same when booking.' },
+        },
         required: [],
       },
     },
@@ -113,7 +116,7 @@ export const TOOL_DEFINITIONS = [
         properties: {
           slotId: { type: 'string', description: 'The slotId from list_tour_slots. Never invent one.' },
           prospectName: { type: 'string', description: 'The name to put on the booking.' },
-          prospectEmail: { type: 'string', description: 'Where the confirmation goes, if they gave one.' },
+          prospectEmail: { type: 'string', description: 'Optional email voluntarily provided for staff follow-up. No confirmation message is sent automatically.' },
           unitId: { type: 'string', description: 'The unit they want to see, if they picked one.' },
         },
         required: ['slotId', 'prospectName'],
@@ -165,7 +168,7 @@ export const TOOL_MESSAGES: Record<string, Array<Record<string, unknown>>> = {
     { type: 'request-response-delayed', content: 'One more second.', timingMilliseconds: 2500 },
   ],
   list_tour_slots: [{ type: 'request-start', content: 'Let me look at the calendar.' }],
-  book_tour: [{ type: 'request-start', content: 'Locking that in now.' }],
+  book_tour: [{ type: 'request-start', content: 'Checking that time now.', blocking: false }],
   answer_question: [{ type: 'request-response-delayed', content: 'Let me check that for you.', timingMilliseconds: 1500 }],
 }
 
@@ -222,46 +225,23 @@ export function assistantConfig(opts: AssistantConfigOptions) {
 
     server: { url: opts.serverUrl },
 
-    /*
-     * Endpointing, the part that decides when the caller has finished.
-     *
-     * waitSeconds alone does not fix truncation — it governs how long the agent waits
-     * before speaking, which is the wrong end of the pipeline. Truncation is decided by
-     * the endpointing plan below, and words spoken after the endpoint fires never reach
-     * the model.
-     *
-     * The waitFunction is the balanced preset rather than the conservative one: the
-     * conservative floor adds 700ms to every turn by design, and this caller's other
-     * complaint was that the agent is slow.
-     */
+    // Documented timing fields: docs.vapi.ai/customization/voice-pipeline-configuration.
+    // These are tuning defaults, not measured call latency. Keep longer contact-spelling
+    // windows without imposing that same pause after every ordinary leasing question.
     startSpeakingPlan: {
-      waitSeconds: 0.6,
-      /*
-       * Smart endpointing is deliberately NOT set. Setting it makes the three
-       * transcriptionEndpointing values below inert, and the wait function that replaces
-       * them is not exposed in the dashboard — so the one control that matches this
-       * failure would become untunable.
-       *
-       * The failure: a caller answers "I don't know, 2 months" and the agent talks over
-       * the number. onNumberSeconds is exactly that case, and its default is about half a
-       * second. Leasing answers are mostly bare numbers — bedroom counts, budgets, phone
-       * numbers, unit numbers — so this is the single most valuable value on the page.
-       */
+      waitSeconds: 0.4,
+      // Used only without a smart/built-in endpointing provider. An existing saved
+      // assistant's smart endpointing provider is preserved by synchronization.
       transcriptionEndpointingPlan: {
-        onPunctuationSeconds: 0.5,
-        onNoPunctuationSeconds: 1.8,
-        onNumberSeconds: 1.5,
+        onPunctuationSeconds: 0.3,
+        onNoPunctuationSeconds: 1.2,
+        onNumberSeconds: 1.0,
       },
-
-      /*
-       * Callers answer leasing questions with bare numbers — "two months", "one bedroom",
-       * "thirty-eight hundred", a phone number. Those are exactly where a short endpoint
-       * cuts them off, so the rules below buy time on the questions that invite one.
-       */
       customEndpointingRules: [
         {
           type: 'assistant',
-          regex: '(how many bedrooms|what.s your budget|when are you looking|move|phone number|email|spell)',
+          regex: '\\b(phone number|callback number|e-?mail|spell|spelling)\\b',
+          regexOptions: [{ type: 'ignore-case', enabled: true }],
           timeoutSeconds: 3,
         },
       ],

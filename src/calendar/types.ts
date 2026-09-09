@@ -6,11 +6,15 @@
  * whether it still offers it.
  */
 
+import type { TourSettings } from './settings.ts'
+
 export interface SlotBlock {
   /** Slot id, or an ISO date (YYYY-MM-DD) to block the whole day. */
   target: string
   reason: string
   blockedAt: string
+  startsAt?: string
+  endsAt?: string
 }
 
 export interface SlotBooking {
@@ -21,11 +25,18 @@ export interface SlotBooking {
   prospectPhone: string
   unitId: string | null
   bookedAt: string
+  /** Immutable tour and staff occupancy instants, independent of later setting changes. */
+  startsAt?: string
+  endsAt?: string
+  occupiedStartsAt?: string
+  occupiedEndsAt?: string
 }
 
 export interface CalendarState {
   blocks: SlotBlock[]
   bookings: SlotBooking[]
+  settings?: TourSettings
+  settingsRevision?: number
 }
 
 export const emptyCalendar = (): CalendarState => ({ blocks: [], bookings: [] })

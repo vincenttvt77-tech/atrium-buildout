@@ -61,9 +61,9 @@ export interface Booking {
  * discipline intact when a real PMS replaces the demo source.
  */
 export interface CalendarPort {
-  listSlots(propertyId: PropertyId, from: Date, to: Date): Promise<TourSlot[]>
-  /** Must be idempotent on idempotencyKey: the same key returns the same booking. */
+  listSlots(propertyId: PropertyId, from: Date, to: Date, unitId?: string | null): Promise<TourSlot[]>
+  /** Same-key retries must match the original apartment and actual tour interval. */
   createBooking(intent: BookingIntent): Promise<{ externalId: string }>
   /** Reads the booking back from the system of record. Null means it is not there. */
-  readBooking(externalId: string): Promise<{ externalId: string; slot: TourSlot } | null>
+  readBooking(externalId: string): Promise<{ externalId: string; slot: TourSlot; unitId?: string | null } | null>
 }

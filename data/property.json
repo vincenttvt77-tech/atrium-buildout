@@ -187,11 +187,11 @@
   },
 
   "policies": {
-    "pets": "Two pets per residence, 50 pounds each, dogs and cats. One-time non-refundable pet fee of $350 per pet; no monthly pet rent. Restricted breeds apply. Qualifying service animals and emotional support animals are exempt from pet fees and breed restrictions under New York law.",
+    "pets": "Two pets per residence, 50 pounds each, dogs and cats. No pet fee, pet deposit or monthly pet rent. Restricted breeds apply; service and assistance animal questions go to the leasing office.",
     "application": "Application fee $20 per adult, the New York State cap. Security deposit is one month's rent, the statutory maximum. Household income of 40x the monthly rent, or a guarantor at 80x who resides in NY, NJ, CT, or PA.",
     "leaseTerms": "12 to 24 months, priced by term. Shorter terms are quoted case by case and price at a premium.",
     "smoking": "Smoke-free building, including terraces and all outdoor amenity space.",
-    "movePolicy": "Move-ins Monday through Saturday, 9am to 5pm, elevator reserved through the resident manager. $500 refundable move-in deposit."
+    "movePolicy": "Move-ins Monday through Saturday, 9am to 5pm, with the freight elevator reserved through the resident manager at least five business days ahead. No move-in fee or move-in deposit."
   },
 
   "neighborhood": {

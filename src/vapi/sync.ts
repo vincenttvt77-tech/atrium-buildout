@@ -6,9 +6,9 @@ import type { DemoAssistantConfig } from './config.ts'
  * Every fix to the prompt or a tool used to mean pasting text into Vapi's editor by hand,
  * and the two drifted: the phone line ran a prompt three edits behind the repository for
  * most of a day. This writes exactly what the repository holds — the system prompt, the
- * tools with their spoken messages, the server URL, the opening line — and nothing else:
- * the voice, the transcriber, the endpointing plans and the model choice are tuned in
- * Vapi's own screens and are read back and kept as they are.
+ * tools with their spoken messages, server URL, opening disclosure and timing controls.
+ * Voice, transcriber, model choice and an existing smart endpointing provider stay tuned
+ * in Vapi. Every written field is checked against a fresh saved-state read-back.
  */
 
 export interface VapiAssistantSummary { id: string; name: string }
@@ -33,7 +33,7 @@ export function chooseAssistant(
   }
 }
 
-/** What is written: the repository's script, tools, server and opening line, over the assistant's own model settings. */
+/** Apply tested workflow and timing settings over the assistant's existing providers. */
 export function assistantPatch(existing: Record<string, unknown>, config: DemoAssistantConfig) {
   const model = (existing.model && typeof existing.model === 'object' ? existing.model : {}) as Record<string, unknown>
   const patched: Record<string, unknown> = {
@@ -47,10 +47,19 @@ export function assistantPatch(existing: Record<string, unknown>, config: DemoAs
   }
   const server = existing.server && typeof existing.server === 'object' ? existing.server as Record<string, unknown> : {}
   const nextServer: Record<string, unknown> & { url: string } = { ...server, ...config.server }
-  return { firstMessage: config.firstMessage, server: nextServer, model: patched }
+  const start = existing.startSpeakingPlan && typeof existing.startSpeakingPlan === 'object' ? existing.startSpeakingPlan : {}
+  const stop = existing.stopSpeakingPlan && typeof existing.stopSpeakingPlan === 'object' ? existing.stopSpeakingPlan : {}
+  return {
+    firstMessage: config.firstMessage,
+    firstMessageMode: config.firstMessageMode,
+    server: nextServer,
+    model: patched,
+    startSpeakingPlan: { ...start, ...config.startSpeakingPlan },
+    stopSpeakingPlan: { ...stop, ...config.stopSpeakingPlan },
+  }
 }
 
-export const KEPT_IN_VAPI = ['voice', 'transcriber', 'start and stop speaking plans', 'model provider and temperature'] as const
+export const KEPT_IN_VAPI = ['voice', 'transcriber', 'model provider and temperature', 'existing smart endpointing provider'] as const
 
 export interface SyncResult {
   ok: boolean
@@ -120,7 +129,7 @@ export async function syncAssistant(opts: {
   return {
     ok: true,
     assistant,
-    updated: ['the script', `${(opts.config.model.tools as unknown[]).length} tools with their spoken messages`, 'the server address', 'the opening line'],
+    updated: ['the script', `${(opts.config.model.tools as unknown[]).length} tools with their spoken messages`, 'the server address', 'the opening disclosure', 'response and interruption timing'],
     kept: KEPT_IN_VAPI,
   }
 }
