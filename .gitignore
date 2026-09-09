@@ -7,3 +7,5 @@ dist/
 .DS_Store
 .vercel-build/
 sim-reports/
+supabase/.temp/
+supabase/.branches/

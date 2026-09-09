@@ -17,12 +17,19 @@
     "dev:ops": "node scripts/dev-ops.mjs",
     "simulate": "node scripts/simulate-calls.mjs",
     "build": "node scripts/build-site.mjs && node scripts/build-api.mjs",
-    "check": "npm run typecheck && npm run validate && npm test"
+    "check": "npm run typecheck && npm run validate && npm test",
+    "test:database": "node --test \"test/database/*.test.mjs\""
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "0.124.0",
     "@types/node": "22.20.1",
+    "@types/pg": "8.23.1",
+    "embedded-postgres": "17.10.0-beta.17",
     "esbuild": "0.28.2",
+    "supabase": "2.117.0",
     "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "pg": "8.23.0"
   }
 }

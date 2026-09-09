@@ -83,3 +83,33 @@ Validation: **495 tests passed**, TypeScript/data checks and the full build pass
 Validation: **573 tests passed**, with TypeScript, data validation and the full build on Node 22.23.2. Tests include an actual mocked Redis compare-and-set race, failure of each safety projection, replay, malformed nested arguments, property timezones, original block restoration and simulation isolation. The local preview was restarted through the real fixture seeder and authenticated portal; account credentials persisted.
 
 A native Vapi smoke suite was saved with six enabled tool mocks and two required evaluation criteria. A one-iteration Chat run was refused by Vapi's payment-method precondition, so no native simulation transcript, evaluation score or audio latency result exists. The suite setup is not a passing voice test. New backend behavior remains on the development branch pending coordinated deployment and assistant synchronization.
+# PostgreSQL foundation checkpoint — September 9, 2026
+
+The new database path is implemented behind explicit repository interfaces. Existing
+portal/API callers still use the previously tested account and memory/Redis adapters;
+no hosted database, customer data migration or portal cutover occurred in this checkpoint.
+
+- `npm run check`: **602 tests passed**, with TypeScript and bundled-data validation.
+- `npm run test:database`: **36 tests passed against native PostgreSQL 17.10**, using
+  temporary loopback-only databases and the real restricted application/authentication roles.
+- `npm run build`: passed. Existing generated portal artifacts did not change.
+- Database cases include two organizations/four properties, identical contact/provider
+  keys, explicit grants, viewer restrictions, password/session/channel revocation, pooled
+  context cleanup, immutable configuration, unchanged source freshness, and atomic audit.
+- Concurrent requests preserve all document increments and admit only three tours for
+  three available staff. A building mismatch is refused before booking. Emergency holds
+  remain effective through the PostgreSQL calendar adapter.
+- Deterministic mid-request revocation tests reject reads instead of reporting empty
+  data and roll back affected writes and audits. A caught SQL failure cannot be mistaken
+  for a successful commit. Async document mutations are rejected without changing data.
+- The CLI-generated migration applies once, verifies checksums and rejects insertion of
+  an earlier migration into applied history. A synthetic snapshot restores exact account
+  hashes, organization/property ownership and UTC booking intervals into a fresh database;
+  an invalid ownership reference rolls back the entire restore.
+
+Supabase's advisor command was attempted against the isolated native PostgreSQL instance.
+It could not execute its lints because the Supabase-specific `anon` role is absent. This
+is not an advisor pass. The database tests independently inspect role attributes, ownership,
+forced RLS and function privileges. Run the provider's advisors against the selected actual
+deployment before activation. A production backup/restore drill, supported production patch,
+API/UI integration, legacy migration reconciliation and full SOW acceptance remain open.
