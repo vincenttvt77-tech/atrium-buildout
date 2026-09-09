@@ -185,3 +185,22 @@ describe('request-scoped tenancy against shared Redis', () => {
     assert.equal(currentTenantId(), LEGACY_TENANT)
   })
 })
+
+test('deployed requests cannot silently fall back to the legacy tenant', async () => {
+  const previousNode = process.env.NODE_ENV
+  const previousVercel = process.env.VERCEL
+  try {
+    for (const hosted of [{ NODE_ENV: 'production', VERCEL: '' }, { NODE_ENV: 'development', VERCEL: '1' }]) {
+      Object.assign(process.env, hosted)
+      assert.throws(() => currentTenantId(), /explicit tenant scope/)
+      assert.equal(await withTenant('explicit-property', async () => {
+        await Promise.resolve()
+        return currentTenantId()
+      }), 'explicit-property')
+      assert.equal(withTenant('legacy', () => currentTenantId()), 'legacy')
+    }
+  } finally {
+    if (previousNode === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previousNode
+    if (previousVercel === undefined) delete process.env.VERCEL; else process.env.VERCEL = previousVercel
+  }
+})

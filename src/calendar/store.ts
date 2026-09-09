@@ -1,4 +1,5 @@
 import { KvClient } from '../store/kv.ts'
+import { storageConfig } from '../store/config.ts'
 import { currentTenantId, tenantNamespace } from '../tenancy/context.ts'
 import type { CalendarState, CalendarStore } from './types.ts'
 import { emptyCalendar } from './types.ts'
@@ -6,10 +7,8 @@ import { emptyCalendar } from './types.ts'
 /**
  * In-process. Survives nothing.
  *
- * Kept as the fallback so the calendar works with no configuration at all, but a block set
- * through one lambda is invisible to the next — which is exactly how the event log lost a
- * call. The dashboard says so rather than letting someone block a morning and wonder why
- * the agent still offers it.
+ * Kept for local previews with no configuration. Hosted runtimes require durable storage
+ * because a block held in one serverless instance is invisible to another instance.
  */
 export class MemoryCalendarStore implements CalendarStore {
   private state: CalendarState = emptyCalendar()
@@ -72,15 +71,15 @@ export class KvCalendarStore implements CalendarStore {
  */
 const tenantMemory = new Map<string, MemoryCalendarStore>()
 
-/** KV when it is configured, memory when it is not. Never throws on startup. */
+/** Resolve tenant and configuration on use; hosted runtimes require KV. */
 export function calendarStoreFromEnv(env: NodeJS.ProcessEnv = process.env): CalendarStore {
   const kvStores = new Map<string, KvCalendarStore>()
   const resolve = (): CalendarStore => {
     const tenantId = currentTenantId()
     const namespace = tenantNamespace(tenantId)
-    const url = env.KV_REST_API_URL?.trim()
-    const token = env.KV_REST_API_TOKEN?.trim()
-    if (url && token) {
+    const config = storageConfig(env)
+    if (config.kind === 'kv') {
+      const { url, token } = config
       const cacheKey = JSON.stringify([url, token, namespace])
       if (!kvStores.has(cacheKey)) kvStores.set(cacheKey, new KvCalendarStore(url, token, { key: `${namespace}:calendar` }))
       return kvStores.get(cacheKey)!
