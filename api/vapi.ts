@@ -20,7 +20,8 @@ import { storeBackedCalendar } from '../src/calendar/port.ts'
 import { documentStoreFromEnv } from '../src/store/documents.ts'
 import { normalisePhone } from '../src/leads/profile.ts'
 import { reconcile } from '../src/leasing/captured.ts'
-import { consolidateCall } from '../src/leads/consolidate.ts'
+import { receiveFinishedCall } from '../src/leads/inbox.ts'
+import { randomUUID } from 'node:crypto'
 import type { LossReason } from '../src/record/store.ts'
 import { bookTour } from '../src/booking/book.ts'
 import type { CalendarPort, TourSlot } from '../src/booking/types.ts'
@@ -394,6 +395,8 @@ async function runTool(
 
 /** Bind the full async request before any document, calendar, event or history operation. */
 export default async function handler(req: any, res: any) {
+  res.atriumRequestId = randomUUID()
+  res.setHeader('x-request-id', res.atriumRequestId)
   if (req.method === 'GET') {
     const auth = authorizeOps(req.headers ?? {}, new Date())
     if (!auth.ok) return scopedHandler(req, res)
@@ -557,13 +560,16 @@ async function scopedHandler(req: any, res: any) {
       const results: Array<{ toolCallId: unknown; result: string }> = []
       for (const tc of list) {
         const name = tc.name ?? tc.function?.name
+        const toolStartedAt = performance.now()
         let result: string
+        let errorCode: string | null = null
         try {
           const rawArgs = tc.arguments ?? tc.function?.arguments ?? {}
           const args = typeof rawArgs === 'string' ? JSON.parse(rawArgs) : rawArgs
           if (!args || typeof args !== 'object' || Array.isArray(args)) throw new Error('Invalid tool arguments')
           result = await runTool(String(name), args, callId, now, state)
         } catch {
+          errorCode = 'tool_failed'
           result = 'I could not verify that action. Ask for clarification or offer a callback; do not claim it succeeded.'
         }
         results.push({ toolCallId: tc.id ?? tc.toolCallId, result })
@@ -571,7 +577,8 @@ async function scopedHandler(req: any, res: any) {
         const events = scopedEvents()
         const last = events[events.length - 1] ?? {}
         console.log('[tool]', JSON.stringify({
-          call: callId.slice(-6), name,
+          tenantId: currentTenantId(), requestId: res.atriumRequestId, callId,
+          toolCallId: tc.id ?? tc.toolCallId, name, durationMs: Math.round(performance.now() - toolStartedAt), errorCode,
           ...(last.callId === callId ? {
             kind: last.kind, outcome: last.outcome ?? last.decision ?? null,
             topic: last.topic ?? null, confidence: last.confidence ?? null,
@@ -597,9 +604,9 @@ async function scopedHandler(req: any, res: any) {
       logEvent(callId, { kind: 'call_status', status: 'end-of-call-report' })
       /*
        * The one moment the whole call is known. Fold it into the caller's profile and
-       * derive what the building should do next about them. Never allowed to fail the
-       * webhook: Vapi is told 200 whatever happens here, because a profile write that
-       * throws must not look like a dropped call.
+       * derive what the building should do next about them. This call has already ended;
+       * unlike an interactive tool response, a failed write must not be acknowledged as
+       * successful delivery. The inbox preserves accepted work for explicit replay.
        */
       try {
         const state = await getCall(callId)
@@ -612,7 +619,7 @@ async function scopedHandler(req: any, res: any) {
         const started = Date.parse(message.startedAt ?? call.startedAt ?? '')
         const ended = Date.parse(message.endedAt ?? call.endedAt ?? '')
         const finishedAt = Number.isFinite(ended) ? new Date(ended) : now
-        await consolidateCall(documents, {
+        await receiveFinishedCall(documents, {
           callId, phone, at: finishedAt,
           durationSeconds: !Number.isFinite(started) || !Number.isFinite(ended) || ended < started
             ? null : Math.round((ended - started) / 1000),
@@ -621,19 +628,23 @@ async function scopedHandler(req: any, res: any) {
           unitsDiscussed: state.unitsDiscussed,
           booking: state.booking, lossReason: state.lossReason, escalation: state.escalation,
           toolsCalled: state.toolsCalled,
-        })
+        }, now)
         // Delete the working details, but retain the completed call's identity. Vapi can
         // retry its report after a cold start, when no customer number is present and
         // the only callback number was captured by a tool during the call.
         await documents.set<CallState>(callKey(callId), { ...freshCall(), phone, completedAt: finishedAt.toISOString() })
         console.log('[call]', JSON.stringify({
-          call: callId.slice(-6), consolidated: true, hasPhone: Boolean(phone && phone !== 'unknown'),
+          tenantId: currentTenantId(), requestId: res.atriumRequestId, callId,
+          consolidated: true, hasPhone: Boolean(phone && phone !== 'unknown'),
           tools: state.toolsCalled.length, booked: state.booking?.status ?? null,
           escalated: Boolean(state.escalation), store: documents.describe().kind,
         }))
       } catch (err) {
-        console.error('[vapi] consolidate failed', err instanceof Error ? err.message : String(err))
-        logEvent(callId, { kind: 'error', message: `consolidate: ${err instanceof Error ? err.message : String(err)}` })
+        console.error('[vapi]', JSON.stringify({ tenantId: currentTenantId(), requestId: res.atriumRequestId, callId, errorCode: 'consolidation_failed' }))
+        logEvent(callId, { kind: 'error', message: 'Finished-call processing failed; delivery must be retried.' })
+        res.setHeader('retry-after', '30')
+        res.status(503).json({ error: 'Finished-call processing failed', retryable: true, requestId: res.atriumRequestId })
+        return
       }
     }
 

@@ -4,6 +4,7 @@ import { generateSlots, statusOf, slotDate, blockFor, bookingsFor, bookingSlot, 
 import { defaultSettings, effectiveOptions, validateSettings } from '../src/calendar/settings.ts'
 import { calendarRange, parseCalendarDate } from '../src/calendar/range.ts'
 import { withTenant } from '../src/tenancy/context.ts'
+import { isHostedRuntime } from '../src/store/config.ts'
 
 const store = calendarStoreFromEnv()
 export const TOUR_CAPACITY = defaultSettings().capacity
@@ -103,7 +104,7 @@ export default async function handler(req: any, res: any) {
           state = await store.mutate(s => ({ ...s, blocks: [] }))
           break
         case 'clear_bookings':
-          if (process.env.NODE_ENV === 'production') { res.status(403).json({ error: 'Bulk tour reset is only available in local testing' }); return }
+          if (isHostedRuntime()) { res.status(403).json({ error: 'Bulk tour reset is only available in local testing' }); return }
           state = await store.mutate(s => ({ ...s, bookings: [] }))
           break
         default: res.status(400).json({ error: 'Unknown calendar action' }); return

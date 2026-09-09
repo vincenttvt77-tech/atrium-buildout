@@ -1,5 +1,6 @@
 import { authorizeOps } from '../src/ops/session.ts'
 import { documentStoreFromEnv } from '../src/store/documents.ts'
+import { isHostedRuntime } from '../src/store/config.ts'
 import { listProfiles, listFollowUps, profileKey, followUpKey } from '../src/leads/consolidate.ts'
 import type { LeadProfile } from '../src/leads/profile.ts'
 import type { FollowUp } from '../src/leads/followups.ts'
@@ -81,6 +82,10 @@ export default async function handler(req: any, res: any) {
 
       if (action === 'clear_leads') {
         // Test control for resetting the demo. Labelled as such on the dashboard.
+        if (isHostedRuntime()) {
+          res.status(403).json({ error: 'Bulk lead reset is only available in local testing' })
+          return
+        }
         for (const k of [...await store.list('lead:'), ...await store.list('followup:')]) await store.delete(k)
         res.status(200).json({ profiles: [], followUps: [] })
         return

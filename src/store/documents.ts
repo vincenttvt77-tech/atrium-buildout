@@ -1,8 +1,9 @@
 import { KvClient } from './kv.ts'
+import { storageConfig } from './config.ts'
 import { currentTenantId, tenantNamespace } from '../tenancy/context.ts'
 
 /**
- * A JSON document store: KV when configured, one shared in-process map when not.
+ * A JSON document store: KV in hosted runtimes, tenant-scoped memory for local previews.
  *
  * Everything that used to live in a module-level variable — the event log, the tour
  * calendar, the per-call conversation state — has the same failure on serverless: each
@@ -11,7 +12,7 @@ import { currentTenantId, tenantNamespace } from '../tenancy/context.ts'
  * possibly how a caller who said "studio" was told there were none: the instance that took
  * check_availability had never seen the instance that took capture_signal.
  *
- * One store, one pattern, one fallback that says out loud when it will not persist.
+ * Hosted runtimes fail closed until durable storage is configured.
  */
 
 export interface DocumentStore {
@@ -108,9 +109,9 @@ export function documentStoreFromEnv(env: NodeJS.ProcessEnv = process.env): Docu
   const resolve = (): DocumentStore => {
     const tenantId = currentTenantId()
     const namespace = tenantNamespace(tenantId)
-    const url = env.KV_REST_API_URL?.trim()
-    const token = env.KV_REST_API_TOKEN?.trim()
-    if (url && token) {
+    const config = storageConfig(env)
+    if (config.kind === 'kv') {
+      const { url, token } = config
       const cacheKey = JSON.stringify([url, token, namespace])
       if (!kvStores.has(cacheKey)) kvStores.set(cacheKey, new KvDocumentStore(url, token, { namespace }))
       return kvStores.get(cacheKey)!

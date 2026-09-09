@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
+import { isHostedRuntime } from '../store/config.ts'
 
 /** Request-local scope. Only authenticated handlers and trusted webhook routing set it. */
 const tenantContext = new AsyncLocalStorage<string>()
@@ -10,7 +11,10 @@ export function validateTenantId(id: string): string {
 }
 
 export function currentTenantId(): string {
-  return tenantContext.getStore() ?? LEGACY_TENANT
+  const tenant = tenantContext.getStore()
+  if (tenant) return tenant
+  if (isHostedRuntime()) throw new Error('An explicit tenant scope is required in a deployed runtime')
+  return LEGACY_TENANT
 }
 
 export function withTenant<T>(tenantId: string, fn: () => T): T {
