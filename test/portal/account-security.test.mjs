@@ -68,8 +68,12 @@ test('the shared mobile Status tab reaches account security without a property w
   assert.match(signedIn, /href="\/api\/account"[^>]*>Account security<\/a>/)
 })
 
-const principal = { userId: 'user-one', username: 'operator', displayName: 'Operator', credentialVersion: 1, kind: 'user' }
-const accountHtml = () => accountSecurityPage(principal, 'synthetic-form-token', 'synthetic-nonce')
+const sessionIds = ['00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000003']
+const principal = { userId: 'user-one', username: 'operator', displayName: 'Operator', credentialVersion: 1, kind: 'user',
+  sessionId: sessionIds[0], sessionExpiresAt: Date.parse('2032-06-01T20:00:00Z') }
+const sessions = sessionIds.map((id, index) => ({ id, userId: principal.userId, credentialVersion: 1, label: `Synthetic browser ${index + 1}`,
+  createdAt: Date.parse('2032-06-01T12:00:00Z'), lastSeenAt: Date.parse('2032-06-01T12:00:00Z'), expiresAt: principal.sessionExpiresAt, revokedAt: null }))
+const accountHtml = () => accountSecurityPage(principal, 'synthetic-form-token', 'synthetic-nonce', sessions)
 const reply = (status, data) => ({ status, json: async () => data })
 
 /** Execute the actual server-rendered script with synthetic credentials and transport. */
@@ -79,25 +83,36 @@ function accountForm(transport) {
   assert.ok(script)
   let submit, resets = 0, focused = false
   const elements = Object.fromEntries(['notice', 'save-password', 'current-password', 'new-password', 'confirm-password',
-    'outcome', 'outcome-title', 'outcome-message'].map(id => [id, { textContent: '', dataset: {}, hidden: false, value: '' }]))
+    'outcome', 'outcome-title', 'outcome-message', 'session-list', 'sign-out-others', 'session-notice', 'session-next', 'session-timezone'].map(id => [id, { textContent: '', dataset: {}, hidden: false, value: '' }]))
   elements['current-password'].value = 'previous synthetic password'
   elements['new-password'].value = elements['confirm-password'].value = 'replacement synthetic password'
   elements['save-password'].disabled = true
   elements.outcome.hidden = true
   elements.outcome.focus = () => { focused = true }
   elements['password-form'] = {
-    dataset: { userId: principal.userId, formToken: 'synthetic-form-token' }, hidden: false,
+    dataset: { userId: principal.userId, sessionId: principal.sessionId, formToken: 'synthetic-form-token' }, hidden: false,
     addEventListener(name, fn) { assert.equal(name, 'submit'); submit = fn },
     reset() { resets++; for (const id of ['current-password', 'new-password', 'confirm-password']) elements[id].value = '' },
   }
+  const rows = sessions.map(session => ({ dataset: { sessionId: session.id }, removed: false, remove() { this.removed = true } }))
+  const controls = sessions.map(session => ({ dataset: { sessionId: session.id }, disabled: true,
+    addEventListener(name, fn) { assert.equal(name, 'click'); this.click = fn } }))
+  elements['sign-out-others'].addEventListener = function (name, fn) { assert.equal(name, 'click'); this.click = fn }
+  elements['session-next'].hidden = true
+  const document = { getElementById: id => elements[id], querySelectorAll(selector) {
+    if (selector === '.session-revoke') return controls
+    if (selector === '.session-row') return rows.filter(row => !row.removed)
+    if (selector === '.sessions time') return []
+    assert.fail(`Unexpected account selector ${selector}`)
+  } }
   const requests = [], timers = new Map()
   let nextTimer = 0
-  runInNewContext(script, { document: { getElementById: id => elements[id] }, AbortController,
+  runInNewContext(script, { document, AbortController,
     setTimeout(callback, delay) { const id = ++nextTimer; timers.set(id, { callback, delay }); return id },
     clearTimeout(id) { timers.delete(id) },
     fetch: async (path, options) => { requests.push({ path, ...options }); return transport(path, options) } })
   assert.equal(typeof submit, 'function')
-  return { elements, requests, submit: () => submit({ preventDefault() {} }), resets: () => resets, focused: () => focused,
+  return { elements, requests, controls, rows, revoke: target => target === 'others' ? elements['sign-out-others'].click() : controls.find(control => control.dataset.sessionId === target).click(), submit: () => submit({ preventDefault() {} }), resets: () => resets, focused: () => focused,
     activeTimers: () => timers.size,
     expireRequest() {
       assert.equal(timers.size, 1)
@@ -153,6 +168,7 @@ test('one verified successful receipt confirms the rendered identity and retires
   assert.equal(ui.requests[0].credentials, 'same-origin')
   assert.equal(ui.requests[0].redirect, 'error')
   assert.equal(ui.requests[0].headers['x-atrium-user-id'], principal.userId)
+  assert.equal(ui.requests[0].headers['x-atrium-session-id'], principal.sessionId)
   assert.equal(ui.requests[0].headers['x-atrium-csrf'], 'synthetic-form-token')
   assert.equal(ui.requests[0].headers['x-atrium-property-id'], undefined)
   assert.deepEqual(Object.keys(JSON.parse(ui.requests[0].body)).sort(), ['action', 'currentPassword', 'newPassword'])
@@ -216,4 +232,113 @@ test('known rejected credentials allow a deliberate corrected retry before verif
   assert.equal(ui.requests.length, 2)
   assert.equal(JSON.parse(ui.requests[1].body).currentPassword, 'corrected synthetic password')
   assert.equal(ui.elements['outcome-title'].textContent, 'Password changed')
+})
+
+
+const sessionReceipt = (revokedIds, currentRevoked = false, fields = {}) => ({ status: 'sessions_revoked', userId: principal.userId,
+  actingSessionId: principal.sessionId, revokedIds, currentRevoked, ...fields })
+
+test('session controls send the rendered user, session and form proof; verified single receipt removes only its target', async () => {
+  const target = sessionIds[1], ui = accountForm(() => reply(200, sessionReceipt([target])))
+  await ui.revoke(target)
+  const request = ui.requests[0]
+  assert.equal(request.path, '/api/account')
+  assert.equal(request.credentials, 'same-origin')
+  assert.equal(request.redirect, 'error')
+  assert.equal(request.headers['x-atrium-user-id'], principal.userId)
+  assert.equal(request.headers['x-atrium-session-id'], principal.sessionId)
+  assert.equal(request.headers['x-atrium-csrf'], 'synthetic-form-token')
+  assert.equal(request.headers['x-atrium-account-action'], 'revoke-session')
+  assert.deepEqual(JSON.parse(request.body), { action: 'revoke-session', sessionId: target })
+  assert.deepEqual(ui.rows.filter(row => row.removed).map(row => row.dataset.sessionId), [target])
+  assert.equal(ui.elements['session-notice'].textContent, 'The selected session is signed out.')
+  assert.equal(ui.elements['password-form'].hidden, false)
+  assert.equal(ui.elements['save-password'].disabled, false)
+  assert.equal(ui.activeTimers(), 0)
+})
+
+test('verified revoke-others keeps the current row and a current-session receipt retires the password form', async () => {
+  const ui = accountForm(() => reply(200, sessionReceipt(sessionIds.slice(1))))
+  await ui.revoke('others')
+  assert.deepEqual(JSON.parse(ui.requests[0].body), { action: 'revoke-other-sessions' })
+  assert.equal(ui.requests[0].headers['x-atrium-account-action'], 'revoke-other-sessions')
+  assert.deepEqual(ui.rows.filter(row => !row.removed).map(row => row.dataset.sessionId), [principal.sessionId])
+  assert.equal(ui.elements['sign-out-others'].disabled, true)
+  assert.match(ui.elements['session-notice'].textContent, /Reload to check for newer sign-ins/)
+  const self = accountForm(() => reply(200, sessionReceipt([principal.sessionId], true)))
+  await self.revoke(principal.sessionId)
+  assert.equal(self.elements['password-form'].hidden, true)
+  assert.equal(self.resets(), 1)
+  assert.equal(self.elements['session-list'].hidden, true)
+  assert.equal(self.elements['session-next'].hidden, false)
+  assert.match(self.elements['session-notice'].textContent, /^This session is signed out/)
+  await self.submit(); await self.revoke('others')
+  assert.equal(self.requests.length, 1)
+})
+
+test('verified already-inactive own target receipt succeeds without pretending an unknown target was verified', async () => {
+  const target = sessionIds[1], own = accountForm(() => reply(200, sessionReceipt([])))
+  await own.revoke(target)
+  assert.equal(own.rows.find(row => row.dataset.sessionId === target).removed, true)
+  const unknown = accountForm(() => reply(400, { code: 'invalid_session', error: 'Choose a session from this account security page.' }))
+  await unknown.revoke(target)
+  assert.ok(unknown.rows.every(row => !row.removed))
+  assert.match(unknown.elements['session-notice'].textContent, /couldn’t confirm/)
+})
+
+test('wrong identity, stale acting session, malformed and contradictory receipts never claim sign-out', async () => {
+  const target = sessionIds[1]
+  for (const payload of [
+    {}, sessionReceipt([target], false, { userId: 'other-user' }),
+    sessionReceipt([target], false, { actingSessionId: sessionIds[2] }),
+    sessionReceipt([target], true), sessionReceipt([sessionIds[2]]), sessionReceipt([target, target]),
+    sessionReceipt(['not-a-session']), sessionReceipt([target], false, { currentRevoked: 'false' }),
+  ]) {
+    const ui = accountForm(() => reply(200, payload))
+    await ui.revoke(target)
+    assert.ok(ui.rows.every(row => !row.removed))
+    assert.match(ui.elements['session-notice'].textContent, /couldn’t confirm/)
+    assert.equal(ui.elements['session-next'].hidden, false)
+    assert.equal(ui.elements['save-password'].disabled, true)
+    assert.ok(ui.controls.every(control => control.disabled))
+    await ui.revoke(target); await ui.submit()
+    assert.equal(ui.requests.length, 1)
+  }
+  const self = accountForm(() => reply(200, sessionReceipt([])))
+  await self.revoke(principal.sessionId)
+  assert.match(self.elements['session-notice'].textContent, /couldn’t confirm/)
+  assert.equal(self.elements['password-form'].hidden, false, 'an empty receipt cannot claim the active current session was revoked')
+})
+
+test('a pending session change blocks double clicks and password submits; lost or stale responses require reload', async () => {
+  let release
+  const waiting = new Promise(resolve => { release = resolve })
+  const pending = accountForm(() => waiting)
+  const first = pending.revoke(sessionIds[1])
+  await pending.revoke(sessionIds[2]); await pending.submit()
+  assert.equal(pending.requests.length, 1)
+  release(reply(503, { code: 'session_unavailable' })); await first
+  assert.match(pending.elements['session-notice'].textContent, /couldn’t confirm/)
+  for (const response of [() => { throw new Error('response lost') }, () => reply(409, { code: 'account_changed' }),
+    () => ({ status: 200, json: async () => { throw new Error('response unreadable') } })]) {
+    const ui = accountForm(response)
+    await ui.revoke(sessionIds[1])
+    assert.ok(ui.rows.every(row => !row.removed))
+    assert.equal(ui.elements['session-next'].hidden, false)
+    assert.equal(ui.elements['save-password'].disabled, true)
+    await ui.revoke(sessionIds[1]); await ui.submit()
+    assert.equal(ui.requests.length, 1)
+  }
+})
+
+test('session request timeout aborts and retires controls without a blind retry', async () => {
+  const ui = accountForm((path, { signal }) => new Promise((resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true })))
+  const pending = ui.revoke(sessionIds[1])
+  ui.expireRequest(); await pending
+  assert.equal(ui.requests[0].signal.aborted, true)
+  assert.match(ui.elements['session-notice'].textContent, /couldn’t confirm/)
+  assert.ok(ui.rows.every(row => !row.removed))
+  await ui.revoke(sessionIds[1]); await ui.submit()
+  assert.equal(ui.requests.length, 1)
+  assert.equal(ui.activeTimers(), 0)
 })

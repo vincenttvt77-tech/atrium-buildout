@@ -65,7 +65,8 @@ before(async () => {
   runtime = createDatabaseRuntime({ app: db.app, auth: db.auth, sessionSecret })
   cookies = {}
   for (const username of ['owner-a', 'owner-b', 'viewer-a']) {
-    const principal = await runtime.authorization.authenticatePassword(username, credentials.password)
+    const verified = await runtime.authorization.authenticatePassword(username, credentials.password)
+    const principal = await runtime.sessions.start(verified, { label: 'Synthetic Vapi HTTP session' })
     cookies[username] = `atrium_ops=${mintUserSession(principal, new Date(), sessionSecret)}`
   }
   process.env.ATRIUM_RUNTIME_MODE = 'postgres'

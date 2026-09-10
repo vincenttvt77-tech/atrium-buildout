@@ -25,6 +25,17 @@ export interface User {
   status: RecordStatus
   credentialVersion: number
 }
+export interface UserSessionRecord {
+  id: string
+  userId: string
+  credentialVersion: number
+  label: string
+  createdAt: number
+  lastSeenAt: number
+  expiresAt: number
+  revokedAt: number | null
+}
+export interface UserSessionClaims { userId: string; credentialVersion: number; sessionId: string; expiresAt: number }
 export interface Credential {
   userId: string
   passwordHash: string
@@ -59,7 +70,7 @@ export interface ChannelBinding {
   permissionVersion: number
 }
 /** Server-derived immutable inputs for transaction-local authorization reads. */
-export type AuthLookupContext = Readonly<{ kind: 'user'; userId: string; credentialVersion: number }>
+export type AuthLookupContext = Readonly<{ kind: 'user'; userId: string; credentialVersion: number; sessionId?: string }>
   | Readonly<{ kind: 'channel'; provider: string; externalId: string }>
 
 /**
@@ -70,6 +81,7 @@ export type AuthLookupContext = Readonly<{ kind: 'user'; userId: string; credent
 export interface AuthorizationRepository {
   findCredentialByUsername(username: string): Promise<Credential | null>
   getUser(userId: string): Promise<User | null>
+  resolveSession(claims: UserSessionClaims): Promise<UserSessionRecord | null>
   getOrganization(organizationId: string, context: AuthLookupContext): Promise<Organization | null>
   getProperty(propertyId: string, context: AuthLookupContext): Promise<Property | null>
   getMembership(userId: string, organizationId: string, context: AuthLookupContext): Promise<Membership | null>
@@ -86,9 +98,11 @@ export interface AuthenticatedUser {
   readonly username: string
   readonly displayName: string
   readonly credentialVersion: number
+  readonly sessionId?: string
+  readonly sessionExpiresAt?: number
 }
 export type ScopeActor = Readonly<{
-  kind: 'user'; userId: string; membershipId: string; role: Role; credentialVersion: number
+  kind: 'user'; userId: string; membershipId: string; role: Role; credentialVersion: number; sessionId?: string
 }> | Readonly<{
   kind: 'channel'; bindingId: string; provider: string; externalId: string; bindingVersion: number
 }>

@@ -100,18 +100,21 @@ async function form(username, cookie) {
   const page = await request('/api/account', { cookie })
   assert.equal(page.status, 200)
   assert.ok(page.text.includes(`data-user-id="${username}"`))
-  return { cookie, page, token: formToken(page.text) }
+  const sessionId = JSON.parse(Buffer.from(cookie.split('=')[1].split('.')[1], 'base64url').toString('utf8')).sessionId
+  assert.ok(page.text.includes(`data-session-id="${sessionId}"`))
+  return { cookie, page, token: formToken(page.text), sessionId }
 }
-function changeHeaders(username, token) {
+function changeHeaders(username, token, sessionId) {
   return { origin, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json',
-    'x-atrium-account-action': 'change-password', 'x-atrium-user-id': username, 'x-atrium-csrf': token }
+    'x-atrium-account-action': 'change-password', 'x-atrium-user-id': username, 'x-atrium-csrf': token,
+    ...(sessionId ? { 'x-atrium-session-id': sessionId } : {}) }
 }
 function changeBody(currentPassword = credentials.password, newPassword = 'Synthetic replacement phrase 2026!') {
   return { action: 'change-password', currentPassword, newPassword }
 }
 async function postChange(username, currentForm, body = changeBody(), headers = {}) {
   return request('/api/account', { method: 'POST', cookie: currentForm.cookie,
-    headers: { ...changeHeaders(username, currentForm.token), ...headers }, body: JSON.stringify(body) })
+    headers: { ...changeHeaders(username, currentForm.token, currentForm.sessionId), ...headers }, body: JSON.stringify(body) })
 }
 async function credentialState() {
   return (await db.admin.query(`SELECT u.id,u.credential_version,c.password_hash
@@ -178,7 +181,7 @@ test('cross-origin, missing or invalid CSRF and changed account identity are ref
   const username = 'invalid-inputs', currentForm = await form(username)
   const otherForm = await form('owner-b')
   const beforeState = await credentialState(), beforeSecurity = await securityState(), beforeChanges = passwordChanges
-  const base = changeHeaders(username, currentForm.token)
+  const base = changeHeaders(username, currentForm.token, currentForm.sessionId)
   const cases = [
     ['missing origin', { origin: null }, 403],
     ['foreign origin', { origin: 'https://attacker.invalid' }, 403],
@@ -214,21 +217,29 @@ test('malformed JSON, oversized payloads and browser-selected target users canno
   const username = 'invalid-inputs', currentForm = await form(username)
   const beforeState = await credentialState(), beforeSecurity = await securityState(), beforeChanges = passwordChanges
   const malicious = [
-    '{not-json', 'null', '[]', '"a string"', '{}',
+    '{not-json', 'null', '[]', '"a string"',
     JSON.stringify({ ...changeBody(), userId: 'owner-b' }),
     JSON.stringify({ ...changeBody(), username: 'owner-b' }),
     JSON.stringify({ ...changeBody(), organizationId: 'organization-b' }),
     JSON.stringify({ ...changeBody(), target: { userId: 'owner-b' } }),
-    JSON.stringify({ ...changeBody(), action: 'reset-password' }),
     JSON.stringify({ ...changeBody(), currentPassword: {} }),
     JSON.stringify({ ...changeBody(), newPassword: null }),
     JSON.stringify({ ...changeBody(), newPassword: 'X'.repeat(4100) }),
     '{"action":"change-password","currentPassword":"wrong","newPassword":"Synthetic replacement phrase","__proto__":{"userId":"owner-b"}}',
   ]
   for (const body of malicious) {
-    const result = await request('/api/account', { method: 'POST', cookie: currentForm.cookie, headers: changeHeaders(username, currentForm.token), body })
+    const result = await request('/api/account', { method: 'POST', cookie: currentForm.cookie, headers: changeHeaders(username, currentForm.token, currentForm.sessionId), body })
     assert.equal(result.status, 400)
     assert.equal(JSON.parse(result.text).code, 'invalid_password')
+    assert.equal(result.headers.has('set-cookie'), false)
+    noSecrets(result)
+  }
+  // Action selection is now a shared account-command boundary, checked before
+  // password payload validation; neither a missing nor switched action is admitted.
+  for (const body of ['{}', JSON.stringify({ ...changeBody(), action: 'reset-password' })]) {
+    const result = await request('/api/account', { method: 'POST', cookie: currentForm.cookie, headers: changeHeaders(username, currentForm.token, currentForm.sessionId), body })
+    assert.equal(result.status, 400)
+    assert.equal(JSON.parse(result.text).code, 'invalid_session')
     assert.equal(result.headers.has('set-cookie'), false)
     noSecrets(result)
   }

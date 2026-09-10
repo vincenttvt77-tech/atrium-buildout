@@ -41,8 +41,8 @@ async function allowed(context, permission = 'read') {
 
 test('schema objects have forced RLS, an exact self-service definer allowlist and restricted real login roles', async () => {
   const roles = (await db.admin.query(`SELECT rolname,rolcanlogin,rolsuper,rolbypassrls,rolcreaterole,rolcreatedb,rolreplication
-    FROM pg_roles WHERE rolname IN ('atrium_admin','atrium_app','atrium_authenticator','atrium_account_executor','atrium_login_executor') ORDER BY rolname`)).rows
-  assert.deepEqual(roles.map(role => role.rolname), ['atrium_account_executor','atrium_admin','atrium_app','atrium_authenticator','atrium_login_executor'])
+    FROM pg_roles WHERE rolname IN ('atrium_admin','atrium_app','atrium_authenticator','atrium_account_executor','atrium_login_executor','atrium_session_executor') ORDER BY rolname`)).rows
+  assert.deepEqual(roles.map(role => role.rolname), ['atrium_account_executor','atrium_admin','atrium_app','atrium_authenticator','atrium_login_executor','atrium_session_executor'])
   for (const role of roles) {
     assert.equal(role.rolcanlogin, ['atrium_app','atrium_authenticator'].includes(role.rolname), `${role.rolname} login policy`)
     for (const key of ['rolsuper', 'rolbypassrls', 'rolcreaterole', 'rolcreatedb', 'rolreplication']) {
@@ -57,7 +57,7 @@ test('schema objects have forced RLS, an exact self-service definer allowlist an
     'property_grants', 'property_configurations', 'channel_bindings',
     'operational_documents', 'calendars', 'audit_events',
     'inbox_events', 'action_intents', 'outbox_messages', 'workflow_events',
-    'password_change_attempts', 'account_security_events', 'login_attempt_buckets',
+    'password_change_attempts', 'account_security_events', 'login_attempt_buckets', 'user_sessions', 'user_session_events',
   ].sort())
   assert.ok(tables.every(row => row.rolname === 'atrium_admin' && row.relrowsecurity && row.relforcerowsecurity))
   const functions = (await db.admin.query(`SELECT p.proname,p.prosecdef,p.proconfig,r.rolname AS owner,
@@ -68,17 +68,18 @@ test('schema objects have forced RLS, an exact self-service definer allowlist an
       has_function_privilege('atrium_authenticator',p.oid,'EXECUTE') AS auth_execute
     FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace JOIN pg_roles r ON r.oid=p.proowner
     WHERE n.nspname='atrium'`)).rows
-  const selfServiceDefiners = ['commit_password_change(text,text,text)', 'reserve_login_attempt(text,text)', 'reserve_password_change(text)']
+  const sessionDefiners = ['hold_current_session()', 'list_user_sessions()', 'resolve_user_session(bigint)', 'revoke_user_sessions(text)', 'start_user_session(uuid,text)']
+  const selfServiceDefiners = ['commit_password_change(text,text,text)', 'reserve_login_attempt(text,text)', 'reserve_password_change(text)', ...sessionDefiners].sort()
   assert.deepEqual(functions.filter(row => row.prosecdef).map(row => row.signature).sort(), selfServiceDefiners)
   assert.ok(functions.length > selfServiceDefiners.length)
   for (const fn of functions) {
     if (selfServiceDefiners.includes(fn.signature)) {
       assert.equal(fn.prosecdef, true, fn.signature)
-      assert.equal(fn.owner, fn.signature === 'reserve_login_attempt(text,text)' ? 'atrium_login_executor' : 'atrium_account_executor', fn.signature)
+      assert.equal(fn.owner, sessionDefiners.includes(fn.signature) ? 'atrium_session_executor' : fn.signature === 'reserve_login_attempt(text,text)' ? 'atrium_login_executor' : 'atrium_account_executor', fn.signature)
       assert.deepEqual(fn.proconfig, ['search_path=pg_catalog'], fn.signature)
       assert.equal(fn.public_execute, false, fn.signature)
-      assert.equal(fn.app_execute, false, fn.signature)
-      assert.equal(fn.auth_execute, true, fn.signature)
+      assert.equal(fn.app_execute, fn.signature === 'hold_current_session()', fn.signature)
+      assert.equal(fn.auth_execute, fn.signature !== 'hold_current_session()', fn.signature)
     } else {
       assert.equal(fn.prosecdef, false, fn.signature)
       assert.equal(fn.owner, 'atrium_admin', fn.signature)

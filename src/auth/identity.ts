@@ -4,9 +4,10 @@ import type { AuthenticatedUser, User } from './model.ts'
 const principals = new WeakSet<object>()
 
 /** Internal issuer: call only after password/session verification and current-user validation. */
-export function issueAuthenticatedUser(user: User): AuthenticatedUser {
+export function issueAuthenticatedUser(user: User, session?: { id: string; expiresAt: number }): AuthenticatedUser {
   const principal = Object.freeze({ kind: 'user' as const, userId: user.id, username: user.username,
-    displayName: user.displayName, credentialVersion: user.credentialVersion })
+    displayName: user.displayName, credentialVersion: user.credentialVersion,
+    ...(session ? { sessionId: session.id, sessionExpiresAt: session.expiresAt } : {}) })
   principals.add(principal)
   return principal
 }

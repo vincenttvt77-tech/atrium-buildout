@@ -97,11 +97,11 @@ after(async () => {
   for (const key of ENV_KEYS) original[key] === undefined ? delete process.env[key] : process.env[key] = original[key]
 })
 
-async function request(target, { path = '/api/dashboard', method = 'GET', fields, cookie, headers = {} } = {}) {
+async function request(target, { path = '/api/dashboard', method = 'GET', fields, body, cookie, headers = {} } = {}) {
   const response = await fetch(`${target.origin}${path}`, { method, redirect: 'manual',
     headers: { ...(fields ? { 'content-type': 'application/x-www-form-urlencoded' } : {}),
       ...(cookie ? { cookie } : {}), ...headers },
-    ...(fields ? { body: new URLSearchParams(fields).toString() } : {}) })
+    ...(fields ? { body: new URLSearchParams(fields).toString() } : body === undefined ? {} : { body }) })
   return { status: response.status, headers: response.headers, text: await response.text() }
 }
 async function login(target, username, { password = credentials.password, headers = {}, ...options } = {}) {
@@ -201,7 +201,12 @@ test('the shared local client budget ignores rotating forwarded headers and coun
   const beforeReservations = instances.reduce((total, instance) => total + instance.reservations, 0)
   const active = await request(first, { path: '/api/account', cookie: hundredth.cookie })
   assert.equal(active.status, 200)
-  const logout = await request(second, { method: 'POST', cookie: hundredth.cookie, fields: { action: 'logout' } })
+  const session = JSON.parse(Buffer.from(hundredth.cookie.split('.')[1], 'base64url'))
+  const token = /data-form-token="([A-Za-z0-9_.-]+)"/.exec(active.text)?.[1]
+  assert.ok(token)
+  const logout = await request(second, { method: 'POST', cookie: hundredth.cookie, body: JSON.stringify({ action: 'logout' }),
+    headers: { origin: second.origin, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json',
+      'x-atrium-user-id': session.userId, 'x-atrium-session-id': session.sessionId, 'x-atrium-csrf': token } })
   assert.equal(logout.status, 200)
   assert.match(logout.headers.get('set-cookie'), /Max-Age=0/i)
   assert.equal(instances.reduce((total, instance) => total + instance.reservations, 0), beforeReservations,

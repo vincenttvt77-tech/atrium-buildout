@@ -18,7 +18,7 @@ const NOW = new Date('2026-09-09T16:00:00.000Z')
 /** Real authorization issuance; structural casts cannot mint a scope under test. */
 async function scope(organizationId = 'org-one', property = 'property-one'): Promise<AuthorizedScope> {
   const repository: AuthorizationRepository = {
-    findCredentialByUsername: async () => null,
+    findCredentialByUsername: async () => null, resolveSession: async () => null,
     getUser: async () => null,
     getOrganization: async () => ({ id: organizationId, name: 'Organization', status: 'active', permissionVersion: 1 }),
     getProperty: async () => ({ id: property, organizationId, name: 'Building', timeZone: 'America/Chicago', status: 'active', permissionVersion: 1 }),

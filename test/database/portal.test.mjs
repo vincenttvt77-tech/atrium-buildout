@@ -76,10 +76,10 @@ after(async () => {
   for (const key of ENV_KEYS) original[key] === undefined ? delete process.env[key] : process.env[key] = original[key]
 })
 
-async function request(path = '/api/dashboard', { cookie, method = 'GET', fields, headers = {} } = {}) {
+async function request(path = '/api/dashboard', { cookie, method = 'GET', fields, body, headers = {} } = {}) {
   const response = await fetch(`${origin}${path}`, { method, redirect: 'manual', headers: {
     ...(cookie ? { cookie } : {}), ...(fields ? { 'content-type': 'application/x-www-form-urlencoded' } : {}), ...headers,
-  }, ...(fields ? { body: new URLSearchParams(fields) } : {}) })
+  }, ...(fields ? { body: new URLSearchParams(fields) } : body === undefined ? {} : { body }) })
   return { status: response.status, headers: response.headers, text: await response.text() }
 }
 async function signIn(username, path = '/api/dashboard') {
@@ -96,16 +96,16 @@ function bootstrap(text, field) {
   return JSON.parse(raw)
 }
 
-test('database login issues only a3 user sessions and preserves the selected property URL', async () => {
+test('database login issues registered a4 user sessions and preserves the selected property URL', async () => {
   const page = await request()
   assert.equal(page.status, 401)
   assert.match(page.text, /name="username"/)
   assert.doesNotMatch(page.text, /name="passcode"/)
   const login = await signIn('owner-a', selected('property-a2'))
   assert.equal(login.headers.get('location'), selected('property-a2'))
-  assert.match(login.headers.get('set-cookie'), /^atrium_ops=a3\..*HttpOnly; SameSite=Strict/)
+  assert.match(login.headers.get('set-cookie'), /^atrium_ops=a4\..*HttpOnly; SameSite=Strict/)
   const payload = JSON.parse(Buffer.from(login.cookie.split('.')[1], 'base64url'))
-  assert.deepEqual(Object.keys(payload).sort(), ['credentialVersion', 'expiresAt', 'userId'])
+  assert.deepEqual(Object.keys(payload).sort(), ['credentialVersion', 'expiresAt', 'sessionId', 'userId'])
   assert.equal(payload.userId, 'owner-a')
   assert.equal(login.text.includes(credentials.password), false)
   assert.match(login.headers.get('cache-control'), /no-store/)
@@ -153,7 +153,7 @@ test('two tabs share user login while their explicit URLs retain separate proper
   assert.equal(values[1].leasingPhone, null)
   assert.equal(values[1].locationLabel, '')
   assert.equal(values[0].buildingName, unsafeLabel)
-  assert.deepEqual(bootstrap(pages[0].text, 'ATRIUM_ACCOUNT'), { userId: 'owner-a', username: 'owner-a', displayName: unsafeLabel })
+  assert.deepEqual(bootstrap(pages[0].text, 'ATRIUM_ACCOUNT'), { userId: 'owner-a', username: 'owner-a', displayName: unsafeLabel, sessionId: JSON.parse(Buffer.from(cookies.get('owner-a').split('.')[1], 'base64url')).sessionId })
   assert.ok(pages[0].text.includes('window.ATRIUM_RUNTIME_MODE="postgres";'))
   assert.equal(pages[0].text.includes(unsafeLabel), false)
   assert.equal(pages[0].text.includes(credentials.password), false)
@@ -217,8 +217,8 @@ test('missing database configuration and invalid mode return 503 even with a wor
   } finally { process.env.ATRIUM_RUNTIME_MODE = 'postgres'; injectRuntime = true }
 })
 
-test('logout clears the a3 session and both routes reject unsupported methods', async () => {
-  const result = await request('/api/dashboard', { method: 'POST', fields: { action: 'logout' } })
+test('logout clears an absent session and both routes reject unsupported methods', async () => {
+  const result = await request('/api/dashboard', { method: 'POST', body: JSON.stringify({ action: 'logout' }), headers: { origin, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json' } })
   assert.equal(result.status, 200)
   assert.match(result.headers.get('set-cookie'), /Max-Age=0; HttpOnly; SameSite=Strict/)
   assert.equal((await request('/api/dashboard', { method: 'PUT' })).status, 405)

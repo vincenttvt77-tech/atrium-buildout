@@ -1,10 +1,11 @@
 import { before, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createHmac } from 'node:crypto'
+import { createHmac, randomUUID } from 'node:crypto'
 import { createAuthorizationService, assertAuthorizedScope, mintUserSession, hashPassword, USER_SESSION_TTL_MS } from '../index.ts'
 import { AuthorizationError } from '../model.ts'
+import { issueAuthenticatedUser } from '../identity.ts'
 import type { AuthorizationRepository, Organization, Property, User, Credential, Membership, PropertyGrant,
-  ChannelBinding, AuthLookupContext, AuthenticatedUser, Permission } from '../model.ts'
+  ChannelBinding, AuthLookupContext, AuthenticatedUser, Permission, UserSessionClaims, UserSessionRecord } from '../model.ts'
 
 const PASSWORD = 'synthetic-auth-test-password-123!'
 const SECRET = 'synthetic-session-signing-secret-at-least-32-characters'
@@ -15,6 +16,7 @@ const copy = <T>(value: T): T => structuredClone(value)
 
 class TestRepository implements AuthorizationRepository {
   contexts: AuthLookupContext[] = []
+  sessions: UserSessionRecord[] = []
   users: User[] = ['staff', 'viewer', 'owner', 'both'].map(username => ({ id: `user-${username}`, username,
     displayName: username, status: 'active', credentialVersion: 1 }))
   organizations: Organization[] = ['a', 'b'].map(id => ({ id: `org-${id}`, name: `Organization ${id}`, status: 'active', permissionVersion: 1 }))
@@ -41,6 +43,11 @@ class TestRepository implements AuthorizationRepository {
     return user ? { userId: user.id, passwordHash, credentialVersion: user.credentialVersion } : null
   }
   async getUser(id: string) { return copy(this.users.find(user => user.id === id) ?? null) }
+  async resolveSession(claims: UserSessionClaims) {
+    return copy(this.sessions.find(session => session.id === claims.sessionId && session.userId === claims.userId
+      && session.credentialVersion === claims.credentialVersion && session.expiresAt === claims.expiresAt
+      && session.revokedAt === null && session.expiresAt > NOW.getTime()) ?? null)
+  }
   async getOrganization(id: string, context: AuthLookupContext) { this.note(context); return copy(this.organizations.find(org => org.id === id) ?? null) }
   async getProperty(id: string, context: AuthLookupContext) { this.note(context); return copy(this.properties.find(property => property.id === id) ?? null) }
   async getMembership(userId: string, organizationId: string, context: AuthLookupContext) { this.note(context); return copy(this.memberships.find(member => member.userId === userId && member.organizationId === organizationId) ?? null) }
@@ -56,6 +63,13 @@ async function setup(username = 'staff') {
   return { repository, service, principal }
 }
 const denied = (code: string) => (error: unknown) => error instanceof AuthorizationError && error.code === code
+function registered(repository: TestRepository, principal: AuthenticatedUser, expiresAt = NOW.getTime() + USER_SESSION_TTL_MS) {
+  const user = repository.users.find(user => user.id === principal.userId)!
+  const session: UserSessionRecord = { id: randomUUID(), userId: user.id, credentialVersion: user.credentialVersion,
+    label: 'Synthetic domain session', createdAt: NOW.getTime(), lastSeenAt: NOW.getTime(), expiresAt, revokedAt: null }
+  repository.sessions.push(session)
+  return issueAuthenticatedUser(user, { id: session.id, expiresAt: session.expiresAt })
+}
 
 test('password authentication reuses scrypt and unknown users never become a dummy account', async () => {
   const repository = new TestRepository(), service = createAuthorizationService(repository)
@@ -155,11 +169,13 @@ test('scopes and identities are immutable server objects, not reusable JSON auth
   await assert.rejects(service.authorizeProperty({ userId: principal.userId, role: 'owner' } as unknown as AuthenticatedUser, 'property-a1', 'read'), denied('unauthenticated'))
 })
 
-test('a3 session contains no property/role authority and rechecks current user plus credential version', async () => {
-  const { service, principal, repository } = await setup()
+test('registered a4 session contains no property/role authority and rechecks current user plus credential version', async () => {
+  const { service, principal: passwordPrincipal, repository } = await setup()
+  const principal = registered(repository, passwordPrincipal)
   const token = mintUserSession(principal, NOW, SECRET)
   const claims = JSON.parse(Buffer.from(token.split('.')[1]!, 'base64url').toString('utf8'))
-  assert.deepEqual(Object.keys(claims).sort(), ['credentialVersion', 'expiresAt', 'userId'])
+  assert.deepEqual(Object.keys(claims).sort(), ['credentialVersion', 'expiresAt', 'sessionId', 'userId'])
+  assert.equal(claims.sessionId, principal.sessionId)
   assert.equal((await service.authenticateSession(token, NOW, SECRET))?.userId, principal.userId)
   repository.users[0]!.credentialVersion++
   assert.equal(await service.authenticateSession(token, NOW, SECRET), null)
@@ -169,17 +185,35 @@ test('a3 session contains no property/role authority and rechecks current user p
 })
 
 test('session tampering, expiry, overlong lifetime, and secret rotation cannot authenticate', async () => {
-  const { service, principal } = await setup()
-  const token = mintUserSession(principal, NOW, SECRET, 1000)
+  const { service, principal: passwordPrincipal, repository } = await setup()
+  const principal = registered(repository, passwordPrincipal, NOW.getTime() + 1000)
+  const token = mintUserSession(principal, NOW, SECRET)
   assert.equal(await service.authenticateSession(token, new Date(NOW.getTime() + 1000), SECRET), null)
   assert.equal(await service.authenticateSession(`${token.slice(0, -1)}${token.endsWith('A') ? 'B' : 'A'}`, NOW, SECRET), null)
   assert.equal(await service.authenticateSession(token, NOW, SECRET + '-rotated'), null)
   assert.equal(await service.authenticateSession('a2.legacy.signature', NOW, SECRET), null)
-  assert.throws(() => mintUserSession(principal, NOW, SECRET, USER_SESSION_TTL_MS + 1), /lifetime/)
+  const tooLong = registered(repository, passwordPrincipal, NOW.getTime() + USER_SESSION_TTL_MS + 1)
+  await assert.rejects(service.authenticateSession(mintUserSession(tooLong, NOW, SECRET), NOW, SECRET), { code: 'session_unavailable' })
+  assert.throws(() => mintUserSession(passwordPrincipal, NOW, SECRET), /registered session/)
   assert.throws(() => mintUserSession(principal, NOW, 'too-short'), /signing secret/)
-  const payload = Buffer.from(JSON.stringify({ userId: principal.userId, credentialVersion: 1, expiresAt: NOW.getTime() + USER_SESSION_TTL_MS + 1 })).toString('base64url')
+  const payload = Buffer.from(JSON.stringify({ userId: principal.userId, credentialVersion: 1, expiresAt: NOW.getTime() + 1000 })).toString('base64url')
   const signature = createHmac('sha256', SECRET).update(`atrium-database-user-session-v3|${payload}`).digest('base64url')
   assert.equal(await service.authenticateSession(`a3.${payload}.${signature}`, NOW, SECRET), null)
+  const overlongPayload = Buffer.from(JSON.stringify({ userId: principal.userId, credentialVersion: 1,
+    sessionId: principal.sessionId, expiresAt: NOW.getTime() + USER_SESSION_TTL_MS + 1 })).toString('base64url')
+  const overlongSignature = createHmac('sha256', SECRET).update(`atrium-database-user-session-v4|${overlongPayload}`).digest('base64url')
+  assert.equal(await service.authenticateSession(`a4.${overlongPayload}.${overlongSignature}`, NOW, SECRET), null)
+})
+
+test('a signed cookie cannot authenticate a missing or revoked registered session', async () => {
+  const { service, principal: passwordPrincipal, repository } = await setup()
+  const principal = registered(repository, passwordPrincipal)
+  const token = mintUserSession(principal, NOW, SECRET)
+  assert.ok(await service.authenticateSession(token, NOW, SECRET))
+  repository.sessions[0]!.revokedAt = NOW.getTime()
+  assert.equal(await service.authenticateSession(token, NOW, SECRET), null)
+  repository.sessions = []
+  assert.equal(await service.authenticateSession(token, NOW, SECRET), null)
 })
 
 test('verified channel routing uses current binding ownership and capabilities, never a user role', async () => {

@@ -23,9 +23,10 @@ node scripts/validate-data.mjs   # check property data against the runtime contr
 See [db/README.md](db/README.md) for the PostgreSQL runtime contract and current
 deployment limits; [SETUP.md](SETUP.md) covers the existing phone integration.
 
-The PostgreSQL portal also includes **Status → Account security** for changing
-your own password. Current-password verification, database rate limits and session
-revocation protect the flow; no environment-file edits are needed. This does not
+The PostgreSQL portal includes **Status → Account security** for changing your own
+password, viewing active logins and signing out individual or all other sessions.
+Current-password verification, shared database rate limits and registered session
+revocation protect these flows; no environment-file edits are needed. This does not
 change the hosted legacy demo password or complete MFA/customer onboarding.
 
 ## The one idea worth understanding
@@ -125,7 +126,11 @@ served by `api/dashboard.ts` after sign-in and is never copied into `public/`.
 
 With `ATRIUM_RUNTIME_MODE=postgres`, staff sign in with their username and password;
 the server resolves a persisted user. Database setup is not part of each login. The session
-contains user identity and credential version, not an active property or cached role.
+contains user identity, credential version and a registered session ID with fixed
+expiration, not an active property or cached role. Every request checks that registry;
+clearing a cookie alone is not logout. Sessions expire after eight hours, with up to
+20 active logins per user. See [session management](docs/adr/0005-revocable-sessions.md)
+for migration, revocation ordering and remaining identity controls.
 Each page selects its organization/property explicitly; every operational request
 rechecks membership, grants and published configuration. Separate tabs can operate
 on separate properties with one user session. Viewers can read; staff can operate;

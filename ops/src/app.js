@@ -2532,7 +2532,7 @@ function statusSummary(s, rows) {
     : summary('Workspace data is available.', `Callers, calendar and call history are loaded. ${refreshed}`, 'is-ok')
 }
 const statusView = {
-  title: 'Status', icon: icons.status, root: null, sigKey: null, busyAction: false, demoFocused: null,
+  title: 'Status', icon: icons.status, root: null, sigKey: null, busyAction: false, signOutPending: false, demoFocused: null,
   mount(root) {
     this.root = root
     root.addEventListener('click', (e) => this.onClick(e))
@@ -2542,7 +2542,7 @@ const statusView = {
   },
   render(s) {
     const root = this.root
-    if (!root || this.busyAction) return
+    if (!root || this.busyAction || this.signOutPending) return
     const rows = statusRows()
     const counts = { calls: arr(s.calls).length, slots: arr(s.calendar && s.calendar.slots).length, leads: profilesOf(s).length, todos: followUpsOf(s).length }
     const week = this.weekDays(s)
@@ -2680,13 +2680,28 @@ const statusView = {
     } else toast('Refresh is incomplete. Some information could not be checked; review the status details.', { kind: 'warn', key: 'refresh' })
   },
   async signOut(btn) {
-    btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true')
-    if (databaseMode) invalidateDocument('Signing out. Sign in again to continue.', 401)
-    stopPolling(); gated = true
+    if (btn.disabled || this.signOutPending) return
+    this.signOutPending = true
+    btn.disabled = true; btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true')
+    const controller = new AbortController(), deadline = setTimeout(() => controller.abort(), 15000)
     try {
-      await fetch('/api/dashboard', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { ...JSON_HEADERS, 'content-type': 'application/json' }, body: JSON.stringify({ action: 'logout' }) })
-    } catch (e) { /* the reload lands on the sign-in page either way */ }
-    location.reload()
+      const response = await fetch('/api/dashboard', { method: 'POST', credentials: 'same-origin', cache: 'no-store',
+        redirect: 'error', signal: controller.signal, headers: { ...JSON_HEADERS, 'content-type': 'application/json',
+          ...(databaseMode ? { 'x-atrium-user-id': window.ATRIUM_ACCOUNT?.userId, 'x-atrium-session-id': window.ATRIUM_ACCOUNT?.sessionId, 'x-atrium-csrf': window.ATRIUM_SESSION_FORM_TOKEN } : {}) }, body: JSON.stringify({ action: 'logout' }) })
+      if (databaseMode) {
+        const result = await response.json()
+        if (!response.ok || result?.status !== 'signed_out') throw new Error('Sign-out was not confirmed')
+      } else if (!response.ok) throw new Error('Sign-out was not confirmed')
+      stopPolling(); gated = true
+      if (databaseMode) invalidateDocument('Signed out. Sign in again to continue.', 401)
+      location.assign('/api/dashboard?reauthenticate=1')
+    } catch {
+      this.signOutPending = false
+      toast('Sign-out could not be confirmed. Reload the workspace to check your session before trying again.', { kind: 'warn', key: 'sign-out' })
+      btn.disabled = false
+    } finally {
+      clearTimeout(deadline); btn.classList.remove('is-busy'); btn.removeAttribute('aria-busy')
+    }
   },
   async blockWeek(btn) {
     const days = this.weekDays(state)

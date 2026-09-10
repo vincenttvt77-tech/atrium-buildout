@@ -7,6 +7,8 @@ import { isPostgresRuntime } from '../database/mode.ts'
 import { PgAuthorizationRepository } from '../database/authorization.ts'
 import { createPasswordChangeService } from '../auth/password-change.ts'
 import { PostgresPasswordChangeRepository } from '../database/password-change.ts'
+import { createSessionManagementService, sessionLabel } from '../auth/session-management.ts'
+import { PostgresUserSessionRepository } from '../database/user-sessions.ts'
 import { createLoginProtection } from '../auth/login-protection.ts'
 import { PostgresLoginProtectionRepository } from '../database/login-protection.ts'
 import { PostgresPropertyRepository } from '../database/properties.ts'
@@ -56,6 +58,7 @@ const header = (headers: Headers, key: string): string | undefined => {
 export class DatabaseRuntime {
   readonly authorization: ReturnType<typeof createAuthorizationService>
   readonly passwordChanges: ReturnType<typeof createPasswordChangeService>
+  readonly sessions: ReturnType<typeof createSessionManagementService>
   readonly loginProtection: ReturnType<typeof createLoginProtection>
   readonly sessionSecret: string
   readonly app: DatabaseConnection
@@ -67,15 +70,17 @@ export class DatabaseRuntime {
     this.authorization = createAuthorizationService(new PgAuthorizationRepository(options.auth))
     this.passwordChanges = createPasswordChangeService(new PostgresPasswordChangeRepository(options.auth))
     this.loginProtection = createLoginProtection(new PostgresLoginProtectionRepository(options.auth), options.sessionSecret)
+    this.sessions = createSessionManagementService(new PostgresUserSessionRepository(options.auth))
     this.properties = new PostgresPropertyRepository(options.app)
   }
   authenticate(headers: Headers, now: Date): Promise<AuthenticatedUser | null> {
     return this.authorization.authenticateSession(parseCookies(headers.cookie)[OPS_COOKIE], now, this.sessionSecret)
   }
   /** Every interactive password login reserves shared budgets before hash lookup. */
-  async signIn(username: unknown, password: unknown, clientAddress: unknown): Promise<AuthenticatedUser | null> {
+  async signIn(username: unknown, password: unknown, clientAddress: unknown, userAgent?: unknown): Promise<AuthenticatedUser | null> {
     await this.loginProtection.reserve(username, clientAddress)
-    return this.authorization.authenticatePassword(username, password)
+    const principal = await this.authorization.authenticatePassword(username, password)
+    return principal ? this.sessions.start(principal, { label: sessionLabel(userAgent) }) : null
   }
   async loadUserProperty(principal: AuthenticatedUser, selected: {organizationId: unknown; propertyId: unknown},
     permission: Permission, requestId: string = randomUUID()): Promise<ResolvedPropertyRuntime> {

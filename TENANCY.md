@@ -56,8 +56,9 @@ data, KV or memory. Full connection, TLS and migration requirements are in
 
 Users, credentials, organizations, memberships and property grants are persisted
 records, not one environment entry per PostgreSQL account. Sessions contain user
-identity, credential version and expiration, with no active property or cached role.
-Current credential status, membership, grants and property status are checked again
+identity, credential version, registered session ID and fixed expiration, with no
+active property or cached role. Each request verifies that the session remains
+registered, unrevoked and unexpired. Current credential status, membership, grants and property status are checked again
 when authorizing operations. Viewers have `read`; staff also have `operate`; admins
 and owners have `configure` and membership permissions. A role does not implicitly
 grant every property: organization-wide access or explicit property grants determine
@@ -84,6 +85,16 @@ password is required, and a confirmed change invalidates earlier sessions. This
 changes a persisted user record without an environment-file edit. It does not
 reset another user’s password, supply forgotten-password recovery, or change the
 separate hosted legacy passcode. See [personal account security](docs/adr/0002-personal-account-security.md).
+
+The same account page lists active logins and can sign out one session or all other
+sessions. Sessions expire eight hours after registration; activity does not renew
+them. New logins above the 20-active-session limit revoke the oldest active login.
+Session controls and logout are bound to the identity/session that rendered the
+page, so a stale tab cannot revoke a replacement login. A failed or uncertain
+response does not confirm sign-out. Deploying the registered-session migration and
+application requires one fresh sign-in for old PostgreSQL cookies, using the same
+password. Historical security records remain retained; their retention policy and
+MFA are follow-on work. See [revocable sessions](docs/adr/0005-revocable-sessions.md).
 
 ## Legacy named accounts and shared passcode
 

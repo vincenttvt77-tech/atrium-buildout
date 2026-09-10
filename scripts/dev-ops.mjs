@@ -524,14 +524,17 @@ if (flags.seed && savedFixture?.status !== 'complete') {
   // resetting its password. This principal never leaves the fixture startup path.
   const user = validateUser(await new PgAuthorizationRepository(runtime.auth).getUser(LOCAL_USER))
   if (user.status !== 'active') throw new Error('The local fixture account is inactive; no seed session was issued.')
-  const maintenancePrincipal = issueAuthenticatedUser(user)
+  const maintenancePrincipal = await runtime.sessions.start(issueAuthenticatedUser(user), { label: 'Local fixture import' })
   fixturePrincipal = await runtime.authenticate({ cookie: `${OPS_COOKIE}=${mintUserSession(maintenancePrincipal, new RealDate(), runtime.sessionSecret)}` }, new RealDate())
   try {
     summary = await seed(fixture)
     for (const call of fixture.calls) { applyTokens(call); delete call.tour }
     await localDatabase.writeImport('synthetic-calls-v1', { status: 'complete', startedAt: STARTED.toISOString(), path: FIXTURE_PATH, fixture,
       synthetic: true, note: 'Fictional call samples imported once. Source dates and staff changes survive restarts; no PMS connection.' })
-  } finally { fixturePrincipal = null }
+  } finally {
+    if (fixturePrincipal) await runtime.sessions.revoke(fixturePrincipal, fixturePrincipal.sessionId)
+    fixturePrincipal = null
+  }
 }
 const fixtureCalls = (summary || savedFixture?.status === 'complete' ? [...fixture.calls] : [])
   .sort((a, b) => (b.startedAt ?? '').localeCompare(a.startedAt ?? ''))
@@ -595,7 +598,9 @@ const server = createServer(async (req, res) => {
     } else if (path === '/api/dashboard' && !flags.built && req.method === 'GET' && out.status === 200
       && String(out.headers.get('content-type') ?? '').includes('text/html')) {
       const served = out.body.toString('utf8')
-      const bootstrap = /<script>window\.ATRIUM_RUNTIME_MODE="postgres";window\.ATRIUM_ACCOUNT=[\s\S]*?<\/script>/.exec(served)?.[0]
+      // Copy the complete authorized bootstrap, including session form bindings;
+      // new fields must not silently disable live composition or demo labeling.
+      const bootstrap = /<script>window\.ATRIUM_RUNTIME_MODE="postgres";[\s\S]*?<\/script>/.exec(served)?.[0]
       // Picker/error pages remain exactly as the handler served them. Only a
       // successfully authorized property page receives the live source bundle.
       if (bootstrap) body = Buffer.from((await livePage(served)).replace('</head>', `${bootstrap}<script>window.ATRIUM_DEMO=true;window.ATRIUM_DEMO_PERSISTENT=true;</script></head>`))

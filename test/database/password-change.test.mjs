@@ -7,11 +7,11 @@ import { createAuthorizationService, mintUserSession, hashPassword } from '../..
 import { createPasswordChangeService } from '../../src/auth/password-change.ts'
 import { PgAuthorizationRepository } from '../../src/database/authorization.ts'
 import { PostgresPasswordChangeRepository } from '../../src/database/password-change.ts'
+import { createDatabaseRuntime } from '../../src/application/runtime.ts'
 
 let db, authorization, repository, service, initialHash
 const initialPassword = 'synthetic initial password for account tests'
 const nextPassword = 'synthetic replacement password for account tests'
-const now = new Date('2032-06-01T12:00:00Z')
 before(async () => {
   db = await createFoundationTestDatabase()
   await seedFoundationTestDatabase(db.admin)
@@ -48,7 +48,9 @@ test('generated account-security migration matches reviewed source and has a res
 })
 
 test('personal change needs no property membership, rotates once and atomically saves a secret-free self audit', async () => {
-  const principal = await user()
+  const runtime = createDatabaseRuntime({ app: db.app, auth: db.auth, sessionSecret: 'synthetic session secret for password tests' })
+  const principal = await runtime.sessions.start(await user(), { label: 'Synthetic password-change session' })
+  const now = new Date()
   const token = mintUserSession(principal, now, 'synthetic session secret for password tests')
   await service.changeOwnPassword(principal, { currentPassword: initialPassword, newPassword: nextPassword })
   const saved = await credential(principal), audit = await events(principal)

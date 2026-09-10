@@ -50,15 +50,16 @@ remain open; native PostgreSQL test success does not resolve those choices.
 
 ## HTTP and portal contract
 
-The PostgreSQL session is a signed user-only token containing `userId`,
-`credentialVersion` and `expiresAt`; it contains no current property or cached role.
-Authentication rereads the active user/credential version. Authorization resolves
+The PostgreSQL `a4` session is a signed user-only token containing `userId`,
+`credentialVersion`, registered `sessionId` and fixed `expiresAt`; it contains no
+current property or cached role. Authentication checks the exact unrevoked registry
+record and rereads the active user/credential version. Authorization resolves
 current membership, organization/property status and explicit grants per operation.
 
 | Route | Scope and behavior |
 | --- | --- |
 | `GET/POST /api/dashboard` | Sign-in/logout and protected HTML. A signed-in user with multiple properties sees a picker; an explicit page uses `?organizationId=...&propertyId=...`. |
-| `GET/POST /api/account` | Personal security page and current-password-verified rotation. Requires a fresh user session, same-origin JSON POST and identity-bound signed form token; independent of property access. Absent in legacy mode. |
+| `GET/POST /api/account` | Personal password change and active-session list/revocation. Requires a current registered user session; mutations require same-origin JSON and a signed user/session-bound form token. Independent of property access; absent in legacy mode. |
 | `GET /api/properties` | Authenticated, unscoped catalogue of properties this user can read. It exposes safe labels, role/permissions and navigation links, not property inventories or credentials. |
 | `GET /api/leads`, `/api/calendar`, `/api/vapi` | Require the user session and all three explicit property headers below; permission is `read`. |
 | `POST /api/leads`, `/api/calendar` | Same explicit selection plus `operate`; calendar `settings` requires `configure`. Bulk demo resets are unavailable in PostgreSQL mode. |
@@ -161,6 +162,36 @@ can be changed through this route.
 remaining MFA, invitation, recovery, breached-password screening and hosted
 migration gates. The security event table is private, not a customer audit UI.
 
+## Registered sessions and sign-out
+
+A successful password login registers a UUID session and lifecycle audit before
+issuing its cookie. Database time sets an absolute eight-hour expiration. Requests
+and page reloads do not renew it. Authentication refuses missing, revoked, expired,
+wrong-version or mismatched records, including correctly signed old `a3` cookies.
+Registry unavailability refuses access instead of falling back to a stateless cookie.
+
+Account security lists at most 20 active sessions for the current user/version.
+New logins beyond the cap revoke the oldest active sessions in the registration
+transaction. Users can revoke one session or all other sessions. An unknown or
+foreign target returns the same generic refusal; an owned inactive target permits
+an idempotent result. Last connection includes background activity. Device/browser
+labels are coarse, unverified hints; raw user agents, IPs and locations are not stored.
+
+Account mutations and authenticated dashboard logout require same-origin JSON,
+`x-atrium-user-id`, `x-atrium-session-id` and a signed `x-atrium-csrf` token bound to
+the rendered session. Account mutations also require the matching
+`x-atrium-account-action`. Form tokens last one hour; stale pages must reload.
+Logout revokes the session before clearing the cookie. Missing/malformed/lost
+receipts do not display success or trigger an automatic mutation retry.
+
+Provision `atrium_session_executor NOLOGIN` before the user-sessions migration and
+release the corresponding application together. Users with old PostgreSQL cookies
+sign in again with their existing password; no account reset or per-login environment
+change is required. The legacy hosted adapter remains separate. Historical session
+and lifecycle audit rows are retained; a purge/archival policy is not implemented.
+See [ADR 0005](../docs/adr/0005-revocable-sessions.md) for transaction ordering, trusted
+internal operations, rollout and remaining MFA/recovery/retention work.
+
 ## Published showing rules
 
 A PostgreSQL property must publish `property.tourSettings` in its configuration
@@ -205,14 +236,16 @@ separately by the deployment secret store. There are no database passwords in SQ
 | Role | Purpose and privileges |
 | --- | --- |
 | `atrium_admin` | Owns the private `atrium` schema and its objects. Runs migrations, explicit provisioning and maintenance. Has an explicit all-row policy, including under forced RLS. Never use this role in an HTTP request. |
-| `atrium_authenticator` | Separate login/session connection. Scoped identity queries, the finite sign-in reservation and two finite personal password commands. Can read the selected credential but cannot write raw identity tables, read/write login buckets directly or access operational tables. |
+| `atrium_authenticator` | Separate login/session connection. Scoped identity queries, the finite sign-in reservation, two personal password commands and four session commands. Can read the selected credential/current session but cannot write raw identity/session tables, access login buckets directly or access operational tables. |
 | `atrium_account_executor` | NOLOGIN owner of the two private password commands. Has only self-scoped credential/version writes, attempt reservations and audit append under forced RLS. Runtime logins cannot inherit or assume this role. |
 | `atrium_login_executor` | NOLOGIN owner of `atrium.reserve_login_attempt(text,text)`. Can maintain only the private forced-RLS login bucket table; cannot read or change identities, credentials or property records. Runtime logins cannot inherit or assume this role. |
+| `atrium_session_executor` | NOLOGIN owner of four finite session commands and the current-session transaction fence. Own-user registry changes and append-only lifecycle audit under forced RLS; user row locking cannot change identity. No credential or property access. Runtime logins cannot inherit or assume this role. |
 | `atrium_app` | Property repositories only. Scoped configuration reads and operational document/calendar writes, plus scoped audit append/read. Cannot read password hashes, change memberships/configuration/channel bindings, truncate tables, or modify audit history. |
 
-All five must be `NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`.
+All six must be `NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`.
 Provision `atrium_account_executor NOLOGIN` before the account-security migration
-and `atrium_login_executor NOLOGIN` before the login-protection migration. Grant
+and `atrium_login_executor NOLOGIN` before the login-protection migration. Provision
+`atrium_session_executor NOLOGIN` before the user-sessions migration. Grant
 these executor roles only to `atrium_admin` so migrations can transfer function
 ownership; do not grant them to either runtime login. The migration grants the
 authenticator explicit execution of the login reservation while denying execution
@@ -238,12 +271,12 @@ Never use session-scoped `SET` for request identity.
 
 | Transaction | Local settings |
 | --- | --- |
-| Staff property operation | `actor_user_id`, `credential_version`, `organization_id`, `property_id` |
-| Verified channel property operation | `channel_binding_id`, `channel_binding_version`, `organization_id`, `property_id`; no staff actor |
+| Staff property operation | `actor_user_id`, `credential_version`, `session_id`, `organization_id`, `property_id` |
+| Verified channel property operation | `channel_binding_id`, `channel_binding_version`, `organization_id`, `property_id`; no staff actor or session |
 | Pre-login attempt reservation | All authorization settings empty; only two server-derived HMAC keys enter the finite function |
 | Password lookup | `login_username` only |
-| Session identity lookup | `actor_user_id` only |
-| Staff authorization lookup | `actor_user_id`, `credential_version` |
+| Session commands / identity lookup | `actor_user_id`, `credential_version`, `session_id`; registration has no session yet |
+| Staff authorization lookup | `actor_user_id`, `credential_version`, `session_id` for HTTP users |
 | Channel authorization lookup | `channel_provider`, `channel_external_id` |
 
 These settings are a **trusted server boundary**. The role owning a connection can
@@ -253,7 +286,17 @@ an injection that can impersonate another actor. Request/model-provided tenant I
 must never be copied directly into this context. The authentication service issues
 scope after checking the current identity or verified server-owned channel binding.
 
-Before reading a property's operational data, the repository must execute:
+For registered staff sessions, acquire the finite fence before any property locks:
+
+```sql
+SELECT atrium.hold_current_session() AS allowed;
+```
+
+It holds the current user and exact active session in that order through commit or
+rollback; anything other than true is forbidden. It is callable only by the property
+application role. Channel operations and explicitly trusted internal user operations
+without a browser session do not use this fence. All HTTP users have registered
+sessions. The same transaction must then check property authority:
 
 ```sql
 SELECT atrium.can_access_property($1, $2, $3) AS allowed;
@@ -268,12 +311,15 @@ membership, explicit property grant or organization-wide access, and current rol
 Channel operations instead recheck the active binding, its version and capability.
 Neither route trusts a cached role or client-selected binding.
 
-Revocation and password rotation affect the next statement's current database
-snapshot, including requests holding an old application scope. This does not cancel
-a statement already executing or undo an operation committed before revocation.
-Do not use `REPEATABLE READ` to stretch old authorization snapshots across a request.
-Stronger cancellation of in-flight work requires a coordinated locking/cancellation
-protocol; it is not claimed here.
+Session revocation, session-cap eviction and password rotation take the user lock
+exclusively before session locks. They wait for previously admitted property
+transactions to complete. After revocation commits, the old session cannot pass a
+new property transaction's fence, including with an already issued application scope.
+Keep these transactions short; never hold their locks across network or password
+hashing work. Entry/exit checks still cover membership, configuration and property
+changes; the session fence does not serialize every authorization change. Do not
+use `REPEATABLE READ` to stretch old authority across a request. Already committed
+work and accepted background workflows are not canceled by browser logout.
 
 ## Tables and ownership
 
@@ -281,6 +327,8 @@ protocol; it is not claimed here.
 | --- | --- |
 | `users`, `user_credentials` | Stable staff identity and separately protected scrypt hash. Canonical username is unique. Updating/deleting a hash advances the user's credential version. |
 | `login_attempt_buckets` | `(bucket_kind, bucket_key)` for private username/client HMAC digests and bounded timestamp queues. Only the finite reservation function and authorized maintenance can access these rows; they are distinct from personal password-change attempts. |
+| `user_sessions` | UUID session records with user/version, coarse label, fixed expiration, last connection and irreversible revocation. At most 20 active per user/version; historical rows retained. |
+| `user_session_events` | Append-only registration/revocation lifecycle audit, including session-cap eviction. No caller, credential or raw user-agent payload. |
 | `organizations` | Client boundary with status and permission version. |
 | `properties` | One organization, validated database timezone, status and nullable current configuration version. |
 | `memberships` | One user/organization membership. Role is `owner`, `admin`, `staff` or `viewer`; `access='organization'` must be explicit. Role alone never confers access to all properties. |
