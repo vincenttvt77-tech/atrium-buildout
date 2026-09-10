@@ -13,6 +13,27 @@ import type { DemoAssistantConfig } from './config.ts'
 
 export interface VapiAssistantSummary { id: string; name: string }
 
+const AUTH_HEADERS = new Set(['authorization', 'proxy-authorization', 'x-vapi-secret', 'x-vapi-signature'])
+const configurationError = () => new Error('Webhook authentication is missing or conflicts with an existing secret or authentication header. Reconcile the configuration before publishing; no update was sent.')
+const record = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+
+/** A vault credential owns authentication. Inline headers/legacy secrets cannot compete. */
+function assertCredentialServer(value: unknown): asserts value is Record<string, unknown> & { url: string; credentialId: string } {
+  if (!record(value) || typeof value.url !== 'string' || typeof value.credentialId !== 'string'
+    || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(value.credentialId)
+    || (value.secret !== undefined && value.secret !== null)) throw configurationError()
+  let url: URL
+  try { url = new URL(value.url) } catch { throw configurationError() }
+  const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+  if (url.username || url.password || url.search || url.hash || url.pathname !== '/api/vapi'
+    || value.url !== url.href || (url.protocol !== 'https:' && !(local && url.protocol === 'http:'))) throw configurationError()
+  if (value.headers !== undefined && value.headers !== null) {
+    if (!record(value.headers) || Object.entries(value.headers).some(([key, header]) =>
+      !/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(key) || AUTH_HEADERS.has(key.toLowerCase())
+      || ['host', ':authority'].includes(key.toLowerCase()) || typeof header !== 'string' || /[\r\n]/.test(header))) throw configurationError()
+  }
+}
+
 export function chooseAssistant(
   list: VapiAssistantSummary[], wanted: { id?: string | undefined; name: string },
 ): { assistant: VapiAssistantSummary } | { error: string; candidates: VapiAssistantSummary[] } {
@@ -36,17 +57,30 @@ export function chooseAssistant(
 /** Apply tested workflow and timing settings over the assistant's existing providers. */
 export function assistantPatch(existing: Record<string, unknown>, config: DemoAssistantConfig) {
   const model = (existing.model && typeof existing.model === 'object' ? existing.model : {}) as Record<string, unknown>
+  const server = record(existing.server) ? existing.server : {}
+  const nextServer = { ...server, ...config.server }
+  assertCredentialServer(nextServer)
+  if (!Array.isArray(config.model.tools) || !config.model.tools.length) throw configurationError()
+  const tools = config.model.tools.map((tool: unknown) => {
+    if (!record(tool) || tool.type !== 'function') throw configurationError()
+    // Retain unrelated server options, but remove any dependence on implicit
+    // assistant-to-tool credential inheritance. Each function has the same route.
+    if (tool.server !== undefined) {
+      assertCredentialServer(tool.server)
+      if (tool.server.url !== nextServer.url || tool.server.credentialId !== nextServer.credentialId) throw configurationError()
+    }
+    return { ...tool, server: { ...nextServer,
+      ...(record(nextServer.headers) ? { headers: { ...nextServer.headers } } : {}) } }
+  })
   const patched: Record<string, unknown> = {
     ...model,
     messages: config.model.messages,
-    tools: config.model.tools,
+    tools,
     // Tools attached as separate Vapi resources would be merged with — or shadow — the
     // inline ones. The inline definitions are the ones under test here, so they are the
     // only ones.
     toolIds: [],
   }
-  const server = existing.server && typeof existing.server === 'object' ? existing.server as Record<string, unknown> : {}
-  const nextServer: Record<string, unknown> & { url: string } = { ...server, ...config.server }
   const start = existing.startSpeakingPlan && typeof existing.startSpeakingPlan === 'object' ? existing.startSpeakingPlan : {}
   const stop = existing.stopSpeakingPlan && typeof existing.stopSpeakingPlan === 'object' ? existing.stopSpeakingPlan : {}
   return {
@@ -111,7 +145,9 @@ export async function syncAssistant(opts: {
   }
   const assistant = summarise(existing)
 
-  const patch = assistantPatch(existing, opts.config)
+  let patch: ReturnType<typeof assistantPatch>
+  try { patch = assistantPatch(existing, opts.config) }
+  catch { return { ok: false, error: configurationError().message, assistant } }
   const patchRes = await doFetch(endpoint, { method: 'PATCH', headers, body: JSON.stringify(patch), signal })
   if (!patchRes.ok) {
     let detail = ''
@@ -123,7 +159,7 @@ export async function syncAssistant(opts: {
   const readbackRes = await doFetch(endpoint, { headers, signal })
   if (!readbackRes.ok) return { ok: false, error: `The update was sent, but Vapi returned ${readbackRes.status} when verifying the saved assistant.`, assistant }
   const readback = await readbackRes.json() as Record<string, unknown>
-  if (!readback || readback.id !== assistantId || !containsPatch(readback, patch)) {
+  if (!readback || readback.id !== assistantId || !containsPatch(readback, patch) || !verifiedRoutes(readback, patch)) {
     return { ok: false, error: 'The update was sent, but the saved assistant did not match the expected configuration. Check Vapi before retrying.', assistant }
   }
   return {
@@ -135,6 +171,21 @@ export async function syncAssistant(opts: {
 }
 
 const config_name = (c: DemoAssistantConfig) => c.name
+
+/** Added API defaults must never create an alternate route or authentication source. */
+function verifiedRoutes(actual: Record<string, unknown>, expected: ReturnType<typeof assistantPatch>): boolean {
+  try {
+    assertCredentialServer(actual.server)
+    if (actual.server.url !== expected.server.url || actual.server.credentialId !== expected.server.credentialId
+      || !record(actual.model) || !Array.isArray(actual.model.tools)) return false
+    for (const tool of actual.model.tools) {
+      if (!record(tool) || tool.type !== 'function') return false
+      assertCredentialServer(tool.server)
+      if (tool.server.url !== expected.server.url || tool.server.credentialId !== expected.server.credentialId) return false
+    }
+    return true
+  } catch { return false }
+}
 
 /** API defaults may add fields, but every intended field and ordered array must survive. */
 function containsPatch(actual: unknown, expected: unknown): boolean {

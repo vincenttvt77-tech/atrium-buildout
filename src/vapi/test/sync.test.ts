@@ -4,7 +4,8 @@ import { chooseAssistant, assistantPatch, syncAssistant } from '../sync.ts'
 import { demoAssistantConfig } from '../config.ts'
 import property from '../../../data/property.json' with { type: 'json' }
 
-const config = demoAssistantConfig(property as Record<string, unknown>, 'https://example.vercel.app', new Date('2026-09-08T12:00:00Z'))
+const generated = demoAssistantConfig(property as Record<string, unknown>, 'https://example.vercel.app', new Date('2026-09-08T12:00:00Z'))
+const config = { ...generated, server: { ...generated.server, credentialId: 'credential-configured' } }
 
 describe('which assistant is updated', () => {
   const list = [{ id: 'a1', name: 'The Larkin — Leasing' }, { id: 'a2', name: 'Scratch' }]
@@ -22,12 +23,31 @@ describe('which assistant is updated', () => {
 })
 
 describe('what the update writes and what it leaves alone', () => {
-  test('preserves webhook credentials when changing the server URL', () => {
-    const patch = assistantPatch({ server: { url: 'https://old.example/api/vapi', credentialId: 'credential-existing', headers: { 'x-custom': 'value' }, secret: 'test-only-secret' } }, config)
+  test('preserves a configured vault credential and unrelated headers on all seven explicit tool routes', () => {
+    const patch = assistantPatch({ server: { url: 'https://old.example/api/vapi', credentialId: 'credential-existing', headers: { 'x-custom': 'value' } } }, generated)
     assert.equal(patch.server.credentialId, 'credential-existing')
-    assert.equal(patch.server.secret, 'test-only-secret')
     assert.deepEqual(patch.server.headers, { 'x-custom': 'value' })
     assert.equal(patch.server.url, config.server.url)
+    const tools = patch.model.tools as Array<{ server: Record<string, unknown>; function: unknown; messages?: unknown }>
+    assert.equal(tools.length, 7)
+    for (const [index, tool] of tools.entries()) {
+      assert.deepEqual(tool.server, patch.server)
+      assert.notEqual(tool.server, patch.server)
+      assert.deepEqual(tool.function, (config.model.tools as typeof tools)[index]!.function)
+      assert.deepEqual(tool.messages, (config.model.tools as typeof tools)[index]!.messages)
+    }
+  })
+  test('rejects competing legacy secrets and case-insensitive authentication headers without exposing their values', () => {
+    for (const field of [{ secret: 'sensitive-marker' }, { secret: '' },
+      ...['Authorization', 'authorization', 'X-Vapi-Secret', 'x-vapi-signature', 'Proxy-Authorization'].map(key => ({ headers: { [key]: 'sensitive-marker' } }))]) {
+      assert.throws(() => assistantPatch({ server: field }, config), error => {
+        assert.match((error as Error).message, /conflicts/)
+        assert.doesNotMatch((error as Error).message, /sensitive-marker/)
+        return true
+      })
+    }
+    assert.throws(() => assistantPatch({}, generated), /authentication is missing/)
+    assert.throws(() => assistantPatch({}, { ...config, server: { ...config.server, url: 'https://elsewhere.example/other' } }), /authentication/)
   })
   test('saved assistants resolve the date on the call, not on the last deployment', () => {
     assert.match(config.model.messages[0]!.content, /\{\{"now" \| date:/)
@@ -56,6 +76,43 @@ describe('what the update writes and what it leaves alone', () => {
 })
 
 describe('the round trip to Vapi', () => {
+  test('conflicting existing authentication refuses before PATCH', async () => {
+    const methods: string[] = []
+    const result = await syncAssistant({ apiKey: 'synthetic', assistantId: 'a1', config,
+      fetchImpl: (async (_url: string, init?: RequestInit) => {
+        methods.push(init?.method ?? 'GET')
+        return Response.json({ id: 'a1', server: { headers: { 'X-Vapi-Secret': 'sensitive-marker' } } })
+      }) as unknown as typeof fetch })
+    assert.equal(result.ok, false)
+    assert.deepEqual(methods, ['GET'])
+    assert.match(result.error!, /no update was sent/)
+    assert.doesNotMatch(result.error!, /sensitive-marker/)
+  })
+
+  test('readback rejects missing or changed tool routes and added competing auth despite a correct assistant server', async () => {
+    for (const failure of ['tool-url', 'tool-credential', 'tool-missing-server', 'tool-secret', 'tool-auth-header', 'assistant-secret', 'assistant-auth-header']) {
+      let saved: any, reads = 0, writes = 0
+      const result = await syncAssistant({ apiKey: 'synthetic', assistantId: 'a1', config,
+        fetchImpl: (async (_url: string, init?: RequestInit) => {
+          if (init?.method === 'PATCH') { writes++; saved = JSON.parse(String(init.body)); return Response.json({}) }
+          if (++reads === 1) return Response.json({ id: 'a1', name: 'Synthetic' })
+          const tool = saved.model.tools[0]
+          if (failure === 'tool-url') tool.server.url = 'https://wrong.example/api/vapi'
+          if (failure === 'tool-credential') tool.server.credentialId = 'wrong-credential'
+          if (failure === 'tool-missing-server') delete tool.server
+          if (failure === 'tool-secret') tool.server.secret = 'sensitive-marker'
+          if (failure === 'tool-auth-header') tool.server.headers = { 'X-Vapi-Signature': 'sensitive-marker' }
+          if (failure === 'assistant-secret') saved.server.secret = 'sensitive-marker'
+          if (failure === 'assistant-auth-header') saved.server.headers = { Authorization: 'sensitive-marker' }
+          return Response.json({ id: 'a1', ...saved })
+        }) as unknown as typeof fetch })
+      assert.equal(result.ok, false, failure)
+      assert.equal(writes, 1); assert.equal(reads, 2)
+      assert.match(result.error!, /saved assistant did not match/)
+      assert.doesNotMatch(result.error!, /sensitive-marker/)
+    }
+  })
+
   test('legacy mode lists, reads, patches and verifies the chosen assistant with the key', async () => {
     const calls: Array<{ url: string; method: string; body?: unknown; auth?: string }> = []
     let saved: Record<string, unknown> = { id: 'a1', name: 'The Larkin — Leasing', model: { provider: 'anthropic', model: 'claude-sonnet-5', temperature: 0.4 } }

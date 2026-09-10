@@ -759,15 +759,33 @@ export default async function handler(req: any, res: any) {
   return scopedHandler(req, res)
 }
 
+/** An explicit credential must never fall back to a different, legacy credential. */
+function webhookCredential(req: any): string | undefined {
+  const headers = req.headers ?? {}
+  const authorizationKeys = Object.keys(headers).filter(key => key.toLowerCase() === 'authorization')
+  // Node can discard duplicate Authorization values while normalizing headers.
+  // Retain the raw-header ambiguity check when the HTTP adapter exposes it.
+  const rawCount = Array.isArray(req.rawHeaders)
+    ? req.rawHeaders.filter((value: unknown, index: number) => index % 2 === 0
+      && typeof value === 'string' && value.toLowerCase() === 'authorization').length
+    : 0
+  if (authorizationKeys.length > 0 || rawCount > 0) {
+    if (authorizationKeys.length !== 1 || rawCount > 1) return undefined
+    const authorization = headers[authorizationKeys[0]!]
+    if (typeof authorization !== 'string') return undefined
+    return /^Bearer ([A-Za-z0-9._~+/-]+=*)$/i.exec(authorization)?.[1]
+  }
+  const legacy = headers['x-vapi-secret'] ?? headers['x-vapi-signature']
+  return typeof legacy === 'string' ? legacy : undefined
+}
+
 function verifyDatabaseWebhook(req: any, res: any): boolean {
   const expected = process.env.VAPI_WEBHOOK_SECRET?.trim()
   if (!expected) {
     res.status(503).json({ error: 'Webhook verification is not configured' })
     return false
   }
-  const bearer = req.headers?.authorization
-  const provided = req.headers?.['x-vapi-secret'] ?? req.headers?.['x-vapi-signature']
-    ?? (typeof bearer === 'string' && bearer.startsWith('Bearer ') ? bearer.slice(7) : undefined)
+  const provided = webhookCredential(req)
   if (typeof provided !== 'string' || !constantTimeEquals(provided, expected)) {
     res.status(401).json({ error: 'unauthorized' })
     return false
@@ -916,9 +934,7 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
       return
     }
     if (expected) {
-      const bearer = req.headers?.authorization
-      const provided = req.headers?.['x-vapi-secret'] ?? req.headers?.['x-vapi-signature']
-        ?? (typeof bearer === 'string' && bearer.startsWith('Bearer ') ? bearer.slice(7) : undefined)
+      const provided = webhookCredential(req)
       if (typeof provided !== 'string' || !constantTimeEquals(provided, expected)) {
         res.status(401).json({ error: 'unauthorized' })
         return
