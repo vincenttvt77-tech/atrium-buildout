@@ -1,3 +1,4 @@
+import { TEST_AUTH_ORIGIN, verifyMfaSession } from '../helpers/mfa-session.mjs'
 import { before, after, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
@@ -13,7 +14,7 @@ before(async () => {
   credentials = await seedFoundationTestDatabase(db.admin)
   repository = new PgAuthorizationRepository(db.auth)
   authorization = createAuthorizationService(repository)
-  runtime = createDatabaseRuntime({ app: db.app, auth: db.auth, sessionSecret })
+  runtime = createDatabaseRuntime({ authOrigin: TEST_AUTH_ORIGIN, app: db.app, auth: db.auth, sessionSecret })
 })
 after(async () => { if (db) await db.close() })
 async function login(username) {
@@ -83,6 +84,7 @@ test('concurrent lookups on reused connections keep actor and organization conte
 
 test('real password rotation increments credential version and invalidates registered sessions', async () => {
   const principal = await runtime.sessions.start(await login('owner-a'), { label: 'Synthetic rotation session' })
+  await verifyMfaSession(runtime, principal, credentials.password)
   const now = new Date()
   const session = mintUserSession(principal, now, sessionSecret)
   const replacement = randomBytes(24).toString('base64url')
@@ -102,6 +104,7 @@ test('real password rotation increments credential version and invalidates regis
 
 test('deactivating a user blocks an already-issued session and credential lookup', async () => {
   const principal = await runtime.sessions.start(await login('owner-b'), { label: 'Synthetic deactivation session' })
+  await verifyMfaSession(runtime, principal, credentials.password)
   const now = new Date()
   const session = mintUserSession(principal, now, sessionSecret)
   try {

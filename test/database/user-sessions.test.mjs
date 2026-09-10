@@ -10,10 +10,13 @@ import { issueAuthenticatedUser } from '../../src/auth/identity.ts'
 import { createAuthorizationService, hashPassword } from '../../src/auth/index.ts'
 import { PgAuthorizationRepository } from '../../src/database/authorization.ts'
 import { propertyTransaction } from '../../src/database/scope.ts'
+import { createDatabaseRuntime } from '../../src/application/runtime.ts'
+import { TEST_AUTH_ORIGIN, verifyMfaSession } from '../helpers/mfa-session.mjs'
 
-let db, repo, other, otherRepo, hash
+let db, repo, other, otherRepo, hash, password, runtime
 before(async () => {
-  db = await createFoundationTestDatabase(); await seedFoundationTestDatabase(db.admin)
+  db = await createFoundationTestDatabase(); ({ password } = await seedFoundationTestDatabase(db.admin))
+  runtime = createDatabaseRuntime({ app: db.app, auth: db.auth, sessionSecret: randomBytes(40).toString('base64url'), authOrigin: TEST_AUTH_ORIGIN })
   hash = (await db.admin.query("SELECT password_hash FROM atrium.user_credentials WHERE user_id='owner-a'")).rows[0].password_hash
   const options = db.auth.pool.options
   other = new DatabaseConnection({ ...options, password: options.password, max: 8 }, 'atrium_authenticator')
@@ -171,6 +174,7 @@ test('audit failure rolls back both explicit revocation and cap eviction/new reg
 async function propertyUser() {
   const u=await user(),a=await create(u),b=await create(u),p=managed(u,a),controller=managed(u,b)
   await db.admin.query("INSERT INTO atrium.memberships(id,user_id,organization_id,role,access,status) VALUES($1,$2,'organization-a','owner','organization','active')",[`membership-${u.userId}`,u.userId])
+  await verifyMfaSession(runtime,p,password)
   const authorization=createAuthorizationService(new PgAuthorizationRepository(db.auth))
   const scope=await authorization.authorizeProperty(p,'property-a1','operate')
   return {u,a,p,controller,scope}
@@ -184,7 +188,7 @@ for(const rollback of [false,true]) test(`admitted property transaction ${rollba
     admitted.resolve();await finish.promise
     if(rollback)throw new Error('Synthetic callback rollback')
   }).then(()=>({ok:true}),error=>({error}))
-  await admitted.promise
+  await Promise.race([admitted.promise,work.then(result=>{throw result.error ?? new Error('Property callback completed without reaching the lock barrier')})])
   let revokeFinished=false
   const revoke=otherRepo.revoke(controller,a.id).then(result=>{revokeFinished=true;return result})
   await waitingForLocks();assert.equal(revokeFinished,false)

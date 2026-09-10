@@ -74,7 +74,7 @@ See [shared login protection](docs/adr/0004-login-protection.md) for proxy handl
 privacy, temporary lockout tradeoffs and required database provisioning.
 
 The dashboard and APIs already use these boundaries. This does not establish a
-complete customer-onboarding system, hosted database rollout, MFA/SSO or verified
+complete customer-onboarding system, hosted database rollout, enterprise SSO or verified
 resident identity. Track implementation and remaining work in
 [ARCHITECTURE.md](ARCHITECTURE.md), rather than treating an account record as a completed
 customer deployment.
@@ -93,8 +93,19 @@ Session controls and logout are bound to the identity/session that rendered the
 page, so a stale tab cannot revoke a replacement login. A failed or uncertain
 response does not confirm sign-out. Deploying the registered-session migration and
 application requires one fresh sign-in for old PostgreSQL cookies, using the same
-password. Historical security records remain retained; their retention policy and
-MFA are follow-on work. See [revocable sessions](docs/adr/0005-revocable-sessions.md).
+password. Historical security records remain retained; their retention policy is
+follow-on work. See [revocable sessions](docs/adr/0005-revocable-sessions.md).
+
+PostgreSQL passkeys use a deployment-configured `ATRIUM_AUTH_ORIGIN` and required
+WebAuthn user verification. Enrolled users and active owner/admin/staff accounts
+must verify the current registered session before property operations or password
+changes. Passkey setup/recovery and own-session controls remain available while
+verification is pending. Pending registration is activated only after a separate
+signed assertion. Ten single-use recovery codes plus the current password allow
+replacement setup; verification of that replacement revokes prior keys and other
+sessions. Recovery alone does not grant administrator assurance. These controls
+are implemented and locally tested; production activation and physical device
+acceptance remain separate. See [passkeys](docs/adr/0006-multi-factor-authentication.md).
 
 ## Legacy named accounts and shared passcode
 
@@ -191,5 +202,5 @@ establish hosted verification. The legacy named-account adapter
 still gives its configured users staff access within their tenant and uses bundled
 property content. PostgreSQL supports published per-property data and role permissions;
 the local seed is specifically the fictional Larkin property. General customer
-onboarding, membership administration, MFA/SSO, resident identity, PMS integration and
+onboarding, membership administration, hosted MFA rollout/SSO, resident identity, PMS integration and
 commercial rollout acceptance remain tracked in [ARCHITECTURE.md](ARCHITECTURE.md).

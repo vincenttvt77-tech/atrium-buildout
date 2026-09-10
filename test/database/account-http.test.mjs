@@ -1,3 +1,4 @@
+import { TEST_AUTH_ORIGIN, verifyMfaCookie } from '../helpers/mfa-session.mjs'
 import { before, after, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
@@ -30,7 +31,7 @@ before(async () => {
   }
   await db.admin.query("INSERT INTO atrium.memberships(id,user_id,organization_id,role,access,status) VALUES('member-zero-grants','zero-grants','organization-a','staff','properties','active')")
   await db.admin.query('UPDATE atrium.users SET display_name=$1 WHERE id=$2', [unsafeLabel, 'no-memberships'])
-  runtime = createDatabaseRuntime({ app: db.app, auth: db.auth, sessionSecret: process.env.OPS_SESSION_SECRET })
+  runtime = createDatabaseRuntime({ authOrigin: TEST_AUTH_ORIGIN, app: db.app, auth: db.auth, sessionSecret: process.env.OPS_SESSION_SECRET })
   // Count calls while retaining the complete production service, database and scrypt path.
   const realChanges = runtime.passwordChanges
   runtime.passwordChanges = { async changeOwnPassword(...args) {
@@ -147,6 +148,9 @@ test('account GET is identity-only with no property grants or configuration and 
       assert.equal(page.text.includes(unsafeLabel), false)
       assert.match(page.text, /&lt;\/script&gt;&lt;img/)
     }
+    // Account settings remain readable before MFA. Verify the staff session here
+    // so the following assertion still tests absent property grants, not step-up.
+    await verifyMfaCookie(runtime, currentForm.cookie, credentials.password)
     const picker = await request('/api/dashboard', { cookie: currentForm.cookie })
     assert.equal(picker.status, 403)
     assert.match(picker.text, /does not have access to an active property/)

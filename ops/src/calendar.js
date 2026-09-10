@@ -310,14 +310,55 @@ function say(msg) {
 // HTML — everything from the API or a person passes through esc()
 // ---------------------------------------------------------------------------------------
 
-function stripHtml(s, m) {
-  const tours = derive.toursOn(s, m.today)
-  if (!tours.length) return '<p class="cal-today-strip">Today: no tours.</p>'
-  const items = tours.map((t) => {
-    const name = t.profile && href.tel(t.phone) !== null ? `<a href="${esc(A.hashFor('leads', { phone: t.phone }))}">${esc(t.name)}</a>` : esc(t.name)
-    return `<span class="cal-strip-item${t.past ? ' is-past' : ''}"><span class="num">${esc(fmt.time(t.startsAt))}</span> ${name}${t.unitId ? ` (${esc(t.unitId)})` : ''}</span>`
-  })
-  return `<p class="cal-today-strip">Today: ${esc(plural(tours.length, 'tour'))} — ${items.join(' · ')}</p>`
+/** Counts describe only the selected, successfully loaded property-local range. */
+function summaryModel(s, m) {
+  if (!m.loaded) return null
+  const inRange = instant => { const date = fmt.nyDate(instant); return date && date >= m.range.from && date <= m.range.to }
+  const tours = new Map()
+  for (const booking of m.bookings) {
+    if (!booking.externalId || (booking.status && booking.status !== 'confirmed') || !inRange(booking.startsAt)
+      || !Number.isFinite(Date.parse(booking.endsAt)) || Date.parse(booking.endsAt) <= Date.parse(booking.startsAt)) continue
+    tours.set(booking.externalId, booking)
+  }
+  // A supplied interval is authoritative, including blocks created in an older timezone.
+  const overlaps = block => {
+    const start = Date.parse(block.startsAt), end = Date.parse(block.endsAt)
+    if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
+      const first = fmt.nyDate(start), last = fmt.nyDate(end - 1)
+      return first && last && first <= m.range.to && last >= m.range.from
+    }
+    const date = isYmd(block.target) ? block.target : /^slot-(\d{4}-\d{2}-\d{2})T/.exec(String(block.target))?.[1]
+    return date && date >= m.range.from && date <= m.range.to
+  }
+  const building = new Set(m.blocks.filter(overlaps).map(block => block.target)).size
+  const unit = new Set(arr(s.calendar?.unitBlocks).filter(block => block && !block.removedAt && overlaps(block)).map(block => block.id)).size
+  const open = new Set(m.slots.filter(slot => slot.status === 'open' && slot.date >= m.range.from && slot.date <= m.range.to).map(slot => slot.id)).size
+  return { tours: tours.size, open, building, unit, holds: building + unit }
+}
+function heroHtml(m) {
+  const busy = A.busyNow('calendar') || cal.inert
+  const actions = []
+  if (A.can('operate')) {
+    actions.push(`<button type="button" class="btn btn-primary" data-action="block" data-key="block" data-write="calendar"${dis(busy)}>${ico('plus')}Block building time</button>`)
+    actions.push(`<button type="button" class="btn cal-hero-secondary" data-action="unit-blocks" data-key="unit-blocks" data-write="calendar"${dis(busy)}>Unit availability</button>`)
+  }
+  if (A.can('configure')) actions.push(`<button type="button" class="btn cal-hero-secondary" data-action="settings" data-key="settings" data-write="calendar" data-permission="configure"${dis(busy)}>Tour settings</button>`)
+  if (A.can('operate')) actions.push(`<button type="button" class="btn-icon cal-hero-secondary" data-action="more" data-key="more" aria-label="More calendar actions" aria-haspopup="dialog" data-write="calendar"${dis(busy)}>${A.icon('more')}</button>`)
+  return `<section class="page-hero cal-hero"><div class="cal-hero-copy"><span class="page-eyebrow">${esc(A.property.name)} · Tour operations</span><h1 tabindex="-1">Tour calendar</h1><p>Coordinate showings, team capacity and apartment availability in one place.</p><span class="cal-zone">${ico('clock')}${esc(A.property.timeZoneLabel)}</span></div><div class="page-hero-actions cal-hero-actions">${actions.length ? actions.join('') : '<span class="cal-read-only">View-only access</span>'}</div></section>`
+}
+function summaryHtml(s, m) {
+  const values = summaryModel(s, m)
+  const detail = !values ? 'Waiting for this date range' : s.errors.calendar ? 'Last saved view · reconnecting' : m.view === 'day' ? 'In the selected day' : 'In the selected week'
+  const card = (key, label, value, explanation) => `<article class="card cal-metric" data-calendar-metric="${key}"><span class="metric-label">${label}</span><strong class="metric-value num">${value == null ? '—' : value}</strong><span class="metric-detail">${esc(explanation)}</span></article>`
+  return `<div class="page-metrics cal-metrics" aria-label="Selected calendar range">` +
+    card('tours', 'Tours scheduled', values?.tours, detail) +
+    card('starts', 'Open start times', values?.open, values ? 'Available starts, subject to apartment availability' : detail) +
+    card('holds', 'Availability holds', values?.holds, values ? `${plural(values.unit, 'unit hold')} · ${plural(values.building, 'building hold')}` : detail) + '</div>'
+}
+function rulesHtml(m) {
+  if (!m.loaded || !m.settings) return ''
+  const settings = m.settings
+  return `<div class="cal-rules" aria-label="Current tour rules"><div><span>Team capacity</span><strong>${esc(plural(settings.capacity, 'tour'))} at once</strong></div><div><span>Tour length</span><strong>${esc(settings.slotMinutes)} minutes</strong></div><div><span>Apartment policy</span><strong>${settings.sameUnitPolicy === 'shared' ? 'Shared tours allowed' : 'One tour per apartment'}</strong></div><div><span>Book ahead</span><strong>${settings.bookingWindowDays == null ? 'No advance limit' : `${esc(settings.bookingWindowDays)} days`}</strong></div></div>`
 }
 
 function bannersHtml(s, m) {
@@ -343,14 +384,11 @@ function toolbarHtml(m) {
   const unit = m.view === 'week' ? 'week' : 'day'
   const prevOff = Number(m.date.slice(0, 4)) <= 1900
   const nextOff = Number(m.date.slice(0, 4)) >= 9998
-  const busy = A.busyNow('calendar') || cal.inert
-  return `<div class="cal-toolbar"><div class="cal-nav">${navBtn('prev', `Previous ${unit}`, prevOff)}<button type="button" class="btn" data-action="today" data-key="today">Today</button>${navBtn('next', `Next ${unit}`, nextOff)}</div>` +
-    `<h2 class="cal-range" aria-live="polite" data-key="range">${rt.when ? `<span class="cal-range-when">${esc(rt.when)} · </span>` : ''}${esc(rt.range)}</h2><span class="cal-spacer"></span>` +
-    `<div class="cal-tools"><div class="seg cal-seg" role="radiogroup" aria-label="Layout"><button type="button" class="tab" role="radio" aria-checked="${m.view === 'week' ? 'true' : 'false'}" data-action="view-week" data-key="view-week">Week</button><button type="button" class="tab" role="radio" aria-checked="${m.view === 'day' ? 'true' : 'false'}" data-action="view-day" data-key="view-day">Day</button></div>` +
-    `<button type="button" class="btn" data-action="goto" data-key="goto">Go to date</button><button type="button" class="btn" data-action="settings" data-key="settings" data-write="calendar" data-permission="configure"${dis(busy)}>Tour settings</button>` +
-    `<button type="button" class="btn" data-action="unit-blocks" data-key="unit-blocks" data-write="calendar"${dis(busy)}>Unit availability</button>` +
-    `<button type="button" class="btn btn-primary" data-action="block" data-key="block" data-write="calendar"${dis(busy)}>Block time…</button>` +
-    `<button type="button" class="btn-icon" data-action="more" data-key="more" aria-label="More calendar actions" aria-haspopup="dialog" data-write="calendar"${dis(busy)}>${A.icon('more')}</button></div></div>` +
+  const navigation = m.mobile ? '' : `<div class="cal-nav">${navBtn('prev', `Previous ${unit}`, prevOff)}<button type="button" class="btn" data-action="today" data-key="today">Today</button>${navBtn('next', `Next ${unit}`, nextOff)}</div>`
+  const heading = m.mobile ? '<h2 class="cal-schedule-title">Daily schedule</h2>' : `<h2 class="cal-range" aria-live="polite" data-key="range">${rt.when ? `<span class="cal-range-when">${esc(rt.when)} · </span>` : ''}${esc(rt.range)}</h2>`
+  const layout = m.mobile ? '<button type="button" class="btn" data-action="today" data-key="today">Today</button>' : `<div class="seg cal-seg" role="radiogroup" aria-label="Layout"><button type="button" class="tab" role="radio" aria-checked="${m.view === 'week' ? 'true' : 'false'}" data-action="view-week" data-key="view-week">Week</button><button type="button" class="tab" role="radio" aria-checked="${m.view === 'day' ? 'true' : 'false'}" data-action="view-day" data-key="view-day">Day</button></div>`
+  return `<div class="cal-schedule-heading"><div><span class="section-kicker">${m.mobile ? 'One day at a time' : 'Schedule overview'}</span>${heading}</div><div class="cal-tools">${layout}<button type="button" class="btn" data-action="goto" data-key="goto">Go to date</button></div></div>` +
+    `<div class="cal-toolbar">${navigation}<p class="cal-window-note">${m.loaded ? `Showing ${esc(fmt.monthDay(m.range.from))}${m.range.to !== m.range.from ? ` – ${esc(fmt.monthDay(m.range.to))}` : ''}` : 'Loading selected dates'} · ${esc(A.property.timeZoneLabel)}</p></div>` +
     `<div class="cal-progress"${A.busyNow('calendar') ? '' : ' hidden'}></div>`
 }
 
@@ -412,7 +450,7 @@ function gridHtml(m) {
     label = `Tour calendar, week of ${sm === em ? `${sm} ${sd} to ${ed}` : `${sm} ${sd} to ${em} ${ed}`}`
   } else label = `Tour calendar, ${fmt.dayLong(m.date)}`
   let out = `<div class="cal-grid" role="grid" aria-label="${esc(label)}" aria-rowcount="${m.rows + 1}" aria-colcount="${cols + 1}" aria-describedby="cal-keys-hint" style="--cal-cols:${cols};--cal-rows:${m.rows};--cal-row-height:${m.rowHeight}px">`
-  out += '<div role="row" aria-rowindex="1" style="display:contents"><div class="cal-corner" role="columnheader" aria-colindex="1" aria-label="Time" style="grid-row:1;grid-column:1"></div>'
+  out += '<div role="row" aria-rowindex="1" style="display:contents"><div class="cal-corner" role="columnheader" aria-colindex="1" aria-label="Time" style="grid-row:1;grid-column:1"><span aria-hidden="true">Time</span></div>'
   m.dayModels.forEach((d, i) => {
     const isToday = d.ymd === m.today, col = i + 2
     const isPicked = cal.pickedShown === d.ymd
@@ -513,10 +551,11 @@ function footHtml(m) {
   let out = '<div class="cal-foot">'
   out += `<div class="cal-legend" role="list" aria-label="Legend"><span class="muted" aria-hidden="true">Legend:</span>` +
     `<span class="cal-lg" role="listitem"><span class="cal-sw" aria-hidden="true"></span>Open</span>` +
-    `<span class="cal-lg" role="listitem"><span class="cal-sw cal-sw-na" aria-hidden="true"></span>Not offered (past, or outside tour hours)</span>` +
+    `<span class="cal-lg" role="listitem"><span class="cal-sw cal-sw-na" aria-hidden="true"></span>Not offered</span>` +
     `<span class="cal-lg cal-lg-tour" role="listitem"><span class="cal-sw cal-sw-tour" aria-hidden="true"></span>${ico('person')}Tour</span>` +
     `<span class="cal-lg cal-lg-blocked" role="listitem"><span class="cal-sw cal-sw-blocked" aria-hidden="true"></span>${ico('slash')}Blocked</span></div>`
-  if (m.settings) out += `<p class="cal-through small">${esc(m.settings.slotMinutes)}-minute tours · ${esc(plural(m.settings.capacity, 'place'))} at a time · ${m.settings.bookingWindowDays == null ? 'No advance booking limit' : `${esc(m.settings.bookingWindowDays)}-day booking window`} · ${esc(A.property.timeZoneLabel)}</p>`
+  out += rulesHtml(m)
+  out += '<p class="cal-through">Select a tour to review its prospect or move the appointment. A unit hold affects only that apartment; building blocks affect all new tours.</p>'
   if (m.old.length) {
     const n = m.old.length, allDates = m.old.every((b) => isYmd(b.target))
     const desc = (b) => `${monthDayNoYear(b.target)}${reasonOf(b.reason) ? ` · ${reasonOf(b.reason)}` : ''}`
@@ -532,6 +571,7 @@ function footHtml(m) {
 
 const skeletonHtml = () => `<div class="cal-skeleton" aria-busy="true"><span class="vh">Loading the calendar…</span><div class="cal-sk-col"><div class="skeleton-line"></div></div>${'<div class="cal-sk-col"><div class="skeleton-line"></div><div class="skeleton-line"></div><div class="skeleton-line"></div><div class="skeleton-line"></div></div>'.repeat(7)}</div>`
 const emptyHtml = () => `<div class="cal-empty-card">${A.html.empty({ icon: 'calendar', title: 'No tour times in this range.', text: 'Try another date or review your tour hours and booking window in Tour settings.' })}</div>`
+const unavailableHtml = () => `<div class="cal-empty-card" role="status">${A.html.empty({ icon: 'calendar', title: 'Schedule unavailable', text: 'These dates have not loaded. Keep the current bookings unchanged and try again when the connection returns.' })}</div>`
 
 // ---------------------------------------------------------------------------------------
 // Writes (§10.5, §10.6, §12.2) — every one inside Atrium.busy('calendar', …), painted from
@@ -1366,8 +1406,8 @@ const view = {
   mount(root) {
     cal.root = root
     root.classList.add('cal-view')
-    root.innerHTML = '<div class="cal-head"></div><div class="cal-banners"></div><div class="cal-wrap"><div class="cal-toolbar-host"></div><div class="cal-body"></div><div class="cal-foot-host"></div></div>'
-    cal.hosts = { head: root.querySelector('.cal-head'), banners: root.querySelector('.cal-banners'), toolbar: root.querySelector('.cal-toolbar-host'), body: root.querySelector('.cal-body'), foot: root.querySelector('.cal-foot-host') }
+    root.innerHTML = '<div class="cal-head"></div><div class="cal-banners"></div><div class="cal-summary-host"></div><div class="cal-wrap workspace-panel"><div class="cal-toolbar-host"></div><div class="cal-body"></div><div class="cal-foot-host"></div></div>'
+    cal.hosts = { head: root.querySelector('.cal-head'), banners: root.querySelector('.cal-banners'), summary: root.querySelector('.cal-summary-host'), toolbar: root.querySelector('.cal-toolbar-host'), body: root.querySelector('.cal-body'), foot: root.querySelector('.cal-foot-host') }
     root.addEventListener('click', (e) => this.onClick(e))
     root.addEventListener('keydown', (e) => {
       if (e.target.closest && e.target.closest('.cal-grid')) { gridKey(e); if (e.defaultPrevented) return }
@@ -1495,14 +1535,14 @@ const view = {
       if (changed && m.loaded) say('Some of those times changed — selection cleared')
     }
     cal.pickedShown = cal.picked && m.view === 'week' && m.days.includes(cal.picked) && cal.picked !== m.today ? cal.picked : null
-    const moreBtn = `<button type="button" class="btn-icon" data-action="more" data-key="more" aria-label="More calendar actions" aria-haspopup="dialog" data-write="calendar"${dis(A.busyNow('calendar') || cal.inert)}>${A.icon('more')}</button>`
-    setPart('head', `<div class="view-head${m.mobile ? ' cal-head-mobile' : ''}"><div class="cal-head-main"><h1 tabindex="-1">Tour calendar</h1>${m.loaded || s.loaded.leads ? stripHtml(s, m) : ''}</div>${m.mobile ? `<div class="cal-head-tools">${moreBtn}</div>` : ''}</div>`)
+    setPart('head', heroHtml(m))
     setPart('banners', bannersHtml(s, m))
+    setPart('summary', summaryHtml(s, m))
     const rt = rangeText(m)
-    if (m.mobile) setPart('toolbar', `<div class="cal-progress"${A.busyNow('calendar') ? '' : ' hidden'}></div>`)
-    else setPart('toolbar', toolbarHtml(m))
+    setPart('toolbar', toolbarHtml(m))
     let body
     if (loading) body = skeletonHtml()
+    else if (!m.loaded) body = unavailableHtml()
     else if (m.mobile) body = agendaHtml(m) + `<button type="button" class="btn btn-primary cal-fab" data-action="block" data-key="fab" data-write="calendar"${dis(cal.inert)}>${ico('plus')}Block time…</button>`
     else if (!m.hasSlots) body = emptyHtml()
     else body = `<div class="cal-scroll">${gridHtml(m)}</div>`
@@ -1511,9 +1551,9 @@ const view = {
     const focusKey = hadFocus ? keyOf(active) : null
     const scrollEl = q('.cal-scroll'), scrollTop = scrollEl ? scrollEl.scrollTop : null
     const bodyChanged = setPart('body', body)
-    setPart('foot', loading ? '' : footHtml(m))
+    setPart('foot', m.loaded ? footHtml(m) : '')
     // the floating Block time… button owns the bottom edge on mobile; toasts stack above it (calendar.css)
-    document.body.classList.toggle('has-cal-fab', Boolean(A.can('operate') && m.mobile && !loading && !cal.root.hidden))
+    document.body.classList.toggle('has-cal-fab', Boolean(A.can('operate') && m.mobile && m.loaded && !cal.root.hidden))
     if (bodyChanged) {
       const grid = q('.cal-grid')
       if (grid) {

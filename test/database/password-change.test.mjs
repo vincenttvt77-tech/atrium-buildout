@@ -1,3 +1,4 @@
+import { TEST_AUTH_ORIGIN } from '../helpers/mfa-session.mjs'
 import { before, after, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { randomUUID, randomBytes } from 'node:crypto'
@@ -48,7 +49,7 @@ test('generated account-security migration matches reviewed source and has a res
 })
 
 test('personal change needs no property membership, rotates once and atomically saves a secret-free self audit', async () => {
-  const runtime = createDatabaseRuntime({ app: db.app, auth: db.auth, sessionSecret: 'synthetic session secret for password tests' })
+  const runtime = createDatabaseRuntime({ authOrigin: TEST_AUTH_ORIGIN, app: db.app, auth: db.auth, sessionSecret: 'synthetic session secret for password tests' })
   const principal = await runtime.sessions.start(await user(), { label: 'Synthetic password-change session' })
   const now = new Date()
   const token = mintUserSession(principal, now, 'synthetic session secret for password tests')

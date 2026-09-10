@@ -58,6 +58,7 @@ export default async function handler(req: any, res: any) {
       || fields.action !== 'change-password' || typeof fields.currentPassword !== 'string' || typeof fields.newPassword !== 'string') {
       res.status(400).json({ code: 'invalid_password', error: 'Enter your current and new passwords.' }); return
     }
+    await runtime.mfa.requireLogin(principal)
     await runtime.passwordChanges.changeOwnPassword(principal, { currentPassword: fields.currentPassword, newPassword: fields.newPassword })
     res.setHeader('set-cookie', clearedSessionCookie({ secure: isSecureRequest(headers) }))
     res.status(200).json({ status: 'password_changed', userId: principal.userId })

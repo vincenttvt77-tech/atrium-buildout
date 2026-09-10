@@ -1,3 +1,4 @@
+import { TEST_AUTH_ORIGIN, verifyMfaSession } from '../helpers/mfa-session.mjs'
 import { before, beforeEach, after, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
@@ -28,7 +29,7 @@ before(async () => {
   process.env.ATRIUM_RUNTIME_MODE = 'postgres'
   db = await createFoundationTestDatabase()
   ;({ password } = await seedFoundationTestDatabase(db.admin))
-  runtime = createDatabaseRuntime({ app: db.app, auth: db.auth, sessionSecret: randomBytes(40).toString('hex') })
+  runtime = createDatabaseRuntime({ authOrigin: TEST_AUTH_ORIGIN, app: db.app, auth: db.auth, sessionSecret: randomBytes(40).toString('hex') })
   // Only the calendar business clock is in 2032. Session expiry is owned by the
   // actual database clock; keep authentication real while testing fixed tour dates.
   const authenticate = runtime.authenticate.bind(runtime)
@@ -61,7 +62,11 @@ async function selected(user = 'owner-a', property = 'property-a1', permission =
 }
 async function request(body, { user = 'owner-a', property = 'property-a1', org = 'organization-a', method = 'POST', query = {} } = {}) {
   const { principal } = await selected(user, property, method === 'GET' ? 'read' : user === 'viewer-a' ? 'read' : 'operate')
-  if (!registeredUsers.has(user)) registeredUsers.set(user, await runtime.sessions.start(principal, { label: 'Synthetic calendar-date session' }))
+  if (!registeredUsers.has(user)) {
+    const registered = await runtime.sessions.start(principal, { label: 'Synthetic calendar-date session' })
+    await verifyMfaSession(runtime, registered, password)
+    registeredUsers.set(user, registered)
+  }
   const response = { statusCode: 0, body: null, setHeader() {}, status(code) { this.statusCode = code; return this }, json(value) { this.body = value; return this } }
   await handler({ method, atriumRuntime: runtime, headers: { cookie: `${OPS_COOKIE}=${mintUserSession(registeredUsers.get(user), new Date(), runtime.sessionSecret)}`,
     'x-atrium-organization-id': org, 'x-atrium-property-id': property, 'x-atrium-config-version': '1' }, query: { from: '2032-06-01', to: '2032-06-03', ...query },

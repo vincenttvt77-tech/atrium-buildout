@@ -1,3 +1,4 @@
+import { TEST_AUTH_ORIGIN, verifyMfaCookie } from '../helpers/mfa-session.mjs'
 import { before, after, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
@@ -49,7 +50,7 @@ before(async () => {
   process.env.OPS_SESSION_SECRET = randomBytes(36).toString('base64url')
   db = await createFoundationTestDatabase()
   credentials = await seedFoundationTestDatabase(db.admin)
-  runtime = createDatabaseRuntime({ app: db.app, auth: db.auth, sessionSecret: process.env.OPS_SESSION_SECRET })
+  runtime = createDatabaseRuntime({ authOrigin: TEST_AUTH_ORIGIN, app: db.app, auth: db.auth, sessionSecret: process.env.OPS_SESSION_SECRET })
   for (const building of buildings) await publish(building)
   await db.admin.query('UPDATE atrium.users SET display_name=$1 WHERE id=$2', [unsafeLabel, 'owner-a'])
   await db.admin.query('UPDATE atrium.properties SET name=$1 WHERE id=$2', [unsafeLabel, 'property-a1'])
@@ -86,6 +87,7 @@ async function signIn(username, path = '/api/dashboard') {
   const result = await request(path, { method: 'POST', fields: { username, password: credentials.password } })
   assert.equal(result.status, 303)
   const cookie = result.headers.get('set-cookie').split(';')[0]
+  await verifyMfaCookie(runtime, cookie, credentials.password)
   cookies.set(username, cookie)
   return { ...result, cookie }
 }

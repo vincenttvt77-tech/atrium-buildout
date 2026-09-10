@@ -1,3 +1,4 @@
+import { TEST_AUTH_ORIGIN, verifyMfaCookie } from '../helpers/mfa-session.mjs'
 import { before, after, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
@@ -29,7 +30,7 @@ async function endpoint() {
   const app = db.createAppConnection()
   const auth = new DatabaseConnection({ ...db.auth.pool.options, password: db.auth.pool.options.password, max: 2 }, 'atrium_authenticator')
   connections.push(app, auth)
-  const runtime = createDatabaseRuntime({ app, auth, sessionSecret: secret })
+  const runtime = createDatabaseRuntime({ authOrigin: TEST_AUTH_ORIGIN, app, auth, sessionSecret: secret })
   const server = createServer(async (req, res) => {
     try {
       req.atriumRuntime = runtime
@@ -87,6 +88,7 @@ async function login(target, username, suppliedPassword = password) {
   assert.equal(result.status, 303)
   const cookie = result.headers.get('set-cookie')?.split(';')[0]
   assert.ok(cookie)
+  await verifyMfaCookie(target.runtime, cookie, suppliedPassword)
   return { cookie, ...claims(cookie) }
 }
 async function form(target, session) {

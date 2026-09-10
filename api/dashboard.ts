@@ -384,6 +384,11 @@ async function databaseDashboard(req: any, res: any) {
   }
   const principal = await runtime.authenticate(headers, now)
   if (!principal) { send(res, 401, loginPage(false, true, destination)); return }
+  const security = await runtime.mfa.state(principal)
+  if (security.required && !security.assurances.some(proof => proof.purpose === 'session_login')) {
+    for (const [key, value] of HTML_HEADERS) res.setHeader(key, value)
+    res.setHeader('location', '/api/mfa'); res.status(303).send(''); return
+  }
   res.setHeader('set-cookie', sessionCookie(mintUserSession(principal, now, runtime.sessionSecret), { secure, ttlMs: Math.max(1, principal.sessionExpiresAt! - Date.now()) }))
   if (!selection) {
     const properties = await runtime.authorization.listAuthorizedProperties(principal)

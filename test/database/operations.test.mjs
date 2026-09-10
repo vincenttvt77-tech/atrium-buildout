@@ -1,3 +1,4 @@
+import { TEST_AUTH_ORIGIN, verifyMfaSession } from '../helpers/mfa-session.mjs'
 import { before, after, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createFoundationTestDatabase, seedFoundationTestDatabase } from '../../scripts/lib/foundation-test.mjs'
@@ -23,8 +24,9 @@ after(async () => { if (concurrent) await concurrent.close(); if (db) await db.c
 
 test('database password sessions list only accessible properties and recheck current grants', async () => {
   const secret = 'synthetic-session-secret-for-integration-test'
-  const runtime = createDatabaseRuntime({ app: db.app, auth: db.auth, sessionSecret: secret })
+  const runtime = createDatabaseRuntime({ authOrigin: TEST_AUTH_ORIGIN, app: db.app, auth: db.auth, sessionSecret: secret })
   const registered = await runtime.sessions.start(owner, { label: 'Synthetic operations session' })
+  await verifyMfaSession(runtime, registered, credentials.password)
   const sessionNow = new Date()
   const session = mintUserSession(registered, sessionNow, secret)
   const principal = await authorization.authenticateSession(session, sessionNow, secret)

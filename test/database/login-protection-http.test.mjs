@@ -1,3 +1,4 @@
+import { TEST_AUTH_ORIGIN } from '../helpers/mfa-session.mjs'
 import { before, after, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
@@ -32,7 +33,7 @@ function newRuntime() {
     }
   }
   connections.push(app, auth)
-  const runtime = createDatabaseRuntime({ app, auth, sessionSecret: process.env.OPS_SESSION_SECRET })
+  const runtime = createDatabaseRuntime({ authOrigin: TEST_AUTH_ORIGIN, app, auth, sessionSecret: process.env.OPS_SESSION_SECRET })
   const instance = { runtime, passwordChecks: 0, reservations: 0 }
   const authorization = runtime.authorization
   runtime.authorization = { ...authorization, async authenticatePassword(...args) {

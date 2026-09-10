@@ -27,7 +27,9 @@ The PostgreSQL portal includes **Status → Account security** for changing your
 password, viewing active logins and signing out individual or all other sessions.
 Current-password verification, shared database rate limits and registered session
 revocation protect these flows; no environment-file edits are needed. This does not
-change the hosted legacy demo password or complete MFA/customer onboarding.
+change the hosted legacy demo password or complete customer onboarding. PostgreSQL
+passkey enrollment, session verification and recovery are implemented; see
+[passkey security](docs/adr/0006-multi-factor-authentication.md) for rollout limits.
 
 ## The one idea worth understanding
 
@@ -125,7 +127,10 @@ The portal contains caller names, contact details and conversation excerpts. It 
 served by `api/dashboard.ts` after sign-in and is never copied into `public/`.
 
 With `ATRIUM_RUNTIME_MODE=postgres`, staff sign in with their username and password;
-the server resolves a persisted user. Database setup is not part of each login. The session
+the server resolves a persisted user. Enrolled users and owner/admin/staff accounts
+also verify with a passkey. First setup confirms the existing password, creates the
+passkey and verifies it once. No account credentials are reset. Database setup is not
+part of each login. The session
 contains user identity, credential version and a registered session ID with fixed
 expiration, not an active property or cached role. Every request checks that registry;
 clearing a cookie alone is not logout. Sessions expire after eight hours, with up to
@@ -156,13 +161,14 @@ and no-cache headers supplement authentication; they do not grant or deny access
 | `ATRIUM_RUNTIME_MODE=postgres` | Selects the PostgreSQL adapter explicitly | Unknown or present blank modes fail closed; database URLs without this mode also fail |
 | `ATRIUM_DATABASE_URL`, `ATRIUM_AUTH_DATABASE_URL` | Deployment-level URLs using the exact `atrium_app` and `atrium_authenticator` roles | Requests fail; no fallback to another property's bundle or memory |
 | `OPS_SESSION_SECRET` | Independent signing secret, at least 32 characters; required for PostgreSQL and legacy named accounts | Sessions cannot be issued or verified |
+| `ATRIUM_AUTH_ORIGIN` | Exact canonical HTTPS portal origin for PostgreSQL passkeys; localhost HTTP is allowed in development | Missing/invalid origins refuse managed access; request headers never choose the origin |
 | `ATRIUM_DATABASE_CA` (optional) | PEM CA for a database requiring a custom trusted certificate chain | Untrusted nonlocal TLS connections are refused |
 | `OPS_ACCOUNTS_JSON`, `OPS_DASHBOARD_PASSCODE` | Legacy named accounts or shared passcode; ignored as identity sources in PostgreSQL mode | Invalid legacy configuration refuses sign-in |
 | `VAPI_API_KEY` (or `VAPI_PRIVATE_KEY`) | Vapi **private** key, from Vapi → Organization → API Keys. The public key is refused with 401 | Status shows "call recordings and transcripts: connected, but not answering"; Calls stays empty. `VAPI_PRIVATE_KEY` wins when both exist |
 | `KV_REST_API_URL`, `KV_REST_API_TOKEN` | Legacy Redis/KV storage; both are required in hosted legacy mode | Missing/partial configuration or a failed connection refuses storage operations; hosted mode never uses memory |
 | `VAPI_ASSISTANT_ID` (optional, legacy only) | Pins the existing bundled-property publisher; PostgreSQL uses authorized `channel_bindings` instead | Legacy publishing refuses an ambiguous assistant selection; PostgreSQL property publishing is not enabled |
 
-Configure database URLs and the session secret once for each deployment environment.
+Configure database URLs, the session secret and authentication origin once for each deployment environment.
 Create additional staff users and client/property access in PostgreSQL, not new
 environment files. URLs contain no query parameters or fragments; runtime roles must
 not be administrators or inherit each other. Account records and grants require an

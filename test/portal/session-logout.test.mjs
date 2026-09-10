@@ -247,8 +247,11 @@ async function pickerHtml() {
     const runtime = Object.assign(Object.create(DatabaseRuntime.prototype), {
       sessionSecret: 'synthetic-picker-rendering-secret-at-least-32-characters', authenticate: async () => principal,
       authorization: { listAuthorizedProperties: async () => [1, 2].map(index => ({ id: `property-${index}`, name: `Synthetic property ${index}`,
-        organizationId: 'synthetic-org', organizationName: 'Synthetic organization', role: 'staff' })) },
+        organizationId: 'synthetic-org', organizationName: 'Synthetic organization', role: 'viewer' })) },
     })
+    // This browser-script fixture renders an unenrolled viewer's picker. Actual
+    // privileged MFA admission is exercised through real HTTP/PostgreSQL tests.
+    Object.defineProperty(runtime, 'mfa', { value: { state: async () => ({ required: false, assurances: [] }) } })
     const response = { code: 0, body: '', setHeader() {}, status(code) { this.code = code; return this }, send(body) { this.body = body; return this } }
     await dashboard({ method: 'GET', url: '/api/dashboard', headers: {}, atriumRuntime: runtime }, response)
     assert.equal(response.code, 200)

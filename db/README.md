@@ -23,6 +23,7 @@ Set these values **once per deployment environment**, using its secret store:
 | `ATRIUM_DATABASE_URL` | PostgreSQL URL whose login is the restricted `atrium_app` role. |
 | `ATRIUM_AUTH_DATABASE_URL` | Separate PostgreSQL URL whose login is `atrium_authenticator`. |
 | `OPS_SESSION_SECRET` | Independent random signing secret of at least 32 characters. |
+| `ATRIUM_AUTH_ORIGIN` | Exact canonical HTTPS portal origin. HTTP is accepted only for localhost development; no path, query or fragment. |
 | `ATRIUM_DATABASE_CA` | Optional PEM CA certificate for the database's trusted TLS chain. |
 
 Both database URLs require host, username, password and one database path, with no
@@ -60,6 +61,7 @@ current membership, organization/property status and explicit grants per operati
 | --- | --- |
 | `GET/POST /api/dashboard` | Sign-in/logout and protected HTML. A signed-in user with multiple properties sees a picker; an explicit page uses `?organizationId=...&propertyId=...`. |
 | `GET/POST /api/account` | Personal password change and active-session list/revocation. Requires a current registered user session; mutations require same-origin JSON and a signed user/session-bound form token. Independent of property access; absent in legacy mode. |
+| `GET/POST /api/mfa` | Own passkey setup, verification, factor management and recovery. Exact configured origin, registered-session binding and CSRF checks on POST. Finite commands only; absent in legacy mode. |
 | `GET /api/properties` | Authenticated, unscoped catalogue of properties this user can read. It exposes safe labels, role/permissions and navigation links, not property inventories or credentials. |
 | `GET /api/leads`, `/api/calendar`, `/api/vapi` | Require the user session and all three explicit property headers below; permission is `read`. |
 | `POST /api/leads`, `/api/calendar` | Same explicit selection plus `operate`; calendar `settings` requires `configure`. Bulk demo resets are unavailable in PostgreSQL mode. |
@@ -240,12 +242,14 @@ separately by the deployment secret store. There are no database passwords in SQ
 | `atrium_account_executor` | NOLOGIN owner of the two private password commands. Has only self-scoped credential/version writes, attempt reservations and audit append under forced RLS. Runtime logins cannot inherit or assume this role. |
 | `atrium_login_executor` | NOLOGIN owner of `atrium.reserve_login_attempt(text,text)`. Can maintain only the private forced-RLS login bucket table; cannot read or change identities, credentials or property records. Runtime logins cannot inherit or assume this role. |
 | `atrium_session_executor` | NOLOGIN owner of four finite session commands and the current-session transaction fence. Own-user registry changes and append-only lifecycle audit under forced RLS; user row locking cannot change identity. No credential or property access. Runtime logins cannot inherit or assume this role. |
+| `atrium_mfa_executor` | NOLOGIN owner of finite passkey commands. Self-only factor/challenge/proof/recovery writes under forced RLS, plus security audit. Does not receive raw credential writes or property data access. Runtime roles cannot inherit or assume it. |
 | `atrium_app` | Property repositories only. Scoped configuration reads and operational document/calendar writes, plus scoped audit append/read. Cannot read password hashes, change memberships/configuration/channel bindings, truncate tables, or modify audit history. |
 
-All six must be `NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`.
+All seven must be `NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`.
 Provision `atrium_account_executor NOLOGIN` before the account-security migration
 and `atrium_login_executor NOLOGIN` before the login-protection migration. Provision
-`atrium_session_executor NOLOGIN` before the user-sessions migration. Grant
+`atrium_session_executor NOLOGIN` before the user-sessions migration and
+`atrium_mfa_executor NOLOGIN` before the WebAuthn migration. Grant
 these executor roles only to `atrium_admin` so migrations can transfer function
 ownership; do not grant them to either runtime login. The migration grants the
 authenticator explicit execution of the login reservation while denying execution
@@ -391,7 +395,7 @@ advisors before an external deployment. Development source review alone is not a
 successful migration or restore test.
 
 This slice does not normalize people/interactions/bookings, provide membership or
-publication UI, migrate production Redis records, implement SSO/MFA, dispatch jobs,
+publication UI, migrate production Redis records, implement enterprise SSO, dispatch jobs,
 or deliver general inbox/outbox/reconciliation. Calendar/document JSON can still
 contain growing arrays; current repositories reject oversized serialized documents
 and unpaginated key lists over 5,000, but do not provide a normalized portfolio-query
@@ -435,3 +439,28 @@ References: [PostgreSQL 17 RLS](https://www.postgresql.org/docs/17/ddl-rowsecuri
 [transaction-local SET](https://www.postgresql.org/docs/17/sql-set.html),
 [composite foreign keys](https://www.postgresql.org/docs/17/ddl-constraints.html#DDL-CONSTRAINTS-FK),
 [Supabase Data API grant change](https://supabase.com/changelog/45329-breaking-change-tables-not-exposed-to-data-and-graphql-api-automatically).
+
+## Session-bound passkeys
+
+`mfa.sql` and its new migration add private `mfa_states`, `mfa_password_checks`,
+`mfa_factors`, `mfa_assurances`, `mfa_recovery_codes`, `mfa_recovery_grants`,
+`mfa_challenges`, `mfa_attempts`, `mfa_requests` and `mfa_events`. The authenticator
+role invokes finite self-only commands; it cannot directly mutate these records.
+Actual password and WebAuthn verification results are opaque, process-issued
+capabilities at the repository boundary. Database claims remain single-use even
+when verification fails or a process dies. Security state changes serialize with
+already-admitted property transactions using the registered user/session fence.
+
+Every enrolled user and every active owner/admin/staff member needs a current
+session-login proof before property operations. The password-only phase still
+allows own MFA setup/recovery, session controls and logout. Pending registration
+requires a second signed assertion. Fresh passkey proof and password are required
+for factor management; the last active factor cannot be removed. Recovery replaces
+keys and revokes other sessions only when the replacement is verified. It never
+substitutes for an organization-administration proof.
+
+The PostgreSQL runtime requires the canonical `ATRIUM_AUTH_ORIGIN` once per
+environment; do not derive it from HTTP forwarding headers. Apply all migrations
+and provision the executor before activating this runtime. Existing production
+legacy authentication is separate. See [ADR 0006](../docs/adr/0006-multi-factor-authentication.md)
+for proof lifetimes, recovery and deployment limitations.
