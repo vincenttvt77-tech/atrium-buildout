@@ -525,13 +525,17 @@ body.has-dialog { overflow: hidden; }
 /* ---------- Status ---------- */
 .status-col { max-width: 640px; }
 .status-summary { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.status-summary .ico { width: 20px; height: 20px; margin-top: 1px; }
+.status-summary .ico { flex: 0 0 20px; width: 20px; height: 20px; margin-top: 1px; }
 .status-summary.is-ok { background: var(--ok-soft); border-color: transparent; }
 .status-summary.is-ok .summary-title { color: var(--ok); }
 .status-summary.is-warn { background: var(--warn-soft); border-color: transparent; }
 .status-summary.is-warn .summary-title { color: var(--warn); }
 .summary-title { font-weight: 600; font-size: 1.071rem; }
 .summary-sub { color: var(--ink-2); font-size: .929rem; margin-top: 2px; }
+@media (max-width: 599px) {
+  .status-summary { flex-direction: column; align-items: stretch; }
+  .status-summary > .btn { align-self: flex-start; min-height: 44px; }
+}
 .status-section { margin-top: var(--s5); }
 .status-section h2 { font-size: 1.071rem; margin-bottom: 6px; }
 .status-row { display: flex; align-items: flex-start; gap: 8px; padding: 4px 0; }

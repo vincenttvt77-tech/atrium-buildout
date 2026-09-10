@@ -2492,6 +2492,45 @@ function storeLine(store) {
   if (!store) return 'not loaded yet'
   return `${String(store.kind ?? '?')} · ${store.durable ? 'durable' : 'not durable'} · "${String(store.note ?? '')}"`
 }
+function statusSummary(s, rows) {
+  const labels = { leads: 'callers and to-dos', calendar: 'calendar', calls: 'call history' }
+  const names = Object.keys(labels)
+  const loaded = names.filter(name => s.loaded[name])
+  const pending = names.filter(name => !s.loaded[name])
+  const failed = names.filter(name => s.errors[name])
+  const errorAt = s.lastWriteError && Number.isFinite(Date.parse(s.lastWriteError.at)) ? fmt.dateTime(s.lastWriteError.at) : ''
+  const history = s.lastWriteError ? ` A previous change reported an error${errorAt ? ` (${errorAt})` : ''}. Open For support for details.` : ''
+  const summary = (title, detail, tone = '') => ({ title, detail: detail + history, tone: history && tone === 'is-ok' ? '' : tone })
+  if (s.notConfigured) return summary('This workspace needs setup.', 'Ask Atrium support to restore access.', 'is-warn')
+  if (failed.length) return summary(loaded.length ? 'Some workspace information is unavailable.' : 'Workspace information is unavailable.',
+    `Couldn’t refresh ${text.list(failed.map(name => labels[name]))}. Some information may be missing or out of date.`, 'is-warn')
+  if (s.safetyEventsError) return summary('Safety reports need attention.', 'The safety report list may be incomplete. Try Refresh now.', 'is-warn')
+  if (s.callsError) return summary('Call history needs attention.', 'Recent recordings and transcripts could not be refreshed. See the details below.', 'is-warn')
+  const stores = ['leads', 'calendar'].filter(name => s.loaded[name]).map(name => s[name] && s[name].store)
+  if (stores.some(store => store && store.durable === false) && !(isDemo && !isPersistentDemo)) {
+    return summary('Saving needs attention.', 'Changes to callers or the calendar may not be saved. See the details below.', 'is-warn')
+  }
+  if (!isDemo && s.loaded.calls && s.callsConfigured === false) {
+    return summary('Call history isn’t connected.', 'Recordings and transcripts are unavailable. Check the other workspace details below.', 'is-warn')
+  }
+  if (rows.reconnecting) return summary('Trying to reconnect…', 'Previously loaded information may be out of date.', 'is-warn')
+  if (pending.length) return summary(loaded.length ? 'Still checking this workspace…' : 'Checking this workspace…',
+    `Waiting for ${text.list(pending.map(name => labels[name]))}.`)
+  if (stores.some(store => !store || typeof store.durable !== 'boolean') || (!isDemo && s.callsConfigured !== true)) {
+    return summary('Some workspace checks are unconfirmed.', 'Refresh to check saving and call history.')
+  }
+  const checked = names.map(name => Date.parse(s.lastGoodAt[name]))
+  if (checked.some(value => !Number.isFinite(value))) return summary('Some workspace checks are unconfirmed.', 'A complete refresh has not been confirmed yet.')
+  const oldest = Math.min(...checked)
+  const refreshed = `Last complete refresh: ${fmt.dateTime(new Date(oldest).toISOString())}.`
+  // A normal round runs every five seconds. A stalled/skipped request must not
+  // borrow a newer timestamp from another resource or a manual refresh click.
+  if (Date.now() - oldest > 60000) return summary('Some information needs a refresh.', `${refreshed} Previously loaded information may be out of date.`)
+  if (isDemo && !isPersistentDemo) return summary('Demo data is loaded.', 'Sample changes reset when the preview restarts.')
+  return isPersistentDemo
+    ? summary('Local demo data is loaded.', `Sample callers, tours and call history are loaded. ${refreshed}`, 'is-ok')
+    : summary('Workspace data is available.', `Callers, calendar and call history are loaded. ${refreshed}`, 'is-ok')
+}
 const statusView = {
   title: 'Status', icon: icons.status, root: null, sigKey: null, busyAction: false, demoFocused: null,
   mount(root) {
@@ -2505,12 +2544,10 @@ const statusView = {
     const root = this.root
     if (!root || this.busyAction) return
     const rows = statusRows()
-    // "Updated just now" for a minute after Refresh now was pressed (the minute tick repaints it back to the clock time)
-    const justNow = Boolean(this.refreshedAt) && Date.now() - this.refreshedAt < 60000
-    const at = justNow ? 'just now' : (s.updatedAt ? fmt.time(s.updatedAt) : '')
     const counts = { calls: arr(s.calls).length, slots: arr(s.calendar && s.calendar.slots).length, leads: profilesOf(s).length, todos: followUpsOf(s).length }
     const week = this.weekDays(s)
-    const model = { rows, at, errors: s.errors, lastWriteError: s.lastWriteError, health: s.health, counts, lastPollAt: s.lastPollAt, lstore: s.leads && s.leads.store, cstore: s.calendar && s.calendar.store,
+    const summary = statusSummary(s, rows)
+    const model = { rows, summary, errors: s.errors, lastWriteError: s.lastWriteError, health: s.health, counts, lastPollAt: s.lastPollAt, lstore: s.leads && s.leads.store, cstore: s.calendar && s.calendar.store,
       callsError: s.callsError, callsConfigured: s.callsConfigured, safetyEventsError: s.safetyEventsError, outbound: Boolean(s.leads && s.leads.outboundEnabled), notConfigured: s.notConfigured, weekDays: week.length, weekSkipped: week.skipped.length, calLoaded: Boolean(s.calendar) }
     const key = JSON.stringify(model)
     if (key === this.sigKey) return
@@ -2525,10 +2562,9 @@ const statusView = {
     const rec = rows.recordings
     const recText = isDemo ? 'Sample calls and transcripts are included for this demo account.' : rec === null ? 'Checking…' : rec === 'on' ? 'Connected — recordings and transcripts are available for the 20 most recent calls.'
       : rec === 'off' ? "Not connected yet — calls still show from the leads' records, without recordings or transcripts. Ask Atrium support." : 'Connected, but not answering right now — trying again.'
-    const summaryOk = rows.ok
     let out = `<div class="view-head"><h1 tabindex="-1">Status</h1></div><div class="status-col">`
-    out += `<div class="card status-summary ${summaryOk ? 'is-ok' : 'is-warn'}"><div style="display:flex;gap:10px;min-width:0">${ico(summaryOk ? 'check-circle' : 'warning')}<div><div class="summary-title">${summaryOk ? 'All connections are available.' : 'Something needs attention.'}</div>` +
-      `<div class="summary-sub">${rows.reconnecting ? `Trying to reconnect…${at ? ` showing what we had at ${esc(at)}` : ''}` : (at ? `Updated ${esc(at)}` : 'Loading…')}</div></div></div>` +
+    out += `<div class="card status-summary ${summary.tone}"><div style="display:flex;gap:10px;min-width:0">${ico(summary.tone === 'is-ok' ? 'check-circle' : summary.tone === 'is-warn' ? 'warning' : 'refresh')}<div><div class="summary-title">${esc(summary.title)}</div>` +
+      `<div class="summary-sub">${esc(summary.detail)}</div></div></div>` +
       `<button type="button" class="btn" data-action="refresh" data-key="refresh">Refresh now</button></div>`
     out += `<section class="status-section"><h2>Saving</h2>${savingRow('Callers and to-dos', rows.leadsSaving)}${savingRow('Calendar', rows.calendarSaving)}` +
       (!isDemo && (rows.leadsSaving === 'off' || rows.calendarSaving === 'off') ? `<p class="status-p muted small">Ask Atrium support to turn saving on.</p>` : '') + '</section>'
@@ -2614,21 +2650,34 @@ const statusView = {
       toast(`Couldn't update the phone assistant. ${e.message || ''}`.trim(), { kind: 'error', ms: 12000 })
     } finally { if (btn.isConnected) { btn.classList.remove('is-busy'); btn.removeAttribute('aria-busy') } }
   },
-  /** A round finishes in a few ms, so the busy state is held for 600 ms and the result is said in a toast. */
+  /** Bound the UI wait without cancelling or duplicating any pending read. */
   async refreshNow(btn) {
+    if (this.busyAction) return
     this.busyAction = true
     btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true')
     const started = Date.now()
-    const before = state.updatedAt
-    try { await refresh() } finally {
-      await new Promise((r) => setTimeout(r, Math.max(0, 600 - (Date.now() - started))))
+    const names = Object.keys(RESOURCES)
+    const before = Object.fromEntries(names.map(name => [name, Date.parse(state.lastGoodAt[name]) || 0]))
+    let deadline, outcome
+    try {
+      outcome = await Promise.race([
+        refresh().then(() => 'complete', () => 'failed'),
+        new Promise(resolve => { deadline = setTimeout(() => resolve('pending'), 15000) }),
+      ])
+    } finally {
+      clearTimeout(deadline)
       this.busyAction = false
-      const fresh = state.updatedAt && state.updatedAt !== before && state.failedRounds === 0
-      this.refreshedAt = fresh ? Date.now() : null
-      this.sigKey = null; this.render(state)
-      if (fresh) toast(`Up to date · ${fmt.time(state.updatedAt)}`, { kind: 'ok', key: 'refresh' })
-      else toast(`Couldn't reach the server.${state.updatedAt ? ` Showing what we had at ${fmt.time(state.updatedAt)}.` : ''}`, { kind: 'warn', key: 'refresh' })
+      if (btn.isConnected) { btn.classList.remove('is-busy'); btn.removeAttribute('aria-busy') }
+      if (!gated && !documentAccessIssue) { this.sigKey = null; this.render(state) }
     }
+    if (gated || documentAccessIssue) return
+    const fresh = names.every(name => state.loaded[name] && !state.errors[name]
+      && Date.parse(state.lastGoodAt[name]) >= started && Date.parse(state.lastGoodAt[name]) > before[name])
+      && !state.callsError && !state.safetyEventsError && !state.notConfigured
+    if (outcome === 'complete' && fresh) toast('Workspace data refreshed.', { kind: 'ok', key: 'refresh' })
+    else if (outcome === 'pending' || names.some(name => inflight[name])) {
+      toast('Refresh is still pending. Delayed requests may finish later; the information shown may be out of date.', { kind: 'warn', key: 'refresh' })
+    } else toast('Refresh is incomplete. Some information could not be checked; review the status details.', { kind: 'warn', key: 'refresh' })
   },
   async signOut(btn) {
     btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true')
