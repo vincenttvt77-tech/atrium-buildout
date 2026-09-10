@@ -100,9 +100,10 @@ try {
   await buildOps.buildOpsPage()
 }
 
-const [dashboard, calendar, leads, vapi, health, properties, ny, vapiCalls] = await Promise.all([
+const [dashboard, calendar, leads, vapi, health, properties, ny, vapiCalls, account] = await Promise.all([
   load('api/dashboard.ts'), load('api/calendar.ts'), load('api/leads.ts'), load('api/vapi.ts'),
   load('api/health.ts'), load('api/properties.ts'), load('src/time/ny.ts'), load('src/ops/vapi-calls.ts'),
+  load('api/account.ts'),
 ])
 
 const ROUTES = {
@@ -112,6 +113,7 @@ const ROUTES = {
   '/api/vapi': vapi.default,
   '/api/health': health.default,
   '/api/properties': properties.default,
+  '/api/account': account.default,
 }
 
 // ---------------------------------------------------------------------------------------

@@ -39,11 +39,12 @@ async function allowed(context, permission = 'read') {
     [context.organizationId, context.propertyId, permission])).rows[0].allowed)
 }
 
-test('schema objects have a separate owner, forced RLS, invoker-only functions and restricted real login roles', async () => {
-  const roles = (await db.admin.query(`SELECT rolname,rolsuper,rolbypassrls,rolcreaterole,rolcreatedb,rolreplication
-    FROM pg_roles WHERE rolname IN ('atrium_admin','atrium_app','atrium_authenticator') ORDER BY rolname`)).rows
-  assert.equal(roles.length, 3)
+test('schema objects have forced RLS, an exact self-service definer allowlist and restricted real login roles', async () => {
+  const roles = (await db.admin.query(`SELECT rolname,rolcanlogin,rolsuper,rolbypassrls,rolcreaterole,rolcreatedb,rolreplication
+    FROM pg_roles WHERE rolname IN ('atrium_admin','atrium_app','atrium_authenticator','atrium_account_executor') ORDER BY rolname`)).rows
+  assert.deepEqual(roles.map(role => role.rolname), ['atrium_account_executor','atrium_admin','atrium_app','atrium_authenticator'])
   for (const role of roles) {
+    assert.equal(role.rolcanlogin, ['atrium_app','atrium_authenticator'].includes(role.rolname), `${role.rolname} login policy`)
     for (const key of ['rolsuper', 'rolbypassrls', 'rolcreaterole', 'rolcreatedb', 'rolreplication']) {
       assert.equal(role[key], false, `${role.rolname} must not have ${key}`)
     }
@@ -56,11 +57,33 @@ test('schema objects have a separate owner, forced RLS, invoker-only functions a
     'property_grants', 'property_configurations', 'channel_bindings',
     'operational_documents', 'calendars', 'audit_events',
     'inbox_events', 'action_intents', 'outbox_messages', 'workflow_events',
+    'password_change_attempts', 'account_security_events',
   ].sort())
   assert.ok(tables.every(row => row.rolname === 'atrium_admin' && row.relrowsecurity && row.relforcerowsecurity))
-  const functions = (await db.admin.query(`SELECT p.proname,p.prosecdef
-    FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='atrium'`)).rows
-  assert.ok(functions.length > 0 && functions.every(row => !row.prosecdef))
+  const functions = (await db.admin.query(`SELECT p.proname,p.prosecdef,p.proconfig,r.rolname AS owner,
+      p.proname || '(' || replace(oidvectortypes(p.proargtypes),' ','') || ')' AS signature,
+      EXISTS (SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) acl
+        WHERE acl.grantee=0 AND acl.privilege_type='EXECUTE') AS public_execute,
+      has_function_privilege('atrium_app',p.oid,'EXECUTE') AS app_execute,
+      has_function_privilege('atrium_authenticator',p.oid,'EXECUTE') AS auth_execute
+    FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace JOIN pg_roles r ON r.oid=p.proowner
+    WHERE n.nspname='atrium'`)).rows
+  const selfServiceDefiners = ['commit_password_change(text,text,text)', 'reserve_password_change(text)']
+  assert.deepEqual(functions.filter(row => row.prosecdef).map(row => row.signature).sort(), selfServiceDefiners)
+  assert.ok(functions.length > selfServiceDefiners.length)
+  for (const fn of functions) {
+    if (selfServiceDefiners.includes(fn.signature)) {
+      assert.equal(fn.prosecdef, true, fn.signature)
+      assert.equal(fn.owner, 'atrium_account_executor', fn.signature)
+      assert.deepEqual(fn.proconfig, ['search_path=pg_catalog'], fn.signature)
+      assert.equal(fn.public_execute, false, fn.signature)
+      assert.equal(fn.app_execute, false, fn.signature)
+      assert.equal(fn.auth_execute, true, fn.signature)
+    } else {
+      assert.equal(fn.prosecdef, false, fn.signature)
+      assert.equal(fn.owner, 'atrium_admin', fn.signature)
+    }
+  }
   for (const [role, connection] of [['atrium_app', db.app], ['atrium_authenticator', db.auth]]) {
     const identity = await connection.transaction({}, async client => (await client.query(
       'SELECT current_user AS current_role,session_user AS login_role')).rows[0])

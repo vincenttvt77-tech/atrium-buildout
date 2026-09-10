@@ -63,15 +63,17 @@ export class DatabaseConnection {
     try {
       await client.query('BEGIN ISOLATION LEVEL READ COMMITTED')
       const identity = await client.query<{ rolname: string; login_role: string; rolsuper: boolean; rolbypassrls: boolean;
-        rolcreaterole: boolean; rolcreatedb: boolean; rolreplication: boolean; admin_member: boolean; other_runtime_member: boolean }>(
+        rolcreaterole: boolean; rolcreatedb: boolean; rolreplication: boolean; admin_member: boolean; other_runtime_member: boolean; account_executor_member: boolean }>(
         `SELECT rolname, session_user AS login_role, rolsuper, rolbypassrls, rolcreaterole, rolcreatedb, rolreplication,
            pg_catalog.pg_has_role(current_user, 'atrium_admin', 'MEMBER') AS admin_member,
-           pg_catalog.pg_has_role(current_user, $1, 'MEMBER') AS other_runtime_member
+           pg_catalog.pg_has_role(current_user, $1, 'MEMBER') AS other_runtime_member,
+           EXISTS (SELECT 1 FROM pg_catalog.pg_roles executor WHERE executor.rolname='atrium_account_executor'
+             AND pg_catalog.pg_has_role(current_user, executor.oid, 'MEMBER')) AS account_executor_member
          FROM pg_catalog.pg_roles WHERE rolname = current_user`,
       [this.role === 'atrium_app' ? 'atrium_authenticator' : 'atrium_app'])
       const row = identity.rows[0]
       if (!row || row.rolname !== this.role || row.login_role !== this.role || row.rolsuper || row.rolbypassrls
-        || row.rolcreaterole || row.rolcreatedb || row.rolreplication || row.admin_member || row.other_runtime_member) throw new DatabaseConfigurationError()
+        || row.rolcreaterole || row.rolcreatedb || row.rolreplication || row.admin_member || row.other_runtime_member || row.account_executor_member) throw new DatabaseConfigurationError()
       // Bind every known key, including empty ones: inherited state is never authority.
       await client.query(`SELECT ${settings.map(([name], index) => `pg_catalog.set_config('${name}', $${index + 1}, true)`).join(', ')}`,
         settings.map(([, key]) => String(context[key] ?? '')))

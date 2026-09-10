@@ -5,6 +5,8 @@ import { DatabaseConnection, databasePoolConfig } from '../database/connection.t
 import { DatabaseConfigurationError } from '../database/errors.ts'
 import { isPostgresRuntime } from '../database/mode.ts'
 import { PgAuthorizationRepository } from '../database/authorization.ts'
+import { createPasswordChangeService } from '../auth/password-change.ts'
+import { PostgresPasswordChangeRepository } from '../database/password-change.ts'
 import { PostgresPropertyRepository } from '../database/properties.ts'
 import { PostgresDocumentStore, PostgresCalendarStore, propertyCalendar } from '../database/operations.ts'
 import { propertyTransaction } from '../database/scope.ts'
@@ -51,6 +53,7 @@ const header = (headers: Headers, key: string): string | undefined => {
 
 export class DatabaseRuntime {
   readonly authorization: ReturnType<typeof createAuthorizationService>
+  readonly passwordChanges: ReturnType<typeof createPasswordChangeService>
   readonly sessionSecret: string
   readonly app: DatabaseConnection
   readonly auth: DatabaseConnection
@@ -59,6 +62,7 @@ export class DatabaseRuntime {
     if (options.sessionSecret.trim().length < 32) throw new DatabaseConfigurationError()
     this.app = options.app; this.auth = options.auth; this.sessionSecret = options.sessionSecret
     this.authorization = createAuthorizationService(new PgAuthorizationRepository(options.auth))
+    this.passwordChanges = createPasswordChangeService(new PostgresPasswordChangeRepository(options.auth))
     this.properties = new PostgresPropertyRepository(options.app)
   }
   authenticate(headers: Headers, now: Date): Promise<AuthenticatedUser | null> {
