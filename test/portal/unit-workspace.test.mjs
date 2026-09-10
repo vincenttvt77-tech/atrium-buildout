@@ -17,13 +17,22 @@ function workspace({ permissions = ['read', 'operate'], reducedMotion = false, m
   const window = { ATRIUM_RUNTIME_MODE: 'postgres', ATRIUM_ACCOUNT: { username: 'operator', displayName: 'Operator', userId: 'user-one' },
     ATRIUM_PROPERTY: { organizationId: 'org-one', propertyId: 'building-one', buildingName: 'Lake House', timeZone: 'America/Chicago',
       configurationVersion: 3, permissionVersion: 'permission-one', permissions, hours: {} } }
-  const document = { readyState: 'loading', addEventListener() {}, querySelector: () => null, querySelectorAll: () => [],
+  const documentHandlers = new Map()
+  const document = { readyState: 'loading', addEventListener(name, fn) {
+    if (!documentHandlers.has(name)) documentHandlers.set(name, [])
+    documentHandlers.get(name).push(fn)
+  }, querySelector: () => null, querySelectorAll: () => [],
     getElementById: () => null, activeElement: null, body: { classList: { toggle() {}, add() {}, remove() {} } } }
   const location = { hash: '#/units' }, actions = [], requests = [], animations = []
   const context = { window, document, location, Intl, Date: Clock, URLSearchParams, structuredClone, console,
     setTimeout, clearTimeout, setInterval, clearInterval, matchMedia: query => ({ matches: query.includes('reduced-motion') ? reducedMotion : query.includes('max-width') ? mobile : false }),
     fetch: () => { requests.push(true); assert.fail('Unit workspace must not issue a provider request') } }
   runInNewContext(appSource, context)
+  const subscriptions = new Map(), subscribe = window.Atrium.on
+  window.Atrium.on = (name, fn) => {
+    if (!subscriptions.has(name)) subscriptions.set(name, [])
+    subscriptions.get(name).push(fn); return subscribe(name, fn)
+  }
   runInNewContext(unitsSource.replace("A.register('units', view)",
     "window.workspaceTest = { feedbackModel, workspaceModel, workspaceHtml, unitsHtml, sourceHtml, openUnitAvailability, view }; A.register('units', view)"), context)
   const A = window.Atrium, helpers = window.workspaceTest
@@ -36,6 +45,8 @@ function workspace({ permissions = ['read', 'operate'], reducedMotion = false, m
       { unitId: '7B', floor: 7, bedrooms: 2 }], unitFeedback: [], unitFeedbackTruncated: false, profiles: [] }
   A.state.calendar = { bookings: [], unitBlocks: [], units: [{ unitId: '4A' }, { unitId: '7B' }] }
   return { A, helpers, context, location, actions, requests, animations,
+    dispatchDocument(name, event) { for (const fn of documentHandlers.get(name) || []) fn(event) },
+    emit(name, event) { for (const fn of subscriptions.get(name) || []) fn(event) },
     advance(ms) { now += ms },
     model(unitId = '', options = {}) {
       const model = helpers.feedbackModel(A.state, { unitId, ...options })
@@ -46,7 +57,7 @@ function workspace({ permissions = ['read', 'operate'], reducedMotion = false, m
     mount() {
       const controls = new Map(), handlers = new Map()
       const control = selector => {
-        if (!controls.has(selector)) controls.set(selector, { innerHTML: '', hidden: false, disabled: false,
+        if (!controls.has(selector)) controls.set(selector, selector === '.uf-units' ? unitListElement(document) : { innerHTML: '', hidden: false, disabled: false,
           contains: () => false, querySelectorAll: () => [], addEventListener() {}, animate: (...args) => animations.push(args) })
         return controls.get(selector)
       }
@@ -55,6 +66,30 @@ function workspace({ permissions = ['read', 'operate'], reducedMotion = false, m
       helpers.view.mount(root); helpers.view.render(A.state)
       return { root, controls, handlers }
     },
+  }
+}
+
+function unitListElement(document) {
+  let html = '', nodes = [], scroller = null
+  return {
+    writes: 0,
+    get innerHTML() { return html },
+    set innerHTML(value) {
+      html = value; this.writes++
+      for (const node of nodes) node.isConnected = false
+      nodes = [...value.matchAll(/<button\b([^>]*)>[\s\S]*?<\/button>/g)].map(([, source]) => {
+        const attrs = Object.fromEntries([...source.matchAll(/([\w-]+)="([^"]*)"/g)].map(([, key, val]) => [key, val]))
+        const node = { dataset: { unit: attrs['data-unit'], key: attrs['data-key'] }, isConnected: true,
+          getAttribute: key => attrs[key], setAttribute: (key, val) => { attrs[key] = val },
+          focus: () => { document.activeElement = node },
+          closest: selector => selector === '[data-unit]' ? node : null }
+        return node
+      })
+      scroller = value.includes('uf-unit-list') ? { scrollTop: 0, scrollLeft: 0 } : null
+    },
+    querySelector: selector => selector === '.uf-unit-list' ? scroller : null,
+    querySelectorAll: selector => selector === '[data-unit]' || selector === '[data-key]' ? nodes : [],
+    contains: node => nodes.includes(node),
   }
 }
 
@@ -217,4 +252,121 @@ test('an explicit mobile apartment selection focuses its brief once, without mov
     ui.A.state.calendar.bookings = [tour()]; ui.helpers.view.render(ui.A.state)
     assert.equal(focus.length, 1); assert.equal(scrolls.length, 1)
   }
+})
+
+
+test('selecting an apartment keeps the scrolled explorer and original button nodes', () => {
+  const ui = workspace(), mounted = ui.mount(), list = mounted.controls.get('.uf-units')
+  const scroller = list.querySelector('.uf-unit-list')
+  scroller.scrollTop = 960
+  const button = [...list.querySelectorAll('[data-unit]')].find(node => node.dataset.unit === '7B')
+  button.focus()
+  const writes = list.writes
+  ui.A.navigate = (name, args) => { ui.location.hash = ui.A.hashFor(name, args); ui.helpers.view.render(ui.A.state) }
+  mounted.handlers.get('click')({ target: button })
+  assert.equal(ui.location.hash, '#/units?unit=7B')
+  assert.match(mounted.controls.get('.uf-detail').innerHTML, /Apartment 7B/)
+  assert.equal(list.writes, writes, 'selection must only update aria-current, not replace the explorer')
+  assert.equal(list.querySelector('.uf-unit-list'), scroller)
+  assert.equal(scroller.scrollTop, 960)
+  assert.equal(button.isConnected, true)
+  assert.equal(button.getAttribute('aria-current'), 'true')
+  assert.equal(ui.context.document.activeElement, button)
+  ui.advance(5000); ui.helpers.view.render(ui.A.state)
+  assert.equal(list.writes, writes)
+})
+
+test('changed tour/feedback data preserves nested scroll, focused unit and current selection', () => {
+  const ui = workspace(), mounted = ui.mount(), list = mounted.controls.get('.uf-units')
+  ui.location.hash = '#/units?unit=7B'; ui.helpers.view.render(ui.A.state)
+  const scroller = list.querySelector('.uf-unit-list'); scroller.scrollTop = 840; scroller.scrollLeft = 12
+  const focused = [...list.querySelectorAll('[data-unit]')].find(node => node.dataset.unit === '7B')
+  focused.focus()
+  ui.A.state.calendar.bookings = [tour({ unitId: '7B' })]
+  ui.A.state.leads.unitFeedback = [feedback({ unitId: '7B' })]
+  ui.advance(5000); ui.helpers.view.render(ui.A.state)
+  assert.equal(list.querySelector('.uf-unit-list').scrollTop, 840)
+  assert.equal(list.querySelector('.uf-unit-list').scrollLeft, 12)
+  assert.equal(ui.context.document.activeElement.dataset.unit, '7B')
+  assert.equal(ui.context.document.activeElement.getAttribute('aria-current'), 'true')
+  assert.match(list.innerHTML, /1 tour/)
+  assert.match(mounted.controls.get('.uf-detail').innerHTML, /Monthly rent is a concern/)
+})
+
+test('a refresh between pointer press and click cannot detach or redirect the pressed apartment', () => {
+  const ui = workspace(), mounted = ui.mount(), list = mounted.controls.get('.uf-units')
+  const button = [...list.querySelectorAll('[data-unit]')].find(node => node.dataset.unit === '7B')
+  list.querySelector('.uf-unit-list').scrollTop = 900
+  mounted.handlers.get('pointerdown')?.({ target: button, pointerId: 2, button: 0 })
+  const writes = list.writes
+  ui.A.state.calendar.bookings = [tour({ unitId: '7B' })]
+  ui.advance(5000); ui.helpers.view.render(ui.A.state)
+  assert.equal(list.writes, writes, 'data redraw must wait while a unit press is in progress')
+  assert.equal(button.isConnected, true)
+  ui.dispatchDocument('pointerup', { pointerId: 2 })
+  ui.A.navigate = (name, args) => { ui.location.hash = ui.A.hashFor(name, args); ui.helpers.view.render(ui.A.state) }
+  mounted.handlers.get('click')({ target: button })
+  assert.equal(ui.location.hash, '#/units?unit=7B')
+  assert.equal(list.querySelector('.uf-unit-list').scrollTop, 900)
+  assert.match(list.innerHTML, /1 tour/)
+  assert.match(mounted.controls.get('.uf-detail').innerHTML, /Apartment 7B/)
+})
+
+test('cancelled pointer and released keyboard presses resume pending list updates without selection', async () => {
+  for (const input of ['pointer', 'keyboard']) {
+    const ui = workspace(), mounted = ui.mount(), list = mounted.controls.get('.uf-units')
+    const button = [...list.querySelectorAll('[data-unit]')].find(node => node.dataset.unit === '7B')
+    list.querySelector('.uf-unit-list').scrollTop = 700
+    if (input === 'pointer') mounted.handlers.get('pointerdown')?.({ target: button, pointerId: 3, button: 0 })
+    else mounted.handlers.get('keydown')?.({ target: button, key: ' ' })
+    const writes = list.writes
+    ui.A.state.calendar.bookings = [tour({ unitId: '7B' })]
+    ui.helpers.view.render(ui.A.state)
+    assert.equal(list.writes, writes)
+    if (input === 'pointer') ui.dispatchDocument('pointercancel', { pointerId: 3 })
+    else ui.dispatchDocument('keyup', { key: ' ' })
+    await new Promise(resolve => setTimeout(resolve, 5))
+    assert.ok(list.writes > writes)
+    assert.equal(list.querySelector('.uf-unit-list').scrollTop, 700)
+    assert.equal(ui.location.hash, '#/units')
+    assert.match(list.innerHTML, /1 tour/)
+  }
+})
+
+
+test('pointer release outside the list unfreezes it even when the pointer never clicks an apartment', async () => {
+  const ui = workspace(), mounted = ui.mount(), list = mounted.controls.get('.uf-units')
+  const button = [...list.querySelectorAll('[data-unit]')].find(node => node.dataset.unit === '7B')
+  list.querySelector('.uf-unit-list').scrollTop = 640
+  mounted.handlers.get('pointerdown')({ target: button, pointerId: 8, button: 0 })
+  ui.A.state.leads.unitFeedback = [feedback({ unitId: '7B' })]
+  const writes = list.writes
+  ui.helpers.view.render(ui.A.state)
+  assert.equal(list.writes, writes)
+  ui.dispatchDocument('pointerup', { pointerId: 8, target: { closest: () => null } })
+  await new Promise(resolve => setTimeout(resolve, 5))
+  assert.equal(ui.helpers.view.listActivation, null)
+  assert.ok(list.writes > writes)
+  assert.equal(list.querySelector('.uf-unit-list').scrollTop, 640)
+  assert.equal(ui.location.hash, '#/units')
+})
+
+test('leaving Units during a press clears pending activation and fresh data renders when returning', () => {
+  const ui = workspace(), mounted = ui.mount(), list = mounted.controls.get('.uf-units')
+  const button = [...list.querySelectorAll('[data-unit]')].find(node => node.dataset.unit === '7B')
+  list.querySelector('.uf-unit-list').scrollTop = 600
+  mounted.handlers.get('pointerdown')({ target: button, pointerId: 9, button: 0 })
+  ui.A.state.calendar.bookings = [tour({ unitId: '7B' })]
+  const writes = list.writes
+  ui.helpers.view.render(ui.A.state)
+  assert.equal(list.writes, writes)
+  mounted.root.hidden = true
+  ui.emit('route', { name: 'today', params: {} })
+  assert.equal(ui.helpers.view.listActivation, null)
+  assert.equal(ui.helpers.view.listUpdateTimer, null)
+  assert.equal(list.writes, writes, 'hidden view must not repaint as a cleanup side effect')
+  mounted.root.hidden = false; ui.helpers.view.render(ui.A.state)
+  assert.ok(list.writes > writes)
+  assert.equal(list.querySelector('.uf-unit-list').scrollTop, 600)
+  assert.match(list.innerHTML, /1 tour/)
 })

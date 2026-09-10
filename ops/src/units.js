@@ -284,6 +284,7 @@ function openFeedback(unitId, existing = null) {
 const view = {
   title: 'Units', icon: A.icons.units, root: null, source: null, list: null, detail: null, add: null,
   query: '', period: 'all', form: null, selectedKey: null, focusSelected: false,
+  listMarkup: null, listActivation: null, listUpdateTimer: null,
   mount(root) {
     this.root = root
     root.innerHTML = `<div class="uf-view"><div class="view-head uf-heading"><div><h1 tabindex="-1">Unit workspace</h1>` +
@@ -295,9 +296,36 @@ const view = {
     this.source = root.querySelector('.uf-source-region'); this.list = root.querySelector('.uf-units'); this.detail = root.querySelector('.uf-detail'); this.add = root.querySelector('[data-add-feedback]')
     root.querySelector('[data-feedback-search]').addEventListener('input', event => { this.query = event.target.value; this.render(A.state) })
     root.querySelector('[data-feedback-period]').addEventListener('change', event => { this.period = event.target.value; this.render(A.state) })
+    // A polling update must not remove a native click/keyboard target between press and activation.
+    root.addEventListener('pointerdown', event => {
+      if (event.button !== 0 || event.isPrimary === false || !event.target.closest('[data-unit]')) return
+      clearTimeout(this.listUpdateTimer); this.listUpdateTimer = null
+      this.listActivation = `pointer:${event.pointerId}`
+    })
+    root.addEventListener('keydown', event => {
+      if ((event.key === ' ' || event.key === 'Enter') && event.target.closest('[data-unit]')) {
+        clearTimeout(this.listUpdateTimer); this.listUpdateTimer = null
+        this.listActivation = `key:${event.key}`
+      }
+    })
+    const finishActivation = event => {
+      const key = event.pointerId == null ? `key:${event.key}` : `pointer:${event.pointerId}`
+      if (!this.listActivation || (event.type !== 'blur' && this.listActivation !== key)) return
+      clearTimeout(this.listUpdateTimer)
+      // Native click follows pointerup/keyup. Repaint only after that event has had its turn.
+      this.listUpdateTimer = setTimeout(() => {
+        this.listActivation = null; this.listUpdateTimer = null
+        if (this.root && !this.root.hidden) this.render(A.state)
+      }, 0)
+    }
+    document.addEventListener('pointerup', finishActivation, true)
+    document.addEventListener('pointercancel', finishActivation, true)
+    document.addEventListener('keyup', finishActivation, true)
+    window.addEventListener?.('blur', finishActivation)
     root.addEventListener('click', event => {
       const unit = event.target.closest('[data-unit]')
       if (unit) {
+        clearTimeout(this.listUpdateTimer); this.listUpdateTimer = null; this.listActivation = null
         this.focusSelected = matchMedia('(max-width: 760px)').matches
         A.navigate('units', { unit: unit.dataset.unit || undefined }); return
       }
@@ -314,7 +342,24 @@ const view = {
     A.on('poll', () => { if (this.root && !this.root.hidden) this.render(A.state) })
     A.on('busy', () => { if (this.root && !this.root.hidden) this.render(A.state) })
     A.on('minute', () => { if (this.root && !this.root.hidden) this.render(A.state) })
-    A.on('route', route => { if (route.name !== 'units' && this.form && !this.form.isBusy()) this.form.close() })
+    A.on('route', route => {
+      if (route.name === 'units') return
+      clearTimeout(this.listUpdateTimer); this.listUpdateTimer = null; this.listActivation = null; this.focusSelected = false
+      if (this.form && !this.form.isBusy()) this.form.close()
+    })
+  },
+  renderList(html, unitId, force = false) {
+    if (this.listMarkup !== html) {
+      if (this.listActivation && !force) return
+      const scroller = this.list.querySelector?.('.uf-unit-list')
+      const top = scroller?.scrollTop || 0, left = scroller?.scrollLeft || 0
+      const active = document.activeElement, key = this.list.contains?.(active) ? active?.dataset?.key : null
+      this.list.innerHTML = html; this.listMarkup = html
+      const nextScroller = this.list.querySelector?.('.uf-unit-list')
+      if (nextScroller) { nextScroller.scrollTop = top; nextScroller.scrollLeft = left }
+      if (key) [...this.list.querySelectorAll('[data-key]')].find(node => node.dataset.key === key)?.focus({ preventScroll: true })
+    }
+    for (const node of this.list.querySelectorAll('[data-unit]')) node.setAttribute('aria-current', node.dataset.unit === unitId ? 'true' : 'false')
   },
   render(s) {
     if (!this.root) return
@@ -330,11 +375,12 @@ const view = {
     this.add.disabled = !model.available || !model.catalog.length || A.busyNow('leads') || Boolean(s.errors.leads) || model.selectedMissing || Boolean(model.selected && !model.selected.current)
     if (!s.loaded.leads) {
       replace(this.source, s.errors.leads ? A.html.banner('warn', 'Unit feedback could not be loaded. Refresh to try again.') : '')
-      replace(this.list, A.html.skeletonRows(3)); replace(this.detail, A.html.skeletonRows(4)); return
+      this.renderList(A.html.skeletonRows(3), '', true); replace(this.detail, A.html.skeletonRows(4)); return
     }
     replace(this.source, (s.errors.leads ? A.html.banner('warn', 'Unit feedback could not be refreshed. Showing the last loaded records; saving is unavailable until the connection returns.') : '') + sourceHtml(model) +
       (model.truncated ? A.html.banner('info', 'Showing the latest 500 saved entries. Counts and recurring reasons cover only these loaded records.') : ''))
-    replace(this.list, model.available ? unitsHtml(model, unitId) : '')
+    // Selection changes attributes only; the scroll container and pressed buttons keep their identity.
+    this.renderList(model.available ? unitsHtml(model, '') : '', unitId, !model.available)
     replace(this.detail, model.available ? workspaceHtml(model, s) : '')
     if (this.selectedKey !== null && this.selectedKey !== unitId && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
       this.detail.animate?.([{ opacity: .75, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: 180, easing: 'ease-out' })
