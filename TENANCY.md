@@ -63,6 +63,15 @@ and owners have `configure` and membership permissions. A role does not implicit
 grant every property: organization-wide access or explicit property grants determine
 which properties the user may open.
 
+Interactive PostgreSQL sign-in allows 20 attempts per normalized username and 100
+per client network in a rolling 15-minute window, shared across server instances.
+Successful attempts count too. A generic retry response does not disclose account
+existence; protection failures refuse new sign-ins without falling back to another
+login mode. Existing sessions and logout are unaffected. This uses the deployment
+session secret already configured, with no extra per-user environment setup.
+See [shared login protection](docs/adr/0004-login-protection.md) for proxy handling,
+privacy, temporary lockout tradeoffs and required database provisioning.
+
 The dashboard and APIs already use these boundaries. This does not establish a
 complete customer-onboarding system, hosted database rollout, MFA/SSO or verified
 resident identity. Track implementation and remaining work in

@@ -12,6 +12,7 @@ import type { AuthenticatedUser, AuthorizedProperty, AuthorizedScope } from '../
 import { assertPropertySnapshot, PropertyConfigurationError } from '../src/properties/index.ts'
 import type { PropertySnapshot } from '../src/properties/index.ts'
 import { validId } from '../src/auth/validation.ts'
+import { LoginProtectionError, requestLoginAddress } from '../src/auth/login-protection.ts'
 import { runtimeForRequest, isPostgresRuntime, readRuntimeError } from '../src/application/runtime.ts'
 
 /**
@@ -79,10 +80,13 @@ const shell = (title: string, body: string) => `<!doctype html>
 </html>
 `
 
-const loginPage = (failed: boolean, accountMode: boolean, action = '/api/dashboard') => shell('Sign in — Atrium Operations', `
+const loginPage = (failed: boolean, accountMode: boolean, action = '/api/dashboard', retryAfterSeconds?: number) => shell('Sign in — Atrium Operations', `
   <h1>Welcome back.</h1>
   <p>Sign in to manage your leasing workspace.</p>
   ${failed ? `<p class="err" role="alert">${accountMode ? 'The username or password was not right.' : 'That passcode was not right.'} Please try again.</p>` : ''}
+  ${retryAfterSeconds ? `<p class="err" role="alert">Too many sign-in attempts. Please wait at least ${retryAfterSeconds < 60
+    ? `${retryAfterSeconds} second${retryAfterSeconds === 1 ? '' : 's'}`
+    : `${Math.ceil(retryAfterSeconds / 60)} minute${Math.ceil(retryAfterSeconds / 60) === 1 ? '' : 's'}`} before trying again.</p>` : ''}
   <form method="post" action="${escapeHtml(action)}">
     ${accountMode ? `<label for="username">Username</label>
     <input id="username" name="username" type="text" autocomplete="username" autocapitalize="none"
@@ -320,9 +324,16 @@ async function databaseDashboard(req: any, res: any) {
   }
   if (req.method === 'POST') {
     const fields = bodyFields(req)
-    const principal = await runtime.authorization.authenticatePassword(fields.username ?? '', fields.password ?? '')
-    if (!principal) { await penalise(clientKey(req)); send(res, 401, loginPage(true, true, destination)); return }
-    failures.delete(clientKey(req))
+    let principal: AuthenticatedUser | null
+    try { principal = await runtime.signIn(fields.username ?? '', fields.password ?? '', requestLoginAddress(req)) }
+    catch (error) {
+      if (error instanceof LoginProtectionError && error.code === 'rate_limited') {
+        res.setHeader('retry-after', String(error.retryAfterSeconds))
+        send(res, 429, loginPage(false, true, destination, error.retryAfterSeconds)); return
+      }
+      throw error
+    }
+    if (!principal) { send(res, 401, loginPage(true, true, destination)); return }
     for (const [key, value] of HTML_HEADERS) res.setHeader(key, value)
     res.setHeader('set-cookie', sessionCookie(mintUserSession(principal, now, runtime.sessionSecret), { secure }))
     res.setHeader('location', destination); res.status(303).send(''); return
@@ -347,6 +358,9 @@ export default async function handler(req: any, res: any) {
   try {
     if (isPostgresRuntime()) { await databaseDashboard(req, res); return }
   } catch (error) {
+    if (error instanceof LoginProtectionError) {
+      send(res, 503, shell('Sign-in temporarily unavailable', '<h1>Sign-in is temporarily unavailable</h1><p>Please try again later. If this continues, contact your Atrium administrator.</p><a href="/api/dashboard">Return to sign in</a>')); return
+    }
     if (error instanceof InvalidSelection) {
       send(res, 400, shell('Choose a property', '<h1>Choose a property</h1><p>The workspace link needs one organization and one property. <a href="/api/dashboard">Return to your properties</a>.</p>')); return
     }

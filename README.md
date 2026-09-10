@@ -132,6 +132,13 @@ on separate properties with one user session. Viewers can read; staff can operat
 tour-settings changes require `configure`. The UI follows these permissions and the
 server independently enforces them.
 
+Interactive PostgreSQL sign-in reserves shared username and client-network budgets
+before password verification. Limits survive restarts and multiple application
+instances, return a generic retry time, and refuse new sign-ins if the protection
+database is unavailable. Existing sessions remain usable. See the
+[login protection decision](docs/adr/0004-login-protection.md) for limits, deployment
+requirements and remaining identity-security work.
+
 Without the PostgreSQL opt-in, the legacy named-account or shared-passcode adapter
 remains available. Those modes and their restrictions are documented in
 [TENANCY.md](TENANCY.md). Missing/invalid authentication refuses access. Robots rules
