@@ -1,3 +1,4 @@
+import { TEST_AUTH_ORIGIN, verifyMfaCookie } from '../helpers/mfa-session.mjs'
 import { before, after, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
@@ -30,7 +31,7 @@ before(async () => {
   }
   await db.admin.query("INSERT INTO atrium.memberships(id,user_id,organization_id,role,access,status) VALUES('member-zero-grants','zero-grants','organization-a','staff','properties','active')")
   await db.admin.query('UPDATE atrium.users SET display_name=$1 WHERE id=$2', [unsafeLabel, 'no-memberships'])
-  runtime = createDatabaseRuntime({ app: db.app, auth: db.auth, sessionSecret: process.env.OPS_SESSION_SECRET })
+  runtime = createDatabaseRuntime({ authOrigin: TEST_AUTH_ORIGIN, app: db.app, auth: db.auth, sessionSecret: process.env.OPS_SESSION_SECRET })
   // Count calls while retaining the complete production service, database and scrypt path.
   const realChanges = runtime.passwordChanges
   runtime.passwordChanges = { async changeOwnPassword(...args) {
@@ -100,18 +101,21 @@ async function form(username, cookie) {
   const page = await request('/api/account', { cookie })
   assert.equal(page.status, 200)
   assert.ok(page.text.includes(`data-user-id="${username}"`))
-  return { cookie, page, token: formToken(page.text) }
+  const sessionId = JSON.parse(Buffer.from(cookie.split('=')[1].split('.')[1], 'base64url').toString('utf8')).sessionId
+  assert.ok(page.text.includes(`data-session-id="${sessionId}"`))
+  return { cookie, page, token: formToken(page.text), sessionId }
 }
-function changeHeaders(username, token) {
+function changeHeaders(username, token, sessionId) {
   return { origin, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json',
-    'x-atrium-account-action': 'change-password', 'x-atrium-user-id': username, 'x-atrium-csrf': token }
+    'x-atrium-account-action': 'change-password', 'x-atrium-user-id': username, 'x-atrium-csrf': token,
+    ...(sessionId ? { 'x-atrium-session-id': sessionId } : {}) }
 }
 function changeBody(currentPassword = credentials.password, newPassword = 'Synthetic replacement phrase 2026!') {
   return { action: 'change-password', currentPassword, newPassword }
 }
 async function postChange(username, currentForm, body = changeBody(), headers = {}) {
   return request('/api/account', { method: 'POST', cookie: currentForm.cookie,
-    headers: { ...changeHeaders(username, currentForm.token), ...headers }, body: JSON.stringify(body) })
+    headers: { ...changeHeaders(username, currentForm.token, currentForm.sessionId), ...headers }, body: JSON.stringify(body) })
 }
 async function credentialState() {
   return (await db.admin.query(`SELECT u.id,u.credential_version,c.password_hash
@@ -144,6 +148,9 @@ test('account GET is identity-only with no property grants or configuration and 
       assert.equal(page.text.includes(unsafeLabel), false)
       assert.match(page.text, /&lt;\/script&gt;&lt;img/)
     }
+    // Account settings remain readable before MFA. Verify the staff session here
+    // so the following assertion still tests absent property grants, not step-up.
+    await verifyMfaCookie(runtime, currentForm.cookie, credentials.password)
     const picker = await request('/api/dashboard', { cookie: currentForm.cookie })
     assert.equal(picker.status, 403)
     assert.match(picker.text, /does not have access to an active property/)
@@ -178,7 +185,7 @@ test('cross-origin, missing or invalid CSRF and changed account identity are ref
   const username = 'invalid-inputs', currentForm = await form(username)
   const otherForm = await form('owner-b')
   const beforeState = await credentialState(), beforeSecurity = await securityState(), beforeChanges = passwordChanges
-  const base = changeHeaders(username, currentForm.token)
+  const base = changeHeaders(username, currentForm.token, currentForm.sessionId)
   const cases = [
     ['missing origin', { origin: null }, 403],
     ['foreign origin', { origin: 'https://attacker.invalid' }, 403],
@@ -214,21 +221,29 @@ test('malformed JSON, oversized payloads and browser-selected target users canno
   const username = 'invalid-inputs', currentForm = await form(username)
   const beforeState = await credentialState(), beforeSecurity = await securityState(), beforeChanges = passwordChanges
   const malicious = [
-    '{not-json', 'null', '[]', '"a string"', '{}',
+    '{not-json', 'null', '[]', '"a string"',
     JSON.stringify({ ...changeBody(), userId: 'owner-b' }),
     JSON.stringify({ ...changeBody(), username: 'owner-b' }),
     JSON.stringify({ ...changeBody(), organizationId: 'organization-b' }),
     JSON.stringify({ ...changeBody(), target: { userId: 'owner-b' } }),
-    JSON.stringify({ ...changeBody(), action: 'reset-password' }),
     JSON.stringify({ ...changeBody(), currentPassword: {} }),
     JSON.stringify({ ...changeBody(), newPassword: null }),
     JSON.stringify({ ...changeBody(), newPassword: 'X'.repeat(4100) }),
     '{"action":"change-password","currentPassword":"wrong","newPassword":"Synthetic replacement phrase","__proto__":{"userId":"owner-b"}}',
   ]
   for (const body of malicious) {
-    const result = await request('/api/account', { method: 'POST', cookie: currentForm.cookie, headers: changeHeaders(username, currentForm.token), body })
+    const result = await request('/api/account', { method: 'POST', cookie: currentForm.cookie, headers: changeHeaders(username, currentForm.token, currentForm.sessionId), body })
     assert.equal(result.status, 400)
     assert.equal(JSON.parse(result.text).code, 'invalid_password')
+    assert.equal(result.headers.has('set-cookie'), false)
+    noSecrets(result)
+  }
+  // Action selection is now a shared account-command boundary, checked before
+  // password payload validation; neither a missing nor switched action is admitted.
+  for (const body of ['{}', JSON.stringify({ ...changeBody(), action: 'reset-password' })]) {
+    const result = await request('/api/account', { method: 'POST', cookie: currentForm.cookie, headers: changeHeaders(username, currentForm.token, currentForm.sessionId), body })
+    assert.equal(result.status, 400)
+    assert.equal(JSON.parse(result.text).code, 'invalid_session')
     assert.equal(result.headers.has('set-cookie'), false)
     noSecrets(result)
   }

@@ -403,7 +403,12 @@ const href = {
   tel(phone) { const d = String(phone ?? '').replace(/[^\d+]/g, ''); return /\d/.test(d) && phone !== 'unknown' ? `tel:${d}` : null },
   sms(phone) { const d = String(phone ?? '').replace(/[^\d+]/g, ''); return /\d/.test(d) && phone !== 'unknown' ? `sms:${d}` : null },
   mailto(email) { const e = String(email ?? '').trim(); return e.includes('@') && !/\s/.test(e) ? `mailto:${e}` : null },
-  recording(url) { const u = String(url ?? ''); return /^https:\/\//.test(u) ? u : null },
+  recording(url) {
+    const u = String(url ?? '')
+    // Fictional fixture URLs are placeholders, not playable demo recordings.
+    if (!/^https:\/\//.test(u) || /^https:\/\/(?:[^/]*\.)?example\.(?:com|org|net)(?::\d+)?(?:\/|$)/i.test(u)) return null
+    return u
+  },
 }
 
 // ---------------------------------------------------------------------------------------
@@ -887,8 +892,8 @@ function apply(resource, data) {
 // ---------------------------------------------------------------------------------------
 
 const VIEWS = ['today', 'calls', 'leads', 'units', 'calendar', 'status']
-const VIEW_LABEL = { today: 'Today', calls: 'Calls', leads: 'Leads', units: 'Unit feedback', calendar: 'Calendar', status: 'Status' }
-const VIEW_H1 = { today: 'Today', calls: 'Calls', leads: 'Leads', units: 'Unit feedback', calendar: 'Tour calendar', status: 'Status' }
+const VIEW_LABEL = { today: 'Today', calls: 'Calls', leads: 'Leads', units: 'Units', calendar: 'Calendar', status: 'Status' }
+const VIEW_H1 = { today: 'Today', calls: 'Calls', leads: 'Leads', units: 'Unit workspace', calendar: 'Tour calendar', status: 'Status' }
 const modules = {}
 let current = null
 let booted = false
@@ -949,6 +954,9 @@ function showView(r, moveFocus) {
     root.innerHTML = placeholderView(r.name)
   }
   if (moveFocus && root) {
+    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) root.animate?.([
+      { opacity: .82, transform: 'translateY(5px)' }, { opacity: 1, transform: 'none' },
+    ], { duration: 180, easing: 'ease-out' })
     // a modal dialog keeps focus while it is open (its close handler then lands on this view's heading)
     const h1 = root.querySelector('h1')
     if (h1 && !dialogs.length) { if (!h1.hasAttribute('tabindex')) h1.setAttribute('tabindex', '-1'); try { h1.focus({ preventScroll: false }) } catch (e) { /* ignore */ } }
@@ -2263,10 +2271,36 @@ function todayModel(s) {
   }
   return {
     today, now, ws, records, needs, emergencies, people, callBacks, tours, toursTomorrow, callsKnown, callsValue, callsNote, toursBooked,
-    nextTour: nextTour ? fmt.time(nextTour.startsAt) : null, needValue, oldest, leadsOff, calOff, briefing,
+    nextTour: nextTour ? fmt.time(nextTour.startsAt) : null, nextTourRecord: nextTour || null, needValue, oldest, leadsOff, calOff, briefing,
     errors: { calls: Boolean(s.errors.calls), calendar: Boolean(s.errors.calendar), leads: Boolean(s.errors.leads) },
     loaded: { ...s.loaded }, notConfigured: s.notConfigured, callsConfigured: s.callsConfigured, safetyEventsError: s.safetyEventsError,
   }
+}
+function dashboardFresh(s, resource) {
+  const at = toTime(s.lastGoodAt?.[resource])
+  return Boolean(s.loaded[resource] && !s.errors[resource] && at != null && at <= Date.now() + 5000 && Date.now() - at <= 60000)
+}
+function todayPresentation(s, m) {
+  const leads = dashboardFresh(s, 'leads'), calendar = dashboardFresh(s, 'calendar')
+  const calls = dashboardFresh(s, 'calls') && !s.callsError
+  const complete = leads && calendar && calls && !s.safetyEventsError
+  return { leads, calendar, calls, complete,
+    waiting: !s.loaded.leads || !s.loaded.calendar || !s.loaded.calls,
+    briefing: complete ? m.briefing : 'Calls, tours and the work waiting for your team, together in one place.',
+    checked: complete ? 'Current workspace records' : 'Overview from loaded records',
+  }
+}
+function todayHeroHtml(m, presentation) {
+  const next = presentation.calendar ? m.nextTourRecord : null
+  const upcoming = next ? `<span class="page-eyebrow">NEXT TOUR TODAY</span><strong class="today-next-time">${esc(fmt.time(next.startsAt))}</strong>` +
+    `<span class="today-next-name">${esc(next.name)}</span><span>${next.unitId ? `Apartment ${esc(next.unitId)}` : 'Apartment not selected'}</span>` +
+    `<div class="page-hero-actions">${next.unitId ? link('units', { unit: next.unitId }, 'Prepare for this tour', 'btn btn-primary') : link('calendar', { date: m.today, slot: next.slotId }, 'View this tour', 'btn btn-primary')}</div>`
+    : `<span class="page-eyebrow">${presentation.calendar ? 'LOOK AHEAD' : 'CALENDAR'}</span><strong class="today-next-label">${presentation.calendar ? 'Prepare the next showing.' : 'Tour schedule unconfirmed.'}</strong>` +
+      `<span>${presentation.calendar ? 'Apartments, prospect context and saved feedback.' : 'The calendar is still loading or needs a refresh.'}</span><div class="page-hero-actions">${link(presentation.calendar ? 'units' : 'status', {}, presentation.calendar ? 'Explore apartments' : 'Check workspace status', 'btn btn-primary')}</div>`
+  return `<header class="page-hero today-hero"><div class="today-hero-copy"><span class="page-eyebrow">${esc(fmt.dayLong(m.today))} · ${esc(property.timeZoneLabel)}</span>` +
+    `<h1 tabindex="-1">Today</h1><p class="today-briefing">${esc(presentation.briefing)}</p><div class="today-mode">${ico(isDemo ? 'info' : 'home')}<span>${esc(isDemo ? isPersistentDemo ? 'Local demo workspace' : 'Demo workspace' : property.name)}</span><span>${esc(presentation.checked)}</span></div>` +
+    `<div class="page-hero-actions">${link('calls', {}, 'Review calls', 'btn')}${link('leads', { tab: 'todo' }, 'Open team to-dos', 'btn')}</div></div>` +
+    `<div class="today-next" aria-label="Next showing">${upcoming}</div></header>`
 }
 function pollBanner(s, resource, what) {
   const err = s.errors[resource]
@@ -2348,12 +2382,13 @@ function tourRowHtml(t, s, today) {
   const actions = []
   if (confirmPending && href.tel(t.phone)) actions.push(telBtn(t.phone, 'Call to confirm', 'btn btn-call'))
   if (t.profile) actions.push(link('leads', { phone: t.phone }, 'Open lead', 'btn btn-quiet link-action'))
+  if (t.unitId) actions.push(link('units', { unit: t.unitId }, 'Tour brief', 'btn btn-quiet link-action'))
   actions.push(link('calendar', { date: today, slot: t.slotId }, 'Calendar', 'btn btn-quiet link-action'))
-  const chip = t.past ? html_.chip('chip-ok', 'check', 'Toured') : html_.chip('chip-ok', 'check', 'Confirmed')
-  return `<div class="row row-stack${t.past ? ' row-muted' : ''}" data-key="tour:${esc(t.slotId)}">` +
+  const chip = t.past ? html_.chip('chip-neutral', 'clock', 'Scheduled earlier') : html_.chip('chip-neutral', 'calendar', 'Tour booked')
+  return `<div class="row row-stack${t.past ? ' row-muted' : ''}" data-key="tour:${esc(t.slotId)}:${esc(t.unitId || '')}:${esc(t.phone || t.name)}">` +
     `<span class="row-lead"><span class="num strong">${esc(fmt.time(t.startsAt))}</span></span>` +
     `<span class="row-body"><span class="row-title">${t.profile ? personLink(t.phone, t.name) : esc(t.name)} · ${t.unitId ? `apartment ${esc(t.unitId)}` : 'no apartment picked yet'}</span>` +
-    `<span class="row-sub">${fmt.phone(t.phone) ? `${telLink(t.phone)} · Confirmed` : 'Confirmed · no phone on file'}</span></span>` +
+    `<span class="row-sub">${fmt.phone(t.phone) ? telLink(t.phone) : 'No phone on file'}${t.past ? ' · attendance not recorded here' : ''}</span></span>` +
     `<span class="row-actions">${chip}${actions.join('')}</span></div>`
 }
 function recentCallRowHtml(rec, s) {
@@ -2388,7 +2423,7 @@ const todayView = {
     this.root = root
     root.addEventListener('click', (e) => this.onClick(e))
     const repaint = () => { if (this.root && !this.root.hidden) this.render(state) }
-    on('data', repaint); on('minute', repaint)
+    on('data', repaint); on('poll', repaint); on('minute', repaint)
   },
   onClick(e) {
     const btn = e.target.closest('button[data-action]')
@@ -2404,7 +2439,8 @@ const todayView = {
     const root = this.root
     if (!root) return
     const m = todayModel(s)
-    const key = JSON.stringify([m.callsValue, m.callsNote, m.toursBooked, m.nextTour, m.needValue, m.oldest, m.leadsOff, m.calOff, m.briefing, m.errors, m.loaded, m.notConfigured, m.callsConfigured, m.safetyEventsError,
+    const presentation = todayPresentation(s, m)
+    const key = JSON.stringify([m.today, presentation, m.callsValue, m.callsNote, m.toursBooked, m.nextTour, m.needValue, m.oldest, m.leadsOff, m.calOff, m.briefing, m.errors, m.loaded, m.notConfigured, m.callsConfigured, m.safetyEventsError,
       m.emergencies.map((x) => [x.callId, x.at, x.matched, x.action, x.name]), m.people.map((x) => [x.type, x.callId, x.respondBy, x.calledAt, fmt.respondPhrase(x.respondBy), x.question, x.name, x.request, html_.followUpReview(x.fu)]),
       m.callBacks.map((f) => [f.id, f.dueAt, f.status, fmt.duePhrase(f.dueAt), todoSentence(f, profileByPhone(s, f.phone), s).text, html_.followUpReview(f)]),
       m.tours.map((t) => [t.slotId, t.name, t.unitId, t.past, t.phone]), m.toursTomorrow.length,
@@ -2413,7 +2449,7 @@ const todayView = {
     this.sigKey = key
     const focusKey = root.contains(document.activeElement) && document.activeElement.dataset ? document.activeElement.dataset.key : null
     const loading = !m.callsKnown && !s.loaded.calendar && !m.errors.calls && !m.errors.leads
-    let out = `<div class="view-head"><h1 tabindex="-1">Today</h1><p class="dateline small muted">${esc(fmt.dayLong(m.today))} · ${esc(property.name)}</p>${m.briefing ? `<p class="briefing muted">${esc(m.briefing)}</p>` : ''}</div>`
+    let out = todayHeroHtml(m, presentation)
     if (m.notConfigured) { root.innerHTML = out; return }
     out += m.emergencies.map((x) => emergencyBannerHtml(x, this.announced)).join('')
     if (m.safetyEventsError) out += html_.banner('warn', 'Safety reports are temporarily unavailable. The list may be incomplete. Trying again.')
@@ -2423,47 +2459,49 @@ const todayView = {
           : "Heads up: calendar changes aren't being saved right now. Blocks you add may disappear. Ask Atrium support."
       out += html_.banner('warn', '', { raw: `<a class="banner-link" href="#/status" style="color:inherit;text-decoration:none">${esc(txt)}</a>` })
     }
-    out += `<p class="label muted" style="margin-top:${m.emergencies.length || m.leadsOff || m.calOff ? '16px' : '0'}">Since 6 PM yesterday</p>`
+    out += `<p class="section-kicker">Since 6 PM yesterday · ${esc(property.timeZoneLabel)}${presentation.complete ? '' : ' · last loaded records'}</p>`
     if (loading) {
       out += `<div class="tiles" aria-busy="true"><span class="vh">Loading today…</span><div class="skeleton-tile skeleton-row"></div><div class="skeleton-tile skeleton-row"></div><div class="skeleton-tile skeleton-row"></div></div>`
       for (const title of ['Needs a person', 'Call back today', 'Tours today']) out += `<section class="section">${sectionHead(title)}${html_.skeletonRows(2)}</section>`
       root.innerHTML = out
       return
     }
-    const tile = (label_, value, note, extra) => `<a class="card big-number${extra || ''}" href="${esc(extra === ' big-number-warn' || label_.includes('person') ? '#needs-a-person' : (label_ === 'Calls' ? '#/calls' : '#/calendar'))}" data-key="tile:${esc(label_)}"><span class="big-number-label">${esc(label_)}</span><span class="big-number-value num">${esc(value)}</span><span class="big-number-note">${note}</span></a>`
-    const callsNote = m.callsNote === 'notConnected' ? `<a href="#/status" class="link">Call history isn't connected</a>` : esc(m.callsNote || '')
+    const tile = (label_, value, note, destination, warning = false) => `<a class="today-metric${warning ? ' today-metric-warn' : ''}" href="${esc(destination)}" data-key="tile:${esc(label_)}"><span class="metric-label">${esc(label_)}</span><span class="metric-value">${esc(value)}</span><span class="metric-detail">${esc(note)}</span></a>`
+    const callsNote = m.callsNote === 'notConnected' ? 'Call history is not connected' : m.callsNote || 'Recorded in this reporting window'
     const toursVal = m.toursBooked == null ? '—' : String(m.toursBooked)
     const needVal = m.needValue == null ? '—' : String(m.needValue)
-    out += `<div class="tiles">${tile('Calls', m.callsValue === '—' ? '—' : m.callsValue, callsNote)}` +
-      `${tile(m.toursBooked === 1 ? 'Tour booked' : 'Tours booked', toursVal, esc(m.toursBooked == null ? '' : (m.nextTour ? `next one ${m.nextTour}` : 'none today')))}` +
-      `${tile(m.needValue === 1 ? 'Needs a person' : 'Need a person', needVal, esc(m.needValue == null ? '' : (m.needs.length ? `oldest waiting ${fmt.elapsed(m.now - m.oldest)}` : 'all handled')), m.needValue > 0 ? ' big-number-warn' : '')}</div>`
+    out += `<div class="page-metrics today-metrics">${tile('Calls received', m.callsValue, callsNote, m.callsNote === 'notConnected' ? '#/status' : '#/calls')}` +
+      `${tile('Tours booked', toursVal, 'Saved during this reporting window', '#/calendar')}` +
+      `${tile('Needs a person', needVal, m.needValue == null ? 'Review queue is still loading' : m.needs.length ? `Oldest waiting ${fmt.elapsed(m.now - m.oldest)}` : presentation.complete ? 'No saved items waiting for review' : 'Review status not confirmed', '#needs-a-person', m.needValue > 0)}</div>`
+    if (!presentation.complete) out += `<div class="today-data-note">${ico('info')}<span>${presentation.waiting ? 'Some workspace information is still loading. Records appear as they arrive.' : 'Some information needs a refresh. Check Status before relying on an empty list.'}</span>${link('status', {}, 'Check status', 'btn-link')}</div>`
+    out += '<div class="today-workbench"><div class="today-main">'
     // Needs a person — every needsPerson item in order, the live emergency first (it is also the banner
     // above), so the count here is the tile's, the badge's and the briefing sentence's number.
-    out += `<section class="section today-list" id="needs-a-person">${sectionHead('Needs a person', m.needs.length)}`
+    out += `<section class="section today-list" id="needs-a-person">${sectionHead('Needs a person', s.loaded.leads ? m.needs.length : null)}`
     out += pollBanner(s, 'leads', 'callers')
     if (m.needs.length) out += `<div class="card card-warn rows">${m.needs.map((p) => personRowHtml(p, s)).join('')}</div>`
-    else if (s.loaded.leads) out += `<div class="card">${html_.empty({ title: m.safetyEventsError ? 'Safety reports could not be checked.' : 'Nothing needs a person right now.', text: "When the assistant hands something off — an accommodation question, a dispute, a tour it couldn't book — it shows up here." })}</div>`
+    else if (s.loaded.leads) out += `<div class="card">${html_.empty({ icon: 'check-circle', title: m.safetyEventsError ? 'Safety reports could not be checked.' : presentation.complete ? 'Nothing needs a person right now.' : 'Review status is not confirmed yet.', text: presentation.complete ? 'Questions, requests and booking issues that need your team appear here.' : 'Wait for the workspace checks to finish, or open Status to review the connection.' })}</div>`
     out += '</section>'
     // Call back today
     const more = m.callBacks.length > 6 ? link('leads', { tab: 'todo' }, `See all ${m.callBacks.length} in Leads ›`, 'btn-link') : ''
-    out += `<section class="section today-list">${sectionHead('Call back today', m.callBacks.length, more)}`
+    out += `<section class="section today-list">${sectionHead('Call back today', s.loaded.leads ? m.callBacks.length : null, more)}`
     if (!m.needs.length) out += pollBanner(s, 'leads', 'callers')
     if (m.callBacks.length) out += `<div class="card rows">${m.callBacks.slice(0, 6).map((f) => followUpRowHtml(f, s)).join('')}</div>`
-    else if (s.loaded.leads) out += `<div class="card">${html_.empty({ title: 'No one to call back today.', text: "To-dos the assistant creates — a tour to confirm, a question it couldn't answer — appear here on the day they're due." })}</div>`
-    out += '</section>'
+    else if (s.loaded.leads) out += `<div class="card">${html_.empty({ icon: 'phone', title: presentation.leads ? 'No one to call back today.' : 'Follow-ups are not confirmed yet.', text: presentation.leads ? 'Tour confirmations and other follow-ups appear here when they are due.' : 'The last loaded records may be out of date. Check Status for details.' })}</div>`
+    out += '</section></div><aside class="today-aside" aria-label="Tours and apartment preparation">'
     // Tours today
     const tomorrowLink = m.toursTomorrow.length ? link('calendar', { date: addDays(m.today, 1) }, `Tomorrow: ${text.plural(m.toursTomorrow.length, 'tour')} ›`, 'btn-link') : ''
-    out += `<section class="section today-list">${sectionHead('Tours today', m.tours.length, tomorrowLink)}`
+    out += `<section class="section today-list today-tours">${sectionHead('Tours today', s.loaded.calendar ? m.tours.length : null, tomorrowLink)}`
     out += pollBanner(s, 'calendar', 'the calendar')
     if (m.tours.length) out += `<div class="card rows">${m.tours.map((t) => tourRowHtml(t, s, m.today)).join('')}</div>`
-    else if (s.loaded.calendar || s.loaded.leads) out += `<div class="card">${html_.empty({ title: 'No tours today.', text: "When the assistant books one, it shows up here with the caller's name and apartment." })}</div>`
-    out += '</section>'
+    else if (s.loaded.calendar || s.loaded.leads) out += `<div class="card">${html_.empty({ icon: 'calendar', title: presentation.calendar ? 'No tours today.' : 'Today’s calendar is not confirmed yet.', text: presentation.calendar ? 'Open the calendar to review upcoming dates and availability.' : 'The calendar has not finished refreshing.' })}</div>`
+    out += `</section><section class="workspace-panel today-prep"><span class="page-eyebrow">BEFORE THE SHOWING</span><h2>The apartment brief</h2><p>Bring prospect needs, upcoming tours and saved feedback into the same conversation.</p><div class="page-hero-actions">${link('units', {}, 'Open unit workspace', 'btn btn-primary')}</div></section></aside></div>`
     // Recent calls
     out += `<section class="section today-list">${sectionHead('Recent calls', null, link('calls', {}, 'All calls ›', 'btn-link'))}`
     out += pollBanner(s, 'calls', 'calls')
     if (s.callsConfigured === false) out += html_.banner('info', "Call recordings and transcripts aren't connected, so this list is built from the assistant's notes.")
     if (m.records.length) out += `<div class="card rows">${m.records.slice(0, 5).map((r) => recentCallRowHtml(r, s)).join('')}</div>`
-    else if (s.loaded.calls || s.loaded.leads) out += `<div class="card">${html_.empty({ title: 'No calls yet.', text: 'Calls to the leasing line show up here within a minute of ending.' })}</div>`
+    else if (s.loaded.calls || s.loaded.leads) out += `<div class="card">${html_.empty({ icon: 'phone', title: presentation.calls || (s.callsConfigured === false && presentation.leads) ? 'No calls in the loaded records.' : 'Call history is not confirmed yet.', text: 'Completed calls appear here after their records are received.' })}</div>`
     out += '</section>'
     root.innerHTML = out
     if (focusKey) { const el = root.querySelector(`[data-key="${cssq(focusKey)}"]`); if (el) { try { el.focus({ preventScroll: true }) } catch (e) { /* ignore */ } } }
@@ -2486,14 +2524,53 @@ document.addEventListener('click', (e) => {
 // Status and Demo tools (§11)
 // ---------------------------------------------------------------------------------------
 
-const ASSISTANT_PARA = "It answers the leasing line, learns what a caller is looking for, quotes only the apartments on the live availability list, answers questions from the approved building information, offers real tour times and books them on this calendar. It doesn't guess: if it hasn't been told something, it says so and offers a call back. It never handles accommodation requests, fair-housing or legal questions, disputes, eligibility or payments — those always go to a person, and you'll see them under \"Needs a person\". If a caller reports an emergency it gives them the safety instruction for it (get out and call 911 for gas, smoke or carbon monoxide), then flags it on Today. It doesn't make outgoing calls or send messages yet."
+const ASSISTANT_PARA = "The assistant uses configured property information, records what a prospect needs and offers tour times that pass the calendar checks. Quotes depend on the inventory source checks; a demo catalogue stays a sample. Questions that need staff judgment, including accommodation, legal, eligibility, payment and dispute questions, go to a person. Emergency guidance and a staff-visible report do not mean that someone has been notified. Review the actual call and booking records for each outcome."
 
 function storeLine(store) {
   if (!store) return 'not loaded yet'
   return `${String(store.kind ?? '?')} · ${store.durable ? 'durable' : 'not durable'} · "${String(store.note ?? '')}"`
 }
+function statusSummary(s, rows) {
+  const labels = { leads: 'callers and to-dos', calendar: 'calendar', calls: 'call history' }
+  const names = Object.keys(labels)
+  const loaded = names.filter(name => s.loaded[name])
+  const pending = names.filter(name => !s.loaded[name])
+  const failed = names.filter(name => s.errors[name])
+  const errorAt = s.lastWriteError && Number.isFinite(Date.parse(s.lastWriteError.at)) ? fmt.dateTime(s.lastWriteError.at) : ''
+  const history = s.lastWriteError ? ` A previous change reported an error${errorAt ? ` (${errorAt})` : ''}. Open For support for details.` : ''
+  const summary = (title, detail, tone = '') => ({ title, detail: detail + history, tone: history && tone === 'is-ok' ? '' : tone })
+  if (s.notConfigured) return summary('This workspace needs setup.', 'Ask Atrium support to restore access.', 'is-warn')
+  if (failed.length) return summary(loaded.length ? 'Some workspace information is unavailable.' : 'Workspace information is unavailable.',
+    `Couldn’t refresh ${text.list(failed.map(name => labels[name]))}. Some information may be missing or out of date.`, 'is-warn')
+  if (s.safetyEventsError) return summary('Safety reports need attention.', 'The safety report list may be incomplete. Try Refresh now.', 'is-warn')
+  if (s.callsError) return summary('Call history needs attention.', 'Recent recordings and transcripts could not be refreshed. See the details below.', 'is-warn')
+  const stores = ['leads', 'calendar'].filter(name => s.loaded[name]).map(name => s[name] && s[name].store)
+  if (stores.some(store => store && store.durable === false) && !(isDemo && !isPersistentDemo)) {
+    return summary('Saving needs attention.', 'Changes to callers or the calendar may not be saved. See the details below.', 'is-warn')
+  }
+  if (!isDemo && s.loaded.calls && s.callsConfigured === false) {
+    return summary('Call history isn’t connected.', 'Recordings and transcripts are unavailable. Check the other workspace details below.', 'is-warn')
+  }
+  if (rows.reconnecting) return summary('Trying to reconnect…', 'Previously loaded information may be out of date.', 'is-warn')
+  if (pending.length) return summary(loaded.length ? 'Still checking this workspace…' : 'Checking this workspace…',
+    `Waiting for ${text.list(pending.map(name => labels[name]))}.`)
+  if (stores.some(store => !store || typeof store.durable !== 'boolean') || (!isDemo && s.callsConfigured !== true)) {
+    return summary('Some workspace checks are unconfirmed.', 'Refresh to check saving and call history.')
+  }
+  const checked = names.map(name => Date.parse(s.lastGoodAt[name]))
+  if (checked.some(value => !Number.isFinite(value))) return summary('Some workspace checks are unconfirmed.', 'A complete refresh has not been confirmed yet.')
+  const oldest = Math.min(...checked)
+  const refreshed = `Last complete refresh: ${fmt.dateTime(new Date(oldest).toISOString())}.`
+  // A normal round runs every five seconds. A stalled/skipped request must not
+  // borrow a newer timestamp from another resource or a manual refresh click.
+  if (Date.now() - oldest > 60000) return summary('Some information needs a refresh.', `${refreshed} Previously loaded information may be out of date.`)
+  if (isDemo && !isPersistentDemo) return summary('Demo data is loaded.', 'Sample changes reset when the preview restarts.')
+  return isPersistentDemo
+    ? summary('Local demo data is loaded.', `Sample callers, tours and call history are loaded. ${refreshed}`, 'is-ok')
+    : summary('Workspace data is available.', `Callers, calendar and call history are loaded. ${refreshed}`, 'is-ok')
+}
 const statusView = {
-  title: 'Status', icon: icons.status, root: null, sigKey: null, busyAction: false, demoFocused: null,
+  title: 'Status', icon: icons.status, root: null, sigKey: null, busyAction: false, signOutPending: false, demoFocused: null,
   mount(root) {
     this.root = root
     root.addEventListener('click', (e) => this.onClick(e))
@@ -2503,42 +2580,52 @@ const statusView = {
   },
   render(s) {
     const root = this.root
-    if (!root || this.busyAction) return
+    if (!root || this.busyAction || this.signOutPending) return
     const rows = statusRows()
-    // "Updated just now" for a minute after Refresh now was pressed (the minute tick repaints it back to the clock time)
-    const justNow = Boolean(this.refreshedAt) && Date.now() - this.refreshedAt < 60000
-    const at = justNow ? 'just now' : (s.updatedAt ? fmt.time(s.updatedAt) : '')
     const counts = { calls: arr(s.calls).length, slots: arr(s.calendar && s.calendar.slots).length, leads: profilesOf(s).length, todos: followUpsOf(s).length }
     const week = this.weekDays(s)
-    const model = { rows, at, errors: s.errors, lastWriteError: s.lastWriteError, health: s.health, counts, lastPollAt: s.lastPollAt, lstore: s.leads && s.leads.store, cstore: s.calendar && s.calendar.store,
-      callsError: s.callsError, callsConfigured: s.callsConfigured, safetyEventsError: s.safetyEventsError, outbound: Boolean(s.leads && s.leads.outboundEnabled), notConfigured: s.notConfigured, weekDays: week.length, weekSkipped: week.skipped.length, calLoaded: Boolean(s.calendar) }
+    const summary = statusSummary(s, rows)
+    const fresh = Object.fromEntries(Object.keys(RESOURCES).map(name => [name, dashboardFresh(s, name)]))
+    const inventory = s.leads && s.leads.feedbackInventory
+    const model = { rows, summary, errors: s.errors, lastWriteError: s.lastWriteError, health: s.health, counts, lastPollAt: s.lastPollAt, lstore: s.leads && s.leads.store, cstore: s.calendar && s.calendar.store,
+      fresh, inventory, callsError: s.callsError, callsConfigured: s.callsConfigured, safetyEventsError: s.safetyEventsError, outbound: Boolean(s.leads && s.leads.outboundEnabled), notConfigured: s.notConfigured, weekDays: week.length, weekSkipped: week.skipped.length, calLoaded: Boolean(s.calendar) }
     const key = JSON.stringify(model)
     if (key === this.sigKey) return
     this.sigKey = key
     const focusKey = root.contains(document.activeElement) && document.activeElement.dataset ? document.activeElement.dataset.key : null
-    const savingRow = (labelText, v) => {
+    const savingRow = (labelText, v, resource) => {
       if (v === null) return `<div class="status-row"><span class="dot dot-neutral"></span><span class="muted">${esc(labelText)}: not loaded yet</span></div>`
+      if (!fresh[resource]) return `<div class="status-row"><span class="dot dot-neutral"></span><span>${esc(labelText)}: saving check needs a refresh. ${v === 'on' ? 'Saving was available at the last check.' : 'Saving was not confirmed at the last check.'}</span></div>`
       const off = v !== 'on'
       const word = v === 'on' ? (isPersistentDemo ? 'Sample data saved locally' : 'Saving on') : v === 'temp' ? 'Saving temporarily unavailable — check the connection' : isDemo && !isPersistentDemo ? 'Demo data — resets when the preview restarts' : 'Saving off — changes may be lost'
       return `<div class="status-row"><span class="dot${off ? ' dot-warn' : ''}"></span><span class="${off ? 'warn-text' : ''}">${off ? ico('cloud-off') : ico('check')} ${esc(labelText)}: ${esc(word)}</span></div>`
     }
     const rec = rows.recordings
-    const recText = isDemo ? 'Sample calls and transcripts are included for this demo account.' : rec === null ? 'Checking…' : rec === 'on' ? 'Connected — recordings and transcripts are available for the 20 most recent calls.'
+    const recText = !s.loaded.calls ? 'Checking call history…' : s.errors.calls || s.callsError ? 'Call history could not be refreshed. Previously loaded recordings and transcripts may be out of date.'
+      : !fresh.calls ? 'Call history needs a refresh. The last loaded records may be out of date.'
+      : isDemo ? 'Sample calls and transcripts are included for this demo account.' : s.callsConfigured == null ? 'The call history connection has not been confirmed yet.' : rec === 'on' ? 'Connected — recordings and transcripts are available for the 20 most recent calls.'
       : rec === 'off' ? "Not connected yet — calls still show from the leads' records, without recordings or transcripts. Ask Atrium support." : 'Connected, but not answering right now — trying again.'
-    const summaryOk = rows.ok
-    let out = `<div class="view-head"><h1 tabindex="-1">Status</h1></div><div class="status-col">`
-    out += `<div class="card status-summary ${summaryOk ? 'is-ok' : 'is-warn'}"><div style="display:flex;gap:10px;min-width:0">${ico(summaryOk ? 'check-circle' : 'warning')}<div><div class="summary-title">${summaryOk ? 'All connections are available.' : 'Something needs attention.'}</div>` +
-      `<div class="summary-sub">${rows.reconnecting ? `Trying to reconnect…${at ? ` showing what we had at ${esc(at)}` : ''}` : (at ? `Updated ${esc(at)}` : 'Loading…')}</div></div></div>` +
+    const recConfirmed = fresh.calls && !s.callsError && (isDemo || s.callsConfigured === true) && rec === 'on'
+    let out = `<header class="page-hero status-hero"><div><span class="page-eyebrow">WORKSPACE CONTROLS</span><h1 tabindex="-1">Status</h1><p>See what is available, what needs a check, and how your team is signed in.</p><div class="today-mode">${ico('home')}<span>${esc(property.name)}</span><span>${esc(isDemo ? isPersistentDemo ? 'Local demo' : 'Demo workspace' : 'Property workspace')}</span></div></div>` +
+      '<div class="workspace-stack" aria-hidden="true"><span>CALLS</span><span>TOURS</span><span>TEAM</span></div></header><div class="status-col">'
+    out += `<div class="card status-summary ${summary.tone}"><div style="display:flex;gap:10px;min-width:0">${ico(summary.tone === 'is-ok' ? 'check-circle' : summary.tone === 'is-warn' ? 'warning' : 'refresh')}<div><div class="summary-title">${esc(summary.title)}</div>` +
+      `<div class="summary-sub">${esc(summary.detail)}</div></div></div>` +
       `<button type="button" class="btn" data-action="refresh" data-key="refresh">Refresh now</button></div>`
-    out += `<section class="status-section"><h2>Saving</h2>${savingRow('Callers and to-dos', rows.leadsSaving)}${savingRow('Calendar', rows.calendarSaving)}` +
+    out += '<p class="section-kicker">CONNECTIONS AND SAVING</p><div class="status-grid">'
+    out += `<section class="status-section"><h2>Saving</h2>${savingRow('Callers and to-dos', rows.leadsSaving, 'leads')}${savingRow('Calendar', rows.calendarSaving, 'calendar')}` +
       (!isDemo && (rows.leadsSaving === 'off' || rows.calendarSaving === 'off') ? `<p class="status-p muted small">Ask Atrium support to turn saving on.</p>` : '') + '</section>'
-    out += `<section class="status-section"><h2>Call recordings and transcripts</h2><div class="status-row"><span class="dot${rec === 'on' ? '' : rec === null ? ' dot-neutral' : ' dot-warn'}"></span><span class="${rec === 'on' || rec === null ? '' : 'warn-text'}">${esc(recText)}</span></div></section>`
+    out += `<section class="status-section"><h2>Call recordings and transcripts</h2><div class="status-row"><span class="dot${recConfirmed ? '' : s.errors.calls || s.callsError || rec === 'off' ? ' dot-warn' : ' dot-neutral'}"></span><span>${esc(recText)}</span></div></section>`
+    const fictional = inventory?.fictional === true || inventory?.sourceMode === 'demo'
+    out += `<section class="status-section status-inventory"><h2>Apartment information</h2><p class="status-p">${inventory ? fictional ? '<strong>Fictional demo catalogue.</strong> Rent and availability are sample facts, not a live PMS feed.' : '<strong>Property source snapshot.</strong> Check the source system for current availability.' : 'The property inventory source has not loaded yet.'}</p>` +
+      (inventory ? `<p class="status-p small muted">${esc(inventory.source || 'Configured property source')}${inventory.readAt ? ` · snapshot ${esc(fmt.dateTime(inventory.readAt))}` : ''}</p>` : '') +
+      `<div class="status-actions">${link('units', {}, 'View apartments', 'btn')}</div></section></div><p class="section-kicker">ACCESS AND OPERATING CONTROLS</p><div class="status-grid">`
     out += isDemo ? `<section class="status-section" id="phone-assistant"><h2>Phone assistant</h2><p class="status-p">This demo uses sample conversations. It does not update your live phone assistant.</p></section>` : `<section class="status-section" id="phone-assistant"><h2>Phone assistant</h2><p class="status-p">${databaseMode ? 'Phone assistant changes require an administrator and a verified property connection.' : 'Apply the latest leasing instructions and tools to your phone assistant. Your existing voice, model, and webhook authentication settings are preserved.'}</p>${!databaseMode ? '<div class="status-actions"><button type="button" class="btn" data-action="sync-assistant" data-key="sync-assistant" data-permission="configure">Update the phone assistant</button></div>' : ''}</section>`
-    out += `<section class="status-section"><h2>Outgoing calls</h2><div class="status-row"><span class="dot dot-neutral"></span><span>${model.outbound ? 'The assistant can make outgoing calls.' : "The assistant answers calls; it doesn't make them. Everything under To do is for your team."}</span></div></section>`
-    out += `<section class="status-section"><h2>Times</h2><p class="status-p">All times on this page use ${esc(property.timeZoneLabel)} (${esc(property.timeZone)}).</p></section>`
+    out += `<section class="status-section"><h2>Outgoing calls</h2><div class="status-row"><span class="dot dot-neutral"></span><span>${!s.loaded.leads ? 'Outgoing-call settings have not loaded yet.' : model.outbound ? 'Outgoing calls are enabled in this workspace’s settings. Check provider readiness before placing a call.' : "Outgoing assistant calls are off. Everything under To do is for your team."}</span></div></section>`
+    out += `<section class="status-section"><h2>Times</h2><p class="status-timezone">${esc(property.timeZoneLabel)}</p><p class="status-p">Tour times and work dates follow this property’s time zone.</p></section>`
     out += `<section class="status-section"><h2>Signed in</h2><p class="status-p">${window.ATRIUM_ACCOUNT ? `Signed in as <strong>${esc(window.ATRIUM_ACCOUNT.username)}</strong> to ${esc(databaseMode ? property.name : window.ATRIUM_ACCOUNT.displayName)}. ` : "You're signed in on this device. "}${databaseMode && !permissionAllowed('operate') ? 'Your property access is view only. ' : ''}Sessions end after 8 hours. Sign out before switching accounts.</p><div class="status-actions">${databaseMode ? '<a class="btn" href="/api/account" data-key="account-security">Account security</a>' : ''}<button type="button" class="btn" data-action="signout" data-key="signout">Sign out</button></div></section>`
-    out += `<section class="status-section"><h2>Who can see this</h2><p class="status-p">This page has callers' names, numbers and what they said. Keep it to the leasing team, don't screenshot it into a shared channel, and sign out when you're done.</p></section>`
-    out += `<section class="status-section"><h2>What the assistant does and doesn't do</h2><p class="status-p">${esc(ASSISTANT_PARA)}</p></section>`
+    out += '</div><p class="section-kicker">WORKSPACE GUIDANCE</p><div class="status-grid">'
+    out += `<section class="status-section"><h2>Who can see this</h2><p class="status-p">Names, contact details and call notes are available to authorized staff in this workspace. Use the account controls to review your own access and sessions.</p></section>`
+    out += `<section class="status-section"><h2>Assistant responsibilities</h2><details class="status-guidance" data-key="assistant-guidance"><summary>Review the assistant’s boundaries</summary><p class="status-p">${esc(ASSISTANT_PARA)}</p></details></section></div>`
     const support = []
     support.push(['Callers and to-dos', storeLine(model.lstore)])
     support.push(['Calendar', storeLine(model.cstore)])
@@ -2614,30 +2701,58 @@ const statusView = {
       toast(`Couldn't update the phone assistant. ${e.message || ''}`.trim(), { kind: 'error', ms: 12000 })
     } finally { if (btn.isConnected) { btn.classList.remove('is-busy'); btn.removeAttribute('aria-busy') } }
   },
-  /** A round finishes in a few ms, so the busy state is held for 600 ms and the result is said in a toast. */
+  /** Bound the UI wait without cancelling or duplicating any pending read. */
   async refreshNow(btn) {
+    if (this.busyAction) return
     this.busyAction = true
     btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true')
     const started = Date.now()
-    const before = state.updatedAt
-    try { await refresh() } finally {
-      await new Promise((r) => setTimeout(r, Math.max(0, 600 - (Date.now() - started))))
+    const names = Object.keys(RESOURCES)
+    const before = Object.fromEntries(names.map(name => [name, Date.parse(state.lastGoodAt[name]) || 0]))
+    let deadline, outcome
+    try {
+      outcome = await Promise.race([
+        refresh().then(() => 'complete', () => 'failed'),
+        new Promise(resolve => { deadline = setTimeout(() => resolve('pending'), 15000) }),
+      ])
+    } finally {
+      clearTimeout(deadline)
       this.busyAction = false
-      const fresh = state.updatedAt && state.updatedAt !== before && state.failedRounds === 0
-      this.refreshedAt = fresh ? Date.now() : null
-      this.sigKey = null; this.render(state)
-      if (fresh) toast(`Up to date · ${fmt.time(state.updatedAt)}`, { kind: 'ok', key: 'refresh' })
-      else toast(`Couldn't reach the server.${state.updatedAt ? ` Showing what we had at ${fmt.time(state.updatedAt)}.` : ''}`, { kind: 'warn', key: 'refresh' })
+      if (btn.isConnected) { btn.classList.remove('is-busy'); btn.removeAttribute('aria-busy') }
+      if (!gated && !documentAccessIssue) { this.sigKey = null; this.render(state) }
     }
+    if (gated || documentAccessIssue) return
+    const fresh = names.every(name => state.loaded[name] && !state.errors[name]
+      && Date.parse(state.lastGoodAt[name]) >= started && Date.parse(state.lastGoodAt[name]) > before[name])
+      && !state.callsError && !state.safetyEventsError && !state.notConfigured
+    if (outcome === 'complete' && fresh) toast('Workspace data refreshed.', { kind: 'ok', key: 'refresh' })
+    else if (outcome === 'pending' || names.some(name => inflight[name])) {
+      toast('Refresh is still pending. Delayed requests may finish later; the information shown may be out of date.', { kind: 'warn', key: 'refresh' })
+    } else toast('Refresh is incomplete. Some information could not be checked; review the status details.', { kind: 'warn', key: 'refresh' })
   },
   async signOut(btn) {
-    btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true')
-    if (databaseMode) invalidateDocument('Signing out. Sign in again to continue.', 401)
-    stopPolling(); gated = true
+    if (btn.disabled || this.signOutPending) return
+    this.signOutPending = true
+    btn.disabled = true; btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true')
+    const controller = new AbortController(), deadline = setTimeout(() => controller.abort(), 15000)
     try {
-      await fetch('/api/dashboard', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { ...JSON_HEADERS, 'content-type': 'application/json' }, body: JSON.stringify({ action: 'logout' }) })
-    } catch (e) { /* the reload lands on the sign-in page either way */ }
-    location.reload()
+      const response = await fetch('/api/dashboard', { method: 'POST', credentials: 'same-origin', cache: 'no-store',
+        redirect: 'error', signal: controller.signal, headers: { ...JSON_HEADERS, 'content-type': 'application/json',
+          ...(databaseMode ? { 'x-atrium-user-id': window.ATRIUM_ACCOUNT?.userId, 'x-atrium-session-id': window.ATRIUM_ACCOUNT?.sessionId, 'x-atrium-csrf': window.ATRIUM_SESSION_FORM_TOKEN } : {}) }, body: JSON.stringify({ action: 'logout' }) })
+      if (databaseMode) {
+        const result = await response.json()
+        if (!response.ok || result?.status !== 'signed_out') throw new Error('Sign-out was not confirmed')
+      } else if (!response.ok) throw new Error('Sign-out was not confirmed')
+      stopPolling(); gated = true
+      if (databaseMode) invalidateDocument('Signed out. Sign in again to continue.', 401)
+      location.assign('/api/dashboard?reauthenticate=1')
+    } catch {
+      this.signOutPending = false
+      toast('Sign-out could not be confirmed. Reload the workspace to check your session before trying again.', { kind: 'warn', key: 'sign-out' })
+      btn.disabled = false
+    } finally {
+      clearTimeout(deadline); btn.classList.remove('is-busy'); btn.removeAttribute('aria-busy')
+    }
   },
   async blockWeek(btn) {
     const days = this.weekDays(state)

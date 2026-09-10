@@ -544,13 +544,17 @@ body.has-dialog { overflow: hidden; }
 /* ---------- Status ---------- */
 .status-col { max-width: 640px; }
 .status-summary { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.status-summary .ico { width: 20px; height: 20px; margin-top: 1px; }
+.status-summary .ico { flex: 0 0 20px; width: 20px; height: 20px; margin-top: 1px; }
 .status-summary.is-ok { background: var(--ok-soft); border-color: transparent; }
 .status-summary.is-ok .summary-title { color: var(--ok); }
 .status-summary.is-warn { background: var(--warn-soft); border-color: transparent; }
 .status-summary.is-warn .summary-title { color: var(--warn); }
 .summary-title { font-weight: 600; font-size: 1.071rem; }
 .summary-sub { color: var(--ink-2); font-size: .929rem; margin-top: 2px; }
+@media (max-width: 599px) {
+  .status-summary { flex-direction: column; align-items: stretch; }
+  .status-summary > .btn { align-self: flex-start; min-height: 44px; }
+}
 .status-section { margin-top: var(--s5); }
 .status-section h2 { font-size: 1.071rem; margin-bottom: 6px; }
 .status-row { display: flex; align-items: flex-start; gap: 8px; padding: 4px 0; }
@@ -590,9 +594,107 @@ body.has-dialog { overflow: hidden; }
   .row-stack .row-lead { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 0; }
   .row-stack .row-actions { grid-column: 1 / -1; justify-content: flex-start; }
 }
+
+/* Today: a briefing and two complementary work areas, not an analytics dashboard. */
+.today-hero-copy { flex: 1 1 56%; }
+.today-hero .today-briefing { font-size: 1.1rem; max-width: 52ch; }
+.today-mode { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-top: 18px; font-size: .8125rem; line-height: 1.6; color: #D7E5FA; }
+.today-mode > .ico { flex: 0 0 16px; width: 16px; height: 16px; }
+.today-mode > span + span { padding-left: 10px; border-left: 1px solid #A7BDD755; }
+.today-next { flex: 0 1 292px; align-self: stretch; display: flex; flex-direction: column; justify-content: center; gap: 8px; padding: 23px 24px; border: 1px solid #92AED944; border-radius: 13px; background: linear-gradient(150deg, #FFFFFF11, #FFFFFF03); box-shadow: 7px 7px 0 #FFFFFF04; }
+.today-next > span:not(.page-eyebrow) { color: #D7E5FA; font-size: .9375rem; line-height: 1.5; overflow-wrap: anywhere; }
+.today-next .today-next-name { color: #FFF; font-size: 1.05rem; font-weight: 500; }
+.today-next-time { color: #FFF; font-size: 2.1rem; letter-spacing: -.04em; line-height: 1.2; }
+.today-next-label { color: #FFF; font-size: 1.35rem; line-height: 1.4; }
+.today-next .page-hero-actions { margin-top: 12px; }
+.today-next .btn { width: 100%; justify-content: center; }
+.today-metric { position: relative; }
+.today-metric::before { content: ''; position: absolute; top: 0; left: 24px; height: 3px; width: 30px; border-radius: 0 0 4px 4px; background: var(--accent); }
+.today-metrics .today-metric-warn { border-color: #E0C79F; }
+.today-metric-warn::before { background: var(--warn); }
+.today-metric-warn .metric-value { color: var(--warn); }
+.today-data-note { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 14px 18px; border: 1px solid var(--line); background: var(--paper-2); border-radius: 10px; color: var(--ink-2); font-size: .9375rem; line-height: 1.6; }
+.today-data-note > span:not(.ico) { flex: 1 1 220px; }
+.today-data-note .ico { color: var(--accent); flex: 0 0 18px; width: 18px; height: 18px; }
+.today-data-note .btn-link { min-height: 44px; display: inline-flex; align-items: center; }
+.today-workbench { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(285px, 1fr); gap: 24px; align-items: start; }
+.today-main, .today-aside { min-width: 0; }
+.today-workbench .section { margin-top: 28px; }
+.today-workbench .section-head { align-items: flex-start; flex-wrap: wrap; gap: 8px; }
+.today-workbench .section-head h2 { font-size: 1.22rem; }
+.today-workbench .row { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 12px; padding: 20px; }
+.today-workbench .row-actions { grid-column: 2; justify-content: flex-start; gap: 8px; }
+.today-workbench .row-lead { min-width: 0; }
+.today-workbench .row-body { min-width: 0; }
+.today-workbench .row-title { font-size: 1rem; line-height: 1.6; }
+.today-workbench .row-sub, .today-workbench .meta, .today-workbench .quote, .today-workbench .reassure { font-size: .875rem; line-height: 1.65; }
+.today-workbench .row-sub, .today-workbench .meta { margin-top: 6px; }
+.today-workbench .row-lead:has(.due), .today-workbench .row-lead:has(.overdue) { grid-column: 1 / -1; }
+.today-workbench .row-lead:has(.due) + .row-body, .today-workbench .row-lead:has(.overdue) + .row-body { grid-column: 1 / -1; }
+.today-workbench .empty { text-align: left; padding: 24px; }
+.today-workbench .empty-title { font-size: 1.05rem; margin-bottom: 8px; line-height: 1.5; }
+.today-workbench .empty-text { font-size: .9375rem; line-height: 1.7; max-width: 50ch; }
+.today-workbench .btn, .today-workbench .btn-link { min-height: 44px; white-space: normal; line-height: 1.4; }
+.today-tours .row { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.today-tours .row-actions { grid-column: 1; }
+.today-tours .row-lead { font-size: 1.4rem; color: var(--ink); }
+.today-tours .row-title { font-size: 1rem; }
+.today-tours .row-actions .chip { margin-right: auto; }
+.today-prep { margin-top: 24px; background: linear-gradient(125deg, var(--paper-2), var(--accent-soft)); }
+.today-prep h2 { margin-top: 12px; }
+#needs-a-person { scroll-margin-top: 90px; }
+
+/* Status: meaningful checks first, then account and operating controls. */
+.status-col { max-width: none; }
+.status-col .status-summary { padding: 25px 28px; border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 3px 15px #14233e05; }
+.status-col .status-summary > div { gap: 14px !important; }
+.status-col .status-summary .ico { flex: 0 0 22px; width: 22px; height: 22px; margin-top: 4px; }
+.status-col .summary-title { font-size: 1.2rem; line-height: 1.4; }
+.status-col .summary-sub { font-size: .9375rem; line-height: 1.65; margin-top: 6px; max-width: 78ch; }
+.status-col .status-summary > .btn { min-height: 44px; flex: 0 0 auto; }
+.status-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.status-grid > .status-section { margin: 0; padding: 24px; background: var(--paper-2); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 4px 18px #14233e05; min-width: 0; }
+.status-grid .status-section h2 { font-size: 1.15rem; line-height: 1.4; margin: 0 0 16px; }
+.status-grid .status-section h2::before { content: ''; display: block; width: 26px; height: 3px; border-radius: 3px; background: var(--accent); margin-bottom: 16px; }
+.status-grid .status-inventory { grid-column: 1 / -1; }
+.status-row { gap: 11px; padding: 7px 0; line-height: 1.7; font-size: 1rem; }
+.status-p { font-size: .9375rem; line-height: 1.75; }
+.status-timezone { font-size: 1.4rem; font-weight: 500; line-height: 1.4; color: var(--accent); margin-bottom: 12px; }
+.status-actions { margin-top: 18px; }
+.status-actions .btn { min-height: 44px; white-space: normal; line-height: 1.4; }
+.status-guidance summary { min-height: 44px; color: var(--accent); display: flex; align-items: center; line-height: 1.6; }
+.status-guidance summary::after { content: '+'; font-size: 1.4rem; margin-left: auto; padding-left: 14px; }
+.status-guidance[open] summary::after { content: '−'; }
+.status-guidance .status-p { margin-top: 14px; }
+.status-col > .support { padding: 22px 24px; border: 1px solid var(--line); border-radius: 14px; background: var(--paper-2); }
+.status-col > .support summary { min-height: 44px; }
+.workspace-stack { position: relative; flex: 0 0 220px; height: 165px; margin-right: 12px; align-self: center; }
+.workspace-stack span { position: absolute; width: 165px; height: 84px; display: flex; align-items: center; padding: 20px 24px; border: 1px solid #AEC5E566; border-radius: 12px; background: linear-gradient(120deg, #355C90, #234570); color: #E5EEFC; font-size: .75rem; font-weight: 500; letter-spacing: .13em; box-shadow: 6px 6px 0 #020C1F12; transform: rotate(-12deg) skew(8deg); }
+.workspace-stack span:nth-child(1) { top: 0; right: 28px; }
+.workspace-stack span:nth-child(2) { top: 39px; right: 14px; }
+.workspace-stack span:nth-child(3) { top: 78px; right: 0; }
+@media (max-width: 1199px) { .today-workbench { grid-template-columns: minmax(0, 1fr); } .today-aside { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; } .today-prep { align-self: start; margin-top: 67px; } }
+@media (max-width: 760px) {
+  .today-next { flex-basis: auto; padding: 20px; }
+  .today-hero .today-briefing { font-size: 1.05rem; }
+  .today-workbench { gap: 0; }
+  .today-aside { display: block; }
+  .today-prep { margin-top: 24px; }
+  .today-workbench .row { padding: 18px; }
+  .today-workbench .row-actions { grid-column: 1 / -1; }
+  .status-grid { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .status-grid > .status-section { padding: 22px; }
+  .status-col .status-summary { padding: 22px; }
+  .workspace-stack { display: none; }
+}
+@media (max-width: 600px) {
+  .today-next { width: 100%; }
+  .today-mode { font-size: .8125rem; }
+  .status-col .status-summary > .btn { align-self: stretch; justify-content: center; }
+}
 </style>
 <style>
-/* Tour calendar view (brief §10). Owner: calendar. Every colour is a styles.css token; the
+/* Tour calendar view (brief §10). Owner: calendar. Uses the shared navy/white workspace palette; the
    blocked stripe is CSS, not an image (the CSP allows no images). All classes are cal-*. */
 
 /* ---------- head, strip, toolbar ---------- */
@@ -891,6 +993,164 @@ button.cal-dayhead:hover { background: var(--paper-3); }
 .cal-unit-block .cal-unit-conflict { color: var(--warn); }
 .cal-action-form :disabled { opacity: .65; }
 @media (max-width: 480px) { .cal-action-pair { grid-template-columns: 1fr; } .cal-unit-block { flex-direction: column; } }
+
+/* Calendar workspace: operational overview first, the precise schedule beneath it. */
+.cal-hero { margin-bottom: 20px; align-items: center; }
+.cal-hero-copy { min-width: 0; flex: 1 1 340px; }
+.cal-hero h1 { margin: 8px 0 12px; }
+.cal-hero-copy > p { max-width: 48ch; margin: 0; font-size: 1rem; line-height: 1.65; color: #DEE8FB; }
+.cal-zone { display: inline-flex; align-items: center; gap: 7px; margin-top: 16px; font-size: .8125rem; color: #C8D9F6; }
+.cal-zone .ico { width: 15px; height: 15px; }
+.cal-hero .cal-hero-actions { flex: 0 1 350px; justify-content: flex-end; margin-top: 0; }
+.cal-hero-actions .btn, .cal-hero-actions .btn-icon { min-height: 44px; height: auto; white-space: normal; line-height: 1.4; }
+.cal-hero-actions .btn-primary { color: #153663; background: #FFF; border-color: #FFF; }
+.cal-hero-actions .btn-primary:hover { background: #E9F1FF; border-color: #E9F1FF; }
+.cal-hero-actions .cal-hero-secondary { background: #FFFFFF05; color: #FFF; border-color: #8AA4CA; }
+.cal-hero-actions .cal-hero-secondary:hover { background: #FFFFFF16; }
+.cal-hero-actions .btn-icon { width: 44px; }
+.cal-read-only { color: #DDE8FA; border: 1px solid #7F9ABE; border-radius: 999px; padding: 10px 16px; font-size: .875rem; }
+.cal-view .cal-metrics { margin: 0 0 22px; }
+.cal-view .cal-metric { display: flex; flex-direction: column; gap: 8px; padding: 20px 22px; min-width: 0; }
+.cal-metric .metric-label { color: var(--ink); font-size: .875rem; font-weight: 550; }
+.cal-metric .metric-value { margin: 0; font-size: 2rem; line-height: 1.1; letter-spacing: -.035em; font-weight: 600; }
+.cal-metric .metric-detail { color: var(--ink-2); font-size: .8125rem; line-height: 1.5; }
+.cal-wrap { padding: 22px; background: var(--paper-2); border: 1px solid var(--line); border-radius: var(--r-card); box-shadow: 0 3px 16px #14233E04; }
+.cal-schedule-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.cal-schedule-heading > div { min-width: 0; }
+.cal-schedule-heading .section-kicker { display: block; margin: 0 0 6px; }
+.cal-schedule-heading h2 { color: var(--ink); margin: 0; font-size: 1.35rem; letter-spacing: -.02em; font-weight: 600; line-height: 1.35; }
+.cal-schedule-heading .cal-range-when { color: var(--ink-2); font-weight: 400; }
+.cal-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cal-tools .btn, .cal-toolbar .btn, .cal-toolbar .btn-icon, .cal-agenda-nav .btn-icon { min-height: 44px; }
+.cal-tools .cal-seg { padding: 3px; background: var(--paper); border-radius: 9px; border: 1px solid var(--line); }
+.cal-seg .tab { min-height: 38px; border-radius: 6px; padding: 0 16px; font-size: .875rem; }
+.cal-seg .tab[aria-checked="true"] { color: var(--ink); background: var(--paper-2); box-shadow: 0 1px 5px #11244512; }
+.cal-toolbar { justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+.cal-window-note { font-size: .8125rem; color: var(--ink-2); line-height: 1.6; margin: 0; }
+.cal-scroll { max-height: 62vh; min-height: 300px; border-radius: 12px; border-color: var(--line-strong); }
+.cal-corner { display: flex; align-items: center; justify-content: center; color: var(--ink-3); font-size: .75rem; }
+.cal-dayhead, .cal-corner { background: var(--paper); }
+.cal-dayhead { gap: 3px; }
+.cal-dayhead .cal-wd { font-size: .8125rem; font-weight: 500; }
+.cal-dayhead .cal-dn { font-size: 1.25rem; height: 28px; min-width: 28px; }
+.cal-dayhead .cal-ds { font-size: .75rem; }
+.cal-dayhead[aria-current="date"] { background: var(--accent-soft); }
+.cal-gutter { background: var(--paper); color: var(--ink-2); font-size: .75rem; padding-top: 6px; }
+.cal-open { box-shadow: inset 0 0 0 1px var(--line); }
+.cal-open:hover, .cal-open:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+.cal-open .cal-plus { font-size: .75rem; }
+.cal-na { background: var(--paper); }
+.cal-tour { color: #173F72; background: #E5EEFD; border-left-color: #467AB9; border-radius: 5px; }
+.cal-tour:hover { background: #D6E5FC; }
+.cal-tour.is-past { color: var(--ink-3); background: var(--paper-3); border-left-color: var(--line-strong); }
+.cal-band { border-left-width: 2px; }
+.cal-foot { margin-top: 18px; gap: 14px; }
+.cal-legend { font-size: .8125rem; gap: 10px 20px; }
+.cal-legend .cal-sw-tour { background: #E5EEFD; border-color: #467AB9; }
+.cal-legend .cal-lg-tour .ico { color: #173F72; }
+.cal-rules { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 16px 0; gap: 16px; }
+.cal-rules > div { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.cal-rules span { color: var(--ink-2); font-size: .75rem; line-height: 1.5; }
+.cal-rules strong { color: var(--ink); font-weight: 500; font-size: .875rem; line-height: 1.5; }
+.cal-through { font-size: .875rem; line-height: 1.65; margin: 0; color: var(--ink-2); max-width: 95ch; }
+.cal-old { border-radius: 9px; background: var(--paper); padding: 12px 14px; font-size: .875rem; line-height: 1.6; }
+.cal-old .btn { min-height: 44px; }
+.cal-empty-card { border: 1px dashed var(--line-strong); border-radius: 12px; padding: 16px; background: var(--paper); }
+.cal-empty-card h3 { font-size: 1.25rem; }
+.cal-empty-card p { font-size: 1rem; line-height: 1.65; }
+.cal-popover { width: 380px; max-width: min(380px, calc(100vw - 32px)); }
+.cal-popover .popover-body { font-size: .9375rem; line-height: 1.6; }
+.cal-popover .popover-title { font-size: 1.2rem; }
+.cal-popover .popover-actions { flex-wrap: wrap; gap: 8px; }
+.cal-popover .popover-actions .btn, .cal-sheet-links .btn { min-height: 44px; height: auto; white-space: normal; }
+.cal-popover .popover-x { width: 44px; height: 44px; top: 4px; right: 4px; }
+.cal-popover .popover-title { padding-right: 42px; }
+.cal-sheet-note { font-size: .875rem; line-height: 1.6; }
+.dlg.cal-action-dialog { width: min(620px, calc(100vw - 32px)); max-width: 620px; }
+.cal-action-overview { padding: 18px; background: var(--paper); border-radius: 12px; margin-bottom: 22px; }
+.cal-action-overview .cal-action-intro { margin: 8px 0 12px; }
+.cal-action-intro { font-size: 1rem; line-height: 1.65; }
+.cal-action-assurance { margin: 0; font-size: .875rem; line-height: 1.6; color: var(--ink-2); border-top: 1px solid var(--line); padding-top: 12px; }
+.cal-action-form { gap: 20px; }
+.cal-action-form .input, .cal-action-form .select { min-height: 46px; width: 100%; font-size: 1rem; }
+.cal-action-form .field-label, .cal-settings-form .field-label { font-size: .9375rem; margin-bottom: 7px; }
+.cal-action-form .field-hint { font-size: .875rem; line-height: 1.6; margin: 0; }
+.cal-action-check { min-height: 44px; padding: 10px 12px; background: var(--paper); border-radius: 8px; gap: 10px; font-size: .9375rem; }
+.cal-action-check input { width: 18px; height: 18px; accent-color: var(--accent); }
+.cal-current-tour { display: grid; gap: 8px; margin-bottom: 18px; padding: 20px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 10px; background: var(--paper); }
+.cal-current-tour strong { color: var(--ink); font-size: 1.25rem; line-height: 1.35; }
+.cal-current-tour > span:last-child { color: var(--ink-2); font-size: .875rem; line-height: 1.5; }
+.cal-action-form .cal-consequence { padding: 14px 16px; background: var(--paper); border-radius: 10px; margin: 0; font-size: .9375rem; line-height: 1.65; }
+.cal-unit-blocks h4 { font-size: 1rem; margin-bottom: 18px; }
+.cal-unit-block { padding: 18px 0; }
+.cal-unit-block > div { min-width: 0; overflow-wrap: anywhere; }
+.cal-unit-block strong { font-size: 1.125rem; }
+.cal-unit-block p { font-size: .875rem; line-height: 1.6; }
+.cal-unit-block .btn { min-height: 44px; flex: none; }
+.cal-holds-empty { padding: 20px; background: var(--paper); border-radius: 10px; }
+.cal-holds-empty strong { color: var(--ink); font-size: 1rem; font-weight: 500; }
+.cal-holds-empty p { color: var(--ink-2); font-size: .875rem; line-height: 1.6; margin: 7px 0 0; }
+.cal-settings-form legend { font-size: 1.125rem; }
+.cal-settings-form .input, .cal-settings-form .select { min-height: 46px; font-size: 1rem; }
+.cal-settings-form .field-hint { font-size: .875rem; line-height: 1.6; }
+.cal-hours-row { padding: 14px 0; }
+@media (max-width: 1199px) {
+  .cal-hero .cal-hero-actions { flex-basis: 280px; }
+  .cal-wrap { padding: 18px; }
+  .cal-schedule-heading { align-items: flex-start; }
+  .cal-schedule-heading h2 { font-size: 1.2rem; }
+  .cal-tools { justify-content: flex-end; }
+}
+@media (max-width: 959px) {
+  .cal-hero { flex-direction: column; align-items: stretch; padding: 24px; gap: 20px; }
+  .cal-hero-copy, .cal-hero .cal-hero-actions { flex-basis: auto; }
+  .cal-hero .cal-hero-actions { justify-content: flex-start; }
+  .cal-hero-actions .btn { flex: 1 1 150px; }
+  .cal-wrap { padding: 18px; }
+  .cal-view .cal-metric { padding: 16px; }
+  .cal-metric .metric-value { font-size: 1.8rem; }
+  .cal-schedule-heading { align-items: center; flex-wrap: wrap; gap: 12px; }
+  .cal-schedule-heading .cal-tools { justify-content: flex-start; }
+  .cal-toolbar { margin-bottom: 6px; }
+  .cal-agenda-head { top: 52px; background: var(--paper-2); padding: 12px 0; margin-bottom: 12px; }
+  .cal-agenda-nav { margin-bottom: 4px; }
+  .cal-strip { gap: 4px; }
+  .cal-strip-day { border: 1px solid var(--line); background: var(--paper); border-radius: 9px; min-height: 66px; }
+  .cal-strip-day[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+  .cal-arow { min-height: 76px; padding: 16px 12px; grid-template-columns: 95px minmax(0, 1fr) 16px; gap: 12px; }
+  .cal-arow .row-lead { font-size: .875rem; line-height: 1.5; }
+  .cal-arow .row-body { font-size: 1rem; line-height: 1.5; gap: 3px 6px; }
+  .cal-arow.is-tour .row-body { color: #173F72; }
+  .cal-arow.is-tour { background: #F4F8FF; }
+  .cal-arow.is-tour .row-lead-bar { border-left-color: #467AB9; }
+  .cal-agenda-rows .card.rows { box-shadow: none; border-radius: 12px; overflow: hidden; }
+  .cal-rules { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+  .cal-foot { padding-bottom: 60px; }
+  .cal-fab { min-height: 48px; height: auto; padding: 12px 18px; font-size: .9375rem; }
+}
+@media (max-width: 599px) {
+  .cal-hero { padding: 22px; }
+  .cal-wrap { padding: 16px 12px; }
+  .cal-view .cal-metrics { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .cal-view .cal-metric { display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; padding: 16px 18px; }
+  .cal-metric .metric-value { grid-column: 2; grid-row: 1 / 3; align-self: center; }
+  .cal-metric .metric-detail { grid-column: 1; }
+  .cal-schedule-heading .cal-tools { width: 100%; }
+  .cal-schedule-heading .cal-tools .btn { flex: 1; }
+  .cal-schedule-heading h2 { font-size: 1.25rem; }
+  .cal-strip-day .cal-wd { font-size: .75rem; }
+  .cal-strip-day .cal-dn { width: 26px; height: 28px; }
+  .cal-arow { grid-template-columns: 82px minmax(0, 1fr) 14px; gap: 8px; padding: 16px 10px; }
+  .cal-arow .row-body .ico { display: none; }
+  .cal-arow .row-body .cal-ar-sub { flex-basis: 100%; font-size: .875rem; }
+  .dlg.cal-action-dialog { width: 100%; max-width: none; }
+  .cal-action-overview { padding: 16px; }
+  .cal-current-tour { padding: 16px; }
+  .cal-settings-grid { gap: 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cal-open::before, .cal-tour, .cal-strip-day { transition: none; }
+}
 </style>
 <style>
 /* Leads view — the To do and Everyone tabs and the person panel (brief §9). Owner: leads.
@@ -1053,6 +1313,114 @@ button.cal-dayhead:hover { background: var(--paper-3); }
 .tour-change-row .quote { color: var(--ink-2); font-style: italic; }
 .tour-change-row .reassure, .tour-change-row .meta { color: var(--ink-2); font-size: .929rem; }
 .tour-change-note { width: 100%; min-height: 110px; resize: vertical; }
+
+.lead-call-hint { max-width: 48ch; color: var(--ink-2); font-size: .875rem; line-height: 1.6; margin: 10px 0 0; }
+
+/* Prospect workspace, shared with the Units page through real links and saved evidence. */
+.leads-view { min-width: 0; }
+.leads-view .leads-top { padding: 20px 22px; gap: 18px; }
+.leads-workspace-head { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+.leads-workspace-head p { margin-top: 5px; color: var(--ink-2); font-size: .94rem; }
+.leads-workspace-head .tabs { border: 1px solid var(--line); background: var(--paper); border-radius: 12px; padding: 4px; flex: none; }
+.leads-workspace-head .tab { border: 0; border-radius: 8px; min-height: 44px; font-size: .94rem; }
+.leads-workspace-head .tab[aria-selected="true"] { background: var(--paper-2); color: var(--accent); box-shadow: 0 2px 6px #142f5410; }
+.leads-view .leads-note { display: flex; align-items: flex-start; gap: 8px; padding: 12px 14px; background: var(--paper); border-radius: 10px; line-height: 1.55; }
+.leads-view .leads-note[hidden] { display: none; }
+.leads-note .ico { flex: none; margin-top: 2px; color: var(--accent); }
+.leads-view .chip-filter { min-height: 44px; }
+.leads-view .leads-tools .search { max-width: 520px; }
+.leads-view .leads-list .group-head { padding: 15px 20px; font-size: .78rem; letter-spacing: .065em; text-transform: uppercase; }
+.leads-view .leads-list .group-head .count { margin-left: auto; }
+.leads-view .lead-row { padding: 22px 20px; gap: 12px; background: var(--paper-2); transition: background 140ms ease; }
+.leads-view .lead-row:hover { background: #f4f8fe; }
+.leads-view .lead-row[aria-current="true"] { background: #edf4ff; box-shadow: inset 3px 0 0 var(--accent); }
+.leads-view .lead-row .row-lead-icon { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); }
+.leads-view .lead-row.row-flag .row-lead-icon { color: var(--warn); background: var(--warn-soft); }
+.leads-view .lead-row .row-body { min-width: 0; }
+.leads-view .lead-row .who { display: block; flex-basis: 100%; font-size: 1.08rem; font-weight: 650; overflow-wrap: anywhere; }
+.leads-view .lead-row .last { margin: 2px 0 0; flex-basis: 100%; font-size: .78rem; }
+.lead-row-contact { display: block; color: var(--ink-2); font-size: .85rem; margin: 6px 0 12px; overflow-wrap: anywhere; }
+.lead-row-facts { display: grid; grid-template-columns: minmax(0,1.25fr) minmax(0,1fr); gap: 12px; }
+.lead-row-facts > span { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.lead-row-facts > span > span { color: var(--ink-3); font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; }
+.lead-row-facts strong { font-weight: 550; color: var(--ink); font-size: .93rem; overflow-wrap: anywhere; }
+.lead-row-move { display: block; font-size: .83rem; color: var(--ink-2); margin-top: 12px; overflow-wrap: anywhere; }
+.lead-row-next { display: flex; gap: 8px; align-items: flex-start; padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--line); color: var(--accent); font-size: .82rem; line-height: 1.55; }
+.lead-row-next .ico { width: 16px; height: 16px; flex: none; margin-top: 2px; }
+.leads-view .todo-row, .leads-view .tour-change-row { padding: 20px; }
+.leads-view .todo-row .row-title { font-size: 1rem; line-height: 1.6; }
+.leads-view .todo-row .row-sub { margin-top: 6px; }
+.leads-view .todo-row .row-actions { gap: 8px; padding-top: 8px; }
+.leads-view .todo-row .row-actions .btn { min-height: 44px; }
+.leads-view .lead-panel .panel-head { padding: 14px 22px; }
+.leads-view .lead-panel .panel-head h2 { font-weight: 650; letter-spacing: -.025em; overflow-wrap: anywhere; }
+.leads-view .lead-panel .panel-body { padding: 24px; }
+.leads-view .lead-panel .lead-call { display: inline-flex; width: auto; }
+.leads-view .lead-panel .lead-head { margin-bottom: 22px; }
+.leads-view .lead-panel .lead-meta { line-height: 1.65; overflow-wrap: anywhere; }
+.lead-brief { padding: 22px; margin-bottom: 24px; border: 1px solid #d3e2f5; border-radius: 16px; background: linear-gradient(135deg,#f0f6ff,#fbfdff); }
+.lead-brief-facts { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; margin-top: 16px; }
+.lead-brief-facts > div { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.lead-brief-facts > div > span { font-size: .75rem; color: var(--ink-3); }
+.lead-brief-facts strong { font-size: 1rem; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+.lead-journey { display: flex; flex-wrap: wrap; gap: 12px 24px; margin-top: 20px; padding-top: 16px; border-top: 1px solid #d7e4f4; }
+.lead-journey > span { display: flex; align-items: center; gap: 7px; font-size: .85rem; color: var(--ink-2); }
+.lead-journey .ico { color: var(--accent); width: 16px; height: 16px; }
+.lead-journey strong { color: var(--ink); }
+.lead-next-tour { display: flex; align-items: center; gap: 12px; margin-top: 20px; padding: 16px; background: var(--paper-2); border-radius: 12px; }
+.lead-next-tour > .ico { flex: none; color: var(--accent); }
+.lead-next-tour > div { display: flex; flex-direction: column; flex: 1; gap: 4px; min-width: 0; }
+.lead-next-tour span { font-size: .75rem; color: var(--ink-2); }
+.lead-next-tour strong { font-size: .92rem; font-weight: 600; overflow-wrap: anywhere; }
+.lead-no-tour { color: var(--ink-2); margin-top: 16px; font-size: .85rem; }
+.leads-view .lead-panel .panel-section { padding: 22px 0; border-top: 1px solid var(--line); margin-top: 0; }
+.leads-view .lead-panel .panel-section h3 { font-size: 1.05rem; font-weight: 650; }
+.leads-view .lead-panel .facts dd { overflow-wrap: anywhere; }
+.leads-view .lead-panel .np-card { padding: 18px; }
+.leads-view .lead-panel .tour-row { grid-template-columns: minmax(0,1fr); gap: 12px; padding: 16px; }
+.leads-view .lead-panel .tour-row .row-actions { justify-content: flex-start; flex-wrap: wrap; }
+.lead-unit-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.leads-view .lead-panel .lcall { border: 0; padding: 0 0 22px 20px; border-left: 2px solid #d9e5f5; position: relative; margin-left: 4px; }
+.leads-view .lead-panel .lcall::before { content: ''; position: absolute; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); left: -5px; top: 5px; box-shadow: 0 0 0 4px var(--paper-2); }
+.leads-view .lead-panel .lcall:last-child { padding-bottom: 0; }
+.leads-view .lead-panel .lcall .when { margin-bottom: 6px; font-size: .8rem; }
+.leads-view .lead-panel .lcall .see { margin-top: 8px; }
+.leads-view .lead-panel .notes li { padding: 12px 0; overflow-wrap: anywhere; }
+.leads-view .lead-panel .note-form { margin-top: 16px; }
+.leads-view .lead-panel summary { min-height: 44px; }
+.leads-view .lead-panel .panel-empty { height: 100%; padding: 36px; }
+.lead-empty-guide { max-width: 370px; }
+.lead-empty-guide > .ico { width: 52px; height: 52px; padding: 13px; background: var(--accent-soft); color: var(--accent); border-radius: 16px; margin-bottom: 24px; }
+.lead-empty-guide > .section-kicker { display: block; }
+.lead-empty-guide h2 { margin: 8px 0 12px; font-size: 1.8rem; letter-spacing: -.03em; }
+.lead-empty-guide p { color: var(--ink-2); line-height: 1.65; }
+.lead-empty-guide > div { display: flex; flex-wrap: wrap; gap: 8px; margin: 24px 0; }
+.lead-empty-guide > div > span { border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; color: var(--ink-2); font-size: .8rem; }
+@media (min-width: 1200px) {
+  .leads-view[data-tab] .leads-split { grid-template-columns: minmax(310px,.85fr) minmax(0,1.35fr); height: 74vh; min-height: 620px; max-height: 960px; box-shadow: var(--surface-shadow); }
+  .leads-view .lead-panel .lead-next-tour { flex-wrap: wrap; }
+}
+@media (max-width: 1199px) {
+  .leads-view.has-panel > .page-hero, .leads-view.has-panel > .leads-overview { display: none; }
+}
+@media (max-width: 699px) {
+  .leads-view .leads-top { padding: 18px; }
+  .leads-workspace-head { flex-direction: column; align-items: stretch; gap: 16px; }
+  .leads-workspace-head .tabs { display: flex; width: 100%; }
+  .leads-workspace-head .tab { flex: 1; }
+  .leads-view .lead-row, .leads-view .todo-row, .leads-view .tour-change-row { padding: 18px 14px; }
+  .leads-view .lead-panel .panel-head { padding: 10px 14px; }
+  .leads-view .lead-panel .panel-body { padding: 18px; }
+  .lead-brief { padding: 18px; }
+  .lead-brief-facts { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .lead-brief-facts > div:last-child { grid-column: 1 / -1; }
+  .lead-next-tour { flex-wrap: wrap; padding: 14px; }
+  .lead-next-tour .btn { width: 100%; }
+  .leads-view .lead-panel .lead-call { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .leads-view .lead-row, .leads-view .panel, .leads-view .done-list > summary .ico { animation: none; transition: none; }
+}
 </style>
 <style>
 /* Calls view — list + detail panel. Owner: shell. Uses the shared classes in styles.css. */
@@ -1116,6 +1484,78 @@ button.cal-dayhead:hover { background: var(--paper-3); }
   .call-panel .panel-head { flex-wrap: wrap; row-gap: 4px; padding-bottom: 12px; }
   .call-panel .panel-head .panel-back { margin-right: auto; }
   .call-panel .panel-head h2 { flex-basis: 100%; order: 3; }
+}
+
+/* Conversation workspace: the overview describes loaded records, never lifetime totals. */
+.calls-view { min-width: 0; }
+.calls-view .calls-tools { padding: 20px 22px; gap: 18px; }
+.calls-search-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.calls-search-head p { color: var(--ink-2); margin-top: 5px; font-size: .94rem; }
+.calls-search-head .search { flex: 0 1 420px; min-width: 260px; margin: 0; }
+.calls-view .chip-filter { min-height: 44px; }
+.calls-view .calls-list .day-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; font-size: .78rem; text-transform: uppercase; letter-spacing: .07em; }
+.calls-view .calls-list .day-head .num { padding: 2px 8px; border: 1px solid var(--line); border-radius: 20px; background: var(--paper-2); letter-spacing: 0; }
+.calls-view .call-row { padding: 20px; gap: 12px; background: var(--paper-2); transition: background 140ms ease; }
+.calls-view .call-row:hover { background: #f4f8fe; }
+.calls-view .call-row[aria-current="true"] { background: #edf4ff; box-shadow: inset 3px 0 0 var(--accent); }
+.calls-view .call-row .row-lead-icon { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 12px; color: var(--accent); background: var(--accent-soft); }
+.calls-view .call-row.row-siren .row-lead-icon { color: var(--danger); background: var(--danger-soft); }
+.calls-view .call-row.row-hand .row-lead-icon { color: var(--warn); background: var(--warn-soft); }
+.calls-view .call-row .who { font-size: 1rem; font-weight: 650; overflow-wrap: anywhere; }
+.calls-view .call-row .row-sub { margin-top: 7px; line-height: 1.55; color: var(--ink-2); font-size: .94rem; }
+.call-row-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
+.call-row-foot .row-chips { margin-top: 0; }
+.call-evidence { color: var(--ink-3); font-size: .75rem; font-weight: 500; }
+.calls-view .call-panel .panel-head { padding: 14px 22px; }
+.calls-view .call-panel .panel-body { padding: 24px; }
+.calls-view .call-panel .panel-head h2 { font-weight: 650; letter-spacing: -.025em; overflow-wrap: anywhere; }
+.call-context { margin: 22px 0; padding: 22px; border: 1px solid #d3e2f5; border-radius: 16px; background: linear-gradient(135deg,#f0f6ff,#fbfdff); }
+.call-context h3 { margin: 7px 0; font-size: 1.15rem; letter-spacing: -.015em; }
+.call-context p { color: var(--ink-2); font-size: .94rem; line-height: 1.6; max-width: 62ch; }
+.call-context .call-request-quote { border-left: 2px solid var(--accent); padding-left: 12px; margin-top: 12px; font-style: italic; overflow-wrap: anywhere; }
+.call-context-attention { border-color: #decfae; background: linear-gradient(135deg,#fffbf0,#fff); }
+.call-context .panel-actions:empty { display: none; }
+.calls-view .call-panel .panel-section { padding: 22px 0; border-top: 1px solid var(--line); margin-top: 0; }
+.calls-view .call-panel .panel-section h3 { font-size: 1.05rem; font-weight: 650; }
+.calls-view .call-story .section-kicker { display: block; margin-bottom: 8px; }
+.calls-view .call-panel .facts dt { color: var(--ink-3); font-size: .85rem; }
+.calls-view .call-panel .facts dd { overflow-wrap: anywhere; }
+.calls-view .call-panel .steps li { padding: 12px 0; }
+.calls-view .call-panel .steps li::before { display: flex; align-items: center; justify-content: center; align-self: start; width: 24px; height: 24px; border-radius: 50%; background: var(--paper); color: var(--accent); font-size: .75rem; }
+.calls-view .call-panel .bubble { padding: 12px 16px; overflow-wrap: anywhere; }
+.calls-view .call-panel .caller .bubble { background: #f0f3f8; }
+.calls-view .call-panel .assistant .bubble { background: #e8f0fc; }
+.calls-view .call-panel summary { min-height: 44px; }
+.calls-view .call-panel .support { color: var(--ink-2); font-size: .9rem; }
+.calls-view .panel-empty { height: 100%; padding: 36px; }
+.call-empty-guide { max-width: 370px; }
+.call-empty-guide > .ico { width: 52px; height: 52px; padding: 13px; background: var(--accent-soft); color: var(--accent); border-radius: 16px; margin-bottom: 24px; }
+.call-empty-guide > .section-kicker { display: block; }
+.call-empty-guide h2 { margin: 8px 0 12px; font-size: 1.8rem; letter-spacing: -.03em; }
+.call-empty-guide p { color: var(--ink-2); line-height: 1.65; }
+.call-empty-guide ol { list-style: none; padding: 0; margin: 24px 0 0; }
+.call-empty-guide li { display: flex; gap: 16px; padding: 12px 0; border-top: 1px solid var(--line); font-size: .93rem; }
+.call-empty-guide li span { color: var(--accent); font-size: .8rem; font-weight: 600; }
+@media (min-width: 1200px) {
+  .calls-view .calls-split { grid-template-columns: minmax(310px,.85fr) minmax(0,1.35fr); height: 74vh; min-height: 620px; max-height: 960px; box-shadow: var(--surface-shadow); }
+  .calls-view .call-row .row-title .phone { flex-basis: 100%; font-size: .85rem; }
+  .calls-view .call-row .row-title .when { margin-left: 0; font-size: .78rem; }
+}
+@media (max-width: 1199px) {
+  .calls-view.has-panel > .page-hero, .calls-view.has-panel > .calls-overview, .calls-view.has-panel > .calls-tools { display: none; }
+}
+@media (max-width: 699px) {
+  .calls-view .calls-tools { padding: 18px; }
+  .calls-search-head { flex-direction: column; align-items: stretch; gap: 14px; }
+  .calls-search-head .search { flex-basis: auto; min-width: 0; width: 100%; }
+  .calls-view .call-row { padding: 18px 14px; gap: 10px; }
+  .calls-view .call-panel .panel-body { padding: 18px; }
+  .calls-view .call-panel .panel-head { padding: 10px 14px; }
+  .call-context { padding: 18px; }
+  .calls-view .call-panel .bubble-run { max-width: 92%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .calls-view .call-row, .calls-view .panel, .calls-view .convo summary .ico { animation: none; transition: none; }
 }
 </style>
 <style>
@@ -1188,6 +1628,115 @@ button.cal-dayhead:hover { background: var(--paper-3); }
   .uf-metric { padding: 14px; } .uf-metric strong { font-size: 1.5rem; }
 }
 @media (max-width: 420px) { .uf-form { grid-template-columns: minmax(0, 1fr); } .uf-metrics { gap: 8px; } .uf-metric { padding: 12px; } }
+
+/* A schematic catalogue explorer, deliberately not a drawing of the building. */
+.uw-explorer-label { padding: 20px 18px 14px; background: var(--paper-3); }
+.uw-explorer-label strong, .uw-explorer-label span { display: block; }
+.uw-explorer-label strong { font-size: 1rem; }
+.uw-explorer-label span { color: var(--ink-2); font-size: .8125rem; line-height: 1.5; margin-top: 5px; }
+.uw-explorer { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 12px; background: linear-gradient(145deg, var(--paper-3), var(--paper)); }
+.uw-explorer .uf-unit { padding: 14px 12px; border: 1px solid var(--line-strong); border-radius: 10px; min-height: 132px; box-shadow: 0 3px 0 var(--line); transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease; overflow-wrap: anywhere; }
+.uw-explorer .uf-unit strong { font-size: 1.65rem; letter-spacing: -.03em; line-height: 1.15; }
+.uw-explorer .uf-unit[aria-current="true"] { border-color: var(--accent); box-shadow: inset 0 3px 0 var(--accent), 0 3px 0 var(--line); }
+.uw-apartment-label { display: block; color: var(--ink-2); font-size: .75rem; margin-bottom: 6px; }
+.uw-explorer .uf-counts { font-size: .75rem; gap: 3px 8px; line-height: 1.45; }
+.uw-explorer .uw-tile-tour { display: block; margin-top: 8px; color: var(--ink-2); font-size: .75rem; line-height: 1.5; }
+.uw-property .ico { float: right; margin-top: 5px; color: var(--accent); }
+.uw-explorer .uf-unit-empty { grid-column: 1 / -1; padding: 8px; }
+.uw-hero { display: flex; justify-content: space-between; gap: 24px; background: linear-gradient(115deg, #112445, #1B3E70); color: #FFF; padding: 30px; border-radius: var(--r-card); margin-bottom: 20px; box-shadow: 0 8px 24px #14233e12; overflow: hidden; }
+.uw-hero-copy { min-width: 0; }
+.uw-hero h2 { font-size: clamp(1.7rem, 2.6vw, 2.35rem); line-height: 1.15; letter-spacing: -.035em; margin: 12px 0; overflow-wrap: anywhere; }
+.uw-hero p { color: #DEE8FB; font-size: 1rem; line-height: 1.65; max-width: 48ch; margin: 0; }
+.uw-eyebrow { display: block; font-size: .8125rem; font-weight: 600; letter-spacing: .055em; line-height: 1.6; }
+.uw-hero .uw-eyebrow { color: #C8D9F6; }
+.uw-hero .uw-actions { margin-top: 24px; }
+.uw-hero .btn-primary { background: #FFF; color: #163665; border-color: #FFF; }
+.uw-hero .btn-primary:hover { background: #E9F1FF; border-color: #E9F1FF; }
+.uw-hero .uw-light-button { background: transparent; color: #FFF; border-color: #8AA4CA; }
+.uw-hero .uw-light-button:hover { background: #FFFFFF14; }
+.uw-hero-mark { align-self: center; position: relative; flex: 0 0 144px; max-width: 38%; min-height: 156px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 10px; text-align: center; background: linear-gradient(150deg, #FFFFFF20, #FFFFFF06); border: 1px solid #FFFFFF44; border-radius: 14px; box-shadow: 9px 9px 0 #FFFFFF08, 18px 18px 0 #FFFFFF04; transform: rotate(-3deg); }
+.uw-hero-mark span { font-size: .6875rem; letter-spacing: .12em; color: #D7E6FC; }
+.uw-hero-mark strong { font-size: 2.8rem; line-height: 1.1; letter-spacing: -.04em; max-width: 100%; overflow-wrap: anywhere; padding: 0 8px; }
+.uw-snapshot { display: grid; gap: 4px; margin-top: 18px; }
+.uw-snapshot > strong { font-size: 1.6rem; }
+.uw-snapshot > strong span { font-size: 1rem; font-weight: 400; }
+.uw-snapshot > span { font-size: .8125rem; color: #DEE8FB; }
+.uw-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.uw-actions .btn, .uw-prospects .btn, .uw-more .btn { min-height: 44px; white-space: normal; text-align: center; line-height: 1.4; }
+.uw-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 20px 0; }
+.uw-metrics > div { padding: 20px; display: flex; flex-direction: column; gap: 8px; }
+.uw-metrics strong { font-size: 2rem; line-height: 1; letter-spacing: -.04em; font-weight: 600; }
+.uw-metrics span { font-size: .8125rem; color: var(--ink-2); line-height: 1.5; }
+.uw-metrics span:first-child { color: var(--ink); font-weight: 500; }
+.uw-tour-section h3, .uw-holds h3, .uw-feedback-heading h2 { font-size: 1.25rem; }
+.uw-section-heading p, .uw-holds > p, .uw-feedback-heading p { font-size: .9375rem; line-height: 1.6; margin-top: 8px; }
+.uw-tours { margin-top: 20px; }
+.uw-tour { padding: 22px 0; border-top: 1px solid var(--line); }
+.uw-tour:first-child { padding-top: 0; border: 0; }
+.uw-tour:last-child { padding-bottom: 0; }
+.uw-tour-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.uw-tour-top h4 { font-size: 1.35rem; letter-spacing: -.025em; margin: 3px 0 0; }
+.uw-tour-top .uw-eyebrow { color: var(--ink-2); letter-spacing: 0; }
+.uw-tour-person { margin: 18px 0 12px; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; overflow-wrap: anywhere; }
+.uw-tour-person strong { font-size: 1.125rem; }
+.uw-tour-person a { color: var(--accent); min-height: 44px; display: inline-flex; align-items: center; }
+.uw-prospect-facts { display: flex; flex-wrap: wrap; gap: 12px 32px; margin: 12px 0; }
+.uw-prospect-facts div { min-width: 0; flex: 1 1 140px; }
+.uw-prospect-facts dt { color: var(--ink-2); font-size: .8125rem; line-height: 1.5; }
+.uw-prospect-facts dd { margin: 4px 0 0; font-size: 1rem; line-height: 1.5; overflow-wrap: anywhere; }
+.uw-context { font-size: .9375rem; line-height: 1.6; margin: 12px 0; }
+.uw-staff-note { background: var(--paper); border-left: 3px solid var(--line-strong); padding: 12px 14px; margin: 14px 0 18px; overflow-wrap: anywhere; }
+.uw-staff-note strong { display: block; font-size: .8125rem; margin-bottom: 5px; }
+.uw-staff-note span { white-space: pre-wrap; font-size: .9375rem; line-height: 1.65; }
+.uw-conflict { margin: 12px 0; padding: 14px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); font-size: .9375rem; line-height: 1.6; }
+.uw-empty { padding: 24px 0 8px; color: var(--ink-2); }
+.uw-empty > .ico { color: var(--accent); margin-bottom: 8px; }
+.uw-empty h4 { font-size: 1.125rem; font-weight: 500; color: var(--ink); margin: 5px 0 10px; }
+.uw-empty p { font-size: .9375rem; line-height: 1.6; }
+.uw-more { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 20px; color: var(--ink-2); font-size: .875rem; }
+.uw-holds ul, .uw-prospects { padding: 0; margin: 16px 0 0; list-style: none; }
+.uw-holds li { display: grid; gap: 6px; padding: 14px 0; border-top: 1px solid var(--line); font-size: .9375rem; line-height: 1.6; overflow-wrap: anywhere; }
+.uw-holds li span { color: var(--ink-2); }
+.uw-prospects li { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; padding: 14px 0; border-top: 1px solid var(--line); }
+.uw-prospects li > div { min-width: 0; overflow-wrap: anywhere; }
+.uw-prospects li strong, .uw-prospects li span { display: block; }
+.uw-prospects li span { font-size: .875rem; color: var(--ink-2); margin-top: 5px; }
+.uw-feedback-heading { margin: 32px 0 20px; }
+.uf-view .uf-entry-meta .btn-link { min-height: 44px; padding: 8px 0; }
+@media (hover: hover) and (pointer: fine) {
+  .uw-explorer .uf-unit:hover { transform: translateY(-3px); box-shadow: 0 6px 0 var(--line), 0 10px 20px #14233e0b; }
+}
+@media (max-width: 1199px) {
+  .uw-hero { padding: 24px; }
+  .uw-hero-mark { flex-basis: 102px; min-height: 132px; }
+  .uw-hero-mark strong { font-size: 2.25rem; }
+  .uw-metrics > div { padding: 16px; }
+}
+@media (max-width: 760px) {
+  .uw-explorer { grid-template-columns: repeat(3, minmax(0, 1fr)); max-height: 230px; }
+  .uw-explorer .uf-unit { min-height: 110px; padding: 12px 9px; }
+  .uw-explorer .uf-counts { display: none; }
+  .uw-explorer .uf-unit strong { font-size: 1.45rem; }
+  .uw-explorer-label { padding: 14px; }
+  .uw-explorer-label span { margin-top: 3px; }
+  .uw-hero { padding: 22px; gap: 14px; }
+  .uw-hero-mark { display: none; }
+  .uw-metrics { gap: 8px; }
+  .uw-metrics > div { padding: 14px 10px; }
+  .uw-metrics strong { font-size: 1.8rem; }
+  .uw-tour-top h4 { font-size: 1.25rem; }
+  .uw-actions .btn { flex: 1 1 135px; justify-content: center; }
+  .uw-tour-person { margin: 12px 0 8px; }
+  .uw-section-heading p, .uw-holds > p, .uw-feedback-heading p { font-size: 1rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .uw-explorer .uf-unit { transition: none; }
+  .uw-explorer .uf-unit:hover { transform: none; }
+}
+.uf-source-details { margin-top: 4px; }
+.uf-source-details summary { display: list-item; cursor: pointer; min-height: 44px; padding: 12px 0; color: var(--accent); width: fit-content; }
+.uf-source-details p { margin: 0 0 10px; line-height: 1.6; overflow-wrap: anywhere; }
+.uw-hero h2 { scroll-margin-top: 100px; }
 </style>
 <style>
 /* Atrium's shared visual layer. All routes use the same controls and surfaces. */
@@ -1293,6 +1842,80 @@ h2 { letter-spacing: -.025em; }
   .big-number { padding: 16px 10px; }
   .big-number-label { min-height: 2.6em; }
 }
+
+/* Shared owner workspace system. New pages opt into these classes. */
+:root { --hero-start: #112445; --hero-end: #1B3E70; --hero-ink: #FFFFFF; --hero-muted: #D7E5FA; --surface-shadow: 0 4px 18px #14233e06; }
+.page-hero { position: relative; display: flex; justify-content: space-between; align-items: center; gap: 28px; padding: 30px 32px; margin-bottom: 24px; background: linear-gradient(115deg, var(--hero-start), var(--hero-end)); color: var(--hero-ink); border: 1px solid #253F66; border-radius: 18px; box-shadow: 0 10px 30px #14233e0a; overflow: hidden; }
+.page-hero > div { min-width: 0; }
+.page-hero h1 { color: #FFF; font-size: clamp(1.9rem, 2.8vw, 2.6rem); line-height: 1.16; letter-spacing: -.04em; margin: 10px 0 12px; }
+.page-hero p, .page-hero .page-description { color: var(--hero-muted); max-width: 62ch; line-height: 1.7; font-size: 1rem; }
+.page-eyebrow { display: block; color: var(--ink-2); font-size: .8125rem; line-height: 1.5; font-weight: 600; letter-spacing: .075em; }
+.page-hero .page-eyebrow { color: #C5D9F7; }
+.page-hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 22px; }
+.page-hero .btn, .page-hero-actions .btn { min-height: 44px; white-space: normal; line-height: 1.4; text-align: center; }
+.page-hero .btn { background: #FFFFFF0A; border-color: #8CA5CA; color: #FFF; }
+.page-hero .btn:hover { background: #FFFFFF19; border-color: #B4C9E9; }
+.page-hero .btn-primary { background: #FFF; color: #163665; border-color: #FFF; box-shadow: 0 4px 14px #06172d20; }
+.page-hero .btn-primary:hover { background: #EAF1FF; border-color: #EAF1FF; }
+.page-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 20px 0 26px; }
+.page-metrics > * { min-width: 0; padding: 22px 24px; border: 1px solid var(--line); border-radius: 14px; background: var(--paper-2); box-shadow: var(--surface-shadow); }
+.page-metrics > a { display: flex; flex-direction: column; color: var(--ink); text-decoration: none; transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
+.page-metrics > a:hover { border-color: var(--line-ctrl); box-shadow: 0 8px 22px #14233e0c; }
+.metric-label { display: block; color: var(--ink-2); font-size: .875rem; font-weight: 500; line-height: 1.5; }
+.metric-value { display: block; color: var(--ink); font-size: 2.45rem; font-weight: 600; line-height: 1.15; letter-spacing: -.05em; font-variant-numeric: tabular-nums; margin: 9px 0; }
+.metric-detail { display: block; color: var(--ink-2); font-size: .8125rem; line-height: 1.6; }
+.section-kicker { color: var(--ink-2); font-size: .8125rem; line-height: 1.6; letter-spacing: .02em; margin: 20px 0 10px; }
+.workspace-panel { padding: 24px; background: var(--paper-2); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--surface-shadow); }
+.workspace-panel h2, .workspace-panel h3 { font-size: 1.2rem; margin-bottom: 10px; }
+.workspace-panel p { color: var(--ink-2); font-size: 1rem; line-height: 1.65; }
+@media (min-width: 960px) {
+  .side { background: linear-gradient(178deg, #102443 0%, #122A4C 72%, #173459 100%); box-shadow: 4px 0 24px #1024430a; }
+  .brand { padding-bottom: 24px; }
+  .brand-wordmark { margin-bottom: 26px; }
+  .brand-name { line-height: 1.5; }
+  .brand-sub { margin-top: 3px; }
+  .nav-item { height: 62px; gap: 12px; }
+  .nav-label { display: grid; gap: 3px; }
+  .nav-label small { color: #AABBD4; font-size: .6875rem; font-weight: 400; letter-spacing: .015em; }
+  .nav-item[aria-current="page"] .nav-label small { color: #D1E2FC; }
+  .nav-icon { background: #FFFFFF08; padding: 7px; border-radius: 9px; }
+  .nav-item[aria-current="page"] .nav-icon { background: #FFFFFF0C; }
+  .workspace-bar { margin-bottom: 28px; min-height: 82px; padding: 0 0 22px; }
+  .workspace-identity [data-workspace-name] { font-size: 1.025rem; }
+  .workspace-account { padding: 7px 10px 7px 7px; border-radius: 30px; background: #FFFFFF; border: 1px solid var(--line); min-height: 48px; }
+  .workspace-account:hover { text-decoration: none; border-color: var(--line-ctrl); }
+}
+@media (hover: hover) and (pointer: fine) { .page-metrics > a:hover { transform: translateY(-2px); } }
+@media (max-width: 959px) {
+  .nav-label small { display: none; }
+  .page-hero { padding: 24px; gap: 20px; border-radius: 15px; }
+  .page-hero h1 { font-size: 1.9rem; }
+  .page-metrics { gap: 10px; }
+  .page-metrics > * { padding: 18px 14px; }
+  .metric-value { font-size: 2rem; }
+  .workspace-bar { font-size: .9375rem; }
+  .workspace-label { display: block; font-size: .6875rem; }
+}
+@media (max-width: 600px) {
+  .page-hero { flex-direction: column; align-items: stretch; padding: 23px 20px; }
+  .page-hero h1 { font-size: 2rem; }
+  .page-hero-actions .btn { flex: 1 1 125px; justify-content: center; }
+  .page-metrics { gap: 8px; }
+  .page-metrics > * { padding: 15px 11px; }
+  .metric-label, .metric-detail { font-size: .8125rem; }
+  .metric-value { font-size: 1.95rem; }
+  .workspace-panel { padding: 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-metrics > a { transition: none; }
+  .page-metrics > a:hover { transform: none; }
+}
+.workspace-controls .property-switch { min-height: 44px; }
+@media (min-width: 960px) {
+  .side { overflow-y: auto; }
+  .side .brand, .side .nav, .side-foot { flex-shrink: 0; }
+  .side-foot .cluster-link, .side-foot .staff-only { min-height: 44px; }
+}
 </style>
 </head>
 <body>
@@ -1309,12 +1932,12 @@ h2 { letter-spacing: -.025em; }
     <div class="nav-heading">WORKSPACE</div>
     <nav class="nav" aria-label="Views">
       <ul>
-        <li><a class="nav-item" href="#/today" data-view="today"><span class="nav-icon" data-icon="today"></span><span class="nav-label">Today</span><span class="nav-badge" data-badge="today"></span></a></li>
-        <li><a class="nav-item" href="#/calls" data-view="calls"><span class="nav-icon" data-icon="calls"></span><span class="nav-label">Calls</span><span class="nav-badge" data-badge="calls"></span></a></li>
-        <li><a class="nav-item" href="#/leads" data-view="leads"><span class="nav-icon" data-icon="leads"></span><span class="nav-label">Leads</span><span class="nav-badge" data-badge="leads"></span></a></li>
-        <li><a class="nav-item" href="#/units" data-view="units"><span class="nav-icon" data-icon="units"></span><span class="nav-label">Feedback</span><span class="nav-badge" data-badge="units"></span></a></li>
-        <li><a class="nav-item" href="#/calendar" data-view="calendar"><span class="nav-icon" data-icon="calendar"></span><span class="nav-label">Calendar</span><span class="nav-badge" data-badge="calendar"></span></a></li>
-        <li><a class="nav-item" href="#/status" data-view="status"><span class="nav-icon" data-icon="status"></span><span class="nav-label">Status</span><span class="nav-badge" data-badge="status"></span></a></li>
+        <li><a class="nav-item" href="#/today" data-view="today"><span class="nav-icon" data-icon="today"></span><span class="nav-label"><span>Today</span><small>Briefing &amp; priorities</small></span><span class="nav-badge" data-badge="today"></span></a></li>
+        <li><a class="nav-item" href="#/calls" data-view="calls"><span class="nav-icon" data-icon="calls"></span><span class="nav-label"><span>Calls</span><small>Conversations &amp; outcomes</small></span><span class="nav-badge" data-badge="calls"></span></a></li>
+        <li><a class="nav-item" href="#/leads" data-view="leads"><span class="nav-icon" data-icon="leads"></span><span class="nav-label"><span>Leads</span><small>People &amp; follow-ups</small></span><span class="nav-badge" data-badge="leads"></span></a></li>
+        <li><a class="nav-item" href="#/units" data-view="units"><span class="nav-icon" data-icon="units"></span><span class="nav-label"><span>Units</span><small>Apartments &amp; tour briefs</small></span><span class="nav-badge" data-badge="units"></span></a></li>
+        <li><a class="nav-item" href="#/calendar" data-view="calendar"><span class="nav-icon" data-icon="calendar"></span><span class="nav-label"><span>Calendar</span><small>Tours &amp; availability</small></span><span class="nav-badge" data-badge="calendar"></span></a></li>
+        <li><a class="nav-item" href="#/status" data-view="status"><span class="nav-icon" data-icon="status"></span><span class="nav-label"><span>Status</span><small>Connections &amp; access</small></span><span class="nav-badge" data-badge="status"></span></a></li>
       </ul>
     </nav>
     <div class="side-foot">
@@ -1744,7 +2367,12 @@ const href = {
   tel(phone) { const d = String(phone ?? '').replace(/[^\d+]/g, ''); return /\d/.test(d) && phone !== 'unknown' ? `tel:${d}` : null },
   sms(phone) { const d = String(phone ?? '').replace(/[^\d+]/g, ''); return /\d/.test(d) && phone !== 'unknown' ? `sms:${d}` : null },
   mailto(email) { const e = String(email ?? '').trim(); return e.includes('@') && !/\s/.test(e) ? `mailto:${e}` : null },
-  recording(url) { const u = String(url ?? ''); return /^https:\/\//.test(u) ? u : null },
+  recording(url) {
+    const u = String(url ?? '')
+    // Fictional fixture URLs are placeholders, not playable demo recordings.
+    if (!/^https:\/\//.test(u) || /^https:\/\/(?:[^/]*\.)?example\.(?:com|org|net)(?::\d+)?(?:\/|$)/i.test(u)) return null
+    return u
+  },
 }
 
 // ---------------------------------------------------------------------------------------
@@ -2228,8 +2856,8 @@ function apply(resource, data) {
 // ---------------------------------------------------------------------------------------
 
 const VIEWS = ['today', 'calls', 'leads', 'units', 'calendar', 'status']
-const VIEW_LABEL = { today: 'Today', calls: 'Calls', leads: 'Leads', units: 'Unit feedback', calendar: 'Calendar', status: 'Status' }
-const VIEW_H1 = { today: 'Today', calls: 'Calls', leads: 'Leads', units: 'Unit feedback', calendar: 'Tour calendar', status: 'Status' }
+const VIEW_LABEL = { today: 'Today', calls: 'Calls', leads: 'Leads', units: 'Units', calendar: 'Calendar', status: 'Status' }
+const VIEW_H1 = { today: 'Today', calls: 'Calls', leads: 'Leads', units: 'Unit workspace', calendar: 'Tour calendar', status: 'Status' }
 const modules = {}
 let current = null
 let booted = false
@@ -2290,6 +2918,9 @@ function showView(r, moveFocus) {
     root.innerHTML = placeholderView(r.name)
   }
   if (moveFocus && root) {
+    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) root.animate?.([
+      { opacity: .82, transform: 'translateY(5px)' }, { opacity: 1, transform: 'none' },
+    ], { duration: 180, easing: 'ease-out' })
     // a modal dialog keeps focus while it is open (its close handler then lands on this view's heading)
     const h1 = root.querySelector('h1')
     if (h1 && !dialogs.length) { if (!h1.hasAttribute('tabindex')) h1.setAttribute('tabindex', '-1'); try { h1.focus({ preventScroll: false }) } catch (e) { /* ignore */ } }
@@ -3604,10 +4235,36 @@ function todayModel(s) {
   }
   return {
     today, now, ws, records, needs, emergencies, people, callBacks, tours, toursTomorrow, callsKnown, callsValue, callsNote, toursBooked,
-    nextTour: nextTour ? fmt.time(nextTour.startsAt) : null, needValue, oldest, leadsOff, calOff, briefing,
+    nextTour: nextTour ? fmt.time(nextTour.startsAt) : null, nextTourRecord: nextTour || null, needValue, oldest, leadsOff, calOff, briefing,
     errors: { calls: Boolean(s.errors.calls), calendar: Boolean(s.errors.calendar), leads: Boolean(s.errors.leads) },
     loaded: { ...s.loaded }, notConfigured: s.notConfigured, callsConfigured: s.callsConfigured, safetyEventsError: s.safetyEventsError,
   }
+}
+function dashboardFresh(s, resource) {
+  const at = toTime(s.lastGoodAt?.[resource])
+  return Boolean(s.loaded[resource] && !s.errors[resource] && at != null && at <= Date.now() + 5000 && Date.now() - at <= 60000)
+}
+function todayPresentation(s, m) {
+  const leads = dashboardFresh(s, 'leads'), calendar = dashboardFresh(s, 'calendar')
+  const calls = dashboardFresh(s, 'calls') && !s.callsError
+  const complete = leads && calendar && calls && !s.safetyEventsError
+  return { leads, calendar, calls, complete,
+    waiting: !s.loaded.leads || !s.loaded.calendar || !s.loaded.calls,
+    briefing: complete ? m.briefing : 'Calls, tours and the work waiting for your team, together in one place.',
+    checked: complete ? 'Current workspace records' : 'Overview from loaded records',
+  }
+}
+function todayHeroHtml(m, presentation) {
+  const next = presentation.calendar ? m.nextTourRecord : null
+  const upcoming = next ? `<span class="page-eyebrow">NEXT TOUR TODAY</span><strong class="today-next-time">${esc(fmt.time(next.startsAt))}</strong>` +
+    `<span class="today-next-name">${esc(next.name)}</span><span>${next.unitId ? `Apartment ${esc(next.unitId)}` : 'Apartment not selected'}</span>` +
+    `<div class="page-hero-actions">${next.unitId ? link('units', { unit: next.unitId }, 'Prepare for this tour', 'btn btn-primary') : link('calendar', { date: m.today, slot: next.slotId }, 'View this tour', 'btn btn-primary')}</div>`
+    : `<span class="page-eyebrow">${presentation.calendar ? 'LOOK AHEAD' : 'CALENDAR'}</span><strong class="today-next-label">${presentation.calendar ? 'Prepare the next showing.' : 'Tour schedule unconfirmed.'}</strong>` +
+      `<span>${presentation.calendar ? 'Apartments, prospect context and saved feedback.' : 'The calendar is still loading or needs a refresh.'}</span><div class="page-hero-actions">${link(presentation.calendar ? 'units' : 'status', {}, presentation.calendar ? 'Explore apartments' : 'Check workspace status', 'btn btn-primary')}</div>`
+  return `<header class="page-hero today-hero"><div class="today-hero-copy"><span class="page-eyebrow">${esc(fmt.dayLong(m.today))} · ${esc(property.timeZoneLabel)}</span>` +
+    `<h1 tabindex="-1">Today</h1><p class="today-briefing">${esc(presentation.briefing)}</p><div class="today-mode">${ico(isDemo ? 'info' : 'home')}<span>${esc(isDemo ? isPersistentDemo ? 'Local demo workspace' : 'Demo workspace' : property.name)}</span><span>${esc(presentation.checked)}</span></div>` +
+    `<div class="page-hero-actions">${link('calls', {}, 'Review calls', 'btn')}${link('leads', { tab: 'todo' }, 'Open team to-dos', 'btn')}</div></div>` +
+    `<div class="today-next" aria-label="Next showing">${upcoming}</div></header>`
 }
 function pollBanner(s, resource, what) {
   const err = s.errors[resource]
@@ -3689,12 +4346,13 @@ function tourRowHtml(t, s, today) {
   const actions = []
   if (confirmPending && href.tel(t.phone)) actions.push(telBtn(t.phone, 'Call to confirm', 'btn btn-call'))
   if (t.profile) actions.push(link('leads', { phone: t.phone }, 'Open lead', 'btn btn-quiet link-action'))
+  if (t.unitId) actions.push(link('units', { unit: t.unitId }, 'Tour brief', 'btn btn-quiet link-action'))
   actions.push(link('calendar', { date: today, slot: t.slotId }, 'Calendar', 'btn btn-quiet link-action'))
-  const chip = t.past ? html_.chip('chip-ok', 'check', 'Toured') : html_.chip('chip-ok', 'check', 'Confirmed')
-  return `<div class="row row-stack${t.past ? ' row-muted' : ''}" data-key="tour:${esc(t.slotId)}">` +
+  const chip = t.past ? html_.chip('chip-neutral', 'clock', 'Scheduled earlier') : html_.chip('chip-neutral', 'calendar', 'Tour booked')
+  return `<div class="row row-stack${t.past ? ' row-muted' : ''}" data-key="tour:${esc(t.slotId)}:${esc(t.unitId || '')}:${esc(t.phone || t.name)}">` +
     `<span class="row-lead"><span class="num strong">${esc(fmt.time(t.startsAt))}</span></span>` +
     `<span class="row-body"><span class="row-title">${t.profile ? personLink(t.phone, t.name) : esc(t.name)} · ${t.unitId ? `apartment ${esc(t.unitId)}` : 'no apartment picked yet'}</span>` +
-    `<span class="row-sub">${fmt.phone(t.phone) ? `${telLink(t.phone)} · Confirmed` : 'Confirmed · no phone on file'}</span></span>` +
+    `<span class="row-sub">${fmt.phone(t.phone) ? telLink(t.phone) : 'No phone on file'}${t.past ? ' · attendance not recorded here' : ''}</span></span>` +
     `<span class="row-actions">${chip}${actions.join('')}</span></div>`
 }
 function recentCallRowHtml(rec, s) {
@@ -3729,7 +4387,7 @@ const todayView = {
     this.root = root
     root.addEventListener('click', (e) => this.onClick(e))
     const repaint = () => { if (this.root && !this.root.hidden) this.render(state) }
-    on('data', repaint); on('minute', repaint)
+    on('data', repaint); on('poll', repaint); on('minute', repaint)
   },
   onClick(e) {
     const btn = e.target.closest('button[data-action]')
@@ -3745,7 +4403,8 @@ const todayView = {
     const root = this.root
     if (!root) return
     const m = todayModel(s)
-    const key = JSON.stringify([m.callsValue, m.callsNote, m.toursBooked, m.nextTour, m.needValue, m.oldest, m.leadsOff, m.calOff, m.briefing, m.errors, m.loaded, m.notConfigured, m.callsConfigured, m.safetyEventsError,
+    const presentation = todayPresentation(s, m)
+    const key = JSON.stringify([m.today, presentation, m.callsValue, m.callsNote, m.toursBooked, m.nextTour, m.needValue, m.oldest, m.leadsOff, m.calOff, m.briefing, m.errors, m.loaded, m.notConfigured, m.callsConfigured, m.safetyEventsError,
       m.emergencies.map((x) => [x.callId, x.at, x.matched, x.action, x.name]), m.people.map((x) => [x.type, x.callId, x.respondBy, x.calledAt, fmt.respondPhrase(x.respondBy), x.question, x.name, x.request, html_.followUpReview(x.fu)]),
       m.callBacks.map((f) => [f.id, f.dueAt, f.status, fmt.duePhrase(f.dueAt), todoSentence(f, profileByPhone(s, f.phone), s).text, html_.followUpReview(f)]),
       m.tours.map((t) => [t.slotId, t.name, t.unitId, t.past, t.phone]), m.toursTomorrow.length,
@@ -3754,7 +4413,7 @@ const todayView = {
     this.sigKey = key
     const focusKey = root.contains(document.activeElement) && document.activeElement.dataset ? document.activeElement.dataset.key : null
     const loading = !m.callsKnown && !s.loaded.calendar && !m.errors.calls && !m.errors.leads
-    let out = `<div class="view-head"><h1 tabindex="-1">Today</h1><p class="dateline small muted">${esc(fmt.dayLong(m.today))} · ${esc(property.name)}</p>${m.briefing ? `<p class="briefing muted">${esc(m.briefing)}</p>` : ''}</div>`
+    let out = todayHeroHtml(m, presentation)
     if (m.notConfigured) { root.innerHTML = out; return }
     out += m.emergencies.map((x) => emergencyBannerHtml(x, this.announced)).join('')
     if (m.safetyEventsError) out += html_.banner('warn', 'Safety reports are temporarily unavailable. The list may be incomplete. Trying again.')
@@ -3764,47 +4423,49 @@ const todayView = {
           : "Heads up: calendar changes aren't being saved right now. Blocks you add may disappear. Ask Atrium support."
       out += html_.banner('warn', '', { raw: `<a class="banner-link" href="#/status" style="color:inherit;text-decoration:none">${esc(txt)}</a>` })
     }
-    out += `<p class="label muted" style="margin-top:${m.emergencies.length || m.leadsOff || m.calOff ? '16px' : '0'}">Since 6 PM yesterday</p>`
+    out += `<p class="section-kicker">Since 6 PM yesterday · ${esc(property.timeZoneLabel)}${presentation.complete ? '' : ' · last loaded records'}</p>`
     if (loading) {
       out += `<div class="tiles" aria-busy="true"><span class="vh">Loading today…</span><div class="skeleton-tile skeleton-row"></div><div class="skeleton-tile skeleton-row"></div><div class="skeleton-tile skeleton-row"></div></div>`
       for (const title of ['Needs a person', 'Call back today', 'Tours today']) out += `<section class="section">${sectionHead(title)}${html_.skeletonRows(2)}</section>`
       root.innerHTML = out
       return
     }
-    const tile = (label_, value, note, extra) => `<a class="card big-number${extra || ''}" href="${esc(extra === ' big-number-warn' || label_.includes('person') ? '#needs-a-person' : (label_ === 'Calls' ? '#/calls' : '#/calendar'))}" data-key="tile:${esc(label_)}"><span class="big-number-label">${esc(label_)}</span><span class="big-number-value num">${esc(value)}</span><span class="big-number-note">${note}</span></a>`
-    const callsNote = m.callsNote === 'notConnected' ? `<a href="#/status" class="link">Call history isn't connected</a>` : esc(m.callsNote || '')
+    const tile = (label_, value, note, destination, warning = false) => `<a class="today-metric${warning ? ' today-metric-warn' : ''}" href="${esc(destination)}" data-key="tile:${esc(label_)}"><span class="metric-label">${esc(label_)}</span><span class="metric-value">${esc(value)}</span><span class="metric-detail">${esc(note)}</span></a>`
+    const callsNote = m.callsNote === 'notConnected' ? 'Call history is not connected' : m.callsNote || 'Recorded in this reporting window'
     const toursVal = m.toursBooked == null ? '—' : String(m.toursBooked)
     const needVal = m.needValue == null ? '—' : String(m.needValue)
-    out += `<div class="tiles">${tile('Calls', m.callsValue === '—' ? '—' : m.callsValue, callsNote)}` +
-      `${tile(m.toursBooked === 1 ? 'Tour booked' : 'Tours booked', toursVal, esc(m.toursBooked == null ? '' : (m.nextTour ? `next one ${m.nextTour}` : 'none today')))}` +
-      `${tile(m.needValue === 1 ? 'Needs a person' : 'Need a person', needVal, esc(m.needValue == null ? '' : (m.needs.length ? `oldest waiting ${fmt.elapsed(m.now - m.oldest)}` : 'all handled')), m.needValue > 0 ? ' big-number-warn' : '')}</div>`
+    out += `<div class="page-metrics today-metrics">${tile('Calls received', m.callsValue, callsNote, m.callsNote === 'notConnected' ? '#/status' : '#/calls')}` +
+      `${tile('Tours booked', toursVal, 'Saved during this reporting window', '#/calendar')}` +
+      `${tile('Needs a person', needVal, m.needValue == null ? 'Review queue is still loading' : m.needs.length ? `Oldest waiting ${fmt.elapsed(m.now - m.oldest)}` : presentation.complete ? 'No saved items waiting for review' : 'Review status not confirmed', '#needs-a-person', m.needValue > 0)}</div>`
+    if (!presentation.complete) out += `<div class="today-data-note">${ico('info')}<span>${presentation.waiting ? 'Some workspace information is still loading. Records appear as they arrive.' : 'Some information needs a refresh. Check Status before relying on an empty list.'}</span>${link('status', {}, 'Check status', 'btn-link')}</div>`
+    out += '<div class="today-workbench"><div class="today-main">'
     // Needs a person — every needsPerson item in order, the live emergency first (it is also the banner
     // above), so the count here is the tile's, the badge's and the briefing sentence's number.
-    out += `<section class="section today-list" id="needs-a-person">${sectionHead('Needs a person', m.needs.length)}`
+    out += `<section class="section today-list" id="needs-a-person">${sectionHead('Needs a person', s.loaded.leads ? m.needs.length : null)}`
     out += pollBanner(s, 'leads', 'callers')
     if (m.needs.length) out += `<div class="card card-warn rows">${m.needs.map((p) => personRowHtml(p, s)).join('')}</div>`
-    else if (s.loaded.leads) out += `<div class="card">${html_.empty({ title: m.safetyEventsError ? 'Safety reports could not be checked.' : 'Nothing needs a person right now.', text: "When the assistant hands something off — an accommodation question, a dispute, a tour it couldn't book — it shows up here." })}</div>`
+    else if (s.loaded.leads) out += `<div class="card">${html_.empty({ icon: 'check-circle', title: m.safetyEventsError ? 'Safety reports could not be checked.' : presentation.complete ? 'Nothing needs a person right now.' : 'Review status is not confirmed yet.', text: presentation.complete ? 'Questions, requests and booking issues that need your team appear here.' : 'Wait for the workspace checks to finish, or open Status to review the connection.' })}</div>`
     out += '</section>'
     // Call back today
     const more = m.callBacks.length > 6 ? link('leads', { tab: 'todo' }, `See all ${m.callBacks.length} in Leads ›`, 'btn-link') : ''
-    out += `<section class="section today-list">${sectionHead('Call back today', m.callBacks.length, more)}`
+    out += `<section class="section today-list">${sectionHead('Call back today', s.loaded.leads ? m.callBacks.length : null, more)}`
     if (!m.needs.length) out += pollBanner(s, 'leads', 'callers')
     if (m.callBacks.length) out += `<div class="card rows">${m.callBacks.slice(0, 6).map((f) => followUpRowHtml(f, s)).join('')}</div>`
-    else if (s.loaded.leads) out += `<div class="card">${html_.empty({ title: 'No one to call back today.', text: "To-dos the assistant creates — a tour to confirm, a question it couldn't answer — appear here on the day they're due." })}</div>`
-    out += '</section>'
+    else if (s.loaded.leads) out += `<div class="card">${html_.empty({ icon: 'phone', title: presentation.leads ? 'No one to call back today.' : 'Follow-ups are not confirmed yet.', text: presentation.leads ? 'Tour confirmations and other follow-ups appear here when they are due.' : 'The last loaded records may be out of date. Check Status for details.' })}</div>`
+    out += '</section></div><aside class="today-aside" aria-label="Tours and apartment preparation">'
     // Tours today
     const tomorrowLink = m.toursTomorrow.length ? link('calendar', { date: addDays(m.today, 1) }, `Tomorrow: ${text.plural(m.toursTomorrow.length, 'tour')} ›`, 'btn-link') : ''
-    out += `<section class="section today-list">${sectionHead('Tours today', m.tours.length, tomorrowLink)}`
+    out += `<section class="section today-list today-tours">${sectionHead('Tours today', s.loaded.calendar ? m.tours.length : null, tomorrowLink)}`
     out += pollBanner(s, 'calendar', 'the calendar')
     if (m.tours.length) out += `<div class="card rows">${m.tours.map((t) => tourRowHtml(t, s, m.today)).join('')}</div>`
-    else if (s.loaded.calendar || s.loaded.leads) out += `<div class="card">${html_.empty({ title: 'No tours today.', text: "When the assistant books one, it shows up here with the caller's name and apartment." })}</div>`
-    out += '</section>'
+    else if (s.loaded.calendar || s.loaded.leads) out += `<div class="card">${html_.empty({ icon: 'calendar', title: presentation.calendar ? 'No tours today.' : 'Today’s calendar is not confirmed yet.', text: presentation.calendar ? 'Open the calendar to review upcoming dates and availability.' : 'The calendar has not finished refreshing.' })}</div>`
+    out += `</section><section class="workspace-panel today-prep"><span class="page-eyebrow">BEFORE THE SHOWING</span><h2>The apartment brief</h2><p>Bring prospect needs, upcoming tours and saved feedback into the same conversation.</p><div class="page-hero-actions">${link('units', {}, 'Open unit workspace', 'btn btn-primary')}</div></section></aside></div>`
     // Recent calls
     out += `<section class="section today-list">${sectionHead('Recent calls', null, link('calls', {}, 'All calls ›', 'btn-link'))}`
     out += pollBanner(s, 'calls', 'calls')
     if (s.callsConfigured === false) out += html_.banner('info', "Call recordings and transcripts aren't connected, so this list is built from the assistant's notes.")
     if (m.records.length) out += `<div class="card rows">${m.records.slice(0, 5).map((r) => recentCallRowHtml(r, s)).join('')}</div>`
-    else if (s.loaded.calls || s.loaded.leads) out += `<div class="card">${html_.empty({ title: 'No calls yet.', text: 'Calls to the leasing line show up here within a minute of ending.' })}</div>`
+    else if (s.loaded.calls || s.loaded.leads) out += `<div class="card">${html_.empty({ icon: 'phone', title: presentation.calls || (s.callsConfigured === false && presentation.leads) ? 'No calls in the loaded records.' : 'Call history is not confirmed yet.', text: 'Completed calls appear here after their records are received.' })}</div>`
     out += '</section>'
     root.innerHTML = out
     if (focusKey) { const el = root.querySelector(`[data-key="${cssq(focusKey)}"]`); if (el) { try { el.focus({ preventScroll: true }) } catch (e) { /* ignore */ } } }
@@ -3827,14 +4488,53 @@ document.addEventListener('click', (e) => {
 // Status and Demo tools (§11)
 // ---------------------------------------------------------------------------------------
 
-const ASSISTANT_PARA = "It answers the leasing line, learns what a caller is looking for, quotes only the apartments on the live availability list, answers questions from the approved building information, offers real tour times and books them on this calendar. It doesn't guess: if it hasn't been told something, it says so and offers a call back. It never handles accommodation requests, fair-housing or legal questions, disputes, eligibility or payments — those always go to a person, and you'll see them under \"Needs a person\". If a caller reports an emergency it gives them the safety instruction for it (get out and call 911 for gas, smoke or carbon monoxide), then flags it on Today. It doesn't make outgoing calls or send messages yet."
+const ASSISTANT_PARA = "The assistant uses configured property information, records what a prospect needs and offers tour times that pass the calendar checks. Quotes depend on the inventory source checks; a demo catalogue stays a sample. Questions that need staff judgment, including accommodation, legal, eligibility, payment and dispute questions, go to a person. Emergency guidance and a staff-visible report do not mean that someone has been notified. Review the actual call and booking records for each outcome."
 
 function storeLine(store) {
   if (!store) return 'not loaded yet'
   return `${String(store.kind ?? '?')} · ${store.durable ? 'durable' : 'not durable'} · "${String(store.note ?? '')}"`
 }
+function statusSummary(s, rows) {
+  const labels = { leads: 'callers and to-dos', calendar: 'calendar', calls: 'call history' }
+  const names = Object.keys(labels)
+  const loaded = names.filter(name => s.loaded[name])
+  const pending = names.filter(name => !s.loaded[name])
+  const failed = names.filter(name => s.errors[name])
+  const errorAt = s.lastWriteError && Number.isFinite(Date.parse(s.lastWriteError.at)) ? fmt.dateTime(s.lastWriteError.at) : ''
+  const history = s.lastWriteError ? ` A previous change reported an error${errorAt ? ` (${errorAt})` : ''}. Open For support for details.` : ''
+  const summary = (title, detail, tone = '') => ({ title, detail: detail + history, tone: history && tone === 'is-ok' ? '' : tone })
+  if (s.notConfigured) return summary('This workspace needs setup.', 'Ask Atrium support to restore access.', 'is-warn')
+  if (failed.length) return summary(loaded.length ? 'Some workspace information is unavailable.' : 'Workspace information is unavailable.',
+    `Couldn’t refresh ${text.list(failed.map(name => labels[name]))}. Some information may be missing or out of date.`, 'is-warn')
+  if (s.safetyEventsError) return summary('Safety reports need attention.', 'The safety report list may be incomplete. Try Refresh now.', 'is-warn')
+  if (s.callsError) return summary('Call history needs attention.', 'Recent recordings and transcripts could not be refreshed. See the details below.', 'is-warn')
+  const stores = ['leads', 'calendar'].filter(name => s.loaded[name]).map(name => s[name] && s[name].store)
+  if (stores.some(store => store && store.durable === false) && !(isDemo && !isPersistentDemo)) {
+    return summary('Saving needs attention.', 'Changes to callers or the calendar may not be saved. See the details below.', 'is-warn')
+  }
+  if (!isDemo && s.loaded.calls && s.callsConfigured === false) {
+    return summary('Call history isn’t connected.', 'Recordings and transcripts are unavailable. Check the other workspace details below.', 'is-warn')
+  }
+  if (rows.reconnecting) return summary('Trying to reconnect…', 'Previously loaded information may be out of date.', 'is-warn')
+  if (pending.length) return summary(loaded.length ? 'Still checking this workspace…' : 'Checking this workspace…',
+    `Waiting for ${text.list(pending.map(name => labels[name]))}.`)
+  if (stores.some(store => !store || typeof store.durable !== 'boolean') || (!isDemo && s.callsConfigured !== true)) {
+    return summary('Some workspace checks are unconfirmed.', 'Refresh to check saving and call history.')
+  }
+  const checked = names.map(name => Date.parse(s.lastGoodAt[name]))
+  if (checked.some(value => !Number.isFinite(value))) return summary('Some workspace checks are unconfirmed.', 'A complete refresh has not been confirmed yet.')
+  const oldest = Math.min(...checked)
+  const refreshed = `Last complete refresh: ${fmt.dateTime(new Date(oldest).toISOString())}.`
+  // A normal round runs every five seconds. A stalled/skipped request must not
+  // borrow a newer timestamp from another resource or a manual refresh click.
+  if (Date.now() - oldest > 60000) return summary('Some information needs a refresh.', `${refreshed} Previously loaded information may be out of date.`)
+  if (isDemo && !isPersistentDemo) return summary('Demo data is loaded.', 'Sample changes reset when the preview restarts.')
+  return isPersistentDemo
+    ? summary('Local demo data is loaded.', `Sample callers, tours and call history are loaded. ${refreshed}`, 'is-ok')
+    : summary('Workspace data is available.', `Callers, calendar and call history are loaded. ${refreshed}`, 'is-ok')
+}
 const statusView = {
-  title: 'Status', icon: icons.status, root: null, sigKey: null, busyAction: false, demoFocused: null,
+  title: 'Status', icon: icons.status, root: null, sigKey: null, busyAction: false, signOutPending: false, demoFocused: null,
   mount(root) {
     this.root = root
     root.addEventListener('click', (e) => this.onClick(e))
@@ -3844,42 +4544,52 @@ const statusView = {
   },
   render(s) {
     const root = this.root
-    if (!root || this.busyAction) return
+    if (!root || this.busyAction || this.signOutPending) return
     const rows = statusRows()
-    // "Updated just now" for a minute after Refresh now was pressed (the minute tick repaints it back to the clock time)
-    const justNow = Boolean(this.refreshedAt) && Date.now() - this.refreshedAt < 60000
-    const at = justNow ? 'just now' : (s.updatedAt ? fmt.time(s.updatedAt) : '')
     const counts = { calls: arr(s.calls).length, slots: arr(s.calendar && s.calendar.slots).length, leads: profilesOf(s).length, todos: followUpsOf(s).length }
     const week = this.weekDays(s)
-    const model = { rows, at, errors: s.errors, lastWriteError: s.lastWriteError, health: s.health, counts, lastPollAt: s.lastPollAt, lstore: s.leads && s.leads.store, cstore: s.calendar && s.calendar.store,
-      callsError: s.callsError, callsConfigured: s.callsConfigured, safetyEventsError: s.safetyEventsError, outbound: Boolean(s.leads && s.leads.outboundEnabled), notConfigured: s.notConfigured, weekDays: week.length, weekSkipped: week.skipped.length, calLoaded: Boolean(s.calendar) }
+    const summary = statusSummary(s, rows)
+    const fresh = Object.fromEntries(Object.keys(RESOURCES).map(name => [name, dashboardFresh(s, name)]))
+    const inventory = s.leads && s.leads.feedbackInventory
+    const model = { rows, summary, errors: s.errors, lastWriteError: s.lastWriteError, health: s.health, counts, lastPollAt: s.lastPollAt, lstore: s.leads && s.leads.store, cstore: s.calendar && s.calendar.store,
+      fresh, inventory, callsError: s.callsError, callsConfigured: s.callsConfigured, safetyEventsError: s.safetyEventsError, outbound: Boolean(s.leads && s.leads.outboundEnabled), notConfigured: s.notConfigured, weekDays: week.length, weekSkipped: week.skipped.length, calLoaded: Boolean(s.calendar) }
     const key = JSON.stringify(model)
     if (key === this.sigKey) return
     this.sigKey = key
     const focusKey = root.contains(document.activeElement) && document.activeElement.dataset ? document.activeElement.dataset.key : null
-    const savingRow = (labelText, v) => {
+    const savingRow = (labelText, v, resource) => {
       if (v === null) return `<div class="status-row"><span class="dot dot-neutral"></span><span class="muted">${esc(labelText)}: not loaded yet</span></div>`
+      if (!fresh[resource]) return `<div class="status-row"><span class="dot dot-neutral"></span><span>${esc(labelText)}: saving check needs a refresh. ${v === 'on' ? 'Saving was available at the last check.' : 'Saving was not confirmed at the last check.'}</span></div>`
       const off = v !== 'on'
       const word = v === 'on' ? (isPersistentDemo ? 'Sample data saved locally' : 'Saving on') : v === 'temp' ? 'Saving temporarily unavailable — check the connection' : isDemo && !isPersistentDemo ? 'Demo data — resets when the preview restarts' : 'Saving off — changes may be lost'
       return `<div class="status-row"><span class="dot${off ? ' dot-warn' : ''}"></span><span class="${off ? 'warn-text' : ''}">${off ? ico('cloud-off') : ico('check')} ${esc(labelText)}: ${esc(word)}</span></div>`
     }
     const rec = rows.recordings
-    const recText = isDemo ? 'Sample calls and transcripts are included for this demo account.' : rec === null ? 'Checking…' : rec === 'on' ? 'Connected — recordings and transcripts are available for the 20 most recent calls.'
+    const recText = !s.loaded.calls ? 'Checking call history…' : s.errors.calls || s.callsError ? 'Call history could not be refreshed. Previously loaded recordings and transcripts may be out of date.'
+      : !fresh.calls ? 'Call history needs a refresh. The last loaded records may be out of date.'
+      : isDemo ? 'Sample calls and transcripts are included for this demo account.' : s.callsConfigured == null ? 'The call history connection has not been confirmed yet.' : rec === 'on' ? 'Connected — recordings and transcripts are available for the 20 most recent calls.'
       : rec === 'off' ? "Not connected yet — calls still show from the leads' records, without recordings or transcripts. Ask Atrium support." : 'Connected, but not answering right now — trying again.'
-    const summaryOk = rows.ok
-    let out = `<div class="view-head"><h1 tabindex="-1">Status</h1></div><div class="status-col">`
-    out += `<div class="card status-summary ${summaryOk ? 'is-ok' : 'is-warn'}"><div style="display:flex;gap:10px;min-width:0">${ico(summaryOk ? 'check-circle' : 'warning')}<div><div class="summary-title">${summaryOk ? 'All connections are available.' : 'Something needs attention.'}</div>` +
-      `<div class="summary-sub">${rows.reconnecting ? `Trying to reconnect…${at ? ` showing what we had at ${esc(at)}` : ''}` : (at ? `Updated ${esc(at)}` : 'Loading…')}</div></div></div>` +
+    const recConfirmed = fresh.calls && !s.callsError && (isDemo || s.callsConfigured === true) && rec === 'on'
+    let out = `<header class="page-hero status-hero"><div><span class="page-eyebrow">WORKSPACE CONTROLS</span><h1 tabindex="-1">Status</h1><p>See what is available, what needs a check, and how your team is signed in.</p><div class="today-mode">${ico('home')}<span>${esc(property.name)}</span><span>${esc(isDemo ? isPersistentDemo ? 'Local demo' : 'Demo workspace' : 'Property workspace')}</span></div></div>` +
+      '<div class="workspace-stack" aria-hidden="true"><span>CALLS</span><span>TOURS</span><span>TEAM</span></div></header><div class="status-col">'
+    out += `<div class="card status-summary ${summary.tone}"><div style="display:flex;gap:10px;min-width:0">${ico(summary.tone === 'is-ok' ? 'check-circle' : summary.tone === 'is-warn' ? 'warning' : 'refresh')}<div><div class="summary-title">${esc(summary.title)}</div>` +
+      `<div class="summary-sub">${esc(summary.detail)}</div></div></div>` +
       `<button type="button" class="btn" data-action="refresh" data-key="refresh">Refresh now</button></div>`
-    out += `<section class="status-section"><h2>Saving</h2>${savingRow('Callers and to-dos', rows.leadsSaving)}${savingRow('Calendar', rows.calendarSaving)}` +
+    out += '<p class="section-kicker">CONNECTIONS AND SAVING</p><div class="status-grid">'
+    out += `<section class="status-section"><h2>Saving</h2>${savingRow('Callers and to-dos', rows.leadsSaving, 'leads')}${savingRow('Calendar', rows.calendarSaving, 'calendar')}` +
       (!isDemo && (rows.leadsSaving === 'off' || rows.calendarSaving === 'off') ? `<p class="status-p muted small">Ask Atrium support to turn saving on.</p>` : '') + '</section>'
-    out += `<section class="status-section"><h2>Call recordings and transcripts</h2><div class="status-row"><span class="dot${rec === 'on' ? '' : rec === null ? ' dot-neutral' : ' dot-warn'}"></span><span class="${rec === 'on' || rec === null ? '' : 'warn-text'}">${esc(recText)}</span></div></section>`
+    out += `<section class="status-section"><h2>Call recordings and transcripts</h2><div class="status-row"><span class="dot${recConfirmed ? '' : s.errors.calls || s.callsError || rec === 'off' ? ' dot-warn' : ' dot-neutral'}"></span><span>${esc(recText)}</span></div></section>`
+    const fictional = inventory?.fictional === true || inventory?.sourceMode === 'demo'
+    out += `<section class="status-section status-inventory"><h2>Apartment information</h2><p class="status-p">${inventory ? fictional ? '<strong>Fictional demo catalogue.</strong> Rent and availability are sample facts, not a live PMS feed.' : '<strong>Property source snapshot.</strong> Check the source system for current availability.' : 'The property inventory source has not loaded yet.'}</p>` +
+      (inventory ? `<p class="status-p small muted">${esc(inventory.source || 'Configured property source')}${inventory.readAt ? ` · snapshot ${esc(fmt.dateTime(inventory.readAt))}` : ''}</p>` : '') +
+      `<div class="status-actions">${link('units', {}, 'View apartments', 'btn')}</div></section></div><p class="section-kicker">ACCESS AND OPERATING CONTROLS</p><div class="status-grid">`
     out += isDemo ? `<section class="status-section" id="phone-assistant"><h2>Phone assistant</h2><p class="status-p">This demo uses sample conversations. It does not update your live phone assistant.</p></section>` : `<section class="status-section" id="phone-assistant"><h2>Phone assistant</h2><p class="status-p">${databaseMode ? 'Phone assistant changes require an administrator and a verified property connection.' : 'Apply the latest leasing instructions and tools to your phone assistant. Your existing voice, model, and webhook authentication settings are preserved.'}</p>${!databaseMode ? '<div class="status-actions"><button type="button" class="btn" data-action="sync-assistant" data-key="sync-assistant" data-permission="configure">Update the phone assistant</button></div>' : ''}</section>`
-    out += `<section class="status-section"><h2>Outgoing calls</h2><div class="status-row"><span class="dot dot-neutral"></span><span>${model.outbound ? 'The assistant can make outgoing calls.' : "The assistant answers calls; it doesn't make them. Everything under To do is for your team."}</span></div></section>`
-    out += `<section class="status-section"><h2>Times</h2><p class="status-p">All times on this page use ${esc(property.timeZoneLabel)} (${esc(property.timeZone)}).</p></section>`
+    out += `<section class="status-section"><h2>Outgoing calls</h2><div class="status-row"><span class="dot dot-neutral"></span><span>${!s.loaded.leads ? 'Outgoing-call settings have not loaded yet.' : model.outbound ? 'Outgoing calls are enabled in this workspace’s settings. Check provider readiness before placing a call.' : "Outgoing assistant calls are off. Everything under To do is for your team."}</span></div></section>`
+    out += `<section class="status-section"><h2>Times</h2><p class="status-timezone">${esc(property.timeZoneLabel)}</p><p class="status-p">Tour times and work dates follow this property’s time zone.</p></section>`
     out += `<section class="status-section"><h2>Signed in</h2><p class="status-p">${window.ATRIUM_ACCOUNT ? `Signed in as <strong>${esc(window.ATRIUM_ACCOUNT.username)}</strong> to ${esc(databaseMode ? property.name : window.ATRIUM_ACCOUNT.displayName)}. ` : "You're signed in on this device. "}${databaseMode && !permissionAllowed('operate') ? 'Your property access is view only. ' : ''}Sessions end after 8 hours. Sign out before switching accounts.</p><div class="status-actions">${databaseMode ? '<a class="btn" href="/api/account" data-key="account-security">Account security</a>' : ''}<button type="button" class="btn" data-action="signout" data-key="signout">Sign out</button></div></section>`
-    out += `<section class="status-section"><h2>Who can see this</h2><p class="status-p">This page has callers' names, numbers and what they said. Keep it to the leasing team, don't screenshot it into a shared channel, and sign out when you're done.</p></section>`
-    out += `<section class="status-section"><h2>What the assistant does and doesn't do</h2><p class="status-p">${esc(ASSISTANT_PARA)}</p></section>`
+    out += '</div><p class="section-kicker">WORKSPACE GUIDANCE</p><div class="status-grid">'
+    out += `<section class="status-section"><h2>Who can see this</h2><p class="status-p">Names, contact details and call notes are available to authorized staff in this workspace. Use the account controls to review your own access and sessions.</p></section>`
+    out += `<section class="status-section"><h2>Assistant responsibilities</h2><details class="status-guidance" data-key="assistant-guidance"><summary>Review the assistant’s boundaries</summary><p class="status-p">${esc(ASSISTANT_PARA)}</p></details></section></div>`
     const support = []
     support.push(['Callers and to-dos', storeLine(model.lstore)])
     support.push(['Calendar', storeLine(model.cstore)])
@@ -3955,30 +4665,58 @@ const statusView = {
       toast(`Couldn't update the phone assistant. ${e.message || ''}`.trim(), { kind: 'error', ms: 12000 })
     } finally { if (btn.isConnected) { btn.classList.remove('is-busy'); btn.removeAttribute('aria-busy') } }
   },
-  /** A round finishes in a few ms, so the busy state is held for 600 ms and the result is said in a toast. */
+  /** Bound the UI wait without cancelling or duplicating any pending read. */
   async refreshNow(btn) {
+    if (this.busyAction) return
     this.busyAction = true
     btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true')
     const started = Date.now()
-    const before = state.updatedAt
-    try { await refresh() } finally {
-      await new Promise((r) => setTimeout(r, Math.max(0, 600 - (Date.now() - started))))
+    const names = Object.keys(RESOURCES)
+    const before = Object.fromEntries(names.map(name => [name, Date.parse(state.lastGoodAt[name]) || 0]))
+    let deadline, outcome
+    try {
+      outcome = await Promise.race([
+        refresh().then(() => 'complete', () => 'failed'),
+        new Promise(resolve => { deadline = setTimeout(() => resolve('pending'), 15000) }),
+      ])
+    } finally {
+      clearTimeout(deadline)
       this.busyAction = false
-      const fresh = state.updatedAt && state.updatedAt !== before && state.failedRounds === 0
-      this.refreshedAt = fresh ? Date.now() : null
-      this.sigKey = null; this.render(state)
-      if (fresh) toast(`Up to date · ${fmt.time(state.updatedAt)}`, { kind: 'ok', key: 'refresh' })
-      else toast(`Couldn't reach the server.${state.updatedAt ? ` Showing what we had at ${fmt.time(state.updatedAt)}.` : ''}`, { kind: 'warn', key: 'refresh' })
+      if (btn.isConnected) { btn.classList.remove('is-busy'); btn.removeAttribute('aria-busy') }
+      if (!gated && !documentAccessIssue) { this.sigKey = null; this.render(state) }
     }
+    if (gated || documentAccessIssue) return
+    const fresh = names.every(name => state.loaded[name] && !state.errors[name]
+      && Date.parse(state.lastGoodAt[name]) >= started && Date.parse(state.lastGoodAt[name]) > before[name])
+      && !state.callsError && !state.safetyEventsError && !state.notConfigured
+    if (outcome === 'complete' && fresh) toast('Workspace data refreshed.', { kind: 'ok', key: 'refresh' })
+    else if (outcome === 'pending' || names.some(name => inflight[name])) {
+      toast('Refresh is still pending. Delayed requests may finish later; the information shown may be out of date.', { kind: 'warn', key: 'refresh' })
+    } else toast('Refresh is incomplete. Some information could not be checked; review the status details.', { kind: 'warn', key: 'refresh' })
   },
   async signOut(btn) {
-    btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true')
-    if (databaseMode) invalidateDocument('Signing out. Sign in again to continue.', 401)
-    stopPolling(); gated = true
+    if (btn.disabled || this.signOutPending) return
+    this.signOutPending = true
+    btn.disabled = true; btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true')
+    const controller = new AbortController(), deadline = setTimeout(() => controller.abort(), 15000)
     try {
-      await fetch('/api/dashboard', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { ...JSON_HEADERS, 'content-type': 'application/json' }, body: JSON.stringify({ action: 'logout' }) })
-    } catch (e) { /* the reload lands on the sign-in page either way */ }
-    location.reload()
+      const response = await fetch('/api/dashboard', { method: 'POST', credentials: 'same-origin', cache: 'no-store',
+        redirect: 'error', signal: controller.signal, headers: { ...JSON_HEADERS, 'content-type': 'application/json',
+          ...(databaseMode ? { 'x-atrium-user-id': window.ATRIUM_ACCOUNT?.userId, 'x-atrium-session-id': window.ATRIUM_ACCOUNT?.sessionId, 'x-atrium-csrf': window.ATRIUM_SESSION_FORM_TOKEN } : {}) }, body: JSON.stringify({ action: 'logout' }) })
+      if (databaseMode) {
+        const result = await response.json()
+        if (!response.ok || result?.status !== 'signed_out') throw new Error('Sign-out was not confirmed')
+      } else if (!response.ok) throw new Error('Sign-out was not confirmed')
+      stopPolling(); gated = true
+      if (databaseMode) invalidateDocument('Signed out. Sign in again to continue.', 401)
+      location.assign('/api/dashboard?reauthenticate=1')
+    } catch {
+      this.signOutPending = false
+      toast('Sign-out could not be confirmed. Reload the workspace to check your session before trying again.', { kind: 'warn', key: 'sign-out' })
+      btn.disabled = false
+    } finally {
+      clearTimeout(deadline); btn.classList.remove('is-busy'); btn.removeAttribute('aria-busy')
+    }
   },
   async blockWeek(btn) {
     const days = this.weekDays(state)
@@ -4112,6 +4850,33 @@ const searchPlaceholder = () => (isDesktop() ? 'Search calls by name, number or 
 const hasChip = (story, name) => story.chips.some((c) => c.text === name)
 const passes = (filter, story) => filter === 'person' ? story.needsPerson : filter === 'booked' ? hasChip(story, 'Tour booked') : filter === 'priced' ? hasChip(story, 'Priced out') : filter === 'emergency' ? story.emergency : true
 
+function callWork(rec, s) {
+  const followUps = ((s.leads && s.leads.followUps) || []).filter(f => f && f.createdFromCall === rec.id && f.status === 'scheduled')
+  const requests = ((s.leads && s.leads.tourChangeRequests) || []).filter(r => r && r.callId === rec.id && r.status === 'pending')
+  return { followUps, requests, count: followUps.length + requests.length }
+}
+function callOverviewHtml(s, records, stories) {
+  const known = s.loaded.calls || s.loaded.leads
+  const stale = s.errors.calls || s.errors.leads || s.callsError || s.safetyEventsError
+  const booked = records.filter(r => hasChip(stories.get(r.id), 'Tour booked')).length
+  const review = records.filter(r => {
+    const story = stories.get(r.id)
+    return story.emergency || story.needsPerson || callWork(r, s).count > 0
+  }).length
+  const metrics = [['Saved call records', records.length, stale ? 'Saved snapshot · refresh needed' : 'Recent history + retained lead records'],
+    ['Tour-booking outcomes', booked, 'Calls with a recorded booking outcome'],
+    ['Calls to review', review, 'Open staff work or a flagged outcome']]
+  return `<div class="page-metrics" aria-label="Loaded call history">${metrics.map(([label, value, detail]) => `<div><span class="metric-label">${esc(label)}</span><strong class="metric-value num">${known ? value : '—'}</strong><span class="metric-detail">${known ? esc(detail) : 'Waiting for call records'}</span></div>`).join('')}</div>`
+}
+function callContextHtml(rec, story, s) {
+  const work = callWork(rec, s)
+  const leadLink = rec.profile ? `<a class="btn btn-quiet" href="${esc(A.hashFor('leads', { phone: rec.profile.phone, tab: work.count ? 'todo' : 'all' }))}">View prospect ${ico('chevron-right')}</a>` : ''
+  const queueLink = work.count ? `<a class="btn" href="${esc(A.hashFor('leads', { tab: 'todo', ...(rec.profile ? { phone: rec.profile.phone } : {}) }))}">Review staff work ${ico('chevron-right')}</a>` : ''
+  const title = work.requests.length ? 'Tour change awaiting staff review' : work.followUps.length ? `${text.plural(work.followUps.length, 'follow-up')} to complete` : story.emergency ? 'Safety report needs review' : story.needsPerson ? 'A staff decision is needed' : rec.profile ? 'Conversation saved to this prospect' : 'Call record available'
+  const detail = work.requests.length ? 'The request is saved. This does not confirm a changed tour or a notification to staff.' : work.followUps.length ? 'Open the work queue for the saved task, contact details, and due time.' : rec.profile ? 'Review requirements, tours, and conversation history together.' : 'A linked prospect profile is not available in the loaded records.'
+  return `<section class="call-context${work.count || story.needsPerson || story.emergency ? ' call-context-attention' : ''}"><span class="section-kicker">Next step</span><h3>${esc(title)}</h3><p>${esc(detail)}</p>${work.requests.map(r => `<p class="call-request-quote">“${esc(text.truncate((r.excerpts || []).slice(-1)[0] || 'Tour-change request', 220))}”</p>`).join('')}<div class="panel-actions">${queueLink}${leadLink}</div></section>`
+}
+
 function matches(rec, story, q) {
   if (!q) return true
   const digits = q.replace(/\D/g, '')
@@ -4142,7 +4907,7 @@ function rowHtml(rec, story, open, tab, isNew) {
     `<span class="row-body"><span class="row-title"><span class="who">${esc(rec.displayName)}</span>${phone ? `<span class="phone">· ${esc(phone)}</span>` : ''}` +
     `<span class="when when-desk num">${esc(whenDesk)}</span><span class="when when-mobile num">${esc(whenMobile)}</span></span>` +
     `<span class="row-sub">${esc(story.sentence)}</span>` +
-    (story.chips.length ? `<span class="row-chips">${story.chips.slice(0, 2).map((c) => A.html.chip(c.cls, c.icon, c.text)).join('')}</span>` : '') +
+    `<span class="call-row-foot"><span class="row-chips">${story.chips.slice(0, 2).map((c) => A.html.chip(c.cls, c.icon, c.text)).join('')}</span><span class="call-evidence">${rec.call && rec.call.transcript ? 'Transcript' : 'Saved summary'}${rec.call && href.recording(rec.call.recordingUrl) ? ' · Audio' : ''}</span></span>` +
     `</span></button>`
 }
 function bubbleRuns(transcript) {
@@ -4197,8 +4962,9 @@ function panelHtml(rec, story, s) {
   if (call && call.transcript) actions.push(`<button type="button" class="btn btn-quiet" data-action="read">Read the conversation ${ico('chevron-down')}</button>`)
   if (s.callsConfigured === false) actions.push(`<span class="faint small">Recordings aren't connected.</span>`)
   if (actions.length) out += `<div class="panel-actions">${actions.join('')}</div>`
-  if (!call) out += `<div style="margin-top:12px">${A.html.banner('info', 'Only the 20 most recent calls have transcripts and recordings. This is what was kept about this one.')}</div>`
-  out += `<section class="panel-section"><h3>What happened</h3><p class="story prose">${esc([story.who, story.wants, story.sentence].filter(Boolean).join(' '))}</p>` +
+  if (!call) out += `<div style="margin-top:12px">${A.html.banner('info', 'This is a retained call summary. A transcript and recording are not in the loaded history.')}</div>`
+  out += callContextHtml(rec, story, s)
+  out += `<section class="panel-section call-story"><span class="section-kicker">Conversation brief</span><h3>What happened</h3><p class="story prose">${esc([story.who, story.wants, story.sentence].filter(Boolean).join(' '))}</p>` +
     (story.dropped ? `<p class="muted small" style="margin-top:6px">The call seems to have dropped partway through — the last step never finished.</p>` : '') +
     (story.chips.length ? `<div class="chips">${story.chips.map((c) => A.html.chip(c.cls, c.icon, c.text)).join('')}</div>` : '') + '</section>'
   if (story.needsPerson) {
@@ -4209,7 +4975,7 @@ function panelHtml(rec, story, s) {
     let handling
     if (!fu) handling = '<span>No call-back was created for this.</span>'
     else if (fu.status === 'scheduled') handling = `<span>Still waiting — ${esc(fmt.respondPhrase(fu.dueAt))}</span><button type="button" class="btn" data-action="handled" data-fu="${esc(fu.id)}" data-key="fu:${esc(fu.id)}:done" data-write="leads">Mark handled</button>`
-    else handling = '<span>Handled — a person marked this done.</span>'
+    else handling = fu.status === 'done' ? '<span>Handled — a person marked this done.</span>' : '<span>Marked not needed. No completed callback is recorded here.</span>'
     out += `<section class="panel-section"><h3 data-key="panel-np" tabindex="-1">Needs a person</h3><div class="card card-warn needs-card">` +
       (t ? `<div class="${t.quote === null ? 'quote' : ''}">${t.quote === null ? esc(t.headline.replace(/^asked /, '')) : esc(text.capitalise(t.headline))}</div>${t.quote ? `<div class="quote">"${esc(t.quote)}"</div>` : ''}<div class="reassure">${esc(t.reassurance)}</div>`
         : `<div>They wanted a tour but it couldn't be booked.</div><div class="reassure">The assistant said someone would call back with times.</div>`) +
@@ -4220,11 +4986,11 @@ function panelHtml(rec, story, s) {
     out += `<dl class="facts">${story.facts.map((f) => f.unreadable
       ? `<dt>${esc(f.label)}</dt><dd>Couldn't make out their ${esc(A.label(A.labels.signalShort, f.signal, 'answer'))} from "${esc(f.value)}" — asked again.</dd>`
       : `<dt>${esc(f.label)}</dt><dd>${esc(f.value)}${f.excerpt ? ` — <span class="quote">"${esc(f.excerpt)}"</span>` : ''}</dd>`).join('')}</dl>`
-  } else out += `<p class="muted">The assistant didn't need to ask what they were looking for on this call.</p>`
+  } else out += `<p class="muted">No structured requirements were saved for this call.</p>`
   out += '</section>'
   out += `<section class="panel-section"><h3>What the assistant did</h3>`
   if (story.steps.length) out += `<ol class="steps">${story.steps.map((st) => `<li>${ico(st.icon)}<span>${esc(st.text)}</span></li>`).join('')}</ol>`
-  else out += `<p class="muted">The assistant answered without needing to look anything up.</p>`
+  else out += `<p class="muted">No completed tool actions are present in this call record.</p>`
   out += '</section>'
   const transcript = call && call.transcript ? String(call.transcript) : ''
   if (transcript.trim()) {
@@ -4247,10 +5013,11 @@ const view = {
   savedScroll: null, returnKey: null, focusPanel: false, typing: null,
   mount(root) {
     this.root = root
-    root.innerHTML = `<div class="view-head"><h1 tabindex="-1">Calls</h1></div><div class="calls-banners"></div>` +
-      `<div class="calls-tools"><label class="search"><span class="vh">Search calls by name, number or apartment</span>${ico('search')}<input type="search" data-key="search" placeholder="${esc(searchPlaceholder())}" aria-label="Search calls by name, number or apartment" autocomplete="off"></label>` +
+    root.innerHTML = `<div class="calls-view"><header class="page-hero"><div><span class="page-eyebrow">Leasing conversations</span><h1 tabindex="-1">Calls</h1><p>Hear what matters. See what happened. Know what needs a person.</p></div><div class="page-hero-actions"><a class="btn" href="${esc(A.hashFor('leads', { tab: 'todo' }))}">${ico('leads')}Open work queue</a></div></header><div class="calls-overview"></div><div class="calls-banners"></div>` +
+      `<div class="calls-tools workspace-panel"><div class="calls-search-head"><div><span class="section-kicker">Conversation history</span><p>Search the loaded calls and retained summaries.</p></div><label class="search"><span class="vh">Search calls by name, number or apartment</span>${ico('search')}<input type="search" data-key="search" placeholder="${esc(searchPlaceholder())}" aria-label="Search calls by name, number or apartment" autocomplete="off"></label></div>` +
       `<div class="chips" role="group" aria-label="Filter calls">${FILTERS.map(([k, l]) => `<button type="button" class="chip-filter" data-filter="${k}" aria-pressed="${k === 'all' ? 'true' : 'false'}">${ico('check')}<span>${esc(l)} · 0</span></button>`).join('')}</div></div>` +
-      `<div class="split calls-split"><div class="split-list calls-list" data-key="list"></div><div class="panel call-panel" data-key="panel"></div></div>`
+      `<div class="split calls-split"><div class="split-list calls-list" data-key="list"></div><div class="panel call-panel" data-key="panel"></div></div></div>`
+    this.wrap = root.querySelector('.calls-view'); this.overview = root.querySelector('.calls-overview'); this.overviewHtml = null
     this.banners = root.querySelector('.calls-banners'); this.chipsEl = root.querySelector('.chips'); this.search = root.querySelector('input[data-key="search"]')
     this.split = root.querySelector('.split'); this.list = root.querySelector('.calls-list'); this.panel = root.querySelector('.call-panel')
     this.search.addEventListener('input', () => {
@@ -4320,6 +5087,8 @@ const view = {
     const records = derive.callRecords(s)
     const stories = new Map(records.map((r) => [r.id, derive.callStory(r, s)]))
     const known = s.loaded.calls || s.loaded.leads
+    const overviewHtml = callOverviewHtml(s, records, stories)
+    if (overviewHtml !== this.overviewHtml) { this.overviewHtml = overviewHtml; this.overview.innerHTML = overviewHtml }
     if (wantId && known && !records.some((r) => r.id === wantId)) {
       if (!this.warnedStale.has(wantId)) { this.warnedStale.add(wantId); A.toast("That item isn't on the list any more.", { kind: 'info' }) }
       this.setParams({ id: undefined }, true)
@@ -4362,10 +5131,10 @@ const view = {
       }
       const firstId = (wantId && shown.some((r) => r.id === wantId)) ? wantId : shown[0].id
       for (const g of groups) {
-        listHtml += `<h2 class="day-head">${esc(dayLabel(g.ymd, today))}</h2><div class="card rows">` +
+        listHtml += `<h2 class="day-head"><span>${esc(dayLabel(g.ymd, today))}</span><span class="num">${g.items.length}</span></h2><div class="card rows">` +
           g.items.map((r) => rowHtml(r, stories.get(r.id), r.id === wantId, r.id === firstId, Boolean(this.prevIds) && !this.prevIds.has(r.id))).join('') + '</div>'
       }
-      listHtml += `<p class="calls-end">${records.some((r) => !r.call && r.summary) ? 'Older calls show only what was kept about them — no transcript or recording.' : "That's the last 20 calls."}</p>`
+      listHtml += `<p class="calls-end">${esc(text.plural(shown.length, 'call record'))} shown${shown.length !== records.length ? ` of ${records.length} loaded` : ''}. Retained summaries may not include a transcript or recording.</p>`
     }
     if (listHtml !== this.listHtml) {
       this.listHtml = listHtml
@@ -4380,7 +5149,8 @@ const view = {
     const openRec = wantId ? records.find((r) => r.id === wantId) : null
     let panelHtml_ = ''
     if (openRec) { this.split.classList.add('has-panel'); panelHtml_ = panelHtml(openRec, stories.get(openRec.id), s) }
-    else { this.split.classList.remove('has-panel'); panelHtml_ = isSplit() ? `<div class="panel-empty">${A.html.empty({ icon: 'calls', title: 'Pick a call to read what happened.' })}</div>` : '' }
+    else { this.split.classList.remove('has-panel'); panelHtml_ = isSplit() ? `<div class="panel-empty"><div class="call-empty-guide">${ico('calls')}<span class="section-kicker">The full conversation</span><h2>Select a call</h2><p>Move from the conversation to the prospect, the saved outcome, and the next staff action.</p><ol><li><span>01</span>Review the conversation brief</li><li><span>02</span>Read or listen to the saved call</li><li><span>03</span>Follow through in Leads</li></ol></div></div>` : '' }
+    this.wrap.classList.toggle('has-panel', Boolean(openRec))
     if (panelHtml_ !== this.panelHtml) {
       const wasOpen = new Set([...this.panel.querySelectorAll('details[open]')].map((d) => d.dataset.key))
       const sameCall = this.openId === (openRec && openRec.id)
@@ -4722,14 +5492,55 @@ function say(msg) {
 // HTML — everything from the API or a person passes through esc()
 // ---------------------------------------------------------------------------------------
 
-function stripHtml(s, m) {
-  const tours = derive.toursOn(s, m.today)
-  if (!tours.length) return '<p class="cal-today-strip">Today: no tours.</p>'
-  const items = tours.map((t) => {
-    const name = t.profile && href.tel(t.phone) !== null ? `<a href="${esc(A.hashFor('leads', { phone: t.phone }))}">${esc(t.name)}</a>` : esc(t.name)
-    return `<span class="cal-strip-item${t.past ? ' is-past' : ''}"><span class="num">${esc(fmt.time(t.startsAt))}</span> ${name}${t.unitId ? ` (${esc(t.unitId)})` : ''}</span>`
-  })
-  return `<p class="cal-today-strip">Today: ${esc(plural(tours.length, 'tour'))} — ${items.join(' · ')}</p>`
+/** Counts describe only the selected, successfully loaded property-local range. */
+function summaryModel(s, m) {
+  if (!m.loaded) return null
+  const inRange = instant => { const date = fmt.nyDate(instant); return date && date >= m.range.from && date <= m.range.to }
+  const tours = new Map()
+  for (const booking of m.bookings) {
+    if (!booking.externalId || (booking.status && booking.status !== 'confirmed') || !inRange(booking.startsAt)
+      || !Number.isFinite(Date.parse(booking.endsAt)) || Date.parse(booking.endsAt) <= Date.parse(booking.startsAt)) continue
+    tours.set(booking.externalId, booking)
+  }
+  // A supplied interval is authoritative, including blocks created in an older timezone.
+  const overlaps = block => {
+    const start = Date.parse(block.startsAt), end = Date.parse(block.endsAt)
+    if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
+      const first = fmt.nyDate(start), last = fmt.nyDate(end - 1)
+      return first && last && first <= m.range.to && last >= m.range.from
+    }
+    const date = isYmd(block.target) ? block.target : /^slot-(\d{4}-\d{2}-\d{2})T/.exec(String(block.target))?.[1]
+    return date && date >= m.range.from && date <= m.range.to
+  }
+  const building = new Set(m.blocks.filter(overlaps).map(block => block.target)).size
+  const unit = new Set(arr(s.calendar?.unitBlocks).filter(block => block && !block.removedAt && overlaps(block)).map(block => block.id)).size
+  const open = new Set(m.slots.filter(slot => slot.status === 'open' && slot.date >= m.range.from && slot.date <= m.range.to).map(slot => slot.id)).size
+  return { tours: tours.size, open, building, unit, holds: building + unit }
+}
+function heroHtml(m) {
+  const busy = A.busyNow('calendar') || cal.inert
+  const actions = []
+  if (A.can('operate')) {
+    actions.push(`<button type="button" class="btn btn-primary" data-action="block" data-key="block" data-write="calendar"${dis(busy)}>${ico('plus')}Block building time</button>`)
+    actions.push(`<button type="button" class="btn cal-hero-secondary" data-action="unit-blocks" data-key="unit-blocks" data-write="calendar"${dis(busy)}>Unit availability</button>`)
+  }
+  if (A.can('configure')) actions.push(`<button type="button" class="btn cal-hero-secondary" data-action="settings" data-key="settings" data-write="calendar" data-permission="configure"${dis(busy)}>Tour settings</button>`)
+  if (A.can('operate')) actions.push(`<button type="button" class="btn-icon cal-hero-secondary" data-action="more" data-key="more" aria-label="More calendar actions" aria-haspopup="dialog" data-write="calendar"${dis(busy)}>${A.icon('more')}</button>`)
+  return `<section class="page-hero cal-hero"><div class="cal-hero-copy"><span class="page-eyebrow">${esc(A.property.name)} · Tour operations</span><h1 tabindex="-1">Tour calendar</h1><p>Coordinate showings, team capacity and apartment availability in one place.</p><span class="cal-zone">${ico('clock')}${esc(A.property.timeZoneLabel)}</span></div><div class="page-hero-actions cal-hero-actions">${actions.length ? actions.join('') : '<span class="cal-read-only">View-only access</span>'}</div></section>`
+}
+function summaryHtml(s, m) {
+  const values = summaryModel(s, m)
+  const detail = !values ? 'Waiting for this date range' : s.errors.calendar ? 'Last saved view · reconnecting' : m.view === 'day' ? 'In the selected day' : 'In the selected week'
+  const card = (key, label, value, explanation) => `<article class="card cal-metric" data-calendar-metric="${key}"><span class="metric-label">${label}</span><strong class="metric-value num">${value == null ? '—' : value}</strong><span class="metric-detail">${esc(explanation)}</span></article>`
+  return `<div class="page-metrics cal-metrics" aria-label="Selected calendar range">` +
+    card('tours', 'Tours scheduled', values?.tours, detail) +
+    card('starts', 'Open start times', values?.open, values ? 'Available starts, subject to apartment availability' : detail) +
+    card('holds', 'Availability holds', values?.holds, values ? `${plural(values.unit, 'unit hold')} · ${plural(values.building, 'building hold')}` : detail) + '</div>'
+}
+function rulesHtml(m) {
+  if (!m.loaded || !m.settings) return ''
+  const settings = m.settings
+  return `<div class="cal-rules" aria-label="Current tour rules"><div><span>Team capacity</span><strong>${esc(plural(settings.capacity, 'tour'))} at once</strong></div><div><span>Tour length</span><strong>${esc(settings.slotMinutes)} minutes</strong></div><div><span>Apartment policy</span><strong>${settings.sameUnitPolicy === 'shared' ? 'Shared tours allowed' : 'One tour per apartment'}</strong></div><div><span>Book ahead</span><strong>${settings.bookingWindowDays == null ? 'No advance limit' : `${esc(settings.bookingWindowDays)} days`}</strong></div></div>`
 }
 
 function bannersHtml(s, m) {
@@ -4755,14 +5566,11 @@ function toolbarHtml(m) {
   const unit = m.view === 'week' ? 'week' : 'day'
   const prevOff = Number(m.date.slice(0, 4)) <= 1900
   const nextOff = Number(m.date.slice(0, 4)) >= 9998
-  const busy = A.busyNow('calendar') || cal.inert
-  return `<div class="cal-toolbar"><div class="cal-nav">${navBtn('prev', `Previous ${unit}`, prevOff)}<button type="button" class="btn" data-action="today" data-key="today">Today</button>${navBtn('next', `Next ${unit}`, nextOff)}</div>` +
-    `<h2 class="cal-range" aria-live="polite" data-key="range">${rt.when ? `<span class="cal-range-when">${esc(rt.when)} · </span>` : ''}${esc(rt.range)}</h2><span class="cal-spacer"></span>` +
-    `<div class="cal-tools"><div class="seg cal-seg" role="radiogroup" aria-label="Layout"><button type="button" class="tab" role="radio" aria-checked="${m.view === 'week' ? 'true' : 'false'}" data-action="view-week" data-key="view-week">Week</button><button type="button" class="tab" role="radio" aria-checked="${m.view === 'day' ? 'true' : 'false'}" data-action="view-day" data-key="view-day">Day</button></div>` +
-    `<button type="button" class="btn" data-action="goto" data-key="goto">Go to date</button><button type="button" class="btn" data-action="settings" data-key="settings" data-write="calendar" data-permission="configure"${dis(busy)}>Tour settings</button>` +
-    `<button type="button" class="btn" data-action="unit-blocks" data-key="unit-blocks" data-write="calendar"${dis(busy)}>Unit availability</button>` +
-    `<button type="button" class="btn btn-primary" data-action="block" data-key="block" data-write="calendar"${dis(busy)}>Block time…</button>` +
-    `<button type="button" class="btn-icon" data-action="more" data-key="more" aria-label="More calendar actions" aria-haspopup="dialog" data-write="calendar"${dis(busy)}>${A.icon('more')}</button></div></div>` +
+  const navigation = m.mobile ? '' : `<div class="cal-nav">${navBtn('prev', `Previous ${unit}`, prevOff)}<button type="button" class="btn" data-action="today" data-key="today">Today</button>${navBtn('next', `Next ${unit}`, nextOff)}</div>`
+  const heading = m.mobile ? '<h2 class="cal-schedule-title">Daily schedule</h2>' : `<h2 class="cal-range" aria-live="polite" data-key="range">${rt.when ? `<span class="cal-range-when">${esc(rt.when)} · </span>` : ''}${esc(rt.range)}</h2>`
+  const layout = m.mobile ? '<button type="button" class="btn" data-action="today" data-key="today">Today</button>' : `<div class="seg cal-seg" role="radiogroup" aria-label="Layout"><button type="button" class="tab" role="radio" aria-checked="${m.view === 'week' ? 'true' : 'false'}" data-action="view-week" data-key="view-week">Week</button><button type="button" class="tab" role="radio" aria-checked="${m.view === 'day' ? 'true' : 'false'}" data-action="view-day" data-key="view-day">Day</button></div>`
+  return `<div class="cal-schedule-heading"><div><span class="section-kicker">${m.mobile ? 'One day at a time' : 'Schedule overview'}</span>${heading}</div><div class="cal-tools">${layout}<button type="button" class="btn" data-action="goto" data-key="goto">Go to date</button></div></div>` +
+    `<div class="cal-toolbar">${navigation}<p class="cal-window-note">${m.loaded ? `Showing ${esc(fmt.monthDay(m.range.from))}${m.range.to !== m.range.from ? ` – ${esc(fmt.monthDay(m.range.to))}` : ''}` : 'Loading selected dates'} · ${esc(A.property.timeZoneLabel)}</p></div>` +
     `<div class="cal-progress"${A.busyNow('calendar') ? '' : ' hidden'}></div>`
 }
 
@@ -4824,7 +5632,7 @@ function gridHtml(m) {
     label = `Tour calendar, week of ${sm === em ? `${sm} ${sd} to ${ed}` : `${sm} ${sd} to ${em} ${ed}`}`
   } else label = `Tour calendar, ${fmt.dayLong(m.date)}`
   let out = `<div class="cal-grid" role="grid" aria-label="${esc(label)}" aria-rowcount="${m.rows + 1}" aria-colcount="${cols + 1}" aria-describedby="cal-keys-hint" style="--cal-cols:${cols};--cal-rows:${m.rows};--cal-row-height:${m.rowHeight}px">`
-  out += '<div role="row" aria-rowindex="1" style="display:contents"><div class="cal-corner" role="columnheader" aria-colindex="1" aria-label="Time" style="grid-row:1;grid-column:1"></div>'
+  out += '<div role="row" aria-rowindex="1" style="display:contents"><div class="cal-corner" role="columnheader" aria-colindex="1" aria-label="Time" style="grid-row:1;grid-column:1"><span aria-hidden="true">Time</span></div>'
   m.dayModels.forEach((d, i) => {
     const isToday = d.ymd === m.today, col = i + 2
     const isPicked = cal.pickedShown === d.ymd
@@ -4925,10 +5733,11 @@ function footHtml(m) {
   let out = '<div class="cal-foot">'
   out += `<div class="cal-legend" role="list" aria-label="Legend"><span class="muted" aria-hidden="true">Legend:</span>` +
     `<span class="cal-lg" role="listitem"><span class="cal-sw" aria-hidden="true"></span>Open</span>` +
-    `<span class="cal-lg" role="listitem"><span class="cal-sw cal-sw-na" aria-hidden="true"></span>Not offered (past, or outside tour hours)</span>` +
+    `<span class="cal-lg" role="listitem"><span class="cal-sw cal-sw-na" aria-hidden="true"></span>Not offered</span>` +
     `<span class="cal-lg cal-lg-tour" role="listitem"><span class="cal-sw cal-sw-tour" aria-hidden="true"></span>${ico('person')}Tour</span>` +
     `<span class="cal-lg cal-lg-blocked" role="listitem"><span class="cal-sw cal-sw-blocked" aria-hidden="true"></span>${ico('slash')}Blocked</span></div>`
-  if (m.settings) out += `<p class="cal-through small">${esc(m.settings.slotMinutes)}-minute tours · ${esc(plural(m.settings.capacity, 'place'))} at a time · ${m.settings.bookingWindowDays == null ? 'No advance booking limit' : `${esc(m.settings.bookingWindowDays)}-day booking window`} · ${esc(A.property.timeZoneLabel)}</p>`
+  out += rulesHtml(m)
+  out += '<p class="cal-through">Select a tour to review its prospect or move the appointment. A unit hold affects only that apartment; building blocks affect all new tours.</p>'
   if (m.old.length) {
     const n = m.old.length, allDates = m.old.every((b) => isYmd(b.target))
     const desc = (b) => `${monthDayNoYear(b.target)}${reasonOf(b.reason) ? ` · ${reasonOf(b.reason)}` : ''}`
@@ -4944,6 +5753,7 @@ function footHtml(m) {
 
 const skeletonHtml = () => `<div class="cal-skeleton" aria-busy="true"><span class="vh">Loading the calendar…</span><div class="cal-sk-col"><div class="skeleton-line"></div></div>${'<div class="cal-sk-col"><div class="skeleton-line"></div><div class="skeleton-line"></div><div class="skeleton-line"></div><div class="skeleton-line"></div></div>'.repeat(7)}</div>`
 const emptyHtml = () => `<div class="cal-empty-card">${A.html.empty({ icon: 'calendar', title: 'No tour times in this range.', text: 'Try another date or review your tour hours and booking window in Tour settings.' })}</div>`
+const unavailableHtml = () => `<div class="cal-empty-card" role="status">${A.html.empty({ icon: 'calendar', title: 'Schedule unavailable', text: 'These dates have not loaded. Keep the current bookings unchanged and try again when the connection returns.' })}</div>`
 
 // ---------------------------------------------------------------------------------------
 // Writes (§10.5, §10.6, §12.2) — every one inside Atrium.busy('calendar', …), painted from
@@ -5778,8 +6588,8 @@ const view = {
   mount(root) {
     cal.root = root
     root.classList.add('cal-view')
-    root.innerHTML = '<div class="cal-head"></div><div class="cal-banners"></div><div class="cal-wrap"><div class="cal-toolbar-host"></div><div class="cal-body"></div><div class="cal-foot-host"></div></div>'
-    cal.hosts = { head: root.querySelector('.cal-head'), banners: root.querySelector('.cal-banners'), toolbar: root.querySelector('.cal-toolbar-host'), body: root.querySelector('.cal-body'), foot: root.querySelector('.cal-foot-host') }
+    root.innerHTML = '<div class="cal-head"></div><div class="cal-banners"></div><div class="cal-summary-host"></div><div class="cal-wrap workspace-panel"><div class="cal-toolbar-host"></div><div class="cal-body"></div><div class="cal-foot-host"></div></div>'
+    cal.hosts = { head: root.querySelector('.cal-head'), banners: root.querySelector('.cal-banners'), summary: root.querySelector('.cal-summary-host'), toolbar: root.querySelector('.cal-toolbar-host'), body: root.querySelector('.cal-body'), foot: root.querySelector('.cal-foot-host') }
     root.addEventListener('click', (e) => this.onClick(e))
     root.addEventListener('keydown', (e) => {
       if (e.target.closest && e.target.closest('.cal-grid')) { gridKey(e); if (e.defaultPrevented) return }
@@ -5907,14 +6717,14 @@ const view = {
       if (changed && m.loaded) say('Some of those times changed — selection cleared')
     }
     cal.pickedShown = cal.picked && m.view === 'week' && m.days.includes(cal.picked) && cal.picked !== m.today ? cal.picked : null
-    const moreBtn = `<button type="button" class="btn-icon" data-action="more" data-key="more" aria-label="More calendar actions" aria-haspopup="dialog" data-write="calendar"${dis(A.busyNow('calendar') || cal.inert)}>${A.icon('more')}</button>`
-    setPart('head', `<div class="view-head${m.mobile ? ' cal-head-mobile' : ''}"><div class="cal-head-main"><h1 tabindex="-1">Tour calendar</h1>${m.loaded || s.loaded.leads ? stripHtml(s, m) : ''}</div>${m.mobile ? `<div class="cal-head-tools">${moreBtn}</div>` : ''}</div>`)
+    setPart('head', heroHtml(m))
     setPart('banners', bannersHtml(s, m))
+    setPart('summary', summaryHtml(s, m))
     const rt = rangeText(m)
-    if (m.mobile) setPart('toolbar', `<div class="cal-progress"${A.busyNow('calendar') ? '' : ' hidden'}></div>`)
-    else setPart('toolbar', toolbarHtml(m))
+    setPart('toolbar', toolbarHtml(m))
     let body
     if (loading) body = skeletonHtml()
+    else if (!m.loaded) body = unavailableHtml()
     else if (m.mobile) body = agendaHtml(m) + `<button type="button" class="btn btn-primary cal-fab" data-action="block" data-key="fab" data-write="calendar"${dis(cal.inert)}>${ico('plus')}Block time…</button>`
     else if (!m.hasSlots) body = emptyHtml()
     else body = `<div class="cal-scroll">${gridHtml(m)}</div>`
@@ -5923,9 +6733,9 @@ const view = {
     const focusKey = hadFocus ? keyOf(active) : null
     const scrollEl = q('.cal-scroll'), scrollTop = scrollEl ? scrollEl.scrollTop : null
     const bodyChanged = setPart('body', body)
-    setPart('foot', loading ? '' : footHtml(m))
+    setPart('foot', m.loaded ? footHtml(m) : '')
     // the floating Block time… button owns the bottom edge on mobile; toasts stack above it (calendar.css)
-    document.body.classList.toggle('has-cal-fab', Boolean(A.can('operate') && m.mobile && !loading && !cal.root.hidden))
+    document.body.classList.toggle('has-cal-fab', Boolean(A.can('operate') && m.mobile && m.loaded && !cal.root.hidden))
     if (bodyChanged) {
       const grid = q('.cal-grid')
       if (grid) {
@@ -6037,7 +6847,7 @@ function unitConflicts(block) {
 function unitBlocksHtml(selected) {
   const blocks = arr(current().unitBlocks).filter(block => !block.removedAt && (!selected || block.unitId === selected) && Date.parse(block.endsAt) > Date.now())
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt))
-  if (!blocks.length) return '<p class="muted-line">No upcoming unit blocks.</p>'
+  if (!blocks.length) return '<div class="cal-holds-empty"><strong>No upcoming holds</strong><p>This apartment has no saved availability holds. Tour hours and staff capacity still apply.</p></div>'
   return blocks.map(block => {
     const conflicts = unitConflicts(block)
     return `<article class="cal-unit-block"><div><strong>Apartment ${esc(block.unitId)}</strong><p>${esc(A.fmt.dateTime(block.startsAt))} – ${esc(A.fmt.dateTime(block.endsAt))}</p><p>${esc(block.reason || 'Unavailable for tours')}</p>${conflicts.length ? `<p class="cal-unit-conflict" role="status">${conflicts.length} existing tour${conflicts.length === 1 ? ' needs' : 's need'} attention, including time reserved before or after tours. Reschedule from the calendar.</p>` : ''}</div><button type="button" class="btn btn-quiet" data-unit-reopen="${esc(block.id)}" data-write="calendar">Reopen unit</button></article>`
@@ -6053,11 +6863,12 @@ function openUnitBlocks(preset = {}) {
   let fields, draftId = requestId(), previousPayload = '', alive = true, uncertainWrite = false, pendingWrite = null
   active = A.dialog({ title: 'Unit availability', secondary: { label: 'Close' },
     build(body, dialog) {
-      body.innerHTML = `<p class="cal-action-intro">Block an apartment for painting, renovation, a move-out, or another reason. Other apartments remain available. Existing tours stay on the calendar.</p><form class="cal-action-form">` +
+      dialog.el.classList?.add('cal-action-dialog')
+      body.innerHTML = `<div class="cal-action-overview"><span class="section-kicker">Apartment-specific hold</span><p class="cal-action-intro">Take one apartment off the tour schedule for painting, renovation or a move-out. Other apartments remain available.</p><p class="cal-action-assurance">Existing tours stay saved. Review any conflicts before contacting prospects.</p></div><form class="cal-action-form">` +
         `<label class="field"><span class="field-label">Apartment</span><select class="select" name="unitId">${options(selected)}</select></label>` +
         `<label class="cal-action-check"><input type="checkbox" name="allDay" checked> All day</label><div class="cal-action-pair">${field('First day', 'date', 'date', date, `min="${today}" max="9998-12-31"`)}${field('Last day', 'endDate', 'date', date, `min="${today}" max="9998-12-31"`)}</div>` +
         `<div class="cal-action-pair" data-times hidden>${field('Start time', 'startTime', 'time', '09:00')}${field('End time', 'endTime', 'time', '17:00')}</div>` +
-        `<label class="field"><span class="field-label">Reason</span><input class="input" name="reason" maxlength="120" placeholder="e.g. Painting, renovation, move-out" required></label><p class="field-hint">Times use ${esc(A.property.timeZoneLabel)}. The last day is included for all-day blocks.</p></form><section class="cal-unit-blocks"><h4>Upcoming blocks</h4><div data-block-list>${unitBlocksHtml(selected)}</div></section>`
+        `<label class="field"><span class="field-label">Reason</span><input class="input" name="reason" maxlength="120" placeholder="e.g. Painting, renovation, move-out" required></label><p class="field-hint">Times use ${esc(A.property.timeZoneLabel)}. The last day is included for all-day blocks.</p></form><section class="cal-unit-blocks"><h4>Upcoming holds for this apartment</h4><div data-block-list>${unitBlocksHtml(selected)}</div></section>`
       fields = Object.fromEntries([...body.querySelectorAll('[name]')].map(element => [element.name, element]))
       const list = body.querySelector('[data-block-list]')
       fields.allDay.addEventListener('change', () => { body.querySelector('[data-times]').hidden = fields.allDay.checked })
@@ -6160,8 +6971,9 @@ function openReschedule(booking) {
   active = A.dialog({ title: `Reschedule ${original.prospectName || 'tour'}`, secondary: { label: 'Keep original tour' },
     build(body, api) {
       dialog = api
+      api.el.classList?.add('cal-action-dialog')
       const unknownUnit = initialUnit && !units().some(unit => unitId(unit) === initialUnit)
-      body.innerHTML = `<p class="cal-action-intro">Current tour: ${esc(A.fmt.dateTime(original.startsAt))}${initialUnit ? ` · Apartment ${esc(initialUnit)}` : ''}. The original appointment stays until the new time is saved.</p><form class="cal-action-form">` +
+      body.innerHTML = `<div class="cal-current-tour"><span class="section-kicker">Current appointment</span><strong>${esc(A.fmt.dateTime(original.startsAt))}</strong><span>${initialUnit ? `Apartment ${esc(initialUnit)}` : 'No apartment selected'} · ${esc(A.property.timeZoneLabel)}</span></div><p class="cal-action-intro">Choose a new date and time below. The original appointment stays until the new time is saved.</p><form class="cal-action-form">` +
         `<label class="field"><span class="field-label">Apartment</span><select class="select" name="unitId">${!initialUnit ? '<option value="">No apartment selected</option>' : ''}${unknownUnit ? `<option value="${esc(initialUnit)}" selected>Apartment ${esc(initialUnit)} — no longer in inventory</option>` : ''}${options(initialUnit)}</select></label>` +
         field('New date', 'date', 'date', oldDate && oldDate >= today ? oldDate : today, `min="${today}" max="9998-12-31"`) +
         `<label class="field"><span class="field-label">New tour time</span><select class="select" name="slotId" required><option value="">Checking availability…</option></select></label><p class="field-hint">${esc(A.property.timeZoneLabel)} · availability includes staffing capacity, unit blocks, tour hours and notice.</p><p class="cal-consequence">Contact the prospect with the new time. This action does not send a text or email.</p></form>`
@@ -6282,7 +7094,7 @@ const byDue = (a, b) => (toTime(a.dueAt) ?? Infinity) - (toTime(b.dueAt) ?? Infi
 const byDueDesc = (a, b) => (toTime(b.dueAt) ?? 0) - (toTime(a.dueAt) ?? 0)
 const openItems = (s, phone) => derive.needsPerson(s).filter((n) => n && n.phone === phone)
 
-const TABS = [['todo', 'To do'], ['all', 'Everyone']]
+const TABS = [['todo', 'Work queue'], ['all', 'Prospects']]
 const STAGES = [['all', 'All'], ['new', 'New'], ['qualified', 'Interested'], ['tour_scheduled', 'Tour booked'], ['toured', 'Toured'], ['lost', "Didn't work out"], ['needs_person', 'Needs a person']]
 const GROUPS = [['overdue', 'Overdue', 'clock'], ['today', 'Today', null], ['week', 'Later this week', null], ['later', 'Later', null]]
 
@@ -6308,6 +7120,27 @@ function parseNote(n) {
 const nameNote = (body) => { const m = /^name:\s*(.+)$/i.exec(String(body ?? '').trim()); return m ? m[1].trim() : null }
 const bedroomsFact = (v) => { const t = derive.bedroomsText(v); return /or more$/.test(t) ? `${t} bedrooms` : t }
 const nextTour = (p) => arr(p.bookings).filter((b) => b && b.status === 'confirmed' && (toTime(b.startsAt) ?? -1) >= Date.now()).sort((a, b) => toTime(a.startsAt) - toTime(b.startsAt))[0] || null
+const pendingChanges = s => arr(s.leads && s.leads.tourChangeRequests).filter(r => r && r.status === 'pending')
+function leadOverviewHtml(s) {
+  const known = s.loaded.leads
+  const profiles = profilesOf(s)
+  const followUps = followUpsOf(s).filter(f => f.status === 'scheduled')
+  const changes = pendingChanges(s)
+  const overdue = followUps.filter(f => (toTime(f.dueAt) ?? Infinity) <= Date.now()).length
+  const metrics = [['Saved prospects', profiles.length, s.errors.leads ? 'Saved snapshot · refresh needed' : 'Caller profiles in this workspace'],
+    ['Prospects with tours', profiles.filter(p => nextTour(p)).length, 'Upcoming tours recorded on profiles'],
+    ['Open staff tasks', followUps.length + changes.length, `${followUps.length} follow-ups · ${changes.length} tour requests${overdue ? ` · ${overdue} overdue` : ''}`]]
+  return `<div class="page-metrics" aria-label="Loaded prospect records">${metrics.map(([label, value, detail]) => `<div><span class="metric-label">${esc(label)}</span><strong class="metric-value num">${known ? value : '—'}</strong><span class="metric-detail">${known ? esc(detail) : 'Waiting for prospect records'}</span></div>`).join('')}</div>`
+}
+function leadBriefHtml(p, s) {
+  const tour = nextTour(p)
+  const tasks = followUpsOf(s).filter(f => f.phone === p.phone && f.status === 'scheduled').length + pendingChanges(s).filter(r => r.phone === p.phone).length
+  const sig = p.signals || {}, budget = sig.budgetRange || sig.budget
+  const facts = [['Budget', budget ? derive.budgetText(budget.value) : 'Not captured'],
+    ['Layout', sig.bedrooms ? bedroomsFact(sig.bedrooms.value) : 'Not captured'],
+    ['Move-in', sig.moveIn ? String(sig.moveIn.excerpt || derive.moveInText(sig.moveIn.value) || 'Not captured') : 'Not captured']]
+  return `<section class="lead-brief"><span class="section-kicker">Prospect at a glance</span><div class="lead-brief-facts">${facts.map(([label, value]) => `<div><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join('')}</div><div class="lead-journey"><span>${ico('calls')}<strong>${arr(p.calls).length}</strong> saved ${arr(p.calls).length === 1 ? 'call' : 'calls'}</span><span>${ico('hand')}<strong>${tasks}</strong> open ${tasks === 1 ? 'task' : 'tasks'}</span></div>${tour ? `<div class="lead-next-tour">${ico('calendar')}<div><span>Next tour recorded on profile</span><strong>${esc(fmt.day(tour.startsAt))} · ${esc(fmt.time(tour.startsAt))}${tour.unitId ? ` · Apartment ${esc(tour.unitId)}` : ''}</strong></div>${link('calendar', { date: fmt.nyDate(tour.startsAt) || undefined, slot: tour.slotId }, 'View tour')}</div>` : '<p class="lead-no-tour">No upcoming tour is recorded on this profile.</p>'}</section>`
+}
 /** The calendar's name for one of this caller's tours, when the profile has none (§9.4.1). */
 function calendarName(p, s) {
   const cal = s.calendar
@@ -6445,28 +7278,22 @@ function leadRowHtml(p, s, open, tab) {
   const items = openItems(s, p.phone)
   const flag = items.length > 0
   const sig = p.signals || {}
-  const facts = []
-  if (hidden) facts.push(`${text.plural(arr(p.calls).length, 'call')} from numbers that weren't shared`)
-  else if (p.name && fmt.phone(p.phone)) facts.push(fmt.phone(p.phone)) // a nameless row's title is already the number
-  const more = []
-  if (sig.bedrooms) more.push(bedroomsFact(sig.bedrooms.value))
+  const contact = hidden ? `${text.plural(arr(p.calls).length, 'call')} from numbers that weren't shared` : p.name ? fmt.phone(p.phone) : p.email || 'Name not captured'
   const budget = sig.budgetRange || sig.budget
-  if (budget) more.push(derive.budgetText(budget.value))
-  if (sig.moveIn) more.push(String(sig.moveIn.excerpt || derive.moveInText(sig.moveIn.value) || ''))
+  const facts = [['Budget', budget ? derive.budgetText(budget.value) : 'Not captured'], ['Layout', sig.bedrooms ? bedroomsFact(sig.bedrooms.value) : 'Not captured']]
   const tour = nextTour(p)
   const cb = items.find((i) => i.type === 'callback' && i.question)
   const loss = arr(p.lossReasons).filter(Boolean).slice(-1)[0]
-  if (tour) more.push(`tour ${fmt.dayPhrase(tour.startsAt)} ${fmt.time(tour.startsAt)}${tour.unitId ? ` (${tour.unitId})` : ''}`)
-  else if (cb) more.push(`"${text.truncate(cb.question, 60)}"`)
-  else if (stage.key === 'lost' && loss) more.push(derive.lossText(loss))
-  const line2 = facts.concat(more.filter(Boolean).slice(0, 4))
-  if (!more.filter(Boolean).length) line2.push('no details yet')
+  const change = pendingChanges(s).find(r => r.phone === p.phone)
+  const next = change ? 'Tour change awaiting staff review' : cb ? `Staff follow-up: ${text.truncate(cb.question, 70)}` : tour ? `Tour recorded · ${fmt.dayPhrase(tour.startsAt)} ${fmt.time(tour.startsAt)}${tour.unitId ? ` · ${tour.unitId}` : ''}` : stage.key === 'lost' && loss ? derive.lossText(loss) : 'Open the profile to review the next step'
   return `<button type="button" class="row row-click lead-row${flag ? ' row-flag' : ''}" data-key="lead:${esc(p.phone)}" data-phone="${esc(p.phone)}" aria-current="${open ? 'true' : 'false'}" tabindex="${tab ? '0' : '-1'}">` +
     `<span class="row-lead"><span class="row-lead-icon">${ico(flag ? 'hand' : 'person')}</span></span>` +
     `<span class="row-body"><span class="row-title"><span class="who">${esc(name)}</span>${chip(stage.chipClass, stage.icon, stage.label)}` +
     (flag && stage.key !== 'escalated' ? chip('chip-warn', 'hand', 'Needs a person') : '') +
-    `<span class="last num">Last call ${esc(fmt.relative(p.lastSeenAt))}</span></span>` +
-    `<span class="row-sub">${line2.map((f) => (f.startsWith('"') ? `<span class="quote">${esc(f)}</span>` : esc(f))).join(' · ')}</span></span></button>`
+    `<span class="last num">Last call ${esc(fmt.relative(p.lastSeenAt))}</span></span><span class="lead-row-contact">${esc(contact)}</span>` +
+    `<span class="lead-row-facts">${facts.map(([label, value]) => `<span><span>${esc(label)}</span><strong>${esc(value)}</strong></span>`).join('')}</span>` +
+    (sig.moveIn ? `<span class="lead-row-move">Move-in · ${esc(String(sig.moveIn.excerpt || derive.moveInText(sig.moveIn.value) || 'Not captured'))}</span>` : '') +
+    `<span class="lead-row-next">${ico(change || cb ? 'hand' : tour ? 'calendar' : 'chevron-right')}<span>${esc(next)}</span></span></span></button>`
 }
 function everyoneListHtml(ev, s, q, stage, openPhone) {
   if (!ev.profiles.length) return A.html.empty({ icon: 'leads', title: 'No callers yet.', text: "When someone calls the leasing line, they'll appear here with what they asked for." })
@@ -6561,18 +7388,19 @@ function leadPanelHtml(p, s) {
   if (hidden) out += `<div class="lead-meta">${esc(text.plural(arr(p.calls).length, 'call'))} from numbers that weren't shared</div>`
   else out += `<div class="lead-meta">${shown ? `${telLink(p.phone)} · ` : ''}${p.email ? mailLink(p.email) : 'No email yet'}</div>`
   out += `<div class="lead-meta">First called ${esc(fmt.monthDay(p.firstSeenAt))} · Last call ${esc(fmt.dateTime(p.lastSeenAt, { inSentence: true }))}</div>`
-  if (shown && href.tel(p.phone)) out += `<a class="btn btn-primary lead-call" href="${esc(href.tel(p.phone))}">${ico('phone')}Call ${esc(shown)}</a>`
+  if (shown && href.tel(p.phone)) out += `<a class="btn btn-primary lead-call" href="${esc(href.tel(p.phone))}">${ico('phone')}Call ${esc(shown)}</a><p class="lead-call-hint">Opens your device’s calling app. This action does not place or log a call in Atrium.</p>`
   if (!hidden && !p.name) {
     const sug = calendarName(p, s)
     if (sug) out += `<div class="suggest"><span>The tour was booked under "${esc(sug)}" —</span><button type="button" class="btn-link" data-action="usename" data-name="${esc(sug)}" data-key="usename" data-write="leads">Use this name</button></div>`
   }
   out += '</div>'
+  out += leadBriefHtml(p, s)
   // 2. needs a person (open items, then history)
   const openCallIds = new Set(items.map((i) => String(i.callId)))
   const history = arr(p.escalations).filter((e) => e && !openCallIds.has(String(e.callId)))
   if (items.length || history.length) {
     out += `<section class="panel-section"><h3 data-key="panel-np" tabindex="-1">Needs a person</h3>${items.map((it) => npCardHtml(it, recById)).join('')}`
-    if (history.length) out += `<div class="np-history">${history.map((e) => { const t = derive.escalationText(e); return `<div class="np-hist">Handled — ${esc(t.headline)} · ${esc(fmt.monthDay(e.at))}</div>` }).join('')}</div>`
+    if (history.length) out += `<div class="np-history">${history.map((e) => { const t = derive.escalationText(e); return `<div class="np-hist">Earlier request — ${esc(t.headline)} · ${esc(fmt.monthDay(e.at))}</div>` }).join('')}</div>`
     out += '</section>'
   }
   // 3. to do
@@ -6594,12 +7422,12 @@ function leadPanelHtml(p, s) {
       const st = String(b.status ?? '')
       const stuck = st === 'failed' || st === 'arranging'
       const c = st === 'confirmed' && cal && !calIds.has(b.slotId)
-        ? chip('chip-info', 'info', 'No longer on the calendar')
+        ? chip('chip-info', 'info', 'Not in the loaded calendar window')
         : chip(A.label(labels.bookingChip, st, 'chip-neutral'), A.label(labels.bookingIcon, st, 'calendar'), A.label(labels.bookingStatus, st))
       return `<div class="row row-2 tour-row${stuck ? ' row-warn' : ''}" data-key="tour:${esc(b.slotId)}"><span class="row-body">` +
         `<span class="row-title">${esc(fmt.day(b.startsAt))} · ${esc(fmt.time(b.startsAt))} · ${b.unitId ? `apartment ${esc(b.unitId)}` : 'no apartment picked yet'}</span>` +
         `<span class="row-chips">${c}</span>${stuck ? '<span class="row-sub">Call to set a time.</span>' : ''}</span>` +
-        `<span class="row-actions">${link('calendar', { date: fmt.nyDate(b.startsAt) || undefined, slot: b.slotId }, 'See on calendar')}</span></div>`
+        `<span class="row-actions">${b.unitId ? link('units', { unit: b.unitId }, 'View apartment') : ''}${link('calendar', { date: fmt.nyDate(b.startsAt) || undefined, slot: b.slotId }, 'See on calendar')}</span></div>`
     }).join('')}</div></section>`
   }
   // 5. what they're looking for
@@ -6613,7 +7441,7 @@ function leadPanelHtml(p, s) {
   out += '</section>'
   // 6. apartments they were told about
   const units = arr(p.unitsDiscussed).filter((u) => u != null && String(u).trim())
-  if (units.length) out += `<section class="panel-section"><h3>Apartments they were told about</h3><div class="chips">${units.map((u) => chip('chip-neutral', 'home', String(u))).join('')}</div></section>`
+  if (units.length) out += `<section class="panel-section"><h3>Apartments discussed</h3><p class="muted small">Saved conversation references. Open an apartment to review its current workspace.</p><div class="lead-unit-links">${units.map((u) => link('units', { unit: String(u) }, `Apartment ${u}`)).join('')}</div></section>`
   // 7. why it might not work out
   const losses = arr(p.lossReasons).filter(Boolean)
   if (losses.length) {
@@ -6629,7 +7457,7 @@ function leadPanelHtml(p, s) {
       const sentence = rich ? derive.callStory(rec, s).sentence : derive.summarySentence(c.outcome)
       const dur = fmt.duration(c.durationSeconds)
       return `<div class="lcall"><div class="when num">${esc(fmt.dateTime((rec && rec.startedAt) || c.at))}${dur !== '—' ? ` · ${esc(dur)}` : ''}</div><div>${esc(sentence)}</div>` +
-        `<div class="see">${rich ? link('calls', { id: String(c.callId) }, 'See the call', 'btn-link') : '<span class="faint">not in the last 20 calls</span>'}</div></div>`
+        `<div class="see">${rich ? link('calls', { id: String(c.callId) }, 'See the call', 'btn-link') : '<span class="faint">Saved summary only</span>'}</div></div>`
     }).join('')}</section>`
   }
   // 9. notes
@@ -6672,15 +7500,16 @@ const view = {
   drafts: {}, saving: null, savedScroll: null, returnKey: null, focusPanel: false, closing: false, typing: null, warnedStale: new Set(),
   mount(root) {
     this.root = root
-    root.innerHTML = `<div class="leads-view" data-tab="todo"><div class="view-head"><h1 tabindex="-1">Leads</h1></div>` +
-      `<div class="leads-top"><div class="tabs" role="tablist" aria-label="Leads">` +
+    root.innerHTML = `<div class="leads-view" data-tab="todo"><header class="page-hero"><div><span class="page-eyebrow">Prospect relationships</span><h1 tabindex="-1">Leads</h1><p>One place for the conversation, the apartment, and the next step.</p></div><div class="page-hero-actions"><a class="btn" href="${esc(A.hashFor('units', {}))}">${ico('home')}Explore apartments</a><a class="btn" href="${esc(A.hashFor('calendar', {}))}">${ico('calendar')}Tour calendar</a></div></header><div class="leads-overview"></div>` +
+      `<div class="leads-top workspace-panel"><div class="leads-workspace-head"><div><span class="section-kicker">Leasing workspace</span><p>Follow through with every prospect.</p></div><div class="tabs" role="tablist" aria-label="Leads">` +
       TABS.map(([k, l], i) => `<button type="button" role="tab" class="tab" id="leads-tab-${k}" data-tab="${k}" data-key="tab:${k}" aria-selected="${i === 0 ? 'true' : 'false'}" aria-controls="leads-list" tabindex="${i === 0 ? '0' : '-1'}">${esc(l)}</button>`).join('') +
-      `</div><div class="leads-banners"></div>` +
-      `<p class="leads-note small muted" hidden>These are for you to do — the assistant doesn't make outgoing calls or send messages yet.</p>` +
+      `</div></div><div class="leads-banners"></div>` +
+      `<p class="leads-note small muted" hidden>${ico('info')}Staff work queue. Calls and messages are not sent automatically.</p>` +
       `<div class="leads-tools" hidden><label class="search"><span class="vh">Search by name, number or apartment</span>${ico('search')}<input type="search" data-key="search" placeholder="${esc(searchPlaceholder())}" aria-label="Search by name, number or apartment" autocomplete="off"></label>` +
       `<div class="chips" role="group" aria-label="Filter callers">${STAGES.map(([k, l]) => `<button type="button" class="chip-filter" data-stage="${k}" data-key="stage:${k}" aria-pressed="${k === 'all' ? 'true' : 'false'}">${ico('check')}<span>${esc(l)}</span></button>`).join('')}</div></div></div>` +
       `<div class="split leads-split"><div class="split-list leads-list" id="leads-list" role="tabpanel" aria-labelledby="leads-tab-todo" data-key="list"></div><div class="panel lead-panel" data-key="panel"></div></div></div>`
     this.wrap = root.querySelector('.leads-view'); this.tabsEl = root.querySelector('.tabs'); this.banners = root.querySelector('.leads-banners')
+    this.overview = root.querySelector('.leads-overview'); this.overviewHtml = null
     this.noteEl = root.querySelector('.leads-note'); this.tools = root.querySelector('.leads-tools'); this.search = root.querySelector('input[data-key="search"]')
     this.chipsEl = root.querySelector('.chips'); this.split = root.querySelector('.split'); this.list = root.querySelector('.leads-list'); this.panel = root.querySelector('.lead-panel')
     // tabs: click, arrows, Home/End
@@ -6882,6 +7711,8 @@ const view = {
     const wantPhone = p.phone ? String(p.phone) : null
     const loaded = Boolean(s.loaded.leads)
     const profiles = profilesOf(s), fus = followUpsOf(s)
+    const overviewHtml = leadOverviewHtml(s)
+    if (overviewHtml !== this.overviewHtml) { this.overviewHtml = overviewHtml; this.overview.innerHTML = overviewHtml }
     if (document.activeElement !== this.search && this.search.value !== this.q) this.search.value = this.q
     // a phone that is not on the list: a stale link gets a toast; a panel that was open says so in place
     let gone = false
@@ -6894,7 +7725,7 @@ const view = {
       }
     }
     // tabs, note, tools
-    const scheduledN = fus.filter((f) => f.status === 'scheduled').length
+    const scheduledN = fus.filter((f) => f.status === 'scheduled').length + pendingChanges(s).length
     for (const b of this.tabsEl.querySelectorAll('.tab')) {
       const k = b.dataset.tab, lbl = (TABS.find(([x]) => x === k) || [k, k])[1]
       const n = k === 'todo' ? scheduledN : profiles.length
@@ -6947,8 +7778,8 @@ const view = {
     else if (openRec) panelHtml_ = leadPanelHtml(openRec, s)
     else if (isSplit()) {
       // The placeholder names the gesture the tab offers, and says nothing when there is nobody to pick.
-      const anyone = this.tab === 'todo' ? fus.some((f) => f.status === 'scheduled') : Boolean(this.list.querySelector('.lead-row'))
-      panelHtml_ = anyone ? `<div class="panel-empty">${A.html.empty({ icon: 'leads', title: this.tab === 'todo' ? "Click a name to see what they're looking for." : "Pick someone to see what they're looking for." })}</div>` : ''
+      const anyone = profiles.length || scheduledN
+      panelHtml_ = anyone ? `<div class="panel-empty"><div class="lead-empty-guide">${ico('person')}<span class="section-kicker">The prospect story</span><h2>Select a prospect</h2><p>Review what they want, the apartments discussed, and the work still to do.</p><div><span>Preferences</span><span>Conversations</span><span>Tours & follow-ups</span></div><p class="small">${this.tab === 'todo' ? 'Open a name from the work queue. Tour-change requests can be reviewed directly on their cards.' : 'Choose a prospect from the list to see their full record.'}</p></div></div>` : ''
     } else panelHtml_ = ''
     this.split.classList.toggle('has-panel', hasPanel)
     this.wrap.classList.toggle('has-panel', hasPanel)
@@ -6994,7 +7825,7 @@ A.register('leads', view)
 })()
 </script>
 <script>
-/* Staff-entered unit feedback. Source unit facts stay read-only in the connected PMS. */
+/* Unit workspace. Saved tours and staff observations complement read-only source facts. */
 (function () {
 'use strict'
 const A = window.Atrium
@@ -7021,6 +7852,9 @@ function feedbackModel(s, options = {}) {
   const units = new Map(catalog.map(unit => [unit.unitId, { ...unit, current: true }]))
   // Retain saved feedback when a unit is absent from a newer source snapshot.
   for (const entry of all) if (!units.has(entry.unitId)) units.set(entry.unitId, { unitId: entry.unitId, current: false })
+  for (const record of [...arr(s.calendar?.bookings), ...arr(s.calendar?.unitBlocks)]) {
+    if (record?.unitId && !units.has(record.unitId)) units.set(record.unitId, { unitId: record.unitId, current: false })
+  }
   const unitRows = [...units.values()].map(unit => {
     const feedback = entries.filter(entry => entry.unitId === unit.unitId)
     return { ...unit, feedback, counts: countsFor(feedback) }
@@ -7044,13 +7878,15 @@ function sourceHtml(model) {
   const source = model.inventory, date = source.readAt ? A.fmt.dateTime(source.readAt) : 'date not supplied'
   const demo = source.fictional === true || source.sourceMode === 'demo'
   return `<div class="uf-source small muted">${demo ? A.html.chip('chip-neutral', 'info', 'Fictional demo catalogue') + ' ' : ''}` +
-    `Unit facts from ${esc(source.source || 'the configured property source')} · snapshot ${esc(date)}. ` +
-    `${demo ? 'Sample unit facts; not live availability.' : 'Check the source system for current availability.'} Feedback below is entered by staff.</div>`
+    `Snapshot ${esc(date)} · ${demo ? 'Sample unit facts; not live availability.' : 'Check the source system for current availability.'}` +
+    `<details class="uf-source-details"><summary data-key="source-details">Source details</summary><p>${esc(source.source || 'The configured property source')}. Feedback is entered by staff.</p></details></div>`
 }
 function unitsHtml(model, unitId) {
-  let html = `<button type="button" class="uf-unit" data-unit="" data-key="unit:all" aria-current="${unitId ? 'false' : 'true'}"><strong>Whole property</strong><span class="small muted">All saved unit feedback</span></button><div class="uf-unit-list">`
+  let html = `<button type="button" class="uf-unit uw-property" data-unit="" data-key="unit:all" aria-current="${unitId ? 'false' : 'true'}">${ico('home')}<strong>Whole property</strong><span class="small muted">Tours, interest and feedback</span></button>` +
+    '<div class="uw-explorer-label"><strong>Apartment explorer</strong><span>Catalogue order · not a floor plan</span></div><div class="uf-unit-list uw-explorer">'
   for (const unit of model.shownUnits) html += `<button type="button" class="uf-unit" data-unit="${esc(unit.unitId)}" data-key="unit:${esc(unit.unitId)}" aria-current="${unit.unitId === unitId ? 'true' : 'false'}">` +
-    `<strong>Apartment ${esc(unit.unitId)}</strong><span class="small muted">${esc(unit.current ? unitFacts(unit) || 'Source unit' : 'Prior unit reference')}</span>` +
+    `<span class="uw-apartment-label">Apartment</span><strong>${esc(unit.unitId)}</strong><span class="small muted">${esc(unit.current ? (Number.isFinite(unit.floor) ? `Floor ${unit.floor}` : unitFacts(unit) || 'Source unit') : 'Prior unit reference')}</span>` +
+    (model.workspace?.calendarFresh ? `<span class="uw-tile-tour">${A.text.plural(model.workspace.allTours.filter(t => t.unitId === unit.unitId).length, 'tour')} · next 7 days</span>` : '') +
     `<span class="uf-counts"><span class="uf-up">${unit.counts.positive} positive</span><span class="uf-down">${unit.counts.negative} negative</span><span class="muted">${unit.counts.neutral} neutral</span></span></button>`
   if (!model.shownUnits.length) html += '<p class="uf-unit-empty muted">No units match this search.</p>'
   return html + '</div>'
@@ -7090,6 +7926,105 @@ function detailHtml(model, s) {
   html += model.entries.length ? `<ul class="uf-feed">${model.entries.map(entry => entryHtml(entry, s)).join('')}</ul>` :
     '<div class="empty"><p class="empty-title">No feedback recorded yet.</p><p class="empty-text">Add what a prospect liked, what held them back, or a specific staff observation.</p></div>'
   return html + '</section>'
+}
+
+const validPhone = value => typeof value === 'string' && /^\+[1-9]\d{6,14}$/.test(value)
+const time = value => Date.parse(value || '')
+function resourceFresh(s, key) {
+  const checked = time(s.lastGoodAt?.[key])
+  return Boolean(s.loaded?.[key] && !s.errors?.[key] && Number.isFinite(checked) && checked <= Date.now() + 5000 && Date.now() - checked <= 60000)
+}
+function workspaceModel(s, model) {
+  const today = A.fmt.nyNow().ymd, through = A.fmt.addDays(today, 6), selected = model.selected?.unitId
+  const calendarLoaded = Boolean(s.loaded?.calendar && s.calendar), calendarFresh = resourceFresh(s, 'calendar')
+  // Canonical calendar records are authoritative. Profile booking history may be stale after a move.
+  const unique = new Map()
+  for (const booking of arr(s.calendar?.bookings)) {
+    const date = A.fmt.nyDate(booking?.startsAt)
+    if (!booking?.externalId || (booking.status && booking.status !== 'confirmed') || !date || date < today || date > through
+      || !Number.isFinite(time(booking.endsAt)) || time(booking.endsAt) <= Date.now() || time(booking.endsAt) <= time(booking.startsAt)) continue
+    if (!unique.has(booking.externalId)) unique.set(booking.externalId, booking)
+  }
+  const allTours = [...unique.values()].sort((a, b) => time(a.startsAt) - time(b.startsAt) || a.externalId.localeCompare(b.externalId))
+  const tours = model.selectedMissing ? [] : allTours.filter(tour => !selected || tour.unitId === selected)
+  const blocks = model.selectedMissing ? [] : arr(s.calendar?.unitBlocks).filter(block => block?.id && !block.removedAt
+    && time(block.endsAt) > Date.now() && time(block.endsAt) > time(block.startsAt) && (!selected || block.unitId === selected))
+    .sort((a, b) => time(a.startsAt) - time(b.startsAt))
+  const linkedPhones = new Set([...tours.map(t => t.prospectPhone), ...model.entries.map(f => f.leadPhone)].filter(validPhone))
+  const profiles = arr(s.leads?.profiles).filter(profile => validPhone(profile?.phone) && linkedPhones.has(profile.phone))
+  const conflicts = tour => blocks.filter(block => block.unitId === tour.unitId
+    && time(block.startsAt) < time(tour.occupiedEndsAt || tour.endsAt) && time(block.endsAt) > time(tour.occupiedStartsAt || tour.startsAt))
+  return { today, through, calendarLoaded, calendarFresh, leadsFresh: resourceFresh(s, 'leads'), allTours, tours, blocks, profiles, conflicts }
+}
+const workspaceLink = (viewName, params, title, primary = false) => `<a class="btn ${primary ? 'btn-primary' : 'btn-quiet'}" href="${esc(A.hashFor(viewName, params))}">${esc(title)}</a>`
+function phoneAction(phone, ready) {
+  return ready && A.can('operate') && validPhone(phone)
+    ? `<a class="btn btn-quiet" href="${esc(A.href.tel(phone))}" title="Opens your device’s configured calling app">${ico('phone')}Call in phone app</a>` : ''
+}
+function prospectContext(profile) {
+  if (!profile) return '<p class="uw-context muted">No linked prospect record yet. Check the booking details before contacting.</p>'
+  const signals = profile.signals || {}, facts = []
+  const budget = signals.budgetRange || signals.budget
+  if (budget) {
+    const value = A.derive.budgetText(budget.value)
+    if (value) facts.push(['Budget', value, budget])
+  }
+  if (signals.moveIn) {
+    const value = signals.moveIn.excerpt || A.derive.moveInText(signals.moveIn.value)
+    if (value) facts.push(['Move-in', value, signals.moveIn])
+  }
+  const note = arr(profile.notes).filter(value => typeof value === 'string' && value.trim()).at(-1)
+  return (facts.length ? `<dl class="uw-prospect-facts">${facts.map(([label_, value, signal]) => `<div><dt>${esc(label_)}${Number(signal.confidence) < .7 ? ' · check with prospect' : ''}</dt><dd>${esc(value)}</dd></div>`).join('')}</dl>` : '<p class="uw-context muted">Preferences have not been recorded yet.</p>') +
+    (note ? `<p class="uw-staff-note"><strong>Latest staff note</strong><span>${esc(note)}</span></p>` : '')
+}
+function tourCardHtml(tour, s, workspace) {
+  const profile = workspace.profiles.find(p => p.phone === tour.prospectPhone)
+  const name = profile ? A.derive.displayName(profile) : tour.prospectName || 'Name not recorded'
+  const conflicts = workspace.conflicts(tour), ready = workspace.calendarFresh && workspace.leadsFresh
+  const starts = time(tour.startsAt) <= Date.now() ? 'Scheduled now' : 'Tour booked'
+  return `<article class="uw-tour" data-key="workspace-tour:${esc(tour.externalId)}"><div class="uw-tour-top"><div><span class="uw-eyebrow">${esc(A.fmt.day(tour.startsAt))}</span><h4>${esc(A.fmt.timeRange(tour.startsAt, tour.endsAt))}</h4></div>` +
+    A.html.chip(conflicts.length ? 'chip-warn' : 'chip-neutral', conflicts.length ? 'warning' : 'calendar', conflicts.length ? 'Availability conflict' : workspace.calendarFresh ? starts : 'Last saved tour') + '</div>' +
+    `<div class="uw-tour-person"><strong>${esc(name)}</strong>${tour.unitId ? `<a href="${esc(A.hashFor('units', { unit: tour.unitId }))}">Apartment ${esc(tour.unitId)}</a>` : '<span>No apartment selected</span>'}</div>` +
+    (conflicts.length ? '<p class="uw-conflict">This tour overlaps a unit hold. The booking is still saved. Review the calendar before contacting the prospect.</p>' : '') +
+    prospectContext(profile) + `<div class="uw-actions">${profile ? workspaceLink('leads', { tab: 'all', phone: profile.phone }, 'View prospect') : ''}` +
+    workspaceLink('calendar', { date: A.fmt.nyDate(tour.startsAt), slot: tour.slotId }, 'View calendar') + phoneAction(tour.prospectPhone, ready) + '</div></article>'
+}
+function workspaceHtml(model, s) {
+  if (model.selectedMissing) return detailHtml(model, s)
+  const w = model.workspace || workspaceModel(s, model), unit = model.selected
+  const demo = model.inventory?.fictional === true || model.inventory?.sourceMode === 'demo'
+  const rent = unit?.current && Number.isFinite(unit.monthlyRent) && unit.monthlyRent >= 0
+    ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(unit.monthlyRent) : null
+  const canHold = unit?.current && A.can('operate') && w.calendarFresh && w.leadsFresh && !A.busyNow('calendar')
+    && arr(s.calendar?.units).some(value => (value.unitId || value.id) === unit.unitId) && typeof A.calendarActions?.openUnitBlocks === 'function'
+  let html = `<section class="uw-hero"><div class="uw-hero-copy"><span class="uw-eyebrow">${esc(unit ? A.property.name : 'Leasing workspace')}</span>` +
+    `<h2 tabindex="-1" data-key="workspace-heading">${esc(unit ? `Apartment ${unit.unitId}` : 'Prepare for the next tour.')}</h2><p>${esc(unit ? unit.current ? unitFacts(unit) : 'Prior unit reference · saved records retained' : 'Know who is coming, what matters to them, and what needs your attention.')}</p>` +
+    (unit?.current ? `<div class="uw-snapshot">${rent ? `<strong>${esc(rent)}<span> / month</span></strong>` : '<strong>Rent not supplied</strong>'}<span>${demo ? 'Sample rent' : 'Rent at source snapshot'}${unit.status ? ` · ${esc(unit.status)} in source` : ''}</span></div>` : '') +
+    `<div class="uw-actions">${workspaceLink('calendar', { date: w.today }, 'Open tour calendar', true)}` +
+    (canHold ? `<button type="button" class="btn uw-light-button" data-unit-availability="${esc(unit.unitId)}" data-key="unit-availability:${esc(unit.unitId)}" data-write="calendar">Unit availability</button>` : '') + '</div></div>' +
+    `<div class="uw-hero-mark" aria-hidden="true"><span>${unit ? 'APARTMENT' : 'NEXT 7 DAYS'}</span><strong>${esc(unit ? unit.unitId : w.calendarFresh ? String(w.tours.length) : '—')}</strong><span>${unit ? 'TOUR BRIEF' : 'SAVED TOURS'}</span></div></section>`
+  if (!w.calendarFresh) html += A.html.banner('warn', w.calendarLoaded
+    ? 'Calendar needs a refresh. These are the last loaded tours and holds; current availability is unconfirmed.'
+    : 'Calendar has not loaded yet. Tour counts and availability are not confirmed.')
+  if (!w.leadsFresh) html += A.html.banner('info', 'Prospect details may be out of date. Refresh before contacting someone or changing unit availability.')
+  html += `<div class="uw-metrics"><div class="card"><span>Tours · next 7 days</span><strong>${w.calendarFresh ? w.tours.length : '—'}</strong><span>${esc(A.fmt.day(w.today))} – ${esc(A.fmt.day(w.through))}</span></div>` +
+    `<div class="card"><span>Linked prospects</span><strong>${w.profiles.length}</strong><span>From these tours and feedback</span></div>` +
+    `<div class="card"><span>Concerns recorded</span><strong>${model.counts.negative}</strong><span>${model.truncated ? 'Within loaded feedback only' : 'Negative feedback in selected period'}</span></div></div>`
+  html += `<section class="card uf-section uw-tour-section"><div class="uw-section-heading"><div><h3>Tour preparation</h3><p class="muted">Next 7 days · ${esc(A.property.timeZoneLabel)}.</p></div></div>`
+  html += w.tours.length ? `<div class="uw-tours">${w.tours.slice(0, 6).map(tour => tourCardHtml(tour, s, w)).join('')}</div>` :
+    `<div class="uw-empty">${ico('calendar')}<h4>${w.calendarFresh ? 'No tours booked in the next 7 days.' : 'No tours available in the loaded records.'}</h4><p>Open the calendar to review dates and availability.</p></div>`
+  if (w.tours.length > 6) html += `<p class="uw-more">Showing the next 6 of ${w.tours.length} saved tours. ${workspaceLink('calendar', { date: A.fmt.nyDate(w.tours[6].startsAt) }, 'View more on calendar')}</p>`
+  html += '</section>'
+  if (w.blocks.length) html += `<section class="card uf-section uw-holds"><h3>Unit availability holds</h3><p class="muted">A hold prevents new tours for its apartment during these times. Existing bookings stay saved.</p><ul>${w.blocks.slice(0, 8).map(block => `<li><strong>Apartment ${esc(block.unitId)}</strong><span>${esc(A.fmt.dateTime(block.startsAt))} – ${esc(A.fmt.dateTime(block.endsAt))}</span><span>${esc(block.reason || 'No reason recorded')}</span></li>`).join('')}</ul>${w.blocks.length > 8 ? `<p>Showing 8 of ${w.blocks.length} loaded holds. View the calendar for the rest.</p>` : ''}</section>`
+  if (unit && w.profiles.length) html += `<section class="card uf-section"><h3>Connected prospects</h3><p class="muted">Linked through tours and saved feedback.</p><ul class="uw-prospects">${w.profiles.map(profile => `<li><div><strong>${esc(A.derive.displayName(profile))}</strong><span>${esc(A.fmt.phone(profile.phone))}</span></div>${workspaceLink('leads', { tab: 'all', phone: profile.phone }, 'View prospect')}</li>`).join('')}</ul></section>`
+  return html + '<div class="uw-feedback-heading"><h2>What prospects are saying</h2><p class="muted">Use recorded feedback to prepare the conversation and improve the next showing.</p></div>' + detailHtml(model, s)
+}
+function openUnitAvailability(unitId) {
+  const s = A.state
+  if (!A.can('operate') || !resourceFresh(s, 'calendar') || !resourceFresh(s, 'leads') || A.busyNow('calendar')
+    || !arr(s.leads?.feedbackUnits).some(unit => unit?.unitId === unitId)
+    || !arr(s.calendar?.units).some(unit => (unit?.unitId || unit?.id) === unitId)) return
+  A.calendarActions?.openUnitBlocks({ unitId })
 }
 
 function feedbackRequest(values, s, existing, idempotencyKey) {
@@ -7174,12 +8109,13 @@ function openFeedback(unitId, existing = null) {
 }
 
 const view = {
-  title: 'Unit feedback', icon: A.icons.units, root: null, source: null, list: null, detail: null, add: null,
-  query: '', period: 'all', form: null,
+  title: 'Units', icon: A.icons.units, root: null, source: null, list: null, detail: null, add: null,
+  query: '', period: 'all', form: null, selectedKey: null, focusSelected: false,
+  listMarkup: null, listActivation: null, listUpdateTimer: null,
   mount(root) {
     this.root = root
-    root.innerHTML = `<div class="uf-view"><div class="view-head uf-heading"><div><h1 tabindex="-1">Unit feedback</h1>` +
-      `<p class="muted">See what prospects respond to, spot recurring concerns, and keep the team’s observations in one place.</p></div>` +
+    root.innerHTML = `<div class="uf-view"><div class="view-head uf-heading"><div><h1 tabindex="-1">Unit workspace</h1>` +
+      `<p class="muted">From prospect interest to a prepared showing. Choose an apartment to bring the details together.</p></div>` +
       `<button type="button" class="btn btn-primary" data-add-feedback data-key="feedback-add" data-write="leads">${ico('plus')}Add feedback</button></div>` +
       `<div class="uf-source-region"></div><div class="uf-toolbar"><label class="search">${ico('search')}<span class="vh">Search units or floor plans</span><input type="search" data-feedback-search placeholder="Search units or floor plans" autocomplete="off"></label>` +
       `<label class="uf-period">Observed period<select class="input" data-feedback-period><option value="all">All saved feedback</option><option value="30">Last 30 days</option></select></label></div>` +
@@ -7187,9 +8123,41 @@ const view = {
     this.source = root.querySelector('.uf-source-region'); this.list = root.querySelector('.uf-units'); this.detail = root.querySelector('.uf-detail'); this.add = root.querySelector('[data-add-feedback]')
     root.querySelector('[data-feedback-search]').addEventListener('input', event => { this.query = event.target.value; this.render(A.state) })
     root.querySelector('[data-feedback-period]').addEventListener('change', event => { this.period = event.target.value; this.render(A.state) })
+    // A polling update must not remove a native click/keyboard target between press and activation.
+    root.addEventListener('pointerdown', event => {
+      if (event.button !== 0 || event.isPrimary === false || !event.target.closest('[data-unit]')) return
+      clearTimeout(this.listUpdateTimer); this.listUpdateTimer = null
+      this.listActivation = `pointer:${event.pointerId}`
+    })
+    root.addEventListener('keydown', event => {
+      if ((event.key === ' ' || event.key === 'Enter') && event.target.closest('[data-unit]')) {
+        clearTimeout(this.listUpdateTimer); this.listUpdateTimer = null
+        this.listActivation = `key:${event.key}`
+      }
+    })
+    const finishActivation = event => {
+      const key = event.pointerId == null ? `key:${event.key}` : `pointer:${event.pointerId}`
+      if (!this.listActivation || (event.type !== 'blur' && this.listActivation !== key)) return
+      clearTimeout(this.listUpdateTimer)
+      // Native click follows pointerup/keyup. Repaint only after that event has had its turn.
+      this.listUpdateTimer = setTimeout(() => {
+        this.listActivation = null; this.listUpdateTimer = null
+        if (this.root && !this.root.hidden) this.render(A.state)
+      }, 0)
+    }
+    document.addEventListener('pointerup', finishActivation, true)
+    document.addEventListener('pointercancel', finishActivation, true)
+    document.addEventListener('keyup', finishActivation, true)
+    window.addEventListener?.('blur', finishActivation)
     root.addEventListener('click', event => {
       const unit = event.target.closest('[data-unit]')
-      if (unit) { A.navigate('units', { unit: unit.dataset.unit || undefined }); return }
+      if (unit) {
+        clearTimeout(this.listUpdateTimer); this.listUpdateTimer = null; this.listActivation = null
+        this.focusSelected = matchMedia('(max-width: 760px)').matches
+        A.navigate('units', { unit: unit.dataset.unit || undefined }); return
+      }
+      const availability = event.target.closest('[data-unit-availability]')
+      if (availability) { openUnitAvailability(availability.dataset.unitAvailability); return }
       if (event.target.closest('[data-add-feedback]')) { openFeedback(A.route().params.unit || ''); return }
       const edit = event.target.closest('[data-edit]')
       if (edit) {
@@ -7198,24 +8166,59 @@ const view = {
       }
     })
     A.on('data', () => { if (this.root && !this.root.hidden) this.render(A.state) })
+    A.on('poll', () => { if (this.root && !this.root.hidden) this.render(A.state) })
     A.on('busy', () => { if (this.root && !this.root.hidden) this.render(A.state) })
     A.on('minute', () => { if (this.root && !this.root.hidden) this.render(A.state) })
-    A.on('route', route => { if (route.name !== 'units' && this.form && !this.form.isBusy()) this.form.close() })
+    A.on('route', route => {
+      if (route.name === 'units') return
+      clearTimeout(this.listUpdateTimer); this.listUpdateTimer = null; this.listActivation = null; this.focusSelected = false
+      if (this.form && !this.form.isBusy()) this.form.close()
+    })
+  },
+  renderList(html, unitId, force = false) {
+    if (this.listMarkup !== html) {
+      if (this.listActivation && !force) return
+      const scroller = this.list.querySelector?.('.uf-unit-list')
+      const top = scroller?.scrollTop || 0, left = scroller?.scrollLeft || 0
+      const active = document.activeElement, key = this.list.contains?.(active) ? active?.dataset?.key : null
+      this.list.innerHTML = html; this.listMarkup = html
+      const nextScroller = this.list.querySelector?.('.uf-unit-list')
+      if (nextScroller) { nextScroller.scrollTop = top; nextScroller.scrollLeft = left }
+      if (key) [...this.list.querySelectorAll('[data-key]')].find(node => node.dataset.key === key)?.focus({ preventScroll: true })
+    }
+    for (const node of this.list.querySelectorAll('[data-unit]')) node.setAttribute('aria-current', node.dataset.unit === unitId ? 'true' : 'false')
   },
   render(s) {
     if (!this.root) return
     const unitId = A.route().params.unit || '', model = feedbackModel(s, { unitId, query: this.query, period: this.period })
-    const replace = (element, html) => { if (element.innerHTML !== html) element.innerHTML = html }
+    model.workspace = workspaceModel(s, model)
+    const replace = (element, html) => {
+      if (element.innerHTML === html) return
+      const active = document.activeElement, key = element.contains?.(active) ? active?.dataset?.key : null
+      element.innerHTML = html
+      if (key) [...element.querySelectorAll('[data-key]')].find(node => node.dataset.key === key)?.focus({ preventScroll: true })
+    }
     this.add.hidden = !A.can('operate')
     this.add.disabled = !model.available || !model.catalog.length || A.busyNow('leads') || Boolean(s.errors.leads) || model.selectedMissing || Boolean(model.selected && !model.selected.current)
     if (!s.loaded.leads) {
       replace(this.source, s.errors.leads ? A.html.banner('warn', 'Unit feedback could not be loaded. Refresh to try again.') : '')
-      replace(this.list, A.html.skeletonRows(3)); replace(this.detail, A.html.skeletonRows(4)); return
+      this.renderList(A.html.skeletonRows(3), '', true); replace(this.detail, A.html.skeletonRows(4)); return
     }
     replace(this.source, (s.errors.leads ? A.html.banner('warn', 'Unit feedback could not be refreshed. Showing the last loaded records; saving is unavailable until the connection returns.') : '') + sourceHtml(model) +
       (model.truncated ? A.html.banner('info', 'Showing the latest 500 saved entries. Counts and recurring reasons cover only these loaded records.') : ''))
-    replace(this.list, model.available ? unitsHtml(model, unitId) : '')
-    replace(this.detail, model.available ? detailHtml(model, s) : '')
+    // Selection changes attributes only; the scroll container and pressed buttons keep their identity.
+    this.renderList(model.available ? unitsHtml(model, '') : '', unitId, !model.available)
+    replace(this.detail, model.available ? workspaceHtml(model, s) : '')
+    if (this.selectedKey !== null && this.selectedKey !== unitId && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      this.detail.animate?.([{ opacity: .75, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: 180, easing: 'ease-out' })
+    }
+    this.selectedKey = unitId
+    if (this.focusSelected) {
+      this.focusSelected = false
+      const heading = this.detail.querySelector('.uw-hero h2')
+      heading?.focus({ preventScroll: true })
+      heading?.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })
+    }
     A.paintPermissions(this.root)
   },
 }

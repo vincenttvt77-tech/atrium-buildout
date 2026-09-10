@@ -45,7 +45,7 @@ function unitConflicts(block) {
 function unitBlocksHtml(selected) {
   const blocks = arr(current().unitBlocks).filter(block => !block.removedAt && (!selected || block.unitId === selected) && Date.parse(block.endsAt) > Date.now())
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt))
-  if (!blocks.length) return '<p class="muted-line">No upcoming unit blocks.</p>'
+  if (!blocks.length) return '<div class="cal-holds-empty"><strong>No upcoming holds</strong><p>This apartment has no saved availability holds. Tour hours and staff capacity still apply.</p></div>'
   return blocks.map(block => {
     const conflicts = unitConflicts(block)
     return `<article class="cal-unit-block"><div><strong>Apartment ${esc(block.unitId)}</strong><p>${esc(A.fmt.dateTime(block.startsAt))} – ${esc(A.fmt.dateTime(block.endsAt))}</p><p>${esc(block.reason || 'Unavailable for tours')}</p>${conflicts.length ? `<p class="cal-unit-conflict" role="status">${conflicts.length} existing tour${conflicts.length === 1 ? ' needs' : 's need'} attention, including time reserved before or after tours. Reschedule from the calendar.</p>` : ''}</div><button type="button" class="btn btn-quiet" data-unit-reopen="${esc(block.id)}" data-write="calendar">Reopen unit</button></article>`
@@ -61,11 +61,12 @@ function openUnitBlocks(preset = {}) {
   let fields, draftId = requestId(), previousPayload = '', alive = true, uncertainWrite = false, pendingWrite = null
   active = A.dialog({ title: 'Unit availability', secondary: { label: 'Close' },
     build(body, dialog) {
-      body.innerHTML = `<p class="cal-action-intro">Block an apartment for painting, renovation, a move-out, or another reason. Other apartments remain available. Existing tours stay on the calendar.</p><form class="cal-action-form">` +
+      dialog.el.classList?.add('cal-action-dialog')
+      body.innerHTML = `<div class="cal-action-overview"><span class="section-kicker">Apartment-specific hold</span><p class="cal-action-intro">Take one apartment off the tour schedule for painting, renovation or a move-out. Other apartments remain available.</p><p class="cal-action-assurance">Existing tours stay saved. Review any conflicts before contacting prospects.</p></div><form class="cal-action-form">` +
         `<label class="field"><span class="field-label">Apartment</span><select class="select" name="unitId">${options(selected)}</select></label>` +
         `<label class="cal-action-check"><input type="checkbox" name="allDay" checked> All day</label><div class="cal-action-pair">${field('First day', 'date', 'date', date, `min="${today}" max="9998-12-31"`)}${field('Last day', 'endDate', 'date', date, `min="${today}" max="9998-12-31"`)}</div>` +
         `<div class="cal-action-pair" data-times hidden>${field('Start time', 'startTime', 'time', '09:00')}${field('End time', 'endTime', 'time', '17:00')}</div>` +
-        `<label class="field"><span class="field-label">Reason</span><input class="input" name="reason" maxlength="120" placeholder="e.g. Painting, renovation, move-out" required></label><p class="field-hint">Times use ${esc(A.property.timeZoneLabel)}. The last day is included for all-day blocks.</p></form><section class="cal-unit-blocks"><h4>Upcoming blocks</h4><div data-block-list>${unitBlocksHtml(selected)}</div></section>`
+        `<label class="field"><span class="field-label">Reason</span><input class="input" name="reason" maxlength="120" placeholder="e.g. Painting, renovation, move-out" required></label><p class="field-hint">Times use ${esc(A.property.timeZoneLabel)}. The last day is included for all-day blocks.</p></form><section class="cal-unit-blocks"><h4>Upcoming holds for this apartment</h4><div data-block-list>${unitBlocksHtml(selected)}</div></section>`
       fields = Object.fromEntries([...body.querySelectorAll('[name]')].map(element => [element.name, element]))
       const list = body.querySelector('[data-block-list]')
       fields.allDay.addEventListener('change', () => { body.querySelector('[data-times]').hidden = fields.allDay.checked })
@@ -168,8 +169,9 @@ function openReschedule(booking) {
   active = A.dialog({ title: `Reschedule ${original.prospectName || 'tour'}`, secondary: { label: 'Keep original tour' },
     build(body, api) {
       dialog = api
+      api.el.classList?.add('cal-action-dialog')
       const unknownUnit = initialUnit && !units().some(unit => unitId(unit) === initialUnit)
-      body.innerHTML = `<p class="cal-action-intro">Current tour: ${esc(A.fmt.dateTime(original.startsAt))}${initialUnit ? ` · Apartment ${esc(initialUnit)}` : ''}. The original appointment stays until the new time is saved.</p><form class="cal-action-form">` +
+      body.innerHTML = `<div class="cal-current-tour"><span class="section-kicker">Current appointment</span><strong>${esc(A.fmt.dateTime(original.startsAt))}</strong><span>${initialUnit ? `Apartment ${esc(initialUnit)}` : 'No apartment selected'} · ${esc(A.property.timeZoneLabel)}</span></div><p class="cal-action-intro">Choose a new date and time below. The original appointment stays until the new time is saved.</p><form class="cal-action-form">` +
         `<label class="field"><span class="field-label">Apartment</span><select class="select" name="unitId">${!initialUnit ? '<option value="">No apartment selected</option>' : ''}${unknownUnit ? `<option value="${esc(initialUnit)}" selected>Apartment ${esc(initialUnit)} — no longer in inventory</option>` : ''}${options(initialUnit)}</select></label>` +
         field('New date', 'date', 'date', oldDate && oldDate >= today ? oldDate : today, `min="${today}" max="9998-12-31"`) +
         `<label class="field"><span class="field-label">New tour time</span><select class="select" name="slotId" required><option value="">Checking availability…</option></select></label><p class="field-hint">${esc(A.property.timeZoneLabel)} · availability includes staffing capacity, unit blocks, tour hours and notice.</p><p class="cal-consequence">Contact the prospect with the new time. This action does not send a text or email.</p></form>`

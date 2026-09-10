@@ -180,7 +180,7 @@ export async function publishLocalDemoProvenance(admin, root = ROOT) {
 }
 
 /** Persistent loopback database owned by this preview; close never removes its data. */
-export async function openLocalDatabase({ root = ROOT, directory = join(root, '.atrium-local') } = {}) {
+export async function openLocalDatabase({ root = ROOT, directory = join(root, '.atrium-local'), authOrigin } = {}) {
   prepareLocalPreviewEnvironment()
   root = resolve(root); directory = resolve(directory)
   await privateDirectory(directory)
@@ -215,11 +215,14 @@ export async function openLocalDatabase({ root = ROOT, directory = join(root, '.
     admin = postgres.getPgClient('postgres', '127.0.0.1'); await admin.connect()
     await admin.query('BEGIN')
     try {
-      for (const [role, password] of [['atrium_admin', null], ['atrium_account_executor', null], ['atrium_app', config.appPassword], ['atrium_authenticator', config.authPassword]]) {
+      for (const [role, password] of [['atrium_admin', null], ['atrium_account_executor', null], ['atrium_login_executor', null], ['atrium_session_executor', null], ['atrium_mfa_executor', null], ['atrium_app', config.appPassword], ['atrium_authenticator', config.authPassword]]) {
         const exists = await admin.query('SELECT 1 FROM pg_catalog.pg_roles WHERE rolname=$1', [role])
         if (!exists.rows.length) await admin.query(`CREATE ROLE ${role} ${password ? `LOGIN PASSWORD ${pg.escapeLiteral(password)}` : 'NOLOGIN'} NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOREPLICATION`)
       }
       await admin.query('GRANT atrium_account_executor TO atrium_admin')
+      await admin.query('GRANT atrium_login_executor TO atrium_admin')
+      await admin.query('GRANT atrium_session_executor TO atrium_admin')
+      await admin.query('GRANT atrium_mfa_executor TO atrium_admin')
       await admin.query('COMMIT')
     } catch (error) { await admin.query('ROLLBACK'); throw error }
     const migrations = await applyDatabaseMigrations(admin)
@@ -230,7 +233,7 @@ export async function openLocalDatabase({ root = ROOT, directory = join(root, '.
       options: '-c search_path=pg_catalog -c statement_timeout=10000 -c lock_timeout=5000 -c idle_in_transaction_session_timeout=15000' })
     app = new DatabaseConnection(connection('atrium_app', config.appPassword), 'atrium_app')
     auth = new DatabaseConnection(connection('atrium_authenticator', config.authPassword), 'atrium_authenticator')
-    const runtime = createDatabaseRuntime({ app, auth, sessionSecret: config.sessionSecret })
+    const runtime = createDatabaseRuntime({ app, auth, sessionSecret: config.sessionSecret, authOrigin })
     process.env.OPS_SESSION_SECRET = config.sessionSecret
     process.env.VAPI_WEBHOOK_SECRET = config.webhookSecret
     let closed = false

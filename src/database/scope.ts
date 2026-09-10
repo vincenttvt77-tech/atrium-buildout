@@ -8,7 +8,8 @@ export function scopeContext(scope: AuthorizedScope): DatabaseContext {
   return {
     organizationId: scope.organizationId, propertyId: scope.propertyId,
     ...(scope.actor.kind === 'user'
-      ? { actorUserId: scope.actor.userId, credentialVersion: scope.actor.credentialVersion }
+      ? { actorUserId: scope.actor.userId, credentialVersion: scope.actor.credentialVersion,
+        ...(scope.actor.sessionId ? { actorSessionId: scope.actor.sessionId } : {}) }
       : { channelBindingId: scope.actor.bindingId, channelBindingVersion: scope.actor.bindingVersion,
         channelProvider: scope.actor.provider, channelExternalId: scope.actor.externalId }),
   }
@@ -35,10 +36,16 @@ export async function propertyTransaction<T>(connection: DatabaseConnection, sco
   permission: Permission, work: (client: PoolClient) => Promise<T>, expectedConfigurationVersion?: number): Promise<T> {
   assertAuthorizedScope(scope, permission)
   return connection.transaction(scopeContext(scope), async client => {
+    if (scope.actor.kind === 'user' && scope.actor.sessionId) {
+      // Acquire the user/session fence before any property locks. Revocation waits
+      // for admitted work; work admitted after revocation commits is refused.
+      const held = await client.query<{ allowed: boolean }>('SELECT atrium.hold_current_session() AS allowed')
+      if (held.rows[0]?.allowed !== true) throw new AuthorizationError('forbidden')
+    }
     await assertCurrentPropertyAccess(client, scope, permission, expectedConfigurationVersion)
     const result = await work(client)
-    // Revocation between admission and a later RLS-filtered read must not become
-    // an empty/new calendar. A failed exit check also rolls back writes and audit.
+    // Grant/configuration changes during work must not become an empty/new
+    // calendar. A failed exit check also rolls back writes and audit.
     await assertCurrentPropertyAccess(client, scope, permission, expectedConfigurationVersion)
     return result
   })

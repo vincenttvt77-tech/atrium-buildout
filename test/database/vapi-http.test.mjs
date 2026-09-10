@@ -1,3 +1,4 @@
+import { TEST_AUTH_ORIGIN, verifyMfaSession } from '../helpers/mfa-session.mjs'
 import { before, after, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createServer, request } from 'node:http'
@@ -62,10 +63,12 @@ before(async () => {
     VALUES('channel-b','vapi','synthetic-assistant-b','organization-b','property-b1','active',ARRAY['read','operate'])`)
   await db.admin.query(`INSERT INTO atrium.channel_bindings(id,provider,external_id,organization_id,property_id,status,capabilities)
     VALUES('channel-stale','vapi','synthetic-assistant-stale','organization-a','property-a2','active',ARRAY['read','operate'])`)
-  runtime = createDatabaseRuntime({ app: db.app, auth: db.auth, sessionSecret })
+  runtime = createDatabaseRuntime({ authOrigin: TEST_AUTH_ORIGIN, app: db.app, auth: db.auth, sessionSecret })
   cookies = {}
   for (const username of ['owner-a', 'owner-b', 'viewer-a']) {
-    const principal = await runtime.authorization.authenticatePassword(username, credentials.password)
+    const verified = await runtime.authorization.authenticatePassword(username, credentials.password)
+    const principal = await runtime.sessions.start(verified, { label: 'Synthetic Vapi HTTP session' })
+    await verifyMfaSession(runtime, principal, credentials.password)
     cookies[username] = `atrium_ops=${mintUserSession(principal, new Date(), sessionSecret)}`
   }
   process.env.ATRIUM_RUNTIME_MODE = 'postgres'

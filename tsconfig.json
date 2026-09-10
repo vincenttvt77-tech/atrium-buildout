@@ -10,7 +10,7 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
-    "lib": ["ES2023"],
+    "lib": ["ES2023", "DOM"],
     "types": ["node"]
   },
   "include": ["src/**/*.ts", "api/**/*.ts"]

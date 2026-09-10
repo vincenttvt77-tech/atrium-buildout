@@ -34,12 +34,8 @@ import { access, readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
-import { openLocalDatabase, localImportStep, LOCAL_ORGANIZATION, LOCAL_PROPERTY, LOCAL_USER, LOCAL_ASSISTANT as DEMO_ASSISTANT } from './lib/local-database.mjs'
-import { OPS_COOKIE } from '../src/ops/session.ts'
-import { mintUserSession } from '../src/auth/session.ts'
-import { issueAuthenticatedUser } from '../src/auth/identity.ts'
-import { validateUser } from '../src/auth/validation.ts'
-import { PgAuthorizationRepository } from '../src/database/authorization.ts'
+import { openLocalDatabase, localImportStep, LOCAL_ORGANIZATION, LOCAL_PROPERTY, LOCAL_ASSISTANT as DEMO_ASSISTANT } from './lib/local-database.mjs'
+import { localDemoOperations } from './lib/local-demo-operations.mjs'
 
 const RealDate = Date
 const DAY = 86_400_000
@@ -75,13 +71,13 @@ if (flags.help) {
   process.exit(0)
 }
 
-const localDatabase = await openLocalDatabase({ root })
+const PORT = Number(flags.port ?? process.env.PORT ?? 4300)
+const localDatabase = await openLocalDatabase({ root, authOrigin: `http://localhost:${PORT}` })
 const runtime = localDatabase.runtime
 // Current operational HTTP integrations all use fetch. The local preview never
 // makes those calls, even if a future path accidentally forgets its credential gate.
 globalThis.fetch = async () => { throw new Error('External service calls are disabled in the local preview.') }
 const WEBHOOK_SECRET = (process.env.VAPI_WEBHOOK_SECRET ?? '').trim()
-const PORT = Number(flags.port ?? process.env.PORT ?? 4300)
 const FIXTURE_PATH = flags.fixture ? resolve(process.cwd(), flags.fixture) : DEFAULT_FIXTURE_PATH
 const FIXTURE_IMPORT = 'synthetic-calls-progress-v1'
 const savedFixture = await localDatabase.readImport('synthetic-calls-v1')
@@ -100,10 +96,11 @@ try {
   await buildOps.buildOpsPage()
 }
 
-const [dashboard, calendar, leads, vapi, health, properties, ny, vapiCalls, account] = await Promise.all([
+await (await load('scripts/build-auth.mjs')).buildAuthClient()
+const [dashboard, calendar, leads, vapi, health, properties, ny, vapiCalls, account, mfa] = await Promise.all([
   load('api/dashboard.ts'), load('api/calendar.ts'), load('api/leads.ts'), load('api/vapi.ts'),
   load('api/health.ts'), load('api/properties.ts'), load('src/time/ny.ts'), load('src/ops/vapi-calls.ts'),
-  load('api/account.ts'),
+  load('api/account.ts'), load('api/mfa.ts'),
 ])
 
 const ROUTES = {
@@ -114,6 +111,7 @@ const ROUTES = {
   '/api/health': health.default,
   '/api/properties': properties.default,
   '/api/account': account.default,
+  '/api/mfa': mfa.default,
 }
 
 // ---------------------------------------------------------------------------------------
@@ -265,21 +263,18 @@ async function invoke(handler, request) {
   return out
 }
 
-let fixturePrincipal = null
+let fixtureOperation = null
 const opsHeaders = (extra = {}) => {
-  if (!fixturePrincipal) throw new Error('Fixture authorization is available only during its local import.')
-  return { cookie: `${OPS_COOKIE}=${mintUserSession(fixturePrincipal, new Date(), runtime.sessionSecret)}`,
+  if (!fixtureOperation) throw new Error('Fixture authorization is available only during its local import.')
+  return {
     'x-atrium-organization-id': LOCAL_ORGANIZATION, 'x-atrium-property-id': LOCAL_PROPERTY,
     'x-atrium-config-version': '1', accept: 'application/json', ...extra }
 }
 
 async function api(handler, method, url, body) {
-  if (method === 'POST' && url.split('?')[0] === '/api/calendar') body = { ...body, expectedTimeZone: ZONE }
-  const headers = opsHeaders(body === undefined ? {} : { 'content-type': 'application/json' })
+  if (!fixtureOperation) throw new Error('Template operations are available only during local import.')
   const work = async () => {
-    const out = await invoke(handler, { method, url, headers, body: body === undefined ? undefined : JSON.stringify(body) })
-    if (out.status >= 400) throw new Error(`${method} ${url} returned ${out.status}; fixture import stopped without resetting data.`)
-    return out.json
+    return fixtureOperation(method, url, body)
   }
   return method === 'POST' ? step(`staff:${url}:${payloadId(body)}`, work) : work()
 }
@@ -411,7 +406,8 @@ function applyTokens(call) {
 
 // ---------------------------------------------------------------------------------------
 // Seeding: the fixture replayed through the real webhook, plus the calendar blocks and the
-// staff actions (notes, follow-ups marked done) through the real dashboard endpoints.
+// staff templates through finite, scoped import operations. Interactive endpoints
+// always require the user's own passkey; import never fabricates that assurance.
 // ---------------------------------------------------------------------------------------
 
 const callRef = (call) => ({
@@ -520,18 +516,16 @@ let summary = null
 if (flags.seed && savedFixture?.status !== 'complete') {
   fixture = savedFixture?.fixture ?? await loadFixture()
   await localDatabase.writeImport('synthetic-calls-v1', { status: 'pending', startedAt: STARTED.toISOString(), path: FIXTURE_PATH, fixture, synthetic: true })
-  // Trusted, local maintenance only: use the imported current DB user without
-  // resetting its password. This principal never leaves the fixture startup path.
-  const user = validateUser(await new PgAuthorizationRepository(runtime.auth).getUser(LOCAL_USER))
-  if (user.status !== 'active') throw new Error('The local fixture account is inactive; no seed session was issued.')
-  const maintenancePrincipal = issueAuthenticatedUser(user)
-  fixturePrincipal = await runtime.authenticate({ cookie: `${OPS_COOKIE}=${mintUserSession(maintenancePrincipal, new RealDate(), runtime.sessionSecret)}` }, new RealDate())
+  fixtureOperation = localDemoOperations(await runtime.loadChannel('vapi', DEMO_ASSISTANT), {
+    organizationId: LOCAL_ORGANIZATION, propertyId: LOCAL_PROPERTY })
   try {
     summary = await seed(fixture)
     for (const call of fixture.calls) { applyTokens(call); delete call.tour }
     await localDatabase.writeImport('synthetic-calls-v1', { status: 'complete', startedAt: STARTED.toISOString(), path: FIXTURE_PATH, fixture,
       synthetic: true, note: 'Fictional call samples imported once. Source dates and staff changes survive restarts; no PMS connection.' })
-  } finally { fixturePrincipal = null }
+  } finally {
+    fixtureOperation = null
+  }
 }
 const fixtureCalls = (summary || savedFixture?.status === 'complete' ? [...fixture.calls] : [])
   .sort((a, b) => (b.startedAt ?? '').localeCompare(a.startedAt ?? ''))
@@ -595,7 +589,9 @@ const server = createServer(async (req, res) => {
     } else if (path === '/api/dashboard' && !flags.built && req.method === 'GET' && out.status === 200
       && String(out.headers.get('content-type') ?? '').includes('text/html')) {
       const served = out.body.toString('utf8')
-      const bootstrap = /<script>window\.ATRIUM_RUNTIME_MODE="postgres";window\.ATRIUM_ACCOUNT=[\s\S]*?<\/script>/.exec(served)?.[0]
+      // Copy the complete authorized bootstrap, including session form bindings;
+      // new fields must not silently disable live composition or demo labeling.
+      const bootstrap = /<script>window\.ATRIUM_RUNTIME_MODE="postgres";[\s\S]*?<\/script>/.exec(served)?.[0]
       // Picker/error pages remain exactly as the handler served them. Only a
       // successfully authorized property page receives the live source bundle.
       if (bootstrap) body = Buffer.from((await livePage(served)).replace('</head>', `${bootstrap}<script>window.ATRIUM_DEMO=true;window.ATRIUM_DEMO_PERSISTENT=true;</script></head>`))

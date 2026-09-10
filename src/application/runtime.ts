@@ -7,6 +7,14 @@ import { isPostgresRuntime } from '../database/mode.ts'
 import { PgAuthorizationRepository } from '../database/authorization.ts'
 import { createPasswordChangeService } from '../auth/password-change.ts'
 import { PostgresPasswordChangeRepository } from '../database/password-change.ts'
+import { createSessionManagementService, sessionLabel } from '../auth/session-management.ts'
+import { PostgresUserSessionRepository } from '../database/user-sessions.ts'
+import { createLoginProtection } from '../auth/login-protection.ts'
+import { PostgresLoginProtectionRepository } from '../database/login-protection.ts'
+import { PostgresMfaRepository } from '../database/mfa.ts'
+import { createMfaService } from '../auth/mfa.ts'
+import { mfaConfiguration } from '../auth/mfa-config.ts'
+import { MfaError } from '../auth/mfa-model.ts'
 import { PostgresPropertyRepository } from '../database/properties.ts'
 import { PostgresDocumentStore, PostgresCalendarStore, propertyCalendar } from '../database/operations.ts'
 import { propertyTransaction } from '../database/scope.ts'
@@ -54,22 +62,44 @@ const header = (headers: Headers, key: string): string | undefined => {
 export class DatabaseRuntime {
   readonly authorization: ReturnType<typeof createAuthorizationService>
   readonly passwordChanges: ReturnType<typeof createPasswordChangeService>
+  readonly sessions: ReturnType<typeof createSessionManagementService>
+  readonly loginProtection: ReturnType<typeof createLoginProtection>
   readonly sessionSecret: string
   readonly app: DatabaseConnection
   readonly auth: DatabaseConnection
   readonly properties: PostgresPropertyRepository
-  constructor(options: {app: DatabaseConnection; auth: DatabaseConnection; sessionSecret: string}) {
+  private authOrigin: string | undefined
+  private mfaService: ReturnType<typeof createMfaService> | undefined
+  constructor(options: {app: DatabaseConnection; auth: DatabaseConnection; sessionSecret: string; authOrigin?: string}) {
     if (options.sessionSecret.trim().length < 32) throw new DatabaseConfigurationError()
     this.app = options.app; this.auth = options.auth; this.sessionSecret = options.sessionSecret
+    this.authOrigin = options.authOrigin
     this.authorization = createAuthorizationService(new PgAuthorizationRepository(options.auth))
     this.passwordChanges = createPasswordChangeService(new PostgresPasswordChangeRepository(options.auth))
+    this.loginProtection = createLoginProtection(new PostgresLoginProtectionRepository(options.auth), options.sessionSecret)
+    this.sessions = createSessionManagementService(new PostgresUserSessionRepository(options.auth))
     this.properties = new PostgresPropertyRepository(options.app)
   }
+  get mfa(): ReturnType<typeof createMfaService> {
+    if (!this.mfaService) {
+      const configuration = mfaConfiguration(this.authOrigin)
+      this.mfaService = createMfaService(new PostgresMfaRepository(this.auth, configuration), configuration)
+    }
+    return this.mfaService
+  }
+  get authenticationOrigin(): string { return mfaConfiguration(this.authOrigin).origin }
   authenticate(headers: Headers, now: Date): Promise<AuthenticatedUser | null> {
     return this.authorization.authenticateSession(parseCookies(headers.cookie)[OPS_COOKIE], now, this.sessionSecret)
   }
+  /** Every interactive password login reserves shared budgets before hash lookup. */
+  async signIn(username: unknown, password: unknown, clientAddress: unknown, userAgent?: unknown): Promise<AuthenticatedUser | null> {
+    await this.loginProtection.reserve(username, clientAddress)
+    const principal = await this.authorization.authenticatePassword(username, password)
+    return principal ? this.sessions.start(principal, { label: sessionLabel(userAgent) }) : null
+  }
   async loadUserProperty(principal: AuthenticatedUser, selected: {organizationId: unknown; propertyId: unknown},
     permission: Permission, requestId: string = randomUUID()): Promise<ResolvedPropertyRuntime> {
+    if (principal.sessionId) await this.mfa.requireLogin(principal)
     if (typeof selected.organizationId !== 'string' || typeof selected.propertyId !== 'string' || !selected.organizationId || !selected.propertyId) {
       throw new RuntimeRequestError(428, 'property_selection_required', 'Choose a property before opening this workspace.')
     }
@@ -114,7 +144,7 @@ export class DatabaseRuntime {
   }
 }
 
-export function createDatabaseRuntime(options: {app:DatabaseConnection;auth:DatabaseConnection;sessionSecret:string}): DatabaseRuntime {
+export function createDatabaseRuntime(options: {app:DatabaseConnection;auth:DatabaseConnection;sessionSecret:string;authOrigin?:string}): DatabaseRuntime {
   return new DatabaseRuntime(options)
 }
 let cached: {key:string;runtime:DatabaseRuntime} | undefined
@@ -123,10 +153,11 @@ export function getDatabaseRuntime(env: NodeJS.ProcessEnv = process.env): Databa
   const secret = env.OPS_SESSION_SECRET ?? ''
   if (secret.trim().length < 32) throw new DatabaseConfigurationError()
   const appConfig = databasePoolConfig('atrium_app',env), authConfig = databasePoolConfig('atrium_authenticator',env)
-  const key = JSON.stringify([appConfig,authConfig,secret])
+  const authOrigin = mfaConfiguration(env.ATRIUM_AUTH_ORIGIN).origin
+  const key = JSON.stringify([appConfig,authConfig,secret,authOrigin])
   if (cached?.key === key) return cached.runtime
   if (cached) { void cached.runtime.app.close().catch(() => {}); void cached.runtime.auth.close().catch(() => {}) }
-  const runtime = createDatabaseRuntime({app:new DatabaseConnection(appConfig,'atrium_app'),auth:new DatabaseConnection(authConfig,'atrium_authenticator'),sessionSecret:secret})
+  const runtime = createDatabaseRuntime({app:new DatabaseConnection(appConfig,'atrium_app'),auth:new DatabaseConnection(authConfig,'atrium_authenticator'),sessionSecret:secret,authOrigin})
   cached = {key,runtime}
   return runtime
 }
@@ -155,6 +186,7 @@ export async function resolveVerifiedChannelRuntime(provider: string, externalId
   return (injected ?? getDatabaseRuntime()).loadChannel(provider,externalId,requestId)
 }
 export function readRuntimeError(error: unknown): {status:number;body:{error:string;code:string}} {
+  if (error instanceof MfaError) return {status:error.status,body:{error:error.message,code:error.code}}
   if (error instanceof RuntimeRequestError) return {status:error.status,body:{error:error.message,code:error.code}}
   if (error instanceof AuthorizationError && error.code !== 'invalid_record') return {
     status:error.code === 'unauthenticated' ? 401 : 403,body:{error:error.message,code:error.code},

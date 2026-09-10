@@ -1,18 +1,20 @@
+import { TEST_AUTH_ORIGIN, verifyMfaSession } from '../helpers/mfa-session.mjs'
 import { before, after, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { createFoundationTestDatabase, seedFoundationTestDatabase } from '../../scripts/lib/foundation-test.mjs'
 import { createAuthorizationService, mintUserSession, hashPassword } from '../../src/auth/index.ts'
 import { PgAuthorizationRepository } from '../../src/database/authorization.ts'
+import { createDatabaseRuntime } from '../../src/application/runtime.ts'
 
-let db, repository, authorization, credentials
-const now = new Date('2032-06-01T12:00:00Z')
+let db, repository, authorization, credentials, runtime
 const sessionSecret = 'synthetic-postgres-session-test-secret-not-a-live-credential'
 before(async () => {
   db = await createFoundationTestDatabase()
   credentials = await seedFoundationTestDatabase(db.admin)
   repository = new PgAuthorizationRepository(db.auth)
   authorization = createAuthorizationService(repository)
+  runtime = createDatabaseRuntime({ authOrigin: TEST_AUTH_ORIGIN, app: db.app, auth: db.auth, sessionSecret })
 })
 after(async () => { if (db) await db.close() })
 async function login(username) {
@@ -80,8 +82,10 @@ test('concurrent lookups on reused connections keep actor and organization conte
   assert.deepEqual(afterReuse.rows, [])
 })
 
-test('real password rotation increments credential version and invalidates a3 sessions', async () => {
-  const principal = await login('owner-a')
+test('real password rotation increments credential version and invalidates registered sessions', async () => {
+  const principal = await runtime.sessions.start(await login('owner-a'), { label: 'Synthetic rotation session' })
+  await verifyMfaSession(runtime, principal, credentials.password)
+  const now = new Date()
   const session = mintUserSession(principal, now, sessionSecret)
   const replacement = randomBytes(24).toString('base64url')
   const replacementHash = await hashPassword(replacement)
@@ -99,7 +103,9 @@ test('real password rotation increments credential version and invalidates a3 se
 })
 
 test('deactivating a user blocks an already-issued session and credential lookup', async () => {
-  const principal = await login('owner-b')
+  const principal = await runtime.sessions.start(await login('owner-b'), { label: 'Synthetic deactivation session' })
+  await verifyMfaSession(runtime, principal, credentials.password)
+  const now = new Date()
   const session = mintUserSession(principal, now, sessionSecret)
   try {
     await db.admin.query("UPDATE atrium.users SET status='inactive' WHERE id=$1", [principal.userId])

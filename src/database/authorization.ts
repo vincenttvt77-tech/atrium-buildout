@@ -1,3 +1,5 @@
+import { PostgresUserSessionRepository } from './user-sessions.ts'
+import type { UserSessionClaims } from '../auth/model.ts'
 import { DatabaseConnection } from './connection.ts'
 import type { DatabaseContext } from './connection.ts'
 import { AuthorizationError } from '../auth/model.ts'
@@ -20,7 +22,8 @@ function lookupContext(context: AuthLookupContext): DatabaseContext {
   if (!context || typeof context !== 'object') invalid()
   if (context.kind === 'user') {
     if (!validId(context.userId) || !validVersion(context.credentialVersion)) invalid()
-    return { actorUserId: context.userId, credentialVersion: context.credentialVersion }
+    return { actorUserId: context.userId, credentialVersion: context.credentialVersion,
+      ...(context.sessionId ? { actorSessionId: context.sessionId } : {}) }
   }
   if (context.kind !== 'channel' || !/^[a-z][a-z0-9_-]{0,63}$/.test(context.provider)
     || typeof context.externalId !== 'string' || !context.externalId || context.externalId.length > 256
@@ -68,6 +71,9 @@ export class PgAuthorizationRepository implements AuthorizationRepository {
       if (result.rows.length > MAX_ROWS) throw new Error('Authorization selection exceeds the supported result limit.')
       return result.rows.map(map)
     })
+  }
+  async resolveSession(claims: UserSessionClaims) {
+    return new PostgresUserSessionRepository(this.connection).resolve(claims)
   }
   async findCredentialByUsername(username: string): Promise<Credential | null> {
     if (normalizeUsername(username) !== username) return null

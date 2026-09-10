@@ -30,6 +30,8 @@
     "typescript": "5.9.3"
   },
   "dependencies": {
+    "@simplewebauthn/browser": "14.0.0",
+    "@simplewebauthn/server": "14.0.1",
     "pg": "8.23.0"
   }
 }

@@ -14,6 +14,7 @@ export default async function handler(req: any, res: any) {
     const runtime = runtimeForRequest(req)
     const principal = await runtime.authenticate(req.headers ?? {}, new Date())
     if (!principal) { res.status(401).json({ error: 'Sign in to view your properties.' }); return }
+    await runtime.mfa.requireLogin(principal)
     const properties = await runtime.authorization.listAuthorizedProperties(principal)
     res.status(200).json({ properties: properties.map((property: AuthorizedProperty) => ({
       id: property.id, organizationId: property.organizationId, organizationName: property.organizationName,

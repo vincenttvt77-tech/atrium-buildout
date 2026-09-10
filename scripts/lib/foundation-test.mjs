@@ -12,6 +12,12 @@ export async function createFoundationTestDatabase() {
     await instance.admin.query('CREATE ROLE atrium_admin NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE')
     await instance.admin.query('CREATE ROLE atrium_account_executor NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOREPLICATION')
     await instance.admin.query('GRANT atrium_account_executor TO atrium_admin')
+    await instance.admin.query('CREATE ROLE atrium_login_executor NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOREPLICATION')
+    await instance.admin.query('GRANT atrium_login_executor TO atrium_admin')
+    await instance.admin.query('CREATE ROLE atrium_session_executor NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOREPLICATION')
+    await instance.admin.query('GRANT atrium_session_executor TO atrium_admin')
+    await instance.admin.query('CREATE ROLE atrium_mfa_executor NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOREPLICATION')
+    await instance.admin.query('GRANT atrium_mfa_executor TO atrium_admin')
     const password = randomBytes(32).toString('base64url')
     for (const role of ['atrium_app', 'atrium_authenticator']) {
       await instance.admin.query(`CREATE ROLE ${role} LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE PASSWORD ${pg.escapeLiteral(password)}`)

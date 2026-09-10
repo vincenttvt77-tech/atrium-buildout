@@ -62,7 +62,7 @@ function claimValue(row: Row): WorkflowClaim {
 }
 
 const contextSettings = [
-  ['actor_user_id','actorUserId'],['credential_version','credentialVersion'],['organization_id','organizationId'],
+  ['actor_user_id','actorUserId'],['credential_version','credentialVersion'],['session_id','actorSessionId'],['organization_id','organizationId'],
   ['property_id','propertyId'],['login_username','loginUsername'],['channel_provider','channelProvider'],
   ['channel_external_id','channelExternalId'],['channel_binding_id','channelBindingId'],['channel_binding_version','channelBindingVersion'],
 ] as const

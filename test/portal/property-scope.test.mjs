@@ -552,7 +552,7 @@ test('feedback filtering uses property-local observed dates and signals unavaila
     feedbackFixture({ id: 'older', observedDate: ui.app.fmt.addDays(today, -30) })], unitFeedbackTruncated: true }))
   assert.equal(units.feedbackModel(ui.app.state, { period: '30' }).entries.length, 1)
   const view = units.view
-  view.root = { querySelectorAll: () => [] }; view.add = {}; view.source = { innerHTML: '' }; view.list = { innerHTML: '' }; view.detail = { innerHTML: '' }
+  view.root = { querySelectorAll: () => [] }; view.add = {}; view.source = { innerHTML: '' }; view.list = { innerHTML: '', querySelectorAll: () => [] }; view.detail = { innerHTML: '' }
   view.render(ui.app.state)
   assert.match(view.source.innerHTML, /latest 500 saved entries/)
   ui.app.apply('leads', { scope: ui.scope, feedbackInventory: null })

@@ -26,7 +26,7 @@ export function validateProperty(value: Property): Property {
   catch { throw new AuthorizationError('invalid_record') }
 }
 export function validateUser(value: User): User {
-  requireValid(record(value) && validId(value.id) && normalizeUsername(value.username) === value.username
+  requireValid(record(value) && validId(value.id) && typeof value.username === 'string' && normalizeUsername(value.username) === value.username
     && name(value.displayName) && status(value.status) && validVersion(value.credentialVersion))
   return { ...value }
 }

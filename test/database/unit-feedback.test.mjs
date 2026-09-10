@@ -1,3 +1,4 @@
+import { TEST_AUTH_ORIGIN, verifyMfaCookie } from '../helpers/mfa-session.mjs'
 import { before, after, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
@@ -27,7 +28,7 @@ before(async () => {
   process.env.ATRIUM_RUNTIME_MODE = 'postgres'
   db = await createFoundationTestDatabase(); credentials = await seedFoundationTestDatabase(db.admin)
   app = db.createAppConnection()
-  runtime = createDatabaseRuntime({ app, auth: db.auth, sessionSecret: randomBytes(36).toString('base64url') })
+  runtime = createDatabaseRuntime({ authOrigin: TEST_AUTH_ORIGIN, app, auth: db.auth, sessionSecret: randomBytes(36).toString('base64url') })
   for (const building of buildings) {
     await publish(building)
     await db.admin.query('INSERT INTO atrium.operational_documents(organization_id,property_id,key,value) VALUES($1,$2,$3,$4)', [building[0], building[1], profileKey(phone), JSON.stringify({ ...emptyProfile(phone, new Date()), name: building[1] })])
@@ -48,6 +49,7 @@ before(async () => {
   for (const username of ['owner-a', 'owner-b', 'staff-a', 'viewer-a']) {
     const response = await fetch(`${origin}/api/dashboard`, { method: 'POST', redirect: 'manual', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ username, password: credentials.password }) })
     assert.equal(response.status, 303); cookies[username] = response.headers.get('set-cookie').split(';')[0]; await response.text()
+    await verifyMfaCookie(runtime, cookies[username], credentials.password)
   }
 })
 after(async () => {

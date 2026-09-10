@@ -11,10 +11,12 @@ import { readdir, mkdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { buildOpsPage } from './build-ops.mjs'
 import { verifyApiBundle } from './verify-api-bundle.mjs'
+import { buildAuthClient } from './build-auth.mjs'
 
 // The dashboard page is compiled into api/dashboard.ts rather than served from public/,
 // so regenerate it first — bundling a stale page is how a fix appears not to have landed.
 await buildOpsPage()
+await buildAuthClient()
 
 const SRC = 'api'
 const OUT = '.vercel-build/api'

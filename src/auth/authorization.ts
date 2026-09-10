@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { verifyPassword } from '../ops/accounts.ts'
 import { issueAuthenticatedUser, assertAuthenticatedUser } from './identity.ts'
+import { validateSessionRecord } from './session-management.ts'
 import { verifyUserSessionClaims } from './session.ts'
 import { AuthorizationError } from './model.ts'
 import type { AuthorizationRepository, AuthenticatedUser, AuthorizedScope, AuthorizedProperty, User, Property,
@@ -42,6 +43,13 @@ export function assertAuthorizedScope(value: unknown, permission?: Permission): 
 export function createAuthorizationService(repository: AuthorizationRepository) {
   async function currentUser(principal: AuthenticatedUser): Promise<User> {
     assertAuthenticatedUser(principal)
+    if (principal.sessionId !== undefined) {
+      const session = await repository.resolveSession({ userId: principal.userId, credentialVersion: principal.credentialVersion,
+        sessionId: principal.sessionId, expiresAt: principal.sessionExpiresAt! })
+      if (!session || validateSessionRecord(session).revokedAt !== null || session.id !== principal.sessionId
+        || session.userId !== principal.userId || session.credentialVersion !== principal.credentialVersion
+        || session.expiresAt !== principal.sessionExpiresAt) throw new AuthorizationError('unauthenticated')
+    }
     const raw = await repository.getUser(principal.userId)
     if (!raw) throw new AuthorizationError('unauthenticated')
     const user = validateUser(raw)
@@ -84,16 +92,22 @@ export function createAuthorizationService(repository: AuthorizationRepository) 
   async function authenticateSession(token: string | undefined, now: Date, secret: string): Promise<AuthenticatedUser | null> {
     const claims = verifyUserSessionClaims(token, now, secret)
     if (!claims) return null
+    const rawSession = await repository.resolveSession(claims)
+    if (!rawSession) return null
+    const session = validateSessionRecord(rawSession)
+    if (session.id !== claims.sessionId || session.userId !== claims.userId || session.credentialVersion !== claims.credentialVersion
+      || session.revokedAt !== null || session.expiresAt !== claims.expiresAt) return null
     const raw = await repository.getUser(claims.userId)
     if (!raw) return null
     const user = validateUser(raw)
     if (user.id !== claims.userId) invalid()
-    return user.status === 'active' && user.credentialVersion === claims.credentialVersion ? issueAuthenticatedUser(user) : null
+    return user.status === 'active' && user.credentialVersion === claims.credentialVersion ? issueAuthenticatedUser(user, { id: session.id, expiresAt: session.expiresAt }) : null
   }
 
   async function authorizeProperty(principal: AuthenticatedUser, propertyId: string, permission: Permission): Promise<AuthorizedScope> {
     const user = await currentUser(principal)
-    const context: AuthLookupContext = Object.freeze({ kind: 'user', userId: user.id, credentialVersion: user.credentialVersion })
+    const context: AuthLookupContext = Object.freeze({ kind: 'user', userId: user.id, credentialVersion: user.credentialVersion,
+      ...(principal.sessionId ? { sessionId: principal.sessionId } : {}) })
     const { property, organization } = await activeProperty(propertyId, context)
     const rawMembership = await repository.getMembership(user.id, organization.id, context)
     if (!rawMembership) forbidden()
@@ -116,14 +130,16 @@ export function createAuthorizationService(repository: AuthorizationRepository) 
       if (!grant) forbidden()
     }
     return issueScope(organization.id, property.id, { kind: 'user', userId: user.id, membershipId: membership.id,
-      role: membership.role, credentialVersion: user.credentialVersion }, permissions,
+      role: membership.role, credentialVersion: user.credentialVersion,
+      ...(principal.sessionId ? { sessionId: principal.sessionId } : {}) }, permissions,
     [user.id, user.credentialVersion, organization.id, organization.permissionVersion, property.id, property.permissionVersion,
       membership.id, membership.permissionVersion, membership.role, membership.access, grant?.permissionVersion ?? null])
   }
 
   async function listAuthorizedProperties(principal: AuthenticatedUser): Promise<readonly AuthorizedProperty[]> {
     const user = await currentUser(principal)
-    const context: AuthLookupContext = Object.freeze({ kind: 'user', userId: user.id, credentialVersion: user.credentialVersion })
+    const context: AuthLookupContext = Object.freeze({ kind: 'user', userId: user.id, credentialVersion: user.credentialVersion,
+      ...(principal.sessionId ? { sessionId: principal.sessionId } : {}) })
     const memberships = await repository.listMemberships(user.id, context)
     if (!Array.isArray(memberships)) invalid()
     const organizations = new Set<string>(), propertyIds = new Set<string>()

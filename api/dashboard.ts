@@ -12,6 +12,9 @@ import type { AuthenticatedUser, AuthorizedProperty, AuthorizedScope } from '../
 import { assertPropertySnapshot, PropertyConfigurationError } from '../src/properties/index.ts'
 import type { PropertySnapshot } from '../src/properties/index.ts'
 import { validId } from '../src/auth/validation.ts'
+import { SessionManagementError } from '../src/auth/session-management.ts'
+import { isSameOriginJsonRequest, mintAccountFormToken, verifyAccountFormToken } from '../src/auth/account-request.ts'
+import { LoginProtectionError, requestLoginAddress } from '../src/auth/login-protection.ts'
 import { runtimeForRequest, isPostgresRuntime, readRuntimeError } from '../src/application/runtime.ts'
 
 /**
@@ -79,10 +82,13 @@ const shell = (title: string, body: string) => `<!doctype html>
 </html>
 `
 
-const loginPage = (failed: boolean, accountMode: boolean, action = '/api/dashboard') => shell('Sign in — Atrium Operations', `
+const loginPage = (failed: boolean, accountMode: boolean, action = '/api/dashboard', retryAfterSeconds?: number) => shell('Sign in — Atrium Operations', `
   <h1>Welcome back.</h1>
   <p>Sign in to manage your leasing workspace.</p>
   ${failed ? `<p class="err" role="alert">${accountMode ? 'The username or password was not right.' : 'That passcode was not right.'} Please try again.</p>` : ''}
+  ${retryAfterSeconds ? `<p class="err" role="alert">Too many sign-in attempts. Please wait at least ${retryAfterSeconds < 60
+    ? `${retryAfterSeconds} second${retryAfterSeconds === 1 ? '' : 's'}`
+    : `${Math.ceil(retryAfterSeconds / 60)} minute${Math.ceil(retryAfterSeconds / 60) === 1 ? '' : 's'}`} before trying again.</p>` : ''}
   <form method="post" action="${escapeHtml(action)}">
     ${accountMode ? `<label for="username">Username</label>
     <input id="username" name="username" type="text" autocomplete="username" autocapitalize="none"
@@ -110,7 +116,7 @@ export function propertyDashboardUrl(organizationId: string, propertyId: string)
   return `/api/dashboard?${new URLSearchParams({ organizationId, propertyId })}`
 }
 
-function propertyPicker(principal: AuthenticatedUser, properties: readonly AuthorizedProperty[]): string {
+function propertyPicker(principal: AuthenticatedUser, properties: readonly AuthorizedProperty[], token: string): string {
   return shell('Choose a property — Atrium Operations', `
     <h1>Choose a property.</h1>
     <p>Signed in as ${escapeHtml(principal.displayName)}. Each property opens in its own workspace.</p>
@@ -120,7 +126,34 @@ function propertyPicker(principal: AuthenticatedUser, properties: readonly Autho
         <span style="font-size:13px;color:var(--muted)">${escapeHtml(property.organizationName)} · ${escapeHtml(property.role)}</span>
       </a>`).join('')}</nav>` : '<p role="status">Your account does not have access to an active property. Contact your organization administrator.</p>'}
     <p><a href="/api/account">Account security</a></p>
-    <form method="post" action="/api/dashboard"><input type="hidden" name="action" value="logout"><button type="submit">Sign out</button></form>
+    <form id="signout-form" data-user-id="${escapeHtml(principal.userId)}" data-session-id="${escapeHtml(principal.sessionId)}" data-form-token="${escapeHtml(token)}"><button type="submit" disabled>Sign out</button></form>
+    <p id="signout-notice" role="status" aria-live="polite"></p><p id="signout-next" hidden><a href="/api/dashboard">Reload this page</a></p>
+    <noscript>JavaScript is required to sign out securely.</noscript>
+    <script>
+      const form = document.getElementById('signout-form');
+      const button = form.querySelector('button');
+      const notice = document.getElementById('signout-notice');
+      button.disabled = false;
+      let pending = false;
+      form.addEventListener('submit', async event => {
+        event.preventDefault(); if (pending) return;
+        pending = true; button.disabled = true; button.textContent = 'Signing out…';
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        try {
+          const response = await fetch('/api/dashboard', { method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: controller.signal,
+            headers: { 'content-type': 'application/json', 'x-atrium-user-id': form.dataset.userId, 'x-atrium-session-id': form.dataset.sessionId, 'x-atrium-csrf': form.dataset.formToken },
+            body: JSON.stringify({ action: 'logout' }) });
+          const data = await response.json();
+          if (response.status !== 200 || data?.status !== 'signed_out') throw new Error('Sign-out was not confirmed');
+          location.href = '/api/dashboard?reauthenticate=1';
+        } catch {
+          button.textContent = 'Sign out';
+          notice.textContent = 'We couldn’t confirm sign-out. Reload this page before trying again.';
+          document.getElementById('signout-next').hidden = false;
+        } finally { clearTimeout(timeout); }
+      });
+    </script>
   `)
 }
 
@@ -150,7 +183,7 @@ function portalHours(property: Record<string, unknown>): Record<string, [number,
 }
 
 /** Only allowlisted display fields cross into the page; a bootstrap is never API authority. */
-export function decoratePropertyDashboard(html: string, principal: AuthenticatedUser, scope: AuthorizedScope, snapshot: PropertySnapshot): string {
+export function decoratePropertyDashboard(html: string, principal: AuthenticatedUser, scope: AuthorizedScope, snapshot: PropertySnapshot, sessionFormToken?: string): string {
   assertPropertySnapshot(snapshot, scope)
   if (scope.actor.kind !== 'user' || scope.actor.userId !== principal.userId || scope.actor.credentialVersion !== principal.credentialVersion) throw new AuthorizationError('forbidden')
   const property = snapshot.property
@@ -160,8 +193,8 @@ export function decoratePropertyDashboard(html: string, principal: Authenticated
     buildingName: String(property.buildingName), timeZone: snapshot.timeZone, configurationVersion: snapshot.version,
     permissionVersion: scope.permissionVersion, permissions: scope.permissions,
     leasingPhone: phone?.replace(/[^+\d]/g, '') ?? null, leasingPhoneDisplay: phone, hours: portalHours(property), locationLabel: location.slice(0, 300) }
-  const account = { userId: principal.userId, username: principal.username, displayName: principal.displayName }
-  const script = `<script>window.ATRIUM_RUNTIME_MODE="postgres";window.ATRIUM_ACCOUNT=Object.freeze(${scriptJson(account)});window.ATRIUM_PROPERTY=Object.freeze(${scriptJson(publicProperty)});</script>`
+  const account = { userId: principal.userId, username: principal.username, displayName: principal.displayName, sessionId: principal.sessionId }
+  const script = `<script>window.ATRIUM_RUNTIME_MODE="postgres";window.ATRIUM_SESSION_FORM_TOKEN=${scriptJson(sessionFormToken ?? null)};window.ATRIUM_ACCOUNT=Object.freeze(${scriptJson(account)});window.ATRIUM_PROPERTY=Object.freeze(${scriptJson(publicProperty)});</script>`
   return html.includes('</head>') ? html.replace('</head>', `${script}</head>`) : `${script}${html}`
 }
 
@@ -302,8 +335,23 @@ function selectedProperty(req: any): { organizationId: string; propertyId: strin
 async function databaseDashboard(req: any, res: any) {
   const headers = req.headers ?? {}, secure = isSecureRequest(headers), now = new Date()
   if (req.method === 'POST' && bodyFields(req).action === 'logout') {
-    send(res, 200, shell('Signed out', '<h1>Signed out</h1><p><a href="/api/dashboard">Sign in again</a></p>'), clearedSessionCookie({ secure }))
-    return
+    if (!isSameOriginJsonRequest(headers)) {
+      send(res, 403, shell('Sign-out could not be confirmed', '<h1>Reload your workspace</h1><p>Use the sign-out button in this workspace.</p>')); return
+    }
+    const runtime = runtimeForRequest(req), principal = await runtime.authenticate(headers, now)
+    if (principal) {
+      if (headers['x-atrium-user-id'] !== principal.userId || headers['x-atrium-session-id'] !== principal.sessionId) {
+        send(res, 409, shell('Sign-in changed', '<h1>Your sign-in changed</h1><p>Reload the workspace before signing out.</p>')); return
+      }
+      if (!verifyAccountFormToken(headers['x-atrium-csrf'], principal, now, runtime.sessionSecret)) {
+        send(res, 403, shell('Reload your workspace', '<h1>Reload your workspace</h1><p>The sign-out form is no longer current.</p>')); return
+      }
+      await runtime.sessions.revoke(principal, principal.sessionId!)
+    }
+    for (const [key, value] of HTML_HEADERS) res.setHeader(key, value)
+    res.setHeader('content-type', 'application/json; charset=utf-8')
+    res.setHeader('set-cookie', clearedSessionCookie({ secure }))
+    res.status(200).json({ status: 'signed_out' }); return
   }
   if (!['GET', 'HEAD', 'POST'].includes(req.method)) {
     res.setHeader('allow', 'GET, HEAD, POST'); send(res, 405, shell('Method not allowed', '<h1>Method not allowed</h1>')); return
@@ -320,16 +368,28 @@ async function databaseDashboard(req: any, res: any) {
   }
   if (req.method === 'POST') {
     const fields = bodyFields(req)
-    const principal = await runtime.authorization.authenticatePassword(fields.username ?? '', fields.password ?? '')
-    if (!principal) { await penalise(clientKey(req)); send(res, 401, loginPage(true, true, destination)); return }
-    failures.delete(clientKey(req))
+    let principal: AuthenticatedUser | null
+    try { principal = await runtime.signIn(fields.username ?? '', fields.password ?? '', requestLoginAddress(req), headers['user-agent']) }
+    catch (error) {
+      if (error instanceof LoginProtectionError && error.code === 'rate_limited') {
+        res.setHeader('retry-after', String(error.retryAfterSeconds))
+        send(res, 429, loginPage(false, true, destination, error.retryAfterSeconds)); return
+      }
+      throw error
+    }
+    if (!principal) { send(res, 401, loginPage(true, true, destination)); return }
     for (const [key, value] of HTML_HEADERS) res.setHeader(key, value)
-    res.setHeader('set-cookie', sessionCookie(mintUserSession(principal, now, runtime.sessionSecret), { secure }))
+    res.setHeader('set-cookie', sessionCookie(mintUserSession(principal, new Date(), runtime.sessionSecret), { secure, ttlMs: Math.max(1, principal.sessionExpiresAt! - Date.now()) }))
     res.setHeader('location', destination); res.status(303).send(''); return
   }
   const principal = await runtime.authenticate(headers, now)
   if (!principal) { send(res, 401, loginPage(false, true, destination)); return }
-  res.setHeader('set-cookie', sessionCookie(mintUserSession(principal, now, runtime.sessionSecret), { secure, ttlMs: SESSION_TTL_MS }))
+  const security = await runtime.mfa.state(principal)
+  if (security.required && !security.assurances.some(proof => proof.purpose === 'session_login')) {
+    for (const [key, value] of HTML_HEADERS) res.setHeader(key, value)
+    res.setHeader('location', '/api/mfa'); res.status(303).send(''); return
+  }
+  res.setHeader('set-cookie', sessionCookie(mintUserSession(principal, now, runtime.sessionSecret), { secure, ttlMs: Math.max(1, principal.sessionExpiresAt! - Date.now()) }))
   if (!selection) {
     const properties = await runtime.authorization.listAuthorizedProperties(principal)
     if (properties.length === 1) {
@@ -337,16 +397,22 @@ async function databaseDashboard(req: any, res: any) {
       const property = properties[0]!
       res.setHeader('location', propertyDashboardUrl(property.organizationId, property.id)); res.status(303).send(''); return
     }
-    send(res, properties.length ? 200 : 403, propertyPicker(principal, properties)); return
+    send(res, properties.length ? 200 : 403, propertyPicker(principal, properties, mintAccountFormToken(principal, new Date(), runtime.sessionSecret))); return
   }
   const resolved = await runtime.loadUserProperty(principal, selection, 'read', randomUUID())
-  send(res, 200, decoratePropertyDashboard(page.html, principal, resolved.scope, resolved.snapshot))
+  send(res, 200, decoratePropertyDashboard(page.html, principal, resolved.scope, resolved.snapshot, mintAccountFormToken(principal, new Date(), runtime.sessionSecret)))
 }
 
 export default async function handler(req: any, res: any) {
   try {
     if (isPostgresRuntime()) { await databaseDashboard(req, res); return }
   } catch (error) {
+    if (error instanceof SessionManagementError) {
+      send(res, error.status, shell('Session unavailable', `<h1>Check your sign-in</h1><p>${escapeHtml(error.message)}</p><a href="/api/dashboard?reauthenticate=1">Sign in again</a>`)); return
+    }
+    if (error instanceof LoginProtectionError) {
+      send(res, 503, shell('Sign-in temporarily unavailable', '<h1>Sign-in is temporarily unavailable</h1><p>Please try again later. If this continues, contact your Atrium administrator.</p><a href="/api/dashboard">Return to sign in</a>')); return
+    }
     if (error instanceof InvalidSelection) {
       send(res, 400, shell('Choose a property', '<h1>Choose a property</h1><p>The workspace link needs one organization and one property. <a href="/api/dashboard">Return to your properties</a>.</p>')); return
     }

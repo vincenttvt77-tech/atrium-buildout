@@ -7,6 +7,7 @@ export { DatabaseConfigurationError } from './errors.ts'
 export type DatabaseRole = 'atrium_app' | 'atrium_authenticator'
 export interface DatabaseContext {
   actorUserId?: string
+  actorSessionId?: string
   credentialVersion?: number
   organizationId?: string
   propertyId?: string
@@ -39,7 +40,7 @@ export function databasePoolConfig(role: DatabaseRole, env: NodeJS.ProcessEnv = 
 }
 
 const settings = [
-  ['atrium.actor_user_id', 'actorUserId'], ['atrium.credential_version', 'credentialVersion'],
+  ['atrium.actor_user_id', 'actorUserId'], ['atrium.session_id', 'actorSessionId'], ['atrium.credential_version', 'credentialVersion'],
   ['atrium.organization_id', 'organizationId'], ['atrium.property_id', 'propertyId'],
   ['atrium.login_username', 'loginUsername'], ['atrium.channel_provider', 'channelProvider'],
   ['atrium.channel_external_id', 'channelExternalId'], ['atrium.channel_binding_id', 'channelBindingId'],
@@ -67,7 +68,7 @@ export class DatabaseConnection {
         `SELECT rolname, session_user AS login_role, rolsuper, rolbypassrls, rolcreaterole, rolcreatedb, rolreplication,
            pg_catalog.pg_has_role(current_user, 'atrium_admin', 'MEMBER') AS admin_member,
            pg_catalog.pg_has_role(current_user, $1, 'MEMBER') AS other_runtime_member,
-           EXISTS (SELECT 1 FROM pg_catalog.pg_roles executor WHERE executor.rolname='atrium_account_executor'
+           EXISTS (SELECT 1 FROM pg_catalog.pg_roles executor WHERE executor.rolname IN ('atrium_account_executor','atrium_login_executor','atrium_session_executor','atrium_mfa_executor')
              AND pg_catalog.pg_has_role(current_user, executor.oid, 'MEMBER')) AS account_executor_member
          FROM pg_catalog.pg_roles WHERE rolname = current_user`,
       [this.role === 'atrium_app' ? 'atrium_authenticator' : 'atrium_app'])
