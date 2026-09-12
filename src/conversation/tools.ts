@@ -481,18 +481,6 @@ const ABOUT_PROMOTIONS = /\b(specials|special offers?|concessions?|rent discount
 /** Apartment dimensions belong to the scoped inventory, not general building articles. */
 function answerUnitDimensions(question: string, ctx: ToolContext): ToolResult | null {
   if (ABOUT_RENT_OR_AVAILABILITY.test(question) || ABOUT_PROMOTIONS.test(question)) return null
-  // A count of windows in a bedroom, or a bedroom's own area, is not the
-  // apartment's bedroom count or total square footage.
-  const counts = /\b(?:how many|number of|count of)\s+(?:separate\s+)?(?:bedrooms?(?:\s+(?:and|or)\s+bathrooms?)?|bathrooms?(?:\s+(?:and|or)\s+bedrooms?)?)\b|\b(?:bedroom|bathroom) count\b/i.exec(question)?.[0] ?? ''
-  if (/\b(?:size|area|dimensions) of (?:the )?(?:bedrooms?|bathrooms?|kitchen|balcony|closets?)\b|\bhow (?:big|large) (?:is|are) (?:the )?(?:bedrooms?|bathrooms?|kitchen|balcony|closets?)\b|\b(?:bedroom|bathroom|kitchen|balcony|closet) (?:size|area|dimensions|square footage)\b/i.test(question)) return null
-  const fields = [
-    /\bbedrooms?\b/i.test(counts) ? 'bedrooms' : null,
-    /\bbathrooms?\b/i.test(counts) ? 'bathrooms' : null,
-    /\b(?:square feet|square footage|sq\.?\s*ft|how big|how large|size)\b/i.test(question) ? 'sqft' : null,
-    /\b(?:(?:what|which) floor|floor number)\b/i.test(question) ? 'floor' : null,
-  ].filter((field): field is string => field !== null)
-  if (!fields.length) return null
-
   // Recognize exact spoken labels and alphanumeric apartment codes; numbers alone
   // without a label could be dimensions, dates or prices. Include unknown codes so
   // a multi-apartment question cannot silently use just the one known apartment.
@@ -506,6 +494,38 @@ function answerUnitDimensions(question: string, ctx: ToolContext): ToolResult | 
     if (new RegExp(`(?:^|[^a-z0-9-])${identifier}(?=$|[^a-z0-9-])`, 'i').test(question)) references.add(unit.unitId.toUpperCase())
   }
   if (!references.size) return null
+
+  // Match the requested measurement to the whole residence. Free-floating words
+  // such as "size" or "which floor" also describe washers, rooms and floor plans.
+  // Requiring the complete question shape keeps those on the knowledge path,
+  // including attributes we do not store (e.g. bathrooms that have windows).
+  const text = question.replace(/[’‘]/g, "'").replace(/\s+/g, ' ').trim()
+    .replace(/[?!.]+$/, '').replace(/,?\s+please$/i, '')
+    .replace(/^(?:(?:can|could|would) you (?:please )?(?:tell me|confirm|check)|please (?:tell me|confirm|check)|do you know)\s+/i, '')
+  const identifiers = [...references].sort((a, b) => b.length - a.length)
+    .map(id => id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')
+  const residence = String.raw`(?:(?:the )?(?:residence|unit|apartment|apt\.?)\s*#?\s*)?(?:${identifiers})`
+  const subject = String.raw`${residence}(?:\s*(?:,\s*(?:and |or )?|and |or )${residence})*`
+  const match = (pattern: string) => new RegExp(`^(?:${pattern})$`, 'i').exec(text)
+  const rooms = String.raw`(?:separate )?((?:bedrooms?|bathrooms?)(?: (?:and|or) (?:bedrooms?|bathrooms?))?)`
+  const counts = match(String.raw`(?:how many|(?:what is )?(?:the )?(?:number|count) of) ${rooms} (?:(?:does|do) ${subject} have|(?:is|are)(?: there)?(?: in)? ${subject}|(?:in|for) ${subject}|${subject} (?:has|have))`)?.[1]
+    ?? match(String.raw`(?:what is )?(?:the )?(bedroom|bathroom) count (?:in|for|of) ${subject}`)?.[1]
+    ?? match(String.raw`(?:what is )?${subject}(?:'s)? (bedroom|bathroom) count`)?.[1] ?? ''
+  const area = String.raw`(?:total )?(?:square footage|size|area)`
+  const squareFeet = match(String.raw`how (?:big|large) (?:is|are) ${subject}`)
+    || match(String.raw`(?:what is )?(?:the )?${area} (?:of|for) ${subject}`)
+    || match(String.raw`(?:what is )?${subject}(?:'s)? ${area}`)
+    || match(String.raw`how many (?:square feet|sq\.?\s*ft) (?:(?:is|are)(?: there)?(?: in)? ${subject}|does ${subject} (?:have|contain|cover))`)
+  const floor = match(String.raw`(?:what|which) floor (?:is|are) ${subject}(?: (?:located )?on)?`)
+    || match(String.raw`(?:what is )?(?:the )?floor number (?:of|for) ${subject}`)
+    || match(String.raw`(?:what is )?${subject}(?:'s)? floor number`)
+  const fields = [
+    /\bbedrooms?\b/i.test(counts) ? 'bedrooms' : null,
+    /\bbathrooms?\b/i.test(counts) ? 'bathrooms' : null,
+    squareFeet ? 'sqft' : null,
+    floor ? 'floor' : null,
+  ].filter((field): field is string => field !== null)
+  if (!fields.length) return null
   const unavailable = (reason: string, say: string): ToolResult => ({ say,
     record: { kind: 'unit_facts_unavailable', reason, question } })
   if (references.size !== 1) return unavailable('ambiguous_unit', 'Ask which single residence the caller wants to check first; do not mix dimensions from different apartments.')
