@@ -202,19 +202,40 @@ test('two organizations and two properties cannot see each other through either 
 })
 
 test('document prefix escaping and maximum result bounds survive composed ports',async()=>{
-  const repository=repo(await scope())
+  let plan
+  const observed=observe(db.app,async(client,text,values)=>{
+    if(String(text).startsWith('SELECT key FROM atrium.operational_documents') && values[2]==='bulk:%') {
+      plan=(await client.query(`EXPLAIN (ANALYZE, VERBOSE, BUFFERS, FORMAT JSON) ${text}`,values)).rows[0]['QUERY PLAN'][0]
+    }
+  })
+  const repository=repo(await scope(),observed)
   await repository.transaction(async unit=>{
     await unit.documents.set('literal%_key',{})
+    await unit.documents.set('literal\\key',{})
     await unit.documents.set('literal-other',{})
     assert.deepEqual(await unit.documents.list('literal%_'),['literal%_key'])
+    assert.deepEqual(await unit.documents.list('literal\\'),['literal\\key'])
   })
   await db.admin.query(`INSERT INTO atrium.operational_documents(organization_id,property_id,key,value)
-    SELECT 'organization-a','property-a1','bulk:'||generate_series(1,5001),'{}'::jsonb`)
+    SELECT 'organization-a','property-a1','bulk:'||generate_series(1,5000),'{}'::jsonb`)
+  const keys=await repository.transaction(unit=>unit.documents.list('bulk:'))
+  assert.equal(keys.length,5000)
+  assert.equal(new Set(keys).size,5000)
+  assert.deepEqual(keys,[...keys].sort())
+  const nodes=node=>[node,...(node.Plans??[]).flatMap(nodes)]
+  const permissionPlans=nodes(plan.Plan).filter(node=>node['Parent Relationship']==='InitPlan'
+    && node.Output?.some(output=>output.includes('can_access_property')))
+  assert.equal(permissionPlans.length,1,'the live permission check must be a statement InitPlan')
+  assert.equal(permissionPlans[0]['Actual Loops'],1,'the authorization graph must run once, not once per row')
+  assert.equal(plan.Plan['Actual Rows'],5000)
+  await db.admin.query(`INSERT INTO atrium.operational_documents(organization_id,property_id,key,value)
+    VALUES('organization-a','property-a1','bulk:5001','{}'::jsonb)`)
   const baseline=await counts()
   await assert.rejects(repository.transaction(async unit=>{
     await unit.workflows.accept(receipt())
     await unit.documents.list('bulk:')
   }),/paginated operational query/)
+  assert.equal(plan.Plan['Actual Rows'],5001)
   assert.deepEqual(await counts(),baseline)
 })
 

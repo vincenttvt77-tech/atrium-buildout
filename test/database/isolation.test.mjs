@@ -2,9 +2,11 @@ import { before, after, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createFoundationTestDatabase, seedFoundationTestDatabase } from '../../scripts/lib/foundation-test.mjs'
 import { DatabaseConnection } from '../../src/database/connection.ts'
+import { createDatabaseRuntime } from '../../src/application/runtime.ts'
+import { TEST_AUTH_ORIGIN, verifyMfaSession } from '../helpers/mfa-session.mjs'
 
-let db
-before(async () => { db = await createFoundationTestDatabase(); await seedFoundationTestDatabase(db.admin) })
+let db, credentials
+before(async () => { db = await createFoundationTestDatabase(); credentials = await seedFoundationTestDatabase(db.admin) })
 after(async () => { if (db) await db.close() })
 const a1 = { actorUserId: 'owner-a', credentialVersion: 1, organizationId: 'organization-a', propertyId: 'property-a1' }
 const a2 = { ...a1, propertyId: 'property-a2' }
@@ -52,6 +54,77 @@ test('pool reuse clears context on success and failure; an old credential or mem
   await db.admin.query("UPDATE atrium.memberships SET status='active',permission_version=permission_version+1 WHERE id='member-owner-a'")
   await db.admin.query("UPDATE atrium.users SET credential_version=credential_version+1 WHERE id='owner-a'")
   assert.deepEqual(await db.app.transaction(a1, async client => (await client.query('SELECT * FROM atrium.operational_documents')).rows), [])
+})
+
+const documentScan = { name: 'live-document-read-authority', text: 'SELECT organization_id,property_id,key FROM atrium.operational_documents ORDER BY organization_id,property_id,key' }
+const selectedProperties = result => [...new Set(result.rows.map(row => row.property_id))]
+
+test('prepared unfiltered document scans recompute property and membership authority for each statement', async () => {
+  // The same prepared statement and backend must not capture an earlier scope.
+  await db.app.transaction(b1, async client => {
+    assert.deepEqual(selectedProperties(await client.query(documentScan)), ['property-b1'])
+    await client.query("SELECT set_config('atrium.property_id','property-b2',true)")
+    assert.deepEqual(selectedProperties(await client.query(documentScan)), ['property-b2'])
+    await client.query("SELECT set_config('atrium.property_id','property-a1',true)")
+    assert.deepEqual((await client.query(documentScan)).rows, [])
+    await client.query("SELECT set_config('atrium.property_id','property-b1',true)")
+    assert.deepEqual(selectedProperties(await client.query(documentScan)), ['property-b1'])
+    await db.admin.query("UPDATE atrium.memberships SET status='revoked' WHERE id='member-owner-b'")
+    try {
+      // READ COMMITTED sees a concurrent revocation inside the same transaction.
+      assert.deepEqual((await client.query(documentScan)).rows, [])
+    } finally {
+      await db.admin.query("UPDATE atrium.memberships SET status='active' WHERE id='member-owner-b'")
+    }
+    assert.deepEqual(selectedProperties(await client.query(documentScan)), ['property-b1'])
+  })
+  assert.deepEqual(await db.app.transaction({}, async client => (await client.query(documentScan)).rows), [])
+  assert.deepEqual(await db.app.transaction({ ...b1, organizationId: 'organization-a', propertyId: 'property-a1' }, async client => (await client.query(documentScan)).rows), [])
+})
+
+test('statement-level document permission still enforces exact current channel and rejects mixed identities', async () => {
+  const channel = { organizationId: 'organization-a', propertyId: 'property-a1', channelProvider: 'vapi',
+    channelExternalId: 'synthetic-assistant-a', channelBindingId: 'channel-a', channelBindingVersion: 1 }
+  const scan = context => db.app.transaction(context, client => client.query(documentScan))
+  assert.deepEqual(selectedProperties(await scan(channel)), ['property-a1'])
+  for (const invalid of [{ ...channel, propertyId: 'property-a2' }, { ...channel, channelBindingVersion: 2 },
+    { ...channel, actorUserId: 'owner-b', credentialVersion: 1 }, { ...channel, channelBindingId: undefined }]) {
+    assert.deepEqual((await scan(invalid)).rows, [])
+  }
+  await db.app.transaction(channel, async client => {
+    assert.deepEqual(selectedProperties(await client.query(documentScan)), ['property-a1'])
+    await db.admin.query("UPDATE atrium.channel_bindings SET status='inactive' WHERE id='channel-a'")
+    try { assert.deepEqual((await client.query(documentScan)).rows, []) }
+    finally { await db.admin.query("UPDATE atrium.channel_bindings SET status='active' WHERE id='channel-a'") }
+  })
+})
+
+test('raw document scans require real managed-session MFA and immediately reject session or factor revocation', async () => {
+  const runtime = createDatabaseRuntime({ app: db.app, auth: db.auth, sessionSecret: 'synthetic-document-policy-session-secret', authOrigin: TEST_AUTH_ORIGIN })
+  const passwordPrincipal = await runtime.authorization.authenticatePassword('owner-a', credentials.password)
+  assert.ok(passwordPrincipal)
+  const first = await runtime.sessions.start(passwordPrincipal, { label: 'Synthetic policy session one' })
+  const context = principal => ({ actorUserId: principal.userId, actorSessionId: principal.sessionId,
+    credentialVersion: principal.credentialVersion, organizationId: 'organization-a', propertyId: 'property-a1' })
+  const scan = principal => db.app.transaction(context(principal), client => client.query(documentScan))
+  assert.deepEqual((await scan(first)).rows, [], 'a password-only managed owner session cannot read documents')
+  await verifyMfaSession(runtime, first, credentials.password)
+  assert.deepEqual(selectedProperties(await scan(first)), ['property-a1'])
+  const second = await runtime.sessions.start(passwordPrincipal, { label: 'Synthetic policy session two' })
+  await verifyMfaSession(runtime, second, credentials.password)
+  // Raw RLS reads intentionally omit the application's operation-admission
+  // fence, so the independent revoker can commit between these statements.
+  await db.app.transaction(context(first), async client => {
+    assert.deepEqual(selectedProperties(await client.query(documentScan)), ['property-a1'])
+    await runtime.sessions.revoke(second, first.sessionId)
+    assert.deepEqual((await client.query(documentScan)).rows, [], 'a prepared read cannot reuse a revoked session')
+  })
+  await db.app.transaction(context(second), async client => {
+    assert.deepEqual(selectedProperties(await client.query(documentScan)), ['property-a1'])
+    // Simulate a committed factor revocation, after genuine signed enrollment.
+    await db.admin.query("UPDATE atrium.mfa_factors SET status='revoked' WHERE user_id='owner-a' AND status='active'")
+    assert.deepEqual((await client.query(documentScan)).rows, [], 'an old assurance cannot survive its factor revocation')
+  })
 })
 
 const safetySettings = `SELECT current_setting('search_path') search_path,
