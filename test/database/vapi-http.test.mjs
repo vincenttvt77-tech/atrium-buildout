@@ -30,7 +30,7 @@ function propertyBundle(organizationId, propertyId, timeZone, jurisdiction, rent
       monthlyRent: rent, availableFrom: NOW.toISOString().slice(0, 10), status: 'available' },
     { unitId: '9l', propertyId, floorPlanId: 'one-bed', floor: 9,
       monthlyRent: rent, availableFrom: `${NOW.getUTCFullYear() + 1}-08-01`, status: 'available' }],
-    floorplans: [{ id: 'one-bed', bedrooms: 1, bathrooms: 1, sqft: 750 }],
+    floorplans: [{ id: 'one-bed', bedrooms: 1, bathrooms: 1, sqft: propertyId === 'property-b1' ? 975 : 750 }],
     knowledge: [{ id: 'hours', propertyId, topic: 'hours', question: 'When is the leasing office open?',
       answer: `The ${jurisdiction} leasing desk for ${propertyId} is open from ten until six.`,
       keywords: ['leasing', 'office', 'hours'], propertyScope: [propertyId], jurisdictionScope: [jurisdiction],
@@ -198,6 +198,21 @@ test('concurrent properties with the same call and apartment IDs use separate fa
   const records = (await db.admin.query("SELECT property_id,value FROM atrium.operational_documents WHERE key='call:same-call-id' ORDER BY property_id")).rows
   assert.deepEqual(records.map(row => [row.property_id, row.value.name, row.value.routing.channelBindingId]),
     [['property-a1', 'Alpha Visitor', 'channel-a'], ['property-b1', 'Beta Visitor', 'channel-b']])
+})
+
+test('HTTP apartment questions use the bound property inventory and reject a stale source', async () => {
+  const question = tool('answer_question', { topic: 'general_property_fact', question: 'How big is Residence 4A?' })
+  const [a, b, stale] = await Promise.all([
+    post('synthetic-assistant-a', 'unit-facts-a', [question]),
+    post('synthetic-assistant-b', 'unit-facts-b', [question]),
+    post('synthetic-assistant-stale', 'unit-facts-stale', [question]),
+  ])
+  assert.equal(a.status, 200); assert.equal(b.status, 200); assert.equal(stale.status, 200)
+  assert.equal(a.body.scope.propertyId, 'property-a1'); assert.equal(b.body.scope.propertyId, 'property-b1')
+  assert.equal(a.body.results[0].result, 'Residence 4A is 750 square feet.')
+  assert.equal(b.body.results[0].result, 'Residence 4A is 975 square feet.')
+  assert.match(stale.body.results[0].result, /cannot verify those apartment dimensions/)
+  assert.doesNotMatch(stale.body.results[0].result, /750|975/)
 })
 
 test('HTTP tour tools use each property timezone, settings and inventory without accepting body overrides', async () => {
