@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { answerQuestion, type ToolContext } from '../tools.ts'
-import { propertyId, interactionId } from '../../domain/ids.ts'
+import { propertyId, interactionId, articleId, personId } from '../../domain/ids.ts'
 import type { Topic } from '../../knowledge/topics.ts'
 import { emptyQualification } from '../../leasing/qualification.ts'
 
@@ -101,4 +101,61 @@ test('numeric and hyphenated unit IDs resolve exactly, and multiple numeric unit
   assert.equal(ask('How many bedrooms in Unit 101 and 102?', ctx).record.reason, 'ambiguous_unit')
   ctx.inventory.units[0]!.unitId = '19-A'
   assert.equal(ask('How many bedrooms in Residence 19-A?', ctx).say, 'Residence 19-A has 3 bedrooms.')
+})
+
+test('room and outdoor dimensions never borrow the whole apartment area', () => {
+  for (const question of ["How big is 19A's bedroom?", 'How big is 19A’s primary bedroom?',
+    'How many square feet is the balcony in 19A?', 'What is the size of the living room in 19A?',
+    'How large is the kitchen in apartment 19A?', 'What is the square footage of 19A excluding the bedrooms?']) {
+    const result = ask(question)
+    assert.notEqual(result.record.kind, 'unit_facts_answered', question)
+    assert.doesNotMatch(result.say, /1,332 square feet/, question)
+  }
+})
+
+test('appliance dimensions and floor plans or finishes do not imply apartment area or storey', () => {
+  for (const question of ['What size washer is in 19A?', 'Does a king size bed fit in 19A?',
+    'Which floor plan is apartment 19A?', 'What floor finish does 19A have?',
+    'What is the floor plan size of 19A?']) {
+    const result = ask(question)
+    assert.notEqual(result.record.kind, 'unit_facts_answered', question)
+    assert.doesNotMatch(result.say, /1,332 square feet|on floor 19/, question)
+  }
+})
+
+test('counts with unverified room attributes do not turn total rooms into matching rooms', () => {
+  for (const question of ['How many bathrooms with windows does 19A have?',
+    'How many bathrooms does 19A have with windows?', 'How many bedrooms in 19A have walk-in closets?',
+    'How many bedrooms in 19A are larger than 200 square feet?']) {
+    assert.notEqual(ask(question).record.kind, 'unit_facts_answered', question)
+  }
+})
+
+test('whole-residence measurement questions retain plain and natural wording', () => {
+  for (const [question, expected] of [
+    ['Can you tell me how many bedrooms apartment 19A has?', '3 bedrooms'],
+    ['What is the number of bathrooms in 19A?', '2 bathrooms'],
+    ['How many separate bedrooms are there in 19A?', '3 bedrooms'],
+    ['What is the total square footage of Residence 19A?', '1,332 square feet'],
+    ['How many square feet does 19A have?', '1,332 square feet'],
+    ["What is 19A's size?", '1,332 square feet'],
+    ['What is the floor number of 19A?', 'on floor 19'],
+    ['Which floor is apartment 19A located on, please?', 'on floor 19'],
+  ] as const) {
+    const result = ask(question)
+    assert.equal(result.record.kind, 'unit_facts_answered', question)
+    assert.ok(result.say.includes(expected), question)
+  }
+})
+
+test('a floor-plan question falls through to its approved property article', () => {
+  const ctx = context()
+  ctx.articles = [{ id: articleId('synthetic-floor-plan'), topic: 'general_property_fact',
+    question: 'Which floor plan is apartment 19A?', answer: 'Residence 19A uses the North layout.',
+    propertyScope: [ctx.propertyId], jurisdictionScope: ['NY'], status: 'published', version: 1,
+    source: 'Synthetic verified plan guide', ownerId: personId('synthetic-owner'), approvedBy: personId('synthetic-owner'),
+    approvedAt: new Date('2032-01-01T00:00:00Z'), reviewBy: new Date('2033-01-01T00:00:00Z') }]
+  const result = ask('Which floor plan is apartment 19A?', ctx)
+  assert.equal(result.record.kind, 'question_answered')
+  assert.equal(result.say, 'Residence 19A uses the North layout.')
 })

@@ -63,6 +63,13 @@ export class DatabaseConnection {
     let discard = false
     try {
       await client.query('BEGIN ISOLATION LEVEL READ COMMITTED')
+      // Shared transaction poolers may discard startup options. Apply trusted
+      // bounds on the leased backend before any identity or application query;
+      // LOCAL settings disappear on either commit or rollback.
+      await client.query(`SELECT pg_catalog.set_config('search_path', 'pg_catalog', true),
+        pg_catalog.set_config('statement_timeout', '10000', true),
+        pg_catalog.set_config('lock_timeout', '5000', true),
+        pg_catalog.set_config('idle_in_transaction_session_timeout', '15000', true)`)
       const identity = await client.query<{ rolname: string; login_role: string; rolsuper: boolean; rolbypassrls: boolean;
         rolcreaterole: boolean; rolcreatedb: boolean; rolreplication: boolean; admin_member: boolean; other_runtime_member: boolean; account_executor_member: boolean }>(
         `SELECT rolname, session_user AS login_role, rolsuper, rolbypassrls, rolcreaterole, rolcreatedb, rolreplication,
