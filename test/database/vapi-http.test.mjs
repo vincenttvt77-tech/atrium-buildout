@@ -143,6 +143,44 @@ test('HTTP webhook secrets are checked before any runtime or SQL access', async 
   assert.equal(runtimeLookups, before)
 })
 
+test('HTTP bearer takes precedence over stale phone credentials and persists in the bound property', async () => {
+  const response = await post('synthetic-assistant-a', 'bearer-stale-legacy',
+    [tool('capture_contact', { name: 'Bearer Visitor', excerpt: 'My name is Bearer Visitor' })],
+    { authorization: `Bearer ${secret}`, 'x-vapi-secret': 'stale-phone-secret', 'x-vapi-signature': 'stale-signature' })
+  assert.equal(response.status, 200)
+  assert.equal(response.body.scope.propertyId, 'property-a1')
+  const records = (await db.admin.query("SELECT property_id,value FROM atrium.operational_documents WHERE key='call:bearer-stale-legacy'")).rows
+  assert.deepEqual(records.map(row => [row.property_id, row.value.name]), [['property-a1', 'Bearer Visitor']])
+})
+
+test('HTTP invalid, empty and multiple Authorization never fall back to a valid legacy credential', async () => {
+  const before = runtimeLookups
+  for (const authorization of ['Bearer wrong', '', 'Bearer ', `Basic ${secret}`,
+    `Bearer ${secret}, Bearer wrong`, [`Bearer ${secret}`, 'Bearer wrong'], [`Bearer ${secret}`, `Bearer ${secret}`]]) {
+    const response = await post('synthetic-assistant-a', 'rejected-bearer',
+      [tool('capture_contact', { name: 'Rejected Visitor', excerpt: 'My name is Rejected Visitor' })],
+      { authorization, 'x-vapi-signature': secret })
+    assert.equal(response.status, 401)
+    assert.deepEqual(response.body, { error: 'unauthorized' })
+    assert.equal(runtimeLookups, before)
+  }
+  const records = await db.admin.query("SELECT 1 FROM atrium.operational_documents WHERE key='call:rejected-bearer'")
+  assert.equal(records.rowCount, 0)
+})
+
+test('HTTP absent Authorization preserves both legacy credential headers and refuses unsigned calls', async () => {
+  const body = { message: { type: 'tool-calls', call: { id: 'legacy-secret-compat', assistantId: 'synthetic-assistant-a' },
+    toolCallList: [tool('capture_contact', { name: 'Legacy Visitor', excerpt: 'My name is Legacy Visitor' })] } }
+  for (const headers of [{ 'x-vapi-secret': secret }, { 'x-vapi-signature': secret }]) {
+    const response = await http('POST', '/api/vapi', body, headers)
+    assert.equal(response.status, 200)
+    assert.equal(response.body.scope.propertyId, 'property-a1')
+  }
+  const before = runtimeLookups
+  assert.equal((await http('POST', '/api/vapi', body)).status, 401)
+  assert.equal(runtimeLookups, before)
+})
+
 test('concurrent properties with the same call and apartment IDs use separate facts, knowledge and stored state', async () => {
   const tools = name => [tool('capture_contact', { name, excerpt: `My name is ${name}` }),
     tool('check_availability', { unitId: '4A' }), tool('answer_question', { topic: 'hours', question: 'When is the leasing office open?' })]
