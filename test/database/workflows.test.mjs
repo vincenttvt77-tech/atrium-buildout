@@ -289,11 +289,106 @@ test('real PostgreSQL worker roundtrip requires read-back and recovers after a c
 
 test('pagination and state filters remain property scoped with equal timestamp records', async () => {
   const repository=repo(await scope())
-  await repository.accept(receipt({actions:Array.from({length:5},(_,i)=>({...receipt().actions[0],operationKey:`page-${i}`}))}))
+  // Set only this disposable fixture's insert default. Do not update immutable
+  // accepted rows or rely on coincidentally fast inserts to produce ties.
+  await db.admin.query("ALTER TABLE atrium.action_intents ALTER COLUMN created_at SET DEFAULT '2026-09-12T12:00:00.123Z'::timestamptz")
+  try {
+    await repository.accept(receipt({actions:Array.from({length:5},(_,i)=>({...receipt().actions[0],operationKey:`page-${i}`}))}))
+    await accepted(repo(await scope('owner-a','property-a2')))
+  } finally {
+    await db.admin.query('ALTER TABLE atrium.action_intents ALTER COLUMN created_at SET DEFAULT clock_timestamp()')
+  }
+  const expected=(await db.admin.query("SELECT id FROM atrium.action_intents WHERE property_id='property-a1' ORDER BY created_at DESC,id DESC")).rows.map(row=>row.id)
   const first=await repository.list({limit:2}),second=await repository.list({limit:2,before:{createdAt:first[1].createdAt,id:first[1].id}})
   const third=await repository.list({limit:2,before:{createdAt:second[1].createdAt,id:second[1].id}})
-  assert.equal(new Set([...first,...second,...third].map(a=>a.id)).size,5)
+  const pages=[...first,...second,...third]
+  assert.deepEqual(pages.map(a=>a.id),expected)
+  assert.ok(pages.every(a=>a.createdAt==='2026-09-12T12:00:00.123000Z'))
+  assert.deepEqual(await repository.list({before:{createdAt:third[0].createdAt,id:third[0].id}}),[])
+  for(const createdAt of ['2026-02-30T12:00:00.123Z','2026-09-12','2026-09-12T12:00:00.123+00:00']) {
+    await assert.rejects(repository.list({before:{createdAt,id:first[0].id}}),{code:'workflow_invalid_input'})
+  }
   await repository.cancel(first[0].id,'pagination_test')
   assert.equal((await repository.list({states:['cancelled']})).length,1)
   assert.equal((await repository.list({states:['queued']})).length,4)
+})
+
+test('opaque revision is stable across scoped reads and session timezones, and changes with a worker lease', async () => {
+  const selected=await scope(), repository=repo(selected), a=await accepted(repository)
+  assert.match(a.revision,/^[a-f0-9]{64}$/)
+  assert.equal((await repository.get(a.id)).revision,a.revision)
+  assert.equal((await repository.list())[0].revision,a.revision)
+  const otherZone={transaction:(context,work)=>db.app.transaction(context,async client=>{
+    await client.query("SET LOCAL TIME ZONE 'Pacific/Honolulu'")
+    return work(client)
+  })}
+  assert.equal((await repo(selected,otherZone).get(a.id)).revision,a.revision)
+  const leased=await claim(repository)
+  assert.notEqual(leased.action.revision,a.revision)
+  const baseline=await events(a.id)
+  await assert.rejects(repository.cancel(a.id,'no_longer_needed',a.revision),{code:'workflow_revision_conflict'})
+  assert.deepEqual(await events(a.id),baseline)
+  assert.equal((await repository.get(a.id)).revision,leased.action.revision)
+  const dispatched=await repository.startDispatch(leased)
+  assert.equal(dispatched.status,'ready')
+  assert.notEqual(dispatched.claim.action.revision,leased.action.revision)
+  await assert.rejects(repository.cancel(a.id,'no_longer_needed',dispatched.claim.action.revision),{code:'workflow_cancel_refused'})
+})
+
+test('two operators with the same replay revision cannot both apply an otherwise repeatable transition', async () => {
+  const selected=await scope(), repository=repo(selected), a=await accepted(repository)
+  const otherConnection=db.createAppConnection()
+  try {
+    const other=repo(selected,otherConnection)
+    const results=await Promise.allSettled([repository.replay(a.id,'reviewed_request',a.revision),other.replay(a.id,'reviewed_request',a.revision)])
+    assert.equal(results.filter(result=>result.status==='fulfilled').length,1)
+    assert.equal(results.find(result=>result.status==='rejected').reason.code,'workflow_revision_conflict')
+    const current=await repository.get(a.id)
+    assert.notEqual(current.revision,a.revision)
+    assert.equal((await events(a.id)).filter(event=>event.event_kind==='replayed').length,1)
+    const before=await events(a.id)
+    await assert.rejects(other.replay(a.id,'reviewed_request',a.revision),{code:'workflow_revision_conflict'})
+    assert.deepEqual(await events(a.id),before)
+  } finally { await otherConnection.close() }
+})
+
+test('an identical persisted row rewrite still invalidates its prior revision when timestamps do not advance', async () => {
+  const repository=repo(await scope()), a=await accepted(repository)
+  // Model two writes inside one stored millisecond without changing production
+  // precision or removing its identity/attempt guards. This final fixture-only
+  // trigger preserves updated_at; all row values remain exactly the same.
+  await db.admin.query(`CREATE FUNCTION pg_temp.fixture_same_workflow_time() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN NEW.updated_at:=OLD.updated_at; RETURN NEW; END $$`)
+  await db.admin.query(`CREATE TRIGGER zz_fixture_same_workflow_time BEFORE UPDATE ON atrium.outbox_messages
+    FOR EACH ROW EXECUTE FUNCTION pg_temp.fixture_same_workflow_time()`)
+  try {
+    const payload=async()=>(await db.admin.query('SELECT to_jsonb(o)::text payload FROM atrium.outbox_messages o WHERE action_id=$1',[a.id])).rows[0].payload
+    const before=await payload(), beforeEvents=await events(a.id)
+    await db.admin.query('UPDATE atrium.outbox_messages SET state=state WHERE action_id=$1',[a.id])
+    assert.equal(await payload(),before)
+    const current=await repository.get(a.id)
+    assert.notEqual(current.revision,a.revision,'MVCC tuple identity must distinguish otherwise identical stored values')
+    await assert.rejects(repository.cancel(a.id,'no_longer_needed',a.revision),{code:'workflow_revision_conflict'})
+    assert.deepEqual(await events(a.id),beforeEvents)
+    assert.equal((await repository.get(a.id)).revision,current.revision)
+  } finally {
+    await db.admin.query('DROP TRIGGER zz_fixture_same_workflow_time ON atrium.outbox_messages')
+    await db.admin.query('DROP FUNCTION pg_temp.fixture_same_workflow_time()')
+  }
+})
+
+test('revision checks cover cancelled no-ops, composed ports and foreign property IDs without changing legacy callers', async () => {
+  const repository=repo(await scope()), a=await accepted(repository)
+  const cancelled=await repository.transaction(unit=>unit.workflows.cancel(a.id,'no_longer_needed',a.revision))
+  const before=await events(a.id)
+  await assert.rejects(repository.transaction(unit=>unit.workflows.cancel(a.id,'no_longer_needed',a.revision)),{code:'workflow_revision_conflict'})
+  assert.equal((await repository.cancel(a.id,'no_longer_needed',cancelled.revision)).revision,cancelled.revision)
+  assert.deepEqual(await events(a.id),before)
+  await assert.rejects(repository.replay(a.id,'reviewed_request','not_a_revision'),{code:'workflow_invalid_input'})
+  const foreign=repo(await scope('owner-a','property-a2'))
+  await assert.rejects(foreign.replay(a.id,'reviewed_request',cancelled.revision),{code:'workflow_not_found'})
+  const replayed=await repository.transaction(unit=>unit.workflows.replay(a.id,'reviewed_request',cancelled.revision))
+  assert.notEqual(replayed.revision,cancelled.revision)
+  assert.equal(replayed.operationKey,a.operationKey)
+  assert.equal((await repository.cancel(a.id,'legacy_internal_client')).state,'cancelled')
 })

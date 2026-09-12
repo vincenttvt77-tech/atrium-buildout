@@ -31,6 +31,16 @@ change the hosted legacy demo password or complete customer onboarding. PostgreS
 passkey enrollment, session verification and recovery are implemented; see
 [passkey security](docs/adr/0006-multi-factor-authentication.md) for rollout limits.
 
+The PostgreSQL **Work queue** shows persisted background actions by property,
+including queued, verifying, completed and review-needed states. Authorized
+configuration managers can requeue an action or cancel one that has not possibly
+dispatched. Every recovery request includes the displayed row revision, so a
+stale screen cannot change work that has advanced. Requeueing uncertain work
+resumes verification; it does not blindly repeat a provider write. The view omits
+raw inputs, provider responses and execution credentials. It is unavailable in
+legacy mode, and no background runner or real connector is enabled by this UI.
+An empty queue is not proof that every business workflow has been integrated.
+
 ## The one idea worth understanding
 
 Every rule that matters is enforced in **code the model cannot argue with** — not in the

@@ -38,6 +38,8 @@ export interface WorkflowAction {
   dispatchStarted: boolean
   providerReference: string | null
   evidence: JsonObject | null
+  /** Opaque current-row concurrency token. PostgreSQL always returns this; older test adapters may omit it. */
+  revision?: string
 }
 
 export interface WorkflowClaim {
@@ -98,9 +100,9 @@ export interface WorkflowRepository {
   /** True means the requested transition committed. False includes a lost/expired lease or a persisted authority/config hold instead; never report the requested success then. */
   settle(claim: WorkflowClaim, result: WorkflowSettlement): Promise<boolean>
   /** Replay retains intent/key and resumes verification whenever dispatch could have happened. */
-  replay(id: string, reason: string): Promise<WorkflowAction>
+  replay(id: string, reason: string, expectedRevision?: string): Promise<WorkflowAction>
   /** Cannot cancel a possibly dispatched action without reconciling its external result. */
-  cancel(id: string, reason: string): Promise<WorkflowAction>
+  cancel(id: string, reason: string, expectedRevision?: string): Promise<WorkflowAction>
 }
 
 export type DispatchResult =
