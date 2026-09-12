@@ -478,7 +478,57 @@ export interface AnswerArgs {
 const ABOUT_RENT_OR_AVAILABILITY = /\b(rent|rents|rental|pricing|price|prices|how much (is|are|for|does|would)|cost of (the|a|an) (studio|apartment|unit|residence|one|two|three)|available|availability|vacanc(y|ies)|what('s| is) open|anything open|move[- ]in date|when can (i|we) move|lease start|specials?|concessions?|discount)\b/i
 const ABOUT_PROMOTIONS = /\b(specials|special offers?|concessions?|rent discounts?|rent incentives?|months? free|free months?)\b/i
 
-/** Property questions. Answers only from approved knowledge; escalates the restricted. */
+/** Apartment dimensions belong to the scoped inventory, not general building articles. */
+function answerUnitDimensions(question: string, ctx: ToolContext): ToolResult | null {
+  if (ABOUT_RENT_OR_AVAILABILITY.test(question) || ABOUT_PROMOTIONS.test(question)) return null
+  // A count of windows in a bedroom, or a bedroom's own area, is not the
+  // apartment's bedroom count or total square footage.
+  const counts = /\b(?:how many|number of|count of)\s+(?:separate\s+)?(?:bedrooms?(?:\s+(?:and|or)\s+bathrooms?)?|bathrooms?(?:\s+(?:and|or)\s+bedrooms?)?)\b|\b(?:bedroom|bathroom) count\b/i.exec(question)?.[0] ?? ''
+  if (/\b(?:size|area|dimensions) of (?:the )?(?:bedrooms?|bathrooms?|kitchen|balcony|closets?)\b|\bhow (?:big|large) (?:is|are) (?:the )?(?:bedrooms?|bathrooms?|kitchen|balcony|closets?)\b|\b(?:bedroom|bathroom|kitchen|balcony|closet) (?:size|area|dimensions|square footage)\b/i.test(question)) return null
+  const fields = [
+    /\bbedrooms?\b/i.test(counts) ? 'bedrooms' : null,
+    /\bbathrooms?\b/i.test(counts) ? 'bathrooms' : null,
+    /\b(?:square feet|square footage|sq\.?\s*ft|how big|how large|size)\b/i.test(question) ? 'sqft' : null,
+    /\b(?:(?:what|which) floor|floor number)\b/i.test(question) ? 'floor' : null,
+  ].filter((field): field is string => field !== null)
+  if (!fields.length) return null
+
+  // Recognize exact spoken labels and alphanumeric apartment codes; numbers alone
+  // without a label could be dimensions, dates or prices. Include unknown codes so
+  // a multi-apartment question cannot silently use just the one known apartment.
+  const references = new Set<string>()
+  for (const match of question.matchAll(/\b(?:residence|unit|apartment|apt\.?)\s*#?\s*([a-z0-9][a-z0-9-]*)\b/gi)) {
+    if (/\d/.test(match[1]!) || ctx.inventory.units.some(unit => unit.unitId.toUpperCase() === match[1]!.toUpperCase())) references.add(match[1]!.toUpperCase())
+  }
+  for (const match of question.matchAll(/\b(?:[a-z]*\d+[a-z][a-z\d]*|[a-z]+\d+)\b/gi)) references.add(match[0].toUpperCase())
+  for (const unit of ctx.inventory.units) {
+    const identifier = unit.unitId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    if (new RegExp(`(?:^|[^a-z0-9-])${identifier}(?=$|[^a-z0-9-])`, 'i').test(question)) references.add(unit.unitId.toUpperCase())
+  }
+  if (!references.size) return null
+  const unavailable = (reason: string, say: string): ToolResult => ({ say,
+    record: { kind: 'unit_facts_unavailable', reason, question } })
+  if (references.size !== 1) return unavailable('ambiguous_unit', 'Ask which single residence the caller wants to check first; do not mix dimensions from different apartments.')
+  if (!inventoryIsQuotable(ctx.inventory, ctx.now)) return unavailable('unverified_source', 'The current source cannot verify those apartment dimensions. Offer to have the leasing team confirm them; do not guess.')
+  const unit = ctx.inventory.units.find(unit => unit.unitId.toUpperCase() === [...references][0])
+  if (!unit) return unavailable('unknown_unit', 'That residence is not in this property’s current inventory source. Confirm the apartment identifier before answering; do not substitute another apartment or general building facts.')
+  const facts: string[] = []
+  if (fields.includes('bedrooms')) facts.push(unit.bedrooms === 0 ? 'is a studio with no separate bedrooms'
+    : `has ${unit.bedrooms} bedroom${unit.bedrooms === 1 ? '' : 's'}`)
+  if (fields.includes('bathrooms')) {
+    const bathrooms = `${unit.bathrooms} bathroom${unit.bathrooms === 1 ? '' : 's'}`
+    if (facts[0]?.startsWith('has ')) facts[0] += ` and ${bathrooms}`
+    else facts.push(`has ${bathrooms}`)
+  }
+  if (fields.includes('sqft')) facts.push(`is ${unit.sqft.toLocaleString('en-US')} square feet`)
+  if (fields.includes('floor')) facts.push(`is on floor ${unit.floor}`)
+  const disclosure = inventoryDemoDisclosure(ctx.inventory, ctx.now)
+  return { say: `${disclosure ? `${disclosure}\n\n` : ''}Residence ${unit.unitId} ${facts.join(', and ')}.`,
+    record: { kind: 'unit_facts_answered', question, unitId: unit.unitId, fields,
+      source: ctx.inventory.source, sourceReadAt: ctx.inventory.readAt.toISOString() } }
+}
+
+/** Property questions use approved knowledge or verified unit dimensions; restricted topics escalate. */
 export function answerQuestion(args: AnswerArgs, ctx: ToolContext): ToolResult {
   // Vapi can call this tool without a preceding transcript event. Knowledge lookup
   // must never turn an active emergency into an ordinary low-confidence refusal.
@@ -515,6 +565,11 @@ export function answerQuestion(args: AnswerArgs, ctx: ToolContext): ToolResult {
    */
   if (!guard && isVolatile(topic) && !ABOUT_RENT_OR_AVAILABILITY.test(args.question) && !ABOUT_PROMOTIONS.test(args.question)) {
     topic = 'general_property_fact'
+  }
+
+  if (!guard && isPolicy(topic)) {
+    const dimensions = answerUnitDimensions(args.question, ctx)
+    if (dimensions) return dimensions
   }
 
   // Rank against what was actually asked. Passing every article filed under the topic and
