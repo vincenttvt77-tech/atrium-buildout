@@ -62,6 +62,7 @@ current membership, organization/property status and explicit grants per operati
 | `GET/POST /api/dashboard` | Sign-in/logout and protected HTML. A signed-in user with multiple properties sees a picker; an explicit page uses `?organizationId=...&propertyId=...`. |
 | `GET/POST /api/account` | Personal password change and active-session list/revocation. Requires a current registered user session; mutations require same-origin JSON and a signed user/session-bound form token. Independent of property access; absent in legacy mode. |
 | `GET/POST /api/mfa` | Own passkey setup, verification, factor management and recovery. Exact configured origin, registered-session binding and CSRF checks on POST. Finite commands only; absent in legacy mode. |
+| `GET/POST /api/workflows` | Property-scoped action queue; read permission for bounded listing, configure permission and same-origin JSON for recovery. Required expected row revision is checked under lock; no action creation, connector execution or legacy fallback. |
 | `GET /api/properties` | Authenticated, unscoped catalogue of properties this user can read. It exposes safe labels, role/permissions and navigation links, not property inventories or credentials. |
 | `GET /api/leads`, `/api/calendar`, `/api/vapi` | Require the user session and all three explicit property headers below; permission is `read`. |
 | `POST /api/leads`, `/api/calendar` | Same explicit selection plus `operate`; calendar `settings` requires `configure`. Bulk demo resets are unavailable in PostgreSQL mode. |

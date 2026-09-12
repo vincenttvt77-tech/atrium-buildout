@@ -574,7 +574,7 @@ const arr = (v) => (Array.isArray(v) ? v : [])
 
 let gated = false
 let scopeEpoch = 0
-const PROPERTY_ENDPOINTS = new Set(['/api/vapi', '/api/calendar', '/api/leads', '/api/vapi-sync'])
+const PROPERTY_ENDPOINTS = new Set(['/api/vapi', '/api/calendar', '/api/leads', '/api/vapi-sync', '/api/workflows'])
 const propertyEndpoint = path => PROPERTY_ENDPOINTS.has(String(path).split('?')[0])
 const JSON_HEADERS = { accept: 'application/json' }
 function accessError(message, status = 409) { const error = new Error(message); error.status = status; error.propertyAccess = true; return error }
@@ -668,7 +668,7 @@ const api = {
   async post(path, body, opts) {
     try {
       const endpoint = String(path).split('?')[0]
-      const needed = endpoint === '/api/vapi-sync' || (endpoint === '/api/calendar' && body && body.action === 'settings') ? 'configure' : 'operate'
+      const needed = endpoint === '/api/vapi-sync' || endpoint === '/api/workflows' || (endpoint === '/api/calendar' && body && body.action === 'settings') ? 'configure' : 'operate'
       if (propertyEndpoint(path) && !permissionAllowed(needed)) throw accessError('Your access is view only for this operation.', 403)
       if (endpoint === '/api/calendar') body = { ...body, ...calendarRequestRange(), expectedTimeZone: propertyTimeZone }
       return await request(path, {
@@ -891,9 +891,9 @@ function apply(resource, data) {
 // Routing and views
 // ---------------------------------------------------------------------------------------
 
-const VIEWS = ['today', 'calls', 'leads', 'units', 'calendar', 'status']
-const VIEW_LABEL = { today: 'Today', calls: 'Calls', leads: 'Leads', units: 'Units', calendar: 'Calendar', status: 'Status' }
-const VIEW_H1 = { today: 'Today', calls: 'Calls', leads: 'Leads', units: 'Unit workspace', calendar: 'Tour calendar', status: 'Status' }
+const VIEWS = ['today', 'calls', 'leads', 'units', 'calendar', ...(databaseMode ? ['workflows'] : []), 'status']
+const VIEW_LABEL = { today: 'Today', calls: 'Calls', leads: 'Leads', units: 'Units', calendar: 'Calendar', workflows: 'Work queue', status: 'Status' }
+const VIEW_H1 = { today: 'Today', calls: 'Calls', leads: 'Leads', units: 'Unit workspace', calendar: 'Tour calendar', workflows: 'Work queue', status: 'Status' }
 const modules = {}
 let current = null
 let booted = false
@@ -1016,6 +1016,8 @@ function paintChrome() {
   document.querySelectorAll('[data-property-location]').forEach(node => { node.textContent = property.locationLabel ? `/ ${property.locationLabel}` : '' })
   document.querySelectorAll('[data-workspace-name]').forEach(node => { node.textContent = databaseMode ? property.name : account ? account.displayName : property.name })
   document.querySelectorAll('[data-property-switch]').forEach(node => { node.hidden = !databaseMode })
+  document.querySelectorAll('[data-postgres-only]').forEach(node => { node.hidden = !databaseMode })
+  document.body.classList.toggle('has-work-queue', databaseMode)
   document.querySelectorAll('[data-view-only]').forEach(node => { node.hidden = !databaseMode || permissionAllowed('operate') })
   if (account) {
     document.querySelectorAll('[data-account-name]').forEach((node) => { node.textContent = account.username })

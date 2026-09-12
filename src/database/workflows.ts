@@ -23,22 +23,45 @@ const STATES: WorkflowState[] = ['queued','running','retry_wait','verifying','su
 const ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/
 const TOKEN = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i
 const CODE = /^[a-z][a-z0-9_]{0,127}$/
+const REVISION = /^[a-f0-9]{64}$/
 const integer = (value: number, min: number, max: number) => Number.isSafeInteger(value) && value >= min && value <= max
 const invalid = (): never => { throw new WorkflowError('workflow_invalid_input', 'Workflow input is invalid.') }
 const iso = (value: Date | string): string => new Date(value).toISOString()
+const exactTime = (column: string): string => `to_char(${column} AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`
+const revisionTimes = ['available_at','created_at','updated_at','completed_at','lease_acquired_at','lease_expires_at']
 const SELECT = `SELECT a.id,a.receipt_id,a.organization_id,a.property_id,a.kind,a.connector,a.source_operation_key,
-  a.operation_key,a.input,a.input_sha256,a.max_attempts,a.created_at AS action_created_at,
+  a.operation_key,a.input,a.input_sha256,a.max_attempts,${exactTime('a.created_at')} AS action_created_at,
   r.configuration_version,r.request_id,r.origin_kind,r.origin_user_id,r.origin_credential_version,
   r.origin_binding_id,r.origin_binding_version,r.origin_provider,r.origin_external_id,
   o.state,o.phase,o.dispatch_attempts,o.verification_attempts,o.verification_attempts_at_replay,o.available_at,o.updated_at,o.completed_at,
   o.last_error_code,o.dispatch_started,o.safe_retry_evidence,o.provider_reference,o.evidence,
-  o.lease_token,o.worker_id,o.lease_acquired_at,o.lease_expires_at
+  o.lease_token,o.worker_id,o.lease_acquired_at,o.lease_expires_at,
+  o.xmin::text AS row_transaction,o.ctid::text AS row_location,
+  (to_jsonb(o) || jsonb_build_object(${revisionTimes.map(column => `'${column}',${exactTime(`o.${column}`)}`).join(',')}))::text AS revision_state
   FROM atrium.action_intents a JOIN atrium.inbox_events r
     ON (r.organization_id,r.property_id,r.id)=(a.organization_id,a.property_id,a.receipt_id)
   JOIN atrium.outbox_messages o
     ON (o.organization_id,o.property_id,o.action_id)=(a.organization_id,a.property_id,a.id)`
 const WHERE = 'a.organization_id=$1 AND a.property_id=$2'
 const CLEAR_LEASE = 'lease_token=NULL,worker_id=NULL,lease_acquired_at=NULL,lease_expires_at=NULL'
+
+function revision(row: Row): string {
+  // Millisecond timestamps alone cannot distinguish same-millisecond updates.
+  // MVCC tuple identity also detects an otherwise identical write; a physical
+  // rewrite may conservatively require a reload, never authorize a stale edit.
+  return hashJson(['atrium-workflow-revision-v1', row.organization_id, row.property_id, row.id,
+    row.operation_key, row.row_transaction, row.row_location, row.revision_state])
+}
+function checkRevision(row: Row, expected: string | undefined): void {
+  if (expected !== undefined && revision(row) !== expected) {
+    throw new WorkflowError('workflow_revision_conflict', 'This workflow changed. Reload it before continuing.')
+  }
+}
+function cursorTime(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3,6}Z$/.test(value)) return false
+  const parsed = new Date(value)
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0,19) === value.slice(0,19)
+}
 
 function origin(row: Row): WorkflowOrigin {
   return row.origin_kind === 'user'
@@ -52,9 +75,9 @@ function action(row: Row): WorkflowAction {
     kind: row.kind, connector: row.connector, operationKey: row.operation_key, input: row.input,
     inputSha256: row.input_sha256, state: row.state, phase: row.phase,
     dispatchAttempts: row.dispatch_attempts, verificationAttempts: Number(row.verification_attempts), verificationAttemptsAtReplay: Number(row.verification_attempts_at_replay), maxAttempts: row.max_attempts,
-    availableAt: iso(row.available_at), createdAt: iso(row.action_created_at), updatedAt: iso(row.updated_at),
+    availableAt: iso(row.available_at), createdAt: row.action_created_at, updatedAt: iso(row.updated_at),
     completedAt: row.completed_at ? iso(row.completed_at) : null, lastErrorCode: row.last_error_code,
-    dispatchStarted: row.dispatch_started, providerReference: row.provider_reference, evidence: row.evidence }
+    dispatchStarted: row.dispatch_started, providerReference: row.provider_reference, evidence: row.evidence, revision: revision(row) }
 }
 function claimValue(row: Row): WorkflowClaim {
   return { action: action(row), token: row.lease_token, workerId: row.worker_id,
@@ -123,8 +146,8 @@ export class PostgresWorkflowRepository implements WorkflowRepository {
         startDispatch: claim => queue.run(() => bound.startDispatch(claim)),
         startVerification: claim => queue.run(() => bound.startVerification(claim)),
         settle: (claim, result) => queue.run(() => bound.settle(claim, result)),
-        replay: (id, reason) => queue.run(() => bound.replay(id, reason)),
-        cancel: (id, reason) => queue.run(() => bound.cancel(id, reason)),
+        replay: (id, reason, expectedRevision) => queue.run(() => bound.replay(id, reason, expectedRevision)),
+        cancel: (id, reason, expectedRevision) => queue.run(() => bound.cancel(id, reason, expectedRevision)),
       })
       try {
         const result = await work(Object.freeze({ documents, workflows }))
@@ -260,7 +283,7 @@ export class PostgresWorkflowRepository implements WorkflowRepository {
     const limit = options.limit ?? 50
     if (!integer(limit, 1, 100) || (options.states && (!Array.isArray(options.states) || !options.states.length
       || options.states.some(state => !STATES.includes(state)) || new Set(options.states).size !== options.states.length))) invalid()
-    if (options.before && (!ID.test(options.before.id) || !Number.isFinite(Date.parse(options.before.createdAt)))) invalid()
+    if (options.before && (!ID.test(options.before.id) || !cursorTime(options.before.createdAt))) invalid()
     return this.tx('read', async client => {
       const parameters: unknown[] = this.ids(), conditions = [WHERE]
       if (options.states) { parameters.push(options.states); conditions.push(`o.state=ANY($${parameters.length}::text[])`) }
@@ -362,11 +385,12 @@ export class PostgresWorkflowRepository implements WorkflowRepository {
       return false
     })
   }
-  async replay(id: string, reason: string): Promise<WorkflowAction> {
-    if (!ID.test(id) || !CODE.test(reason)) invalid()
+  async replay(id: string, reason: string, expectedRevision?: string): Promise<WorkflowAction> {
+    if (!ID.test(id) || !CODE.test(reason) || (expectedRevision !== undefined && (typeof expectedRevision !== 'string' || !REVISION.test(expectedRevision)))) invalid()
     return this.tx('configure', async client => {
       const row = await this.row(client, id, true)
       if (!row) throw new WorkflowError('workflow_not_found', 'The workflow action does not exist.')
+      checkRevision(row, expectedRevision)
       if (row.state === 'succeeded' || row.state === 'running') throw new WorkflowError('workflow_replay_refused', 'This action cannot be replayed in its current state.')
       const phase = row.dispatch_started ? 'verify' : 'dispatch'
       const code = await this.originalHold(client, row)
@@ -385,11 +409,12 @@ export class PostgresWorkflowRepository implements WorkflowRepository {
       return transition.allowed ? transition.value : write(transition.code)
     })
   }
-  async cancel(id: string, reason: string): Promise<WorkflowAction> {
-    if (!ID.test(id) || !CODE.test(reason)) invalid()
+  async cancel(id: string, reason: string, expectedRevision?: string): Promise<WorkflowAction> {
+    if (!ID.test(id) || !CODE.test(reason) || (expectedRevision !== undefined && (typeof expectedRevision !== 'string' || !REVISION.test(expectedRevision)))) invalid()
     return this.tx('configure', async client => {
       const row = await this.row(client, id, true)
       if (!row) throw new WorkflowError('workflow_not_found', 'The workflow action does not exist.')
+      checkRevision(row, expectedRevision)
       if (row.dispatch_started || row.state === 'succeeded') throw new WorkflowError('workflow_cancel_refused', 'A possibly dispatched action requires verification and cannot be cancelled.')
       if (row.state === 'cancelled') return action(row)
       await client.query(`UPDATE atrium.outbox_messages SET state='cancelled',completed_at=clock_timestamp(),
