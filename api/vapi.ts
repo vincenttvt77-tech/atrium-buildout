@@ -747,6 +747,11 @@ export default async function handler(req: any, res: any) {
     let body: unknown
     try { body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body }
     catch { return scopedHandler(req, res) }
+    // In the legacy path, verify the configured Vapi credential before inspecting the
+    // assistant/tenant routing claim. Otherwise an untrusted body can select the
+    // workspace context before authentication has been established. The scoped handler
+    // repeats this check as defense in depth.
+    if (process.env.VAPI_WEBHOOK_SECRET?.trim() && !verifyDatabaseWebhook(req, res)) return
     const tenantId = webhookTenant(body)
     if (!tenantId) {
       res.setHeader('cache-control', 'no-store')
