@@ -25,6 +25,7 @@ function purpose(value: unknown): asserts value is MfaPurpose {
 function activeProof(proof: MfaAssurance, principal: AuthenticatedUser, securityVersion: number, expected: MfaPurpose): boolean {
   const now = Date.now()
   return validSessionId(proof.id) && proof.userId === principal.userId && proof.sessionId === principal.sessionId
+    && (expected !== 'organization_administration' || principal.audience === 'staff')
     && proof.credentialVersion === principal.credentialVersion && proof.securityVersion === securityVersion
     && proof.purpose === expected && validSessionId(proof.factorId) && Number.isSafeInteger(proof.verifiedAt)
     && Number.isSafeInteger(proof.expiresAt) && proof.verifiedAt <= now + 5000 && proof.expiresAt > now
@@ -111,6 +112,7 @@ export function createMfaService(repository: MfaRepository, configuration: MfaCo
     },
     async authenticationOptions(principal: AuthenticatedUser, input: { purpose: unknown; factorId: unknown }) {
       managed(principal); purpose(input.purpose)
+      if (input.purpose === 'organization_administration' && principal.audience !== 'staff') throw new MfaError('invalid_input')
       if (input.factorId !== null) uuid(input.factorId)
       const current = await state(principal)
       const factors = input.factorId === null ? current.factors.filter(f => f.status === 'active')
@@ -171,10 +173,12 @@ export function createMfaService(repository: MfaRepository, configuration: MfaCo
     },
     administrationAuthentication(principal: AuthenticatedUser): PrivilegedAuthentication {
       managed(principal)
+      if (principal.audience !== 'staff') throw new MfaError('unauthenticated')
       const issuer = `atrium-webauthn:${configuration.rpId}`
       return Object.freeze({ issuer, sessionId: principal.sessionId!, async verifyCurrentSession(candidate: AuthenticatedUser) {
         managed(candidate)
         if (candidate.userId !== principal.userId || candidate.sessionId !== principal.sessionId
+          || candidate.audience !== principal.audience
           || candidate.credentialVersion !== principal.credentialVersion) throw new MfaError('unauthenticated')
         const proof = await repository.currentProof(candidate, 'organization_administration')
         if (!proof) return null

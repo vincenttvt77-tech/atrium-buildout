@@ -8,7 +8,7 @@ export function scopeContext(scope: AuthorizedScope): DatabaseContext {
   return {
     organizationId: scope.organizationId, propertyId: scope.propertyId,
     ...(scope.actor.kind === 'user'
-      ? { actorUserId: scope.actor.userId, credentialVersion: scope.actor.credentialVersion,
+      ? { actorUserId: scope.actor.userId, credentialVersion: scope.actor.credentialVersion, sessionAudience: 'staff',
         ...(scope.actor.sessionId ? { actorSessionId: scope.actor.sessionId } : {}) }
       : { channelBindingId: scope.actor.bindingId, channelBindingVersion: scope.actor.bindingVersion,
         channelProvider: scope.actor.provider, channelExternalId: scope.actor.externalId }),

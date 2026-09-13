@@ -31,6 +31,12 @@ change the hosted legacy demo password or complete customer onboarding. PostgreS
 passkey enrollment, session verification and recovery are implemented; see
 [passkey security](docs/adr/0006-multi-factor-authentication.md) for rollout limits.
 
+Staff and resident sessions have separate persisted audiences, cookie signatures and
+authorization checks, even when the same account has staff memberships. The staff
+account page lists staff logins. This foundation does not yet provide resident
+enrollment or consent; see [resident authority boundaries](docs/adr/0013-resident-authority-consent.md)
+for the database-first rollout and remaining flows.
+
 The PostgreSQL **Work queue** shows persisted background actions by property,
 including queued, verifying, completed and review-needed states. Authorized
 configuration managers can requeue an action or cancel one that has not possibly

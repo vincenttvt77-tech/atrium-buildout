@@ -1,17 +1,17 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
-import type { AuthenticatedUser } from './model.ts'
+import type { AuthenticatedUser, SessionAudience } from './model.ts'
 import { assertManagedSession } from './session-management.ts'
 
 const TTL_MS = 60 * 60 * 1000
-const signature = (payload: string, secret: string) => createHmac('sha256', secret)
-  .update(`atrium-account-csrf-v2.${payload}`).digest('base64url')
+const signature = (payload: string, secret: string, audience: SessionAudience) => createHmac('sha256', secret)
+  .update(`${audience === 'staff' ? 'atrium-account-csrf-v2' : 'atrium-resident-account-csrf-v1'}.${payload}`).digest('base64url')
 
 /** Signed form token bound to the rendered identity and current credential version. */
 export function mintAccountFormToken(principal: AuthenticatedUser, now: Date, secret: string): string {
   assertManagedSession(principal)
   const payload = Buffer.from(JSON.stringify([principal.userId, principal.credentialVersion, principal.sessionId,
     now.getTime() + TTL_MS, randomBytes(24).toString('base64url')])).toString('base64url')
-  return `${payload}.${signature(payload, secret)}`
+  return `${payload}.${signature(payload, secret, principal.audience)}`
 }
 
 export function verifyAccountFormToken(token: unknown, principal: AuthenticatedUser, now: Date, secret: string): boolean {
@@ -21,7 +21,7 @@ export function verifyAccountFormToken(token: unknown, principal: AuthenticatedU
   if (parts.length !== 2) return false
   const [payload, supplied] = parts as [string, string]
   if (!/^[A-Za-z0-9_-]+$/.test(payload) || !/^[A-Za-z0-9_-]{43}$/.test(supplied)) return false
-  const expected = signature(payload, secret)
+  const expected = signature(payload, secret, principal.audience)
   if (supplied.length !== expected.length || !timingSafeEqual(Buffer.from(supplied), Buffer.from(expected))) return false
   try {
     const fields: unknown = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'))

@@ -311,6 +311,7 @@ function mfa(proof: MfaVerification | null, binding: { issuer: string; sessionId
 }
 function principal(value: AuthenticatedUser): void {
   try { assertAuthenticatedUser(value) } catch { fail('unauthenticated') }
+  require(value.audience === 'staff', 'forbidden')
 }
 function plan<T>(operation: AdministrationPlan<T>['operation'], value: T): AdministrationPlan<T> {
   return Object.freeze({ executionAuthority: false, operation, value: Object.freeze(value) })

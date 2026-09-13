@@ -2,12 +2,14 @@ import pg from 'pg'
 import type { PoolConfig, PoolClient } from 'pg'
 import { isHostedRuntime } from '../store/config.ts'
 import { DatabaseConfigurationError } from './errors.ts'
+import type { SessionAudience } from '../auth/model.ts'
 export { DatabaseConfigurationError } from './errors.ts'
 
 export type DatabaseRole = 'atrium_app' | 'atrium_authenticator'
 export interface DatabaseContext {
   actorUserId?: string
   actorSessionId?: string
+  sessionAudience?: SessionAudience
   credentialVersion?: number
   organizationId?: string
   propertyId?: string
@@ -41,6 +43,7 @@ export function databasePoolConfig(role: DatabaseRole, env: NodeJS.ProcessEnv = 
 
 const settings = [
   ['atrium.actor_user_id', 'actorUserId'], ['atrium.session_id', 'actorSessionId'], ['atrium.credential_version', 'credentialVersion'],
+  ['atrium.session_audience', 'sessionAudience'],
   ['atrium.organization_id', 'organizationId'], ['atrium.property_id', 'propertyId'],
   ['atrium.login_username', 'loginUsername'], ['atrium.channel_provider', 'channelProvider'],
   ['atrium.channel_external_id', 'channelExternalId'], ['atrium.channel_binding_id', 'channelBindingId'],

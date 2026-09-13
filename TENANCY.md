@@ -64,6 +64,14 @@ and owners have `configure` and membership permissions. A role does not implicit
 grant every property: organization-wide access or explicit property grants determine
 which properties the user may open.
 
+Persisted session audience separates staff and resident logins. Staff `a4` and
+resident `r1` signatures cannot substitute for each other, and the saved audience
+must match even for a person with staff memberships. Resident account authentication
+alone grants no property/residency or consent authority. No resident enrollment or
+portal is activated by this foundation. Apply the additive audience migration before
+this code uses a PostgreSQL database; existing staff cookies remain valid. See
+[resident authority boundaries](docs/adr/0013-resident-authority-consent.md).
+
 Interactive PostgreSQL sign-in allows 20 attempts per normalized username and 100
 per client network in a rolling 15-minute window, shared across server instances.
 Successful attempts count too. A generic retry response does not disclose account
@@ -86,9 +94,9 @@ changes a persisted user record without an environment-file edit. It does not
 reset another user’s password, supply forgotten-password recovery, or change the
 separate hosted legacy passcode. See [personal account security](docs/adr/0002-personal-account-security.md).
 
-The same account page lists active logins and can sign out one session or all other
-sessions. Sessions expire eight hours after registration; activity does not renew
-them. New logins above the 20-active-session limit revoke the oldest active login.
+The same account page lists active staff logins and can sign out one staff session or
+all other staff sessions. Sessions expire eight hours after registration; activity does not renew
+them. New logins above the 20-active-session limit for that audience revoke its oldest active login.
 Session controls and logout are bound to the identity/session that rendered the
 page, so a stale tab cannot revoke a replacement login. A failed or uncertain
 response does not confirm sign-out. Deploying the registered-session migration and

@@ -3,6 +3,8 @@ export type RecordStatus = 'active' | 'inactive'
 export type AccessStatus = 'active' | 'revoked'
 export type Role = 'owner' | 'admin' | 'staff' | 'viewer'
 export type Permission = 'read' | 'operate' | 'configure' | 'manage_members' | 'manage_organization'
+/** The surface that authenticated this session; it never changes in place. */
+export type SessionAudience = 'staff' | 'resident'
 
 export interface Organization {
   id: string
@@ -28,6 +30,7 @@ export interface User {
 export interface UserSessionRecord {
   id: string
   userId: string
+  audience: SessionAudience
   credentialVersion: number
   label: string
   createdAt: number
@@ -35,7 +38,7 @@ export interface UserSessionRecord {
   expiresAt: number
   revokedAt: number | null
 }
-export interface UserSessionClaims { userId: string; credentialVersion: number; sessionId: string; expiresAt: number }
+export interface UserSessionClaims { userId: string; credentialVersion: number; sessionId: string; expiresAt: number; audience: SessionAudience }
 export interface Credential {
   userId: string
   passwordHash: string
@@ -94,6 +97,7 @@ export interface AuthorizationRepository {
 /** Opaque at runtime: only objects issued by this module's authentication paths work. */
 export interface AuthenticatedUser {
   readonly kind: 'user'
+  readonly audience: SessionAudience
   readonly userId: string
   readonly username: string
   readonly displayName: string

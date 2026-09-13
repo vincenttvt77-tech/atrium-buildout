@@ -47,10 +47,11 @@ export class PostgresOrganizationAdministrationRepository implements Organizatio
   private async call(principal: AuthenticatedUser, organizationId: string | undefined, verificationId: string,
     query: string, parameters: unknown[]): Promise<unknown> {
     assertManagedSession(principal)
+    if (principal.audience !== 'staff') throw new AdministrationError('forbidden')
     if (!proofId(verificationId)) throw new AdministrationError('mfa_required')
     try {
       return await this.connection.transaction({ actorUserId: principal.userId, credentialVersion: principal.credentialVersion,
-        actorSessionId: principal.sessionId!, ...(organizationId ? { organizationId } : {}) }, async client => {
+        actorSessionId: principal.sessionId!, sessionAudience: principal.audience, ...(organizationId ? { organizationId } : {}) }, async client => {
         const result = await client.query(query, parameters)
         if (result.rows.length !== 1 || !Object.hasOwn(result.rows[0], 'result')) bad()
         return result.rows[0].result

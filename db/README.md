@@ -8,6 +8,15 @@ edit an already applied migration; use a new migration for subsequent changes.
 Apply all reviewed files in `supabase/migrations/` in order; `schema.sql` alone does
 not include later migrations such as immutable channel routing.
 
+The audience foundation requires `20260913091003_session_audience.sql`, after
+maintenance planning, before the matching PostgreSQL application code. It defaults
+existing session rows to staff while preserving old `a4` cookies and credentials.
+New resident `r1` sessions cannot authorize staff routes or SQL commands. Set or
+clear `session_audience` on every pooled transaction; omission supports legacy staff
+context only when the actual session is staff. No new role is introduced. This
+migration does not enable resident enrollment or consent; see
+[ADR 0013](../docs/adr/0013-resident-authority-consent.md).
+
 ## Opt-in runtime
 
 `src/application/runtime.ts` connects the persisted authorization/property repositories
@@ -287,12 +296,12 @@ Never use session-scoped `SET` for request identity.
 
 | Transaction | Local settings |
 | --- | --- |
-| Staff property operation | `actor_user_id`, `credential_version`, `session_id`, `organization_id`, `property_id` |
+| Staff property operation | `actor_user_id`, `credential_version`, `session_id`, `session_audience=staff`, `organization_id`, `property_id` |
 | Verified channel property operation | `channel_binding_id`, `channel_binding_version`, `organization_id`, `property_id`; no staff actor or session |
 | Pre-login attempt reservation | All authorization settings empty; only two server-derived HMAC keys enter the finite function |
 | Password lookup | `login_username` only |
-| Session commands / identity lookup | `actor_user_id`, `credential_version`, `session_id`; registration has no session yet |
-| Staff authorization lookup | `actor_user_id`, `credential_version`, `session_id` for HTTP users |
+| Session commands / identity lookup | `actor_user_id`, `credential_version`, `session_id`, `session_audience`; registration has no session yet |
+| Staff authorization lookup | `actor_user_id`, `credential_version`, `session_id`, `session_audience=staff` for HTTP users |
 | Channel authorization lookup | `channel_provider`, `channel_external_id` |
 
 These settings are a **trusted server boundary**. The role owning a connection can
@@ -343,7 +352,7 @@ work and accepted background workflows are not canceled by browser logout.
 | --- | --- |
 | `users`, `user_credentials` | Stable staff identity and separately protected scrypt hash. Canonical username is unique. Updating/deleting a hash advances the user's credential version. |
 | `login_attempt_buckets` | `(bucket_kind, bucket_key)` for private username/client HMAC digests and bounded timestamp queues. Only the finite reservation function and authorized maintenance can access these rows; they are distinct from personal password-change attempts. |
-| `user_sessions` | UUID session records with user/version, coarse label, fixed expiration, last connection and irreversible revocation. At most 20 active per user/version; historical rows retained. |
+| `user_sessions` | UUID session records with user/version, immutable staff/resident audience, coarse label, fixed expiration, last connection and irreversible revocation. At most 20 active per user/version/audience; historical rows retained. |
 | `user_session_events` | Append-only registration/revocation lifecycle audit, including session-cap eviction. No caller, credential or raw user-agent payload. |
 | `organizations` | Client boundary with status and permission version. |
 | `properties` | One organization, validated database timezone, status and nullable current configuration version. |
