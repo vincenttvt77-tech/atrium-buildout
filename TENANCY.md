@@ -67,9 +67,12 @@ which properties the user may open.
 Persisted session audience separates staff and resident logins. Staff `a4` and
 resident `r1` signatures cannot substitute for each other, and the saved audience
 must match even for a person with staff memberships. Resident account authentication
-alone grants no property/residency or consent authority. No resident enrollment or
-portal is activated by this foundation. Apply the additive audience migration before
-this code uses a PostgreSQL database; existing staff cookies remain valid. See
+alone grants no property/residency or consent authority. The first-party resident portal
+uses separately approved recipient checks, scoped one-use invitations and atomic
+account bindings. It exposes only the signed-in resident’s own connection state.
+Activation grants no maintenance consent or entry permission. Apply both additive
+audience and enrollment migrations before this code uses a PostgreSQL database;
+existing staff cookies remain valid. See
 [resident authority boundaries](docs/adr/0013-resident-authority-consent.md).
 
 Interactive PostgreSQL sign-in allows 20 attempts per normalized username and 100

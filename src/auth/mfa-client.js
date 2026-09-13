@@ -61,10 +61,16 @@ export function mountMfaClient() {
   try {
     if (!record(bootstrap) || !id(bootstrap.userId) || !id(bootstrap.sessionId)
       || typeof bootstrap.formToken !== 'string' || !bootstrap.formToken) throw new Unconfirmed()
-    binding = Object.freeze({ userId: bootstrap.userId, sessionId: bootstrap.sessionId, formToken: bootstrap.formToken })
+    const audience = bootstrap.audience ?? 'staff'
+    if (!['staff', 'resident'].includes(audience)) throw new Unconfirmed()
+    binding = Object.freeze({ userId: bootstrap.userId, sessionId: bootstrap.sessionId, formToken: bootstrap.formToken, audience })
     state = publicState(bootstrap.state)
+    if (audience === 'resident' && state.administratorVerified) throw new Unconfirmed()
   } catch { freeze('Your security settings could not be loaded. Reload this page or sign in again.'); return }
 
+  const resident = binding.audience === 'resident'
+  const endpoint = resident ? '/api/resident?resource=mfa' : '/api/mfa'
+  const home = resident ? '/api/resident' : '/api/dashboard'
   const button = (action, label, extra = '', style = 'secondary') => `<button type="button" class="${style}" data-action="${action}" ${extra}>${label}</button>`
   const date = value => { try { return new Date(value).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) } catch { return 'Unknown date' } }
   function render() {
@@ -79,9 +85,9 @@ export function mountMfaClient() {
     if (active.length) {
       if (!state.sessionVerified) actions.push(button('verify-session', 'Verify this sign-in', '', ''))
       if (!state.manageVerified) actions.push(button('verify-management', 'Verify security changes'))
-      if (state.required && !state.administratorVerified) actions.push(button('verify-administration', 'Verify administrator access'))
+      if (!resident && state.required && !state.administratorVerified) actions.push(button('verify-administration', 'Verify administrator access'))
     }
-    el('mfa-summary').innerHTML = `<h2>${heading}</h2><p>${summary}</p><div class="actions">${actions.join('')}${(!state.required || state.sessionVerified) ? '<a class="back-link" href="/api/dashboard">Continue to workspace</a>' : ''}</div>`
+    el('mfa-summary').innerHTML = `<h2>${heading}</h2><p>${summary}</p><div class="actions">${actions.join('')}${(!state.required || state.sessionVerified) ? '<a class="back-link" href="' + home + '">' + (resident ? 'Continue to resident access' : 'Continue to workspace') + '</a>' : ''}</div>`
     el('mfa-factors').innerHTML = state.factors.length ? state.factors.map(factor => `<article class="factor"><div class="factor-head"><strong>${text(factor.label)}</strong><span class="badge">${factor.status === 'active' ? 'Active' : 'Setup unfinished'}</span></div><p class="hint">Added ${text(date(factor.createdAt))}${factor.lastUsedAt ? ` · Last used ${text(date(factor.lastUsedAt))}` : ''}</p>${factor.status === 'pending' ? '<p>Use this new passkey once to finish setup. Creating it on your device alone does not complete protection.</p>' : ''}<div class="actions">${factor.status === 'pending' ? button('activate', 'Complete setup', `data-factor-id="${text(factor.id)}"`, '') : ''}${state.manageVerified && (factor.status === 'pending' || active.length > 1) ? button('remove', 'Remove passkey', `data-factor-id="${text(factor.id)}"`, 'danger') : ''}</div></article>`).join('') : '<p class="empty">No passkeys are registered yet.</p>'
     el('mfa-actions').innerHTML = (!state.everEnabled || state.manageVerified) ? button('add', pending.length ? 'Create another passkey' : active.length ? 'Add a passkey' : 'Set up a passkey', '', '') : ''
     el('mfa-recovery').innerHTML = `<h2>Recovery</h2><p>${state.everEnabled ? `${state.recoveryRemaining} unused recovery code${state.recoveryRemaining === 1 ? '' : 's'} remain.` : 'After setup, save recovery codes and add a spare passkey so you can regain access if a device is lost.'}</p><div class="actions">${active.length && state.manageVerified ? button('rotate', state.recoveryRemaining ? 'Replace recovery codes' : 'Create recovery codes') : ''}${state.everEnabled ? button('recover', 'Use a recovery code') : ''}</div><p class="hint">A recovery code and your password authorize a replacement passkey. They do not by themselves verify this session. Your existing passkeys remain until the replacement is verified.</p>`
@@ -103,14 +109,14 @@ export function mountMfaClient() {
       : kind === 'rotate' ? 'New codes replace every previous recovery code. They will be shown once after saving.'
         : kind === 'recover' ? 'Enter your password and one unused recovery code. Then create and verify a replacement passkey.'
           : 'Confirm your password, then choose a recognizable name for this passkey. You’ll create it in a separate device prompt.'
-    task(`<p class="step">Confirm it’s you</p><h2>${titles[kind]}</h2><p>${help}</p><form id="mfa-action-form" method="post" action="/api/mfa">${kind === 'add' ? field('mfa-label', 'Passkey name', 'text', 'maxlength="80" autocomplete="off" placeholder="For example, personal phone"') : ''}${field('mfa-password', 'Current password', 'password', 'maxlength="256" autocomplete="current-password"')}${kind === 'recover' ? field('mfa-recovery-code', 'Recovery code', 'text', 'maxlength="256" autocomplete="off" autocapitalize="none" spellcheck="false"') : ''}<div class="actions"><button type="submit">${kind === 'remove' ? 'Confirm removal' : kind === 'rotate' ? 'Create new recovery codes' : 'Continue'}</button>${button('cancel', 'Cancel')}</div></form>`, { kind, factorId })
+    task(`<p class="step">Confirm it’s you</p><h2>${titles[kind]}</h2><p>${help}</p><form id="mfa-action-form" method="post" action="${endpoint}">${kind === 'add' ? field('mfa-label', 'Passkey name', 'text', 'maxlength="80" autocomplete="off" placeholder="For example, personal phone"') : ''}${field('mfa-password', 'Current password', 'password', 'maxlength="256" autocomplete="current-password"')}${kind === 'recover' ? field('mfa-recovery-code', 'Recovery code', 'text', 'maxlength="256" autocomplete="off" autocapitalize="none" spellcheck="false"') : ''}<div class="actions"><button type="submit">${kind === 'remove' ? 'Confirm removal' : kind === 'rotate' ? 'Create new recovery codes' : 'Continue'}</button>${button('cancel', 'Cancel')}</div></form>`, { kind, factorId })
   }
   async function api(action, payload, validate) {
     if (retired) throw new Unconfirmed()
     const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 15000)
     requests.add(controller)
     try {
-      const response = await fetch('/api/mfa', { method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: controller.signal,
+      const response = await fetch(endpoint, { method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: controller.signal,
         headers: { 'content-type': 'application/json', 'x-atrium-account-action': action, 'x-atrium-user-id': binding.userId,
           'x-atrium-session-id': binding.sessionId, 'x-atrium-csrf': binding.formToken },
         body: JSON.stringify({ action, ...payload }) })
@@ -121,7 +127,9 @@ export function mountMfaClient() {
         throw new Unconfirmed()
       }
       if (!record(data) || data.ok !== true || data.userId !== binding.userId || data.sessionId !== binding.sessionId || data.action !== action) throw new Unconfirmed()
+      if (data.audience !== undefined && data.audience !== binding.audience) throw new Unconfirmed()
       const next = publicState(data.state)
+      if (resident && next.administratorVerified) throw new Unconfirmed()
       if (next.securityVersion < state.securityVersion || !validate(data, next)) throw new Unconfirmed()
       state = next
       return data
@@ -138,6 +146,7 @@ export function mountMfaClient() {
     task(`<p class="step">${registration ? 'Create on your device' : 'Use your passkey'}</p><h2>${registration ? 'Ready to create your passkey' : 'Ready to verify'}</h2><p>${registration ? 'Your browser will ask where to save the passkey. After creation, you’ll use it once more to finish setup.' : 'Use your device’s screen lock or security key. Only a confirmed verification will complete this step.'}</p><div class="actions">${button('ceremony', registration ? 'Create passkey on this device' : 'Open passkey prompt', '', '')}${button('cancel', 'Cancel')}</div>`, { kind: 'ceremony', ceremony: kind, challengeId: data.challengeId, optionsJSON: data.optionsJSON, expiresAt: data.expiresAt, purpose, factorId })
   }
   async function authentication(purpose, factorId = null) {
+    if (resident && purpose === 'organization_administration') return
     const data = await api('authentication-options', { purpose, factorId }, value => optionsValid(value, 'authentication'))
     prepareBrowser('authentication', data, purpose, factorId)
   }
@@ -177,7 +186,7 @@ export function mountMfaClient() {
       notice('New recovery codes were saved. Store them before leaving this page.'); return
     }
     const data = await api('recover', { ...common, code }, value => value.requestId === requestId && id(value.recoveryGrantId))
-    task(`<p class="step">Recovery accepted</p><h2>Create your replacement passkey</h2><p>Your existing passkeys have not been removed. Complete the new passkey and its verification to finish recovery.</p><form id="mfa-action-form" method="post" action="/api/mfa">${field('mfa-label', 'Replacement passkey name', 'text', 'maxlength="80" autocomplete="off"')}<div class="actions"><button type="submit">Continue to device setup</button>${button('cancel', 'Cancel')}</div></form>`,
+    task(`<p class="step">Recovery accepted</p><h2>Create your replacement passkey</h2><p>Your existing passkeys have not been removed. Complete the new passkey and its verification to finish recovery.</p><form id="mfa-action-form" method="post" action="${endpoint}">${field('mfa-label', 'Replacement passkey name', 'text', 'maxlength="80" autocomplete="off"')}<div class="actions"><button type="submit">Continue to device setup</button>${button('cancel', 'Cancel')}</div></form>`,
       { kind: 'replacement', reauthenticationId, recoveryGrantId: data.recoveryGrantId })
     notice('The recovery code was accepted for replacement setup. This session is not yet verified.')
   }
@@ -249,7 +258,7 @@ export function mountMfaClient() {
       return
     }
     const purpose = { 'verify-session': 'session_login', 'verify-management': 'manage_factors', 'verify-administration': 'organization_administration' }[action]
-    if (purpose) return run(() => authentication(purpose))
+    if (purpose && !(resident && purpose === 'organization_administration')) return run(() => authentication(purpose))
   })
   root.addEventListener('submit', event => {
     if (event.target.id !== 'mfa-action-form') return

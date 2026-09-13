@@ -86,11 +86,14 @@ function claimValue(row: Row): WorkflowClaim {
 
 const contextSettings = [
   ['actor_user_id','actorUserId'],['credential_version','credentialVersion'],['session_id','actorSessionId'],['organization_id','organizationId'],
+  ['session_audience','sessionAudience'],
   ['property_id','propertyId'],['login_username','loginUsername'],['channel_provider','channelProvider'],
   ['channel_external_id','channelExternalId'],['channel_binding_id','channelBindingId'],['channel_binding_version','channelBindingVersion'],
 ] as const
 async function setContext(client: PoolClient, context: DatabaseContext): Promise<void> {
-  await client.query(`SELECT ${contextSettings.map(([name], index) => `pg_catalog.set_config('atrium.${name}',$${index + 1},true)`).join(',')}`,
+  await client.query(`SELECT pg_catalog.set_config('atrium.enrollment_token_hash','',true),
+    pg_catalog.set_config('atrium.enrollment_new_user_id','',true),
+    ${contextSettings.map(([name], index) => `pg_catalog.set_config('atrium.${name}',$${index + 1},true)`).join(',')}`,
     contextSettings.map(([, key]) => String(context[key] ?? '')))
 }
 

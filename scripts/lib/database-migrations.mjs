@@ -5,10 +5,27 @@ import { join } from 'node:path'
 
 export const migrationsDirectory = fileURLToPath(new URL('../../supabase/migrations/', import.meta.url))
 
-/** Dedicated maintenance connection only. The application never receives this client. */
-export async function applyDatabaseMigrations(client, directory = migrationsDirectory) {
+/** Read-only preflight, also used before provisioning an executor on an existing database. */
+export async function verifyDatabaseMigrationHistory(client, directory = migrationsDirectory) {
   const files = (await readdir(directory)).filter(name => /^\d{14}_[a-z0-9_]+\.sql$/.test(name)).sort()
   if (!files.length) throw new Error('No database migrations found.')
+  const existing = new Map((await client.query('SELECT version, checksum FROM atrium_migrations.history')).rows.map(row => [row.version, row.checksum]))
+  if ([...existing.keys()].some(version => !files.includes(version))) throw new Error('Database migration history includes an unknown version.')
+  const appliedVersions = [...existing.keys()].sort()
+  if (appliedVersions.some((version,index) => files[index] !== version)) throw new Error('Database migration history is not a prefix of the ordered migrations.')
+  const inventory = []
+  for (const file of files) {
+    const sql = await readFile(join(directory, file), 'utf8')
+    if (!sql.trim()) throw new Error(`Empty database migration: ${file}`)
+    const checksum = createHash('sha256').update(sql).digest('hex')
+    if (existing.has(file) && existing.get(file) !== checksum) throw new Error(`Database migration checksum mismatch: ${file}`)
+    inventory.push({ file, sql, checksum, applied: existing.has(file) })
+  }
+  return inventory
+}
+
+/** Dedicated maintenance connection only. The application never receives this client. */
+export async function applyDatabaseMigrations(client, directory = migrationsDirectory) {
   await client.query('BEGIN')
   try {
     await client.query("SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('atrium-schema-migrations', 0))")
@@ -19,19 +36,10 @@ export async function applyDatabaseMigrations(client, directory = migrationsDire
     )`)
     await client.query('ALTER TABLE atrium_migrations.history OWNER TO atrium_admin')
     await client.query('REVOKE ALL ON atrium_migrations.history FROM PUBLIC')
-    const existing = new Map((await client.query('SELECT version, checksum FROM atrium_migrations.history')).rows.map(row => [row.version, row.checksum]))
-    if ([...existing.keys()].some(version => !files.includes(version))) throw new Error('Database migration history includes an unknown version.')
-    const appliedVersions = [...existing.keys()].sort()
-    if (appliedVersions.some((version,index) => files[index] !== version)) throw new Error('Database migration history is not a prefix of the ordered migrations.')
+    const inventory = await verifyDatabaseMigrationHistory(client, directory)
     const applied = []
-    for (const file of files) {
-      const sql = await readFile(join(directory, file), 'utf8')
-      if (!sql.trim()) throw new Error(`Empty database migration: ${file}`)
-      const checksum = createHash('sha256').update(sql).digest('hex')
-      if (existing.has(file)) {
-        if (existing.get(file) !== checksum) throw new Error(`Database migration checksum mismatch: ${file}`)
-        continue
-      }
+    for (const { file, sql, checksum, applied: installed } of inventory) {
+      if (installed) continue
       await client.query(sql)
       await client.query('INSERT INTO atrium_migrations.history(version, checksum) VALUES ($1, $2)', [file, checksum])
       applied.push(file)

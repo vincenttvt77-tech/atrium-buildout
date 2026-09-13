@@ -33,8 +33,9 @@ passkey enrollment, session verification and recovery are implemented; see
 
 Staff and resident sessions have separate persisted audiences, cookie signatures and
 authorization checks, even when the same account has staff memberships. The staff
-account page lists staff logins. This foundation does not yet provide resident
-enrollment or consent; see [resident authority boundaries](docs/adr/0013-resident-authority-consent.md)
+account page lists staff logins. The PostgreSQL resident portal adds property-approved
+one-use invitations, resident-controlled sign-in and scoped connection status;
+exact maintenance work and entry consent remain subsequent work; see [resident authority boundaries](docs/adr/0013-resident-authority-consent.md)
 for the database-first rollout and remaining flows.
 
 The PostgreSQL **Work queue** shows persisted background actions by property,

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createHmac, randomBytes, randomUUID } from 'node:crypto'
-import { mkdtemp, cp, mkdir, readdir, copyFile, rm } from 'node:fs/promises'
+import { mkdtemp, cp, mkdir, readdir, copyFile, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -13,7 +13,7 @@ import { DatabaseConnection } from '../../src/database/connection.ts'
 import { PgAuthorizationRepository } from '../../src/database/authorization.ts'
 import { createAuthorizationService } from '../../src/auth/authorization.ts'
 
-for (const baselineSpec of [{ count: 8, next: '_organization_administration.sql' }, { count: 9, next: '_resident_services.sql' }, { count: 10, next: '_maintenance_planning.sql' }, { count: 11, next: '_session_audience.sql' }]) {
+for (const baselineSpec of [{ count: 8, next: '_organization_administration.sql' }, { count: 9, next: '_resident_services.sql' }, { count: 10, next: '_maintenance_planning.sql' }, { count: 11, next: '_session_audience.sql' }, { count: 12, next: '_resident_enrollment.sql' }]) {
 test(`verified ${baselineSpec.count}-migration hosted workspace upgrades without rotating credentials or repairing unsafe state`, async () => {
   const db = await createTestPostgres(), oldRoot = await mkdtemp(join(tmpdir(), 'atrium-team-upgrade-'))
   const sourceRoot = fileURLToPath(new URL('../../', import.meta.url)), secret = () => randomBytes(36).toString('base64url')
@@ -37,10 +37,10 @@ test(`verified ${baselineSpec.count}-migration hosted workspace upgrades without
     const original = await bootstrapHostedDemoDatabase({ ...input, root: oldRoot })
     assert.equal(original.migrations.length, baselineSpec.count)
     // Reconstruct the actual prior role set, without touching records or credentials.
-    const missingRoles = baselineSpec.count === 8
+    const missingRoles = ['atrium_enrollment_executor', ...(baselineSpec.count === 8
       ? ['atrium_organization_executor', 'atrium_resident_services_executor', 'atrium_maintenance_approval_reader']
       : baselineSpec.count === 9 ? ['atrium_resident_services_executor', 'atrium_maintenance_approval_reader']
-      : baselineSpec.count === 10 ? ['atrium_maintenance_approval_reader'] : []
+      : baselineSpec.count === 10 ? ['atrium_maintenance_approval_reader'] : [])]
     for (const role of missingRoles) {
       await db.admin.query(`REVOKE ${pg.escapeIdentifier(role)} FROM atrium_admin`)
       await db.admin.query(`DROP ROLE ${pg.escapeIdentifier(role)}`)
@@ -61,9 +61,8 @@ test(`verified ${baselineSpec.count}-migration hosted workspace upgrades without
     try { await assert.rejects(bootstrapHostedDemoDatabase(input), { code: 'existing_state' }); await absent() }
     finally { await db.admin.query('REVOKE pg_read_all_data FROM atrium_app') }
     await db.admin.query('INSERT INTO atrium_migrations.history(version,checksum) VALUES($1,$2)', [addition, 'synthetic-already-installed'])
-    // With no missing executor, the immutable migration checksum check supplies the refusal.
-    try { await assert.rejects(bootstrapHostedDemoDatabase(input), { code: baselineSpec.count === 11 ? 'bootstrap_failed' : 'existing_state',
-      ...(baselineSpec.count === 11 ? { stage: 'migrations' } : {}) }); await absent() }
+    // Immutable history is checked before a newly required role can be committed.
+    try { await assert.rejects(bootstrapHostedDemoDatabase(input), { code: 'existing_state' }); await absent() }
     finally { await db.admin.query('DELETE FROM atrium_migrations.history WHERE version=$1', [addition]) }
     const upgraded = await bootstrapHostedDemoDatabase({ ...input, appPassword: secret(), authPassword: secret() })
     assert.equal(upgraded.rolesCreated, false); assert.equal(upgraded.seeded, false); assert.equal(upgraded.credentialsPreserved, true)
@@ -80,3 +79,34 @@ test(`verified ${baselineSpec.count}-migration hosted workspace upgrades without
   } finally { await auth?.close(); await maintenance?.end(); await db.close(); await rm(oldRoot, { recursive: true, force: true }) }
 })
 }
+
+test('a failed first migration can resume from only the bootstrap marker, but missing installed history cannot be repaired implicitly', async () => {
+  const db = await createTestPostgres(), root = await mkdtemp(join(tmpdir(), 'atrium-enrollment-bootstrap-resume-'))
+  const sourceRoot = fileURLToPath(new URL('../../', import.meta.url)), secret = () => randomBytes(36).toString('base64url')
+  let client
+  try {
+    await cp(join(sourceRoot, 'data'), join(root, 'data'), { recursive: true })
+    const directory = join(root, 'supabase', 'migrations')
+    await cp(join(sourceRoot, 'supabase', 'migrations'), directory, { recursive: true })
+    const first = (await readdir(directory)).filter(name => name.endsWith('.sql')).sort()[0]
+    await writeFile(join(directory, first), 'SELECT synthetic_missing_migration_function();\n')
+    const adminPassword = secret()
+    await db.admin.query(`CREATE ROLE hosted_resume_provisioner LOGIN CREATEROLE NOSUPERUSER NOBYPASSRLS NOCREATEDB NOREPLICATION PASSWORD ${pg.escapeLiteral(adminPassword)}`)
+    await db.admin.query('GRANT CREATE ON DATABASE postgres TO hosted_resume_provisioner')
+    client = new pg.Client(db.connection('hosted_resume_provisioner', adminPassword)); await client.connect()
+    const input = { client, root, appPassword: secret(), authPassword: secret(), connectionMode: 'session',
+      account: { username: 'larkin', displayName: 'Synthetic Resume Larkin', passwordHash: await hashPassword(secret()) },
+      bindings: [{ id: 'synthetic-resume-channel', externalId: randomUUID() }] }
+    await assert.rejects(bootstrapHostedDemoDatabase(input), { code: 'bootstrap_failed', stage: 'migrations' })
+    assert.equal((await db.admin.query("SELECT to_regnamespace('atrium') application_schema")).rows[0].application_schema, null)
+    assert.equal((await db.admin.query('SELECT complete FROM atrium_hosted.bootstrap')).rows[0].complete, false)
+    await copyFile(join(sourceRoot, 'supabase', 'migrations', first), join(directory, first))
+    const resumed = await bootstrapHostedDemoDatabase(input)
+    assert.equal(resumed.rolesCreated, false); assert.equal(resumed.seeded, true)
+    const before = (await db.admin.query('SELECT * FROM atrium.users')).rows
+    await db.admin.query('ALTER TABLE atrium_migrations.history RENAME TO missing_history_fixture')
+    await assert.rejects(bootstrapHostedDemoDatabase(input), { code: 'existing_state' })
+    assert.deepEqual((await db.admin.query('SELECT * FROM atrium.users')).rows, before)
+    assert.equal((await db.admin.query("SELECT to_regclass('atrium_migrations.history') history")).rows[0].history, null)
+  } finally { await client?.end(); await db.close(); await rm(root, { recursive: true, force: true }) }
+})

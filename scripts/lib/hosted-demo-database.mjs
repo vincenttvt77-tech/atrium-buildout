@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
-import { applyDatabaseMigrations } from './database-migrations.mjs'
+import { applyDatabaseMigrations, verifyDatabaseMigrationHistory } from './database-migrations.mjs'
 import { createAuthorizationService } from '../../src/auth/authorization.ts'
 import { validateChannelBinding, validateUser } from '../../src/auth/validation.ts'
 import { validatePublishedProperty } from '../../src/properties/snapshot.ts'
@@ -13,7 +13,7 @@ import { defaultSettings, validateSettings } from '../../src/calendar/settings.t
 export const HOSTED_DEMO = Object.freeze({ organizationId: 'org-demo-larkin', propertyId: 'prop-demo',
   userId: 'user-demo-larkin', membershipId: 'member-demo-larkin', name: 'The Larkin · Demo' })
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
-const EXECUTORS = ['atrium_account_executor', 'atrium_login_executor', 'atrium_session_executor', 'atrium_mfa_executor', 'atrium_organization_executor', 'atrium_resident_services_executor', 'atrium_maintenance_approval_reader']
+const EXECUTORS = ['atrium_account_executor', 'atrium_login_executor', 'atrium_session_executor', 'atrium_mfa_executor', 'atrium_organization_executor', 'atrium_resident_services_executor', 'atrium_maintenance_approval_reader', 'atrium_enrollment_executor']
 const RUNTIME_ROLES = ['atrium_app', 'atrium_authenticator']
 const ROLES = ['atrium_admin', ...EXECUTORS, ...RUNTIME_ROLES]
 const LOCK = 'atrium-hosted-demo-bootstrap-v1'
@@ -122,7 +122,7 @@ async function roleSafety(client, executors = EXECUTORS) {
       AND pg_catalog.has_function_privilege(r.oid,p.oid,'EXECUTE')) AS unsafe`)).rows[0].unsafe
   if (unsafe) failState()
 }
-async function prepareRoles(client, manifest, secrets) {
+async function prepareRoles(client, manifest, secrets, directory) {
   return transaction(client, async () => {
     const identity = (await client.query(`SELECT current_user current_role,session_user login_role,current_database() database_name,
       r.rolcanlogin,r.rolcreaterole,has_database_privilege(current_user,current_database(),'CREATE') can_create
@@ -135,6 +135,7 @@ async function prepareRoles(client, manifest, secrets) {
         ['atrium_organization_executor', '%organization_administration%'],
         ['atrium_resident_services_executor', '%resident_services%'],
         ['atrium_maintenance_approval_reader', '%maintenance_planning%'],
+        ['atrium_enrollment_executor', '%resident_enrollment%'],
       ]
       const missing = []
       for (const [role, migration] of additions) {
@@ -142,11 +143,19 @@ async function prepareRoles(client, manifest, secrets) {
       }
       await roleSafety(client, EXECUTORS.filter(role => !missing.some(([absent]) => absent === role)))
       await client.query('SET LOCAL ROLE atrium_admin')
-      const prior = (await client.query('SELECT manifest FROM atrium_hosted.bootstrap WHERE id=1')).rows[0]
+      const prior = (await client.query('SELECT manifest,complete FROM atrium_hosted.bootstrap WHERE id=1')).rows[0]
       if (!prior || !isDeepStrictEqual(prior.manifest, manifest)) failState()
+      // Refuse corrupt/unknown history before committing a new executor role.
+      await client.query("SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('atrium-schema-migrations', 0))")
+      const schema = (await client.query("SELECT to_regclass('atrium_migrations.history') history,to_regnamespace('atrium') application_schema")).rows[0]
+      if (schema.history) {
+        try { await verifyDatabaseMigrationHistory(client, directory) } catch { failState() }
+      } else if (prior.complete || schema.application_schema) failState()
+      // A brand-new bootstrap may have committed only its roles/marker before a
+      // failed first migration. With no application schema, it can resume safely.
       for (const [, migration] of missing) {
         // Extend a verified older bootstrap, never repair a removed installed role.
-        if ((await client.query('SELECT 1 FROM atrium_migrations.history WHERE version LIKE $1 LIMIT 1', [migration])).rowCount) failState()
+        if (schema.history && (await client.query('SELECT 1 FROM atrium_migrations.history WHERE version LIKE $1 LIMIT 1', [migration])).rowCount) failState()
       }
       if (missing.length) {
         await client.query('RESET ROLE')
@@ -250,7 +259,7 @@ export async function bootstrapHostedDemoDatabase({ client, appPassword, authPas
       bindings: bindings.map(({id,externalId}) => ({id,externalId})), sourceSha256: createHash('sha256').update(JSON.stringify(source)).digest('hex') }
     stage = 'lock'
     await client.query('SELECT pg_catalog.pg_advisory_lock(pg_catalog.hashtextextended($1,0))', [LOCK]); locked = true
-    stage = 'roles'; const rolesCreated = await prepareRoles(client, manifest, { appPassword, authPassword })
+    stage = 'roles'; const rolesCreated = await prepareRoles(client, manifest, { appPassword, authPassword }, join(root, 'supabase', 'migrations'))
     stage = 'migrations'; const migrations = await applyDatabaseMigrations(client, join(root, 'supabase', 'migrations'))
     stage = 'seed'; const seeded = await seed(client, account, bindings, source)
     stage = 'verify'; await roleSafety(client)

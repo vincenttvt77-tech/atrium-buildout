@@ -97,10 +97,11 @@ try {
 }
 
 await (await load('scripts/build-auth.mjs')).buildAuthClient()
-const [dashboard, calendar, leads, vapi, health, properties, ny, vapiCalls, account, mfa, workflows, organizations, residentServices, maintenancePlans] = await Promise.all([
+const [dashboard, calendar, leads, vapi, health, properties, ny, vapiCalls, account, mfa, workflows, organizations, residentServices, maintenancePlans, residentAccess, resident] = await Promise.all([
   load('api/dashboard.ts'), load('api/calendar.ts'), load('api/leads.ts'), load('api/vapi.ts'),
   load('api/health.ts'), load('api/properties.ts'), load('src/time/ny.ts'), load('src/ops/vapi-calls.ts'),
   load('api/account.ts'), load('api/mfa.ts'), load('api/workflows.ts'), load('api/organizations.ts'), load('api/resident-services.ts'), load('api/maintenance-plans.ts'),
+  load('api/resident-access.ts'), load('api/resident.ts'),
 ])
 
 const ROUTES = {
@@ -116,6 +117,8 @@ const ROUTES = {
   '/api/resident-services': residentServices.default,
   '/api/maintenance-plans': maintenancePlans.default,
   '/api/organizations': organizations.default,
+  '/api/resident-access': residentAccess.default,
+  '/api/resident': resident.default,
 }
 
 // ---------------------------------------------------------------------------------------

@@ -37,8 +37,9 @@ production cutover. Legacy deployments remain on their separately configured com
 
 Persisted session audiences now separate staff access from resident account control.
 The same person cannot use a resident session to exercise staff membership. This is
-an authentication foundation, with database-first rollout; resident enrollment,
-resident-facing pages and exact work/entry consent remain subsequent implementation.
+an authentication foundation with database-first rollout. First-party enrollment adds
+property-approved recipient checks, digest-only invitations, atomic resident-controlled
+activation and separate resident pages. Exact work/entry consent remains subsequent implementation.
 See [ADR 0013](docs/adr/0013-resident-authority-consent.md) for the current boundary.
 
 The emergency admission hold and call projection are separate writes. Both must succeed

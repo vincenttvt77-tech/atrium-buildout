@@ -41,8 +41,8 @@ async function allowed(context, permission = 'read') {
 
 test('schema objects have forced RLS, an exact self-service definer allowlist and restricted real login roles', async () => {
   const roles = (await db.admin.query(`SELECT rolname,rolcanlogin,rolsuper,rolbypassrls,rolcreaterole,rolcreatedb,rolreplication
-    FROM pg_roles WHERE rolname IN ('atrium_admin','atrium_app','atrium_authenticator','atrium_account_executor','atrium_login_executor','atrium_maintenance_approval_reader','atrium_mfa_executor','atrium_organization_executor','atrium_resident_services_executor','atrium_session_executor') ORDER BY rolname`)).rows
-  assert.deepEqual(roles.map(role => role.rolname), ['atrium_account_executor','atrium_admin','atrium_app','atrium_authenticator','atrium_login_executor','atrium_maintenance_approval_reader','atrium_mfa_executor','atrium_organization_executor','atrium_resident_services_executor','atrium_session_executor'])
+    FROM pg_roles WHERE rolname IN ('atrium_admin','atrium_app','atrium_authenticator','atrium_enrollment_executor','atrium_account_executor','atrium_login_executor','atrium_maintenance_approval_reader','atrium_mfa_executor','atrium_organization_executor','atrium_resident_services_executor','atrium_session_executor') ORDER BY rolname`)).rows
+  assert.deepEqual(roles.map(role => role.rolname), ['atrium_account_executor','atrium_admin','atrium_app','atrium_authenticator','atrium_enrollment_executor','atrium_login_executor','atrium_maintenance_approval_reader','atrium_mfa_executor','atrium_organization_executor','atrium_resident_services_executor','atrium_session_executor'])
   for (const role of roles) {
     assert.equal(role.rolcanlogin, ['atrium_app','atrium_authenticator'].includes(role.rolname), `${role.rolname} login policy`)
     for (const key of ['rolsuper', 'rolbypassrls', 'rolcreaterole', 'rolcreatedb', 'rolreplication']) {
@@ -61,6 +61,7 @@ test('schema objects have forced RLS, an exact self-service definer allowlist an
     'mfa_states','mfa_password_checks','mfa_factors','mfa_assurances','mfa_recovery_codes','mfa_recovery_grants','mfa_challenges','mfa_attempts','mfa_requests','mfa_events','organization_commands','organization_events',
     'organization_people','property_residents','resident_sources','resident_events','service_cases','service_events','service_commands',
     'maintenance_policies','maintenance_vendors','maintenance_plans','maintenance_decisions','maintenance_plan_events','maintenance_commands',
+    'resident_enrollment_policies','resident_enrollment_invites','resident_account_bindings','resident_enrollment_attempts','resident_enrollment_commands','resident_enrollment_events','resident_enrollment_budgets',
   ].sort())
   assert.ok(tables.every(row => row.rolname === 'atrium_admin' && row.relrowsecurity && row.relforcerowsecurity))
   const functions = (await db.admin.query(`SELECT p.proname,p.prosecdef,p.proconfig,r.rolname AS owner,
@@ -76,17 +77,18 @@ test('schema objects have forced RLS, an exact self-service definer allowlist an
   const organizationDefiners = ['list_administrable_organizations(uuid)', 'organization_directory(text,uuid,integer,text)', 'replace_organization_member(jsonb,uuid)']
   const residentServiceDefiners = ['execute_resident_service(jsonb,bigint,text[])', 'execute_maintenance_planning(jsonb,bigint,uuid)']
   const approvalReaderDefiners = ['maintenance_decision_authority(uuid)']
-  const selfServiceDefiners = ['commit_password_change(text,text,text)', 'reserve_login_attempt(text,text)', 'reserve_password_change(text)', ...sessionDefiners,...mfaDefiners,...organizationDefiners,...residentServiceDefiners,...approvalReaderDefiners].sort()
+  const enrollmentDefiners = ['enrollment_staff(text,jsonb,bigint,uuid)', 'enrollment_resident(text,jsonb)']
+  const selfServiceDefiners = ['commit_password_change(text,text,text)', 'reserve_login_attempt(text,text)', 'reserve_password_change(text)', ...sessionDefiners,...mfaDefiners,...organizationDefiners,...residentServiceDefiners,...approvalReaderDefiners,...enrollmentDefiners].sort()
   assert.deepEqual(functions.filter(row => row.prosecdef).map(row => row.signature).sort(), selfServiceDefiners)
   assert.ok(functions.length > selfServiceDefiners.length)
   for (const fn of functions) {
     if (selfServiceDefiners.includes(fn.signature)) {
       assert.equal(fn.prosecdef, true, fn.signature)
-      assert.equal(fn.owner, approvalReaderDefiners.includes(fn.signature) ? 'atrium_maintenance_approval_reader' : residentServiceDefiners.includes(fn.signature) ? 'atrium_resident_services_executor' : organizationDefiners.includes(fn.signature) ? 'atrium_organization_executor' : mfaDefiners.includes(fn.signature) ? 'atrium_mfa_executor' : sessionDefiners.includes(fn.signature) ? 'atrium_session_executor' : fn.signature === 'reserve_login_attempt(text,text)' ? 'atrium_login_executor' : 'atrium_account_executor', fn.signature)
+      assert.equal(fn.owner, enrollmentDefiners.includes(fn.signature) ? 'atrium_enrollment_executor' : approvalReaderDefiners.includes(fn.signature) ? 'atrium_maintenance_approval_reader' : residentServiceDefiners.includes(fn.signature) ? 'atrium_resident_services_executor' : organizationDefiners.includes(fn.signature) ? 'atrium_organization_executor' : mfaDefiners.includes(fn.signature) ? 'atrium_mfa_executor' : sessionDefiners.includes(fn.signature) ? 'atrium_session_executor' : fn.signature === 'reserve_login_attempt(text,text)' ? 'atrium_login_executor' : 'atrium_account_executor', fn.signature)
       assert.deepEqual(fn.proconfig, ['search_path=pg_catalog'], fn.signature)
       assert.equal(fn.public_execute, false, fn.signature)
-      assert.equal(fn.app_execute, [...approvalReaderDefiners,...residentServiceDefiners,...organizationDefiners,'hold_current_session()','mfa_login_allowed()','mfa_hold_proof(uuid,text)'].includes(fn.signature), fn.signature)
-      assert.equal(fn.auth_execute, ![...approvalReaderDefiners,...residentServiceDefiners,...organizationDefiners,'hold_current_session()','mfa_hold_proof(uuid,text)'].includes(fn.signature), fn.signature)
+      assert.equal(fn.app_execute, ['enrollment_staff(text,jsonb,bigint,uuid)',...approvalReaderDefiners,...residentServiceDefiners,...organizationDefiners,'hold_current_session()','mfa_login_allowed()','mfa_hold_proof(uuid,text)'].includes(fn.signature), fn.signature)
+      assert.equal(fn.auth_execute, !['enrollment_staff(text,jsonb,bigint,uuid)',...approvalReaderDefiners,...residentServiceDefiners,...organizationDefiners,'hold_current_session()','mfa_hold_proof(uuid,text)'].includes(fn.signature), fn.signature)
     } else {
       assert.equal(fn.prosecdef, false, fn.signature)
       assert.equal(fn.owner, 'atrium_admin', fn.signature)

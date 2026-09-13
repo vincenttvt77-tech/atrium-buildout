@@ -42,7 +42,7 @@ test('additive migration preserves applied SQL and keeps exact finite privileges
   const migration='20260913091003_session_audience.sql'
   assert.equal(await readFile(new URL('../../db/session-audience.sql',import.meta.url),'utf8'),await readFile(new URL(`../../supabase/migrations/${migration}`,import.meta.url),'utf8'))
   for(const name of await readdir(new URL('../../supabase/migrations/',import.meta.url))) {
-    if(!name.endsWith('.sql') || name===migration)continue
+    if(!name.endsWith('.sql') || name>=migration)continue
     const expected=execFileSync('git',['show',`HEAD:supabase/migrations/${name}`],{cwd:new URL('../../',import.meta.url),encoding:'utf8'})
     assert.equal(await readFile(new URL(`../../supabase/migrations/${name}`,import.meta.url),'utf8'),expected,name)
   }
@@ -186,7 +186,7 @@ test('additive upgrade preserves an already populated staff session and its exis
     const synthetic=randomBytes(32).toString('hex')
     for(const role of ['atrium_app','atrium_authenticator'])await legacy.admin.query(`CREATE ROLE ${role} LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE PASSWORD '${synthetic}'`)
     const migration='20260913091003_session_audience.sql'
-    for(const file of await readdir(migrationsDirectory))if(file.endsWith('.sql')&&file!==migration)await copyFile(join(migrationsDirectory,file),join(directory,file))
+    for(const file of await readdir(migrationsDirectory))if(file.endsWith('.sql')&&file<migration)await copyFile(join(migrationsDirectory,file),join(directory,file))
     await applyDatabaseMigrations(legacy.admin,directory);await seedFoundationTestDatabase(legacy.admin)
     connection=new DatabaseConnection({...legacy.connection('atrium_authenticator',synthetic),max:1},'atrium_authenticator')
     const id=randomUUID(),created=await connection.transaction({actorUserId:'owner-a',credentialVersion:1},async c=>(await c.query('SELECT * FROM atrium.start_user_session($1,$2)',[id,'Existing browser'])).rows[0])
@@ -195,12 +195,13 @@ test('additive upgrade preserves an already populated staff session and its exis
     const cookie=mintUserSession(current,new Date(),secret),claims=verifyUserSessionClaims(cookie,new Date(),secret)
     assert.ok(claims);assert.equal(claims.audience,'staff')
     const beforeAudit=(await legacy.admin.query('SELECT * FROM atrium.user_session_events WHERE session_id=$1',[id])).rows
-    assert.deepEqual(await applyDatabaseMigrations(legacy.admin),[migration])
+    await copyFile(join(migrationsDirectory,migration),join(directory,migration))
+    assert.deepEqual(await applyDatabaseMigrations(legacy.admin,directory),[migration])
     const saved=(await legacy.admin.query('SELECT * FROM atrium.user_sessions WHERE id=$1',[id])).rows[0]
     assert.equal(saved.audience,'staff')
     const {audience,...rest}=saved;assert.deepEqual(rest,created)
     assert.deepEqual((await legacy.admin.query('SELECT * FROM atrium.user_session_events WHERE session_id=$1',[id])).rows,beforeAudit)
     assert.ok(await new PostgresUserSessionRepository(connection).resolve(claims))
-    assert.deepEqual(await applyDatabaseMigrations(legacy.admin),[])
+    assert.deepEqual(await applyDatabaseMigrations(legacy.admin,directory),[])
   } finally {if(connection)await connection.close();await legacy.close();await rm(directory,{recursive:true,force:true})}
 })

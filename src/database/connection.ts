@@ -78,7 +78,7 @@ export class DatabaseConnection {
         `SELECT rolname, session_user AS login_role, rolsuper, rolbypassrls, rolcreaterole, rolcreatedb, rolreplication,
            pg_catalog.pg_has_role(current_user, 'atrium_admin', 'MEMBER') AS admin_member,
            pg_catalog.pg_has_role(current_user, $1, 'MEMBER') AS other_runtime_member,
-           EXISTS (SELECT 1 FROM pg_catalog.pg_roles executor WHERE executor.rolname IN ('atrium_account_executor','atrium_login_executor','atrium_session_executor','atrium_mfa_executor','atrium_organization_executor','atrium_resident_services_executor','atrium_maintenance_approval_reader')
+           EXISTS (SELECT 1 FROM pg_catalog.pg_roles executor WHERE executor.rolname IN ('atrium_account_executor','atrium_login_executor','atrium_session_executor','atrium_mfa_executor','atrium_organization_executor','atrium_resident_services_executor','atrium_maintenance_approval_reader','atrium_enrollment_executor')
              AND pg_catalog.pg_has_role(current_user, executor.oid, 'MEMBER')) AS account_executor_member
          FROM pg_catalog.pg_roles WHERE rolname = current_user`,
       [this.role === 'atrium_app' ? 'atrium_authenticator' : 'atrium_app'])
@@ -86,7 +86,9 @@ export class DatabaseConnection {
       if (!row || row.rolname !== this.role || row.login_role !== this.role || row.rolsuper || row.rolbypassrls
         || row.rolcreaterole || row.rolcreatedb || row.rolreplication || row.admin_member || row.other_runtime_member || row.account_executor_member) throw new DatabaseConfigurationError()
       // Bind every known key, including empty ones: inherited state is never authority.
-      await client.query(`SELECT ${settings.map(([name], index) => `pg_catalog.set_config('${name}', $${index + 1}, true)`).join(', ')}`,
+      await client.query(`SELECT pg_catalog.set_config('atrium.enrollment_token_hash','',true),
+        pg_catalog.set_config('atrium.enrollment_new_user_id','',true),
+        ${settings.map(([name], index) => `pg_catalog.set_config('${name}', $${index + 1}, true)`).join(', ')}`,
         settings.map(([, key]) => String(context[key] ?? '')))
       const result = await work(client)
       const committed = await client.query('COMMIT')
