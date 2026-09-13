@@ -65,7 +65,7 @@ try {
   const repository = new PostgresResidentServicesRepository(db.app, seedScope, { configurationVersion: 1 })
   const planner = new PostgresMaintenancePlanningRepository(db.app, seedScope, { configurationVersion: 1 })
   const cases = {}
-  for (const label of ['automatic', 'approval', 'conflict', 'safety', 'vendor']) {
+  for (const label of ['automatic', 'approval', 'conflict', 'safety', 'vendor', 'inboxReject']) {
     const saved = await repository.execute({ action: 'create_request', requestId: randomUUID(), intake: {
       requestOrigin: 'staff_observation', location: { kind: 'common_area', label: 'Lobby' }, residentId: null,
       summary: `Synthetic ${label} maintenance`, description: 'Staff observed a slow tap drip.', category: 'plumbing', reportedPriority: 'routine',
@@ -127,6 +127,13 @@ try {
           const rect = node.getBoundingClientRect(); return rect.top >= 0 && rect.bottom <= innerHeight
         }), true, `The plan heading remains in view at ${width}`)
       }
+      if (name === 'maintenance-planning-inbox') {
+        await view.locator('.sv-inbox-info').evaluate(node => { node.scrollIntoView({ block: 'start' }); window.scrollBy(0, -90) })
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+        assert.equal(await view.locator('.mp-inbox-row').first().evaluate(node => {
+          const rect = node.getBoundingClientRect(); return rect.top >= 0 && rect.bottom <= innerHeight - 65
+        }), true, `A complete work-plan row remains readable at ${width}`)
+      }
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, `No viewport overflow: ${name} at ${width}`)
       if (artifacts) await page.screenshot({ path: `${artifacts}/${name}-${width}.png`, fullPage: false })
     }
@@ -147,8 +154,8 @@ try {
     await dialog.locator('#mp-reason').fill('Owner established the synthetic per-job authority limits')
     await review()
   }
-  async function selectCase(id) {
-    await view.locator('[data-tab="requests"]').click()
+  async function selectCase(id, inbox = false) {
+    await view.locator(`[data-tab="${inbox ? 'plans' : 'requests'}"]`).click()
     await view.locator('[data-filter="all"]').click()
     await view.locator(`[data-select="${id}"]`).click()
     await view.locator('.sv-planning-case [data-mp-heading]').waitFor()
@@ -227,7 +234,7 @@ try {
 
   await prepare(cases.approval)
   await page.setViewportSize({ width: 390, height: 900 })
-  await selectCase(cases.approval)
+  await selectCase(cases.approval, true)
   await view.locator('[data-mp="approve"]').press('Enter')
   await dialog.locator('#mp-reason').fill('Owner reviewed the exact staff proposal and all-in ceiling')
   await dialog.locator('.dlg-primary').press('Enter')
@@ -242,7 +249,7 @@ try {
   assert.equal(approved.plan.version, 1); assert.equal(approved.decision.decision, 'approve')
   assert.equal(approved.assessment.spendingAuthorized, true)
   assert.notEqual(approved.plan.preparedBy, approved.decision.actorUserId)
-  checks.push('At 390 pixels, a different owner reviews and approves the exact staff proposal using the keyboard with focus retained inside the dialog')
+  checks.push('From Work plans at 390 pixels, a different owner opens current case detail and approves the exact staff proposal using the keyboard with focus retained inside the dialog')
 
   await prepare(cases.conflict)
   await selectCase(cases.conflict)
@@ -293,7 +300,54 @@ try {
   assert.equal(vendorPlan.assessment.spendingAuthorized, true); assert.equal(vendorPlan.assessment.readiness, 'awaiting_vendor')
   checks.push('A real vendor picker binds current approval and version while missing availability holds fulfillment')
 
-  await selectCase(cases.automatic)
+  await view.locator('[data-tab="plans"]').click()
+  await view.locator('[data-filter="attention"]').click()
+  await view.locator(`[data-select="${cases.safety}"]`).waitFor()
+  assert.match(await view.locator(`[data-select="${cases.safety}"]`).innerText(), /Emergency review/)
+  assert.equal(await view.locator(`[data-select="${cases.automatic}"]`).count(), 0, 'Authorized work is waiting for fulfillment, not presented as an undecided approval')
+  await widths('maintenance-planning-inbox')
+  await page.setViewportSize({ width: 390, height: 900 })
+  await prepare(cases.inboxReject)
+  await selectCase(cases.inboxReject, true)
+  await view.locator('[data-mp="reject"]').press('Enter')
+  await dialog.locator('#mp-reason').fill('Owner requests a revised all-in estimate before approving')
+  await review(); await save('Record rejection')
+  await page.waitForFunction(() => document.querySelector('.sv-planning-case')?.textContent.includes('Rejection recorded'))
+  const rejected = await planner.getPlan(cases.inboxReject)
+  assert.equal(rejected.decision.decision, 'reject'); assert.equal(rejected.plan.version, 1)
+  await view.locator('[data-mp="prepare"]').click()
+  await dialog.locator('#mp-maximum').fill('700.00')
+  await dialog.locator('#mp-reason').fill('Owner prepared a revised complete estimate for independent review')
+  await review(); await save()
+  await page.waitForFunction(() => document.querySelector('.sv-planning-case')?.textContent.includes('revision 2'))
+  const revised = await planner.getPlan(cases.inboxReject)
+  assert.equal(revised.plan.version, 2); assert.equal(revised.plan.maximumCents, 70000); assert.equal(revised.decision, null)
+  assert.equal(revised.assessment.spendingAuthorized, false)
+  assert.equal(await view.locator('[data-mp="approve"]').count(), 0, 'The owner who revised a plan cannot independently approve their own version')
+  checks.push('Work plans filters preserve emergency attention and, on mobile, rejection leads to a new independently reviewable version without dispatch')
+
+  await db.admin.query(`INSERT INTO atrium.service_cases
+    SELECT (jsonb_populate_record(NULL::atrium.service_cases,
+      to_jsonb(c) || jsonb_build_object('id', gen_random_uuid(), 'created_at', $2::text))).*
+    FROM atrium.service_cases c CROSS JOIN generate_series(1, 200)
+    WHERE c.id = $1 RETURNING id`, [cases.inboxReject, new Date().toISOString()])
+  await view.locator('[data-tab="plans"]').click()
+  await view.locator('[data-filter="waiting"]').click()
+  const continueChecking = view.getByRole('button', { name: 'Continue checking', exact: true })
+  await continueChecking.waitFor()
+  assert.equal(await view.locator('.mp-inbox-row').count(), 0)
+  assert.match(await view.locator('.sv-results').innerText(), /More requests to check/)
+  assert.match(await view.locator('.sv-loaded').innerText(), /200 requests checked/)
+  await continueChecking.press('Enter')
+  await view.locator(`[data-select="${cases.automatic}"]`).waitFor()
+  assert.match(await view.locator('.sv-loaded').innerText(), /206 requests checked/)
+  assert.equal(await view.locator('[data-command="more"]').isVisible(), false)
+  await page.waitForFunction(() => [...document.querySelectorAll('.sv-view [data-select]')].at(-1) === document.activeElement)
+  assert.equal(await view.locator('[data-select]').last().evaluate(node => node === document.activeElement), true)
+  checks.push('An empty first scan across 200 nonmatching requests offers Continue checking; keyboard continuation finds older waiting work without a false empty state or skipped records')
+
+  await view.locator(`[data-select="${cases.automatic}"]`).click()
+  await view.locator('.sv-planning-case [data-mp-heading]').waitFor()
   let unauthorizedCommit
   await page.route('**/api/maintenance-plans', async route => {
     if (route.request().method() === 'POST' && route.request().postDataJSON()?.action === 'withdraw_plan') {

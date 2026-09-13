@@ -5,6 +5,8 @@ import { isSameOriginJsonRequest } from '../src/auth/account-request.ts'
 import { MaintenancePlanningError } from '../src/maintenance/planning-model.ts'
 import { parsePlanningCommand } from '../src/maintenance/planning-validation.ts'
 import { mintPlanningFormToken, verifyPlanningFormToken } from '../src/maintenance/planning-request.ts'
+import { validateMaintenanceInboxQuery } from '../src/maintenance/planning-inbox.ts'
+import { expiredPlanningScan, mintPlanningInboxCursor, planningScanLifetimeMs, readPlanningInboxCursor } from '../src/maintenance/planning-inbox-cursor.ts'
 import { validateServiceListQuery } from '../src/maintenance/validation.ts'
 import { recordId } from '../src/residents/validation.ts'
 import { PostgresMaintenancePlanningRepository } from '../src/database/maintenance-planning.ts'
@@ -15,8 +17,16 @@ const invalid = (): never => { throw new MaintenancePlanningError('planning_inva
 function query(input: unknown) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return invalid()
   const v = input as Record<string, unknown>
-  if (!['overview', 'vendors', 'vendor', 'plan', 'history'].includes(v.resource as string)
+  if (!['overview', 'vendors', 'vendor', 'plan', 'history', 'inbox'].includes(v.resource as string)
     || Object.values(v).some(value => typeof value !== 'string')) return invalid()
+  if (v.resource === 'inbox') {
+    if (Object.keys(v).some(key => !['resource', 'filter', 'limit', 'unitId', 'cursor'].includes(key))
+      || v.limit !== undefined && !/^[1-9]\d?$/.test(v.limit as string)
+      || v.cursor !== undefined && (!(v.cursor as string).length || (v.cursor as string).length > 800)) return invalid()
+    const inbox = validateMaintenanceInboxQuery({ limit: v.limit === undefined ? 25 : Number(v.limit), filter: v.filter ?? 'attention',
+      ...(v.unitId !== undefined ? { unitId: v.unitId } : {}) })
+    return { resource: 'inbox', id: '', caseId: '', page: { limit: inbox.limit }, inbox, cursor: v.cursor as string | undefined }
+  }
   const resource = v.resource as string, listing = resource === 'vendors' || resource === 'history'
   const allowed = ['resource', ...(listing ? ['limit', 'beforeCreatedAt', 'beforeId'] : []),
     ...(resource === 'vendors' ? ['status'] : resource === 'vendor' ? ['id'] : ['plan', 'history'].includes(resource) ? ['caseId'] : [])]
@@ -33,7 +43,7 @@ function query(input: unknown) {
       page.status = v.status
     }
   }
-  return { resource, id: v.id as string, caseId: v.caseId as string, page }
+  return { resource, id: v.id as string, caseId: v.caseId as string, page, inbox: undefined, cursor: undefined }
 }
 function page<T extends { createdAt: string; id: string }>(rows: T[], limit: number) {
   const visible = rows.slice(0, limit), last = visible.at(-1)
@@ -56,13 +66,35 @@ export default async function handler(req: any, res: any) {
     const runtime = runtimeForRequest(req), headers = req.headers ?? {}, principal = await runtime.authenticate(headers, new Date())
     if (!principal || principal.userId !== property.scope.actor.userId || principal.sessionId !== property.scope.actor.sessionId) throw new AuthorizationError('unauthenticated')
     const repository = new PostgresMaintenancePlanningRepository(runtime.app, property.scope, { configurationVersion: property.snapshot.version })
-    const send = async (body: Record<string, unknown>) => {
+    const send = async (body: Record<string, unknown>, deadline?: number) => {
       await property.revalidate()
       await propertyTransaction(runtime.app, property.scope, 'operate', async () => {}, property.snapshot.version)
+      if (deadline !== undefined && Date.now() >= deadline) return expiredPlanningScan()
       res.status(200).json({ ...body, scope: property.responseScope })
     }
     if (req.method === 'GET') {
       const selected = query(req.query ?? {})
+      if (selected.resource === 'inbox') {
+        const inbox = selected.inbox
+        if (!inbox) return invalid()
+        const started = Date.now(), prior = selected.cursor === undefined ? null : readPlanningInboxCursor(selected.cursor,
+          principal, property.responseScope, inbox, new Date(started), runtime.sessionSecret)
+        const result = await repository.listInbox({ ...inbox, ...(prior ? { before: prior.before } : {}) })
+        if (prior && prior.policyVersion !== result.policyVersion) return expiredPlanningScan()
+        const now = new Date(), evaluatedAt = Date.parse(result.evaluatedAt)
+        if (!Number.isFinite(evaluatedAt)) throw new MaintenancePlanningError('planning_unavailable', 'The planning evaluation time could not be verified.')
+        const boundaries = [result.policyValidUntil, result.refreshAt].filter((value): value is string => value !== null).map(value => Date.parse(value))
+        if (boundaries.some(value => !Number.isFinite(value))) throw new MaintenancePlanningError('planning_unavailable', 'The planning evidence deadline could not be verified.')
+        const scan = { startedAt: prior?.startedAt ?? started, policyVersion: result.policyVersion,
+          expiresAt: Math.min(prior?.expiresAt ?? started + planningScanLifetimeMs,
+            principal.sessionExpiresAt ?? Infinity,
+            ...boundaries.filter(value => value > evaluatedAt)) }
+        if (now.getTime() >= scan.expiresAt) return expiredPlanningScan()
+        const { nextCursor, policyVersion: _policyVersion, policyValidUntil: _policyValidUntil, refreshAt: _refreshAt, ...visible } = result
+        await send({ ...visible, nextCursor: nextCursor ? mintPlanningInboxCursor(nextCursor, scan, principal,
+          property.responseScope, inbox, now, runtime.sessionSecret) : null,
+        scanStartedAt: new Date(scan.startedAt).toISOString(), scanExpiresAt: new Date(scan.expiresAt).toISOString() }, scan.expiresAt); return
+      }
       if (selected.resource === 'overview') {
         await send({ ...await repository.overview(), formToken: mintPlanningFormToken(principal, property.responseScope, new Date(), runtime.sessionSecret) }); return
       }

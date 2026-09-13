@@ -147,6 +147,57 @@ export interface MaintenancePlanningOverview {
   canManageVendors: boolean
   actorRole: Role
 }
+export type MaintenanceInboxFilter = 'attention' | 'waiting' | 'all'
+export type MaintenanceNextStepKind = 'review_emergency' | 'review_context' | 'publish_policy'
+  | 'prepare_plan' | 'revise_plan' | 'review_decision' | 'management_review'
+  | 'verify_resident' | 'confirm_vendor_availability' | 'arrange_work'
+export interface MaintenanceInboxNextStep {
+  kind: MaintenanceNextStepKind
+  label: string
+  responsible: 'property_team' | 'manager_or_owner' | 'owner' | 'verified_resident'
+  /** An available portal step, never a claim that outside work has happened. */
+  availableInPortal: boolean
+}
+/** A minimal staff list projection; contacts, access notes and full work prose stay in detail. */
+export interface MaintenanceInboxItem {
+  id: string
+  caseVersion: number
+  summary: string
+  location: ServiceCase['location']
+  category: ServiceCategory
+  priority: ServiceCase['priority']
+  createdAt: string
+  updatedAt: string
+  planId: string | null
+  planVersion: number | null
+  planPreparedAt: string | null
+  maximumCents: number | null
+  includesAllCharges: boolean | null
+  currency: 'USD'
+  assessment: MaintenanceAssessment
+  canDecide: boolean
+  group: 'attention' | 'waiting'
+  nextStep: MaintenanceInboxNextStep
+}
+export interface MaintenanceInboxQuery {
+  limit: number
+  filter: MaintenanceInboxFilter
+  unitId?: string
+  before?: ServiceCursor
+}
+export interface MaintenanceInboxPage {
+  items: MaintenanceInboxItem[]
+  /** Last consumed case, including nonmatches. This is navigation, not a frozen snapshot. */
+  nextCursor: ServiceCursor | null
+  evaluatedAt: string
+  scannedCount: number
+  /** A bounded scan found fewer than a full page; continuation may contain more matches. */
+  scanIncomplete: boolean
+  policyVersion: number | null
+  policyValidUntil: string | null
+  /** Earliest future evidence boundary in the checked graph, never a snapshot guarantee. */
+  refreshAt: string | null
+}
 export type MaintenancePlanningCommand =
   | { action: 'publish_policy'; requestId: string; expectedVersion: number; details: MaintenancePolicyDetails; reason: string }
   | { action: 'save_vendor'; requestId: string; id: string | null; expectedVersion: number; details: MaintenanceVendorDetails; reason: string }
@@ -166,6 +217,7 @@ export interface MaintenancePlanningReceipt {
 }
 export interface MaintenancePlanningRepository {
   overview(): Promise<MaintenancePlanningOverview>
+  listInbox(query: MaintenanceInboxQuery): Promise<MaintenanceInboxPage>
   listVendors(query: { limit: number; before?: ServiceCursor; status?: 'approved' | 'suspended' }): Promise<MaintenanceVendor[]>
   getVendor(id: string): Promise<MaintenanceVendor | null>
   getPlan(caseId: string): Promise<MaintenancePlanDetail | null>
@@ -173,7 +225,7 @@ export interface MaintenancePlanningRepository {
   execute(command: MaintenancePlanningCommand, proofId?: string): Promise<MaintenancePlanningReceipt>
 }
 export type MaintenancePlanningErrorCode = 'planning_invalid_input' | 'planning_not_found' | 'planning_version_conflict'
-  | 'planning_request_conflict' | 'planning_not_ready' | 'planning_mfa_required' | 'planning_unavailable'
+  | 'planning_request_conflict' | 'planning_not_ready' | 'planning_mfa_required' | 'planning_unavailable' | 'planning_cursor_expired'
 export class MaintenancePlanningError extends Error {
   readonly code: MaintenancePlanningErrorCode
   constructor(code: MaintenancePlanningErrorCode, message: string) { super(message); this.code = code }
