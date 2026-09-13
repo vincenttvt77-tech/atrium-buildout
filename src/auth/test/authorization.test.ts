@@ -66,6 +66,7 @@ const denied = (code: string) => (error: unknown) => error instanceof Authorizat
 function registered(repository: TestRepository, principal: AuthenticatedUser, expiresAt = NOW.getTime() + USER_SESSION_TTL_MS) {
   const user = repository.users.find(user => user.id === principal.userId)!
   const session: UserSessionRecord = { id: randomUUID(), userId: user.id, credentialVersion: user.credentialVersion,
+    audience: 'staff',
     label: 'Synthetic domain session', createdAt: NOW.getTime(), lastSeenAt: NOW.getTime(), expiresAt, revokedAt: null }
   repository.sessions.push(session)
   return issueAuthenticatedUser(user, { id: session.id, expiresAt: session.expiresAt })

@@ -10,6 +10,7 @@ import {verifyMfaSession,TEST_AUTH_ORIGIN} from '../helpers/mfa-session.mjs'
 
 let db,runtime,password
 const principals=new Map(),scopes=new Map()
+const enrollmentTables=['resident_enrollment_events','resident_enrollment_commands','resident_enrollment_attempts','resident_account_bindings','resident_enrollment_invites','resident_enrollment_policies','resident_enrollment_budgets']
 const tables=['service_events','service_commands','service_cases','resident_events','resident_sources','property_residents','organization_people']
 const planningTables=['maintenance_commands','maintenance_plan_events','maintenance_decisions','maintenance_plans','maintenance_vendors','maintenance_policies']
 before(async()=>{
@@ -29,7 +30,7 @@ before(async()=>{
  scopes.set('sibling',await runtime.authorization.authorizeProperty(principals.get('owner-a'),'property-a2','operate'))
 })
 beforeEach(async()=>{
- await db.admin.query(`TRUNCATE ${[...planningTables,...tables].map(t=>`atrium.${t}`).join(',')}`)
+ await db.admin.query(`TRUNCATE ${[...enrollmentTables,...planningTables,...tables].map(t=>`atrium.${t}`).join(',')}`)
  await db.admin.query("UPDATE atrium.memberships SET status='active'")
  await db.admin.query("UPDATE atrium.property_grants SET status='active'")
  await db.admin.query("UPDATE atrium.properties SET published_configuration_version=1 WHERE id IN ('property-a1','property-a2','property-b1')")

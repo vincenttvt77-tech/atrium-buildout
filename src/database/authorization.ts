@@ -22,7 +22,7 @@ function lookupContext(context: AuthLookupContext): DatabaseContext {
   if (!context || typeof context !== 'object') invalid()
   if (context.kind === 'user') {
     if (!validId(context.userId) || !validVersion(context.credentialVersion)) invalid()
-    return { actorUserId: context.userId, credentialVersion: context.credentialVersion,
+    return { actorUserId: context.userId, credentialVersion: context.credentialVersion, sessionAudience: 'staff',
       ...(context.sessionId ? { actorSessionId: context.sessionId } : {}) }
   }
   if (context.kind !== 'channel' || !/^[a-z][a-z0-9_-]{0,63}$/.test(context.provider)

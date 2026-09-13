@@ -11,6 +11,7 @@ const user: User = { id: 'user-a', username: 'staff-a', displayName: 'Staff A', 
 const NOW = Date.now()
 const SECRET = 'synthetic session management secret for tests'
 const record = (patch: Partial<UserSessionRecord> = {}): UserSessionRecord => ({ id: randomUUID(), userId: user.id,
+  audience: 'staff',
   credentialVersion: 1, label: 'Browser session', createdAt: NOW, lastSeenAt: NOW,
   expiresAt: NOW + USER_SESSION_TTL_MS, revokedAt: null, ...patch })
 const base = issueAuthenticatedUser(user)

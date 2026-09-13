@@ -26,10 +26,11 @@ claims. Hosts must maintain synchronized clocks; a small database clock lead mus
 not make a newly registered cookie impossible to issue. Returned records must still
 have the exact eight-hour lifetime and match all signed identifiers and expiration.
 
-At most 20 sessions are active for one user/version. A new successful login revokes
+At most 20 sessions are active for one user/version/audience. A new successful login revokes
 the oldest active sessions needed to remain within this limit, in the same
 transaction as registration and audit. The limit concerns active sessions, not
-total historical rows. Password rotation invalidates prior credential versions;
+total historical rows. Staff and resident lists/revocation are separate; see
+[resident audience boundaries](0013-resident-authority-consent.md). Password rotation invalidates prior credential versions in both audiences;
 disabled users cannot use their recorded sessions.
 
 ## User controls and truthful responses

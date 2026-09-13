@@ -35,6 +35,13 @@ are rejected rather than silently selecting an adapter. Local persistent preview
 HTTP/browser verification exercise this path; they do not establish a hosted database or
 production cutover. Legacy deployments remain on their separately configured compatibility path.
 
+Persisted session audiences now separate staff access from resident account control.
+The same person cannot use a resident session to exercise staff membership. This is
+an authentication foundation with database-first rollout. First-party enrollment adds
+property-approved recipient checks, digest-only invitations, atomic resident-controlled
+activation and separate resident pages. Exact work/entry consent remains subsequent implementation.
+See [ADR 0013](docs/adr/0013-resident-authority-consent.md) for the current boundary.
+
 The emergency admission hold and call projection are separate writes. Both must succeed
 before the handler acknowledges emergency persistence; failures return HTTP 503 with safety
 guidance in the response body for retry. A saved calendar hold remains effective when the

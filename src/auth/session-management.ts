@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { assertAuthenticatedUser, issueAuthenticatedUser } from './identity.ts'
-import type { AuthenticatedUser, UserSessionClaims, UserSessionRecord } from './model.ts'
+import type { AuthenticatedUser, SessionAudience, UserSessionClaims, UserSessionRecord } from './model.ts'
 import { USER_SESSION_TTL_MS, validSessionId } from './session.ts'
 import { validId, validVersion } from './validation.ts'
 
@@ -16,7 +16,7 @@ export class SessionManagementError extends Error {
   }
 }
 export interface UserSessionRepository {
-  start(principal: AuthenticatedUser, input: { id: string; label: string }): Promise<UserSessionRecord>
+  start(principal: AuthenticatedUser, input: { id: string; label: string; audience: SessionAudience }): Promise<UserSessionRecord>
   resolve(claims: UserSessionClaims): Promise<UserSessionRecord | null>
   list(principal: AuthenticatedUser): Promise<UserSessionRecord[]>
   revoke(principal: AuthenticatedUser, targetSessionId: string | 'others'): Promise<{ revokedIds: string[]; currentRevoked: boolean }>
@@ -27,6 +27,7 @@ export function validateSessionRecord(raw: unknown): UserSessionRecord {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new SessionManagementError('session_unavailable')
   const value = raw as UserSessionRecord
   if (!validSessionId(value.id) || !validId(value.userId) || !validVersion(value.credentialVersion)
+    || (value.audience !== 'staff' && value.audience !== 'resident')
     || typeof value.label !== 'string' || !value.label.trim() || value.label.length > 100 || /[\u0000-\u001f\u007f]/.test(value.label)
     || !Number.isSafeInteger(value.createdAt) || !Number.isSafeInteger(value.lastSeenAt) || !Number.isSafeInteger(value.expiresAt)
     || value.createdAt <= 0 || value.lastSeenAt < value.createdAt || value.lastSeenAt >= value.expiresAt
@@ -34,7 +35,7 @@ export function validateSessionRecord(raw: unknown): UserSessionRecord {
     || (value.revokedAt !== null && (!Number.isSafeInteger(value.revokedAt) || value.revokedAt < value.createdAt))) {
     throw new SessionManagementError('session_unavailable')
   }
-  return Object.freeze({ id: value.id, userId: value.userId, credentialVersion: value.credentialVersion, label: value.label,
+  return Object.freeze({ id: value.id, userId: value.userId, audience: value.audience, credentialVersion: value.credentialVersion, label: value.label,
     createdAt: value.createdAt, lastSeenAt: value.lastSeenAt, expiresAt: value.expiresAt, revokedAt: value.revokedAt })
 }
 export function assertManagedSession(principal: AuthenticatedUser): void {
@@ -61,11 +62,12 @@ export function createSessionManagementService(repository: UserSessionRepository
       const label = input?.label
       if (typeof label !== 'string' || !label.trim() || label.length > 100 || /[\u0000-\u001f\u007f]/.test(label)) throw new SessionManagementError('invalid_session')
       try {
-        const id = randomUUID(), record = validateSessionRecord(await repository.start(principal, { id, label }))
+        const id = randomUUID(), record = validateSessionRecord(await repository.start(principal, { id, label, audience: principal.audience }))
         if (record.id !== id || record.userId !== principal.userId || record.credentialVersion !== principal.credentialVersion
+          || record.audience !== principal.audience
           || record.revokedAt !== null || record.expiresAt <= Date.now()) throw new SessionManagementError('session_unavailable')
         return issueAuthenticatedUser({ id: principal.userId, username: principal.username, displayName: principal.displayName,
-          credentialVersion: principal.credentialVersion, status: 'active' }, { id, expiresAt: record.expiresAt })
+          credentialVersion: principal.credentialVersion, status: 'active' }, { id, expiresAt: record.expiresAt }, principal.audience)
       } catch (error) {
         if (error instanceof SessionManagementError) throw error
         throw new SessionManagementError('session_unavailable')
@@ -79,6 +81,7 @@ export function createSessionManagementService(repository: UserSessionRepository
         const ids = new Set<string>(), records = rows.map(raw => {
           const row = validateSessionRecord(raw)
           if (row.userId !== principal.userId || row.credentialVersion !== principal.credentialVersion || row.revokedAt !== null
+            || row.audience !== principal.audience
             || ids.has(row.id)) throw new SessionManagementError('session_unavailable')
           ids.add(row.id); return row
         })

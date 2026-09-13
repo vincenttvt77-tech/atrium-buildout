@@ -4,7 +4,7 @@ import type { AuthenticatedUser } from '../../auth/model.ts'
 import { mintPlanningInboxCursor, readPlanningInboxCursor, planningScanLifetimeMs } from '../planning-inbox-cursor.ts'
 
 const now = new Date('2026-09-13T12:00:00.000Z'), secret = 'synthetic-inbox-cursor-secret-for-tests'
-const principal: AuthenticatedUser = { kind: 'user', userId: 'staff-one', username: 'staff', displayName: 'Synthetic Staff', credentialVersion: 1, sessionId: 'session-one' }
+const principal: AuthenticatedUser = { kind: 'user', audience: 'staff', userId: 'staff-one', username: 'staff', displayName: 'Synthetic Staff', credentialVersion: 1, sessionId: 'session-one' }
 const scope = { organizationId: 'org-one', propertyId: 'property-one', configurationVersion: 1, permissionVersion: 'scope-one' }
 const query = { limit: 25, filter: 'attention' as const, unitId: '19A' }
 const before = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', createdAt: '2026-09-12T12:00:00.000Z' }

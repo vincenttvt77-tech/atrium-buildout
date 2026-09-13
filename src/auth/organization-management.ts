@@ -58,6 +58,7 @@ export function createOrganizationManagementService(repository: OrganizationMana
   authentication: PrivilegedAuthentication, now: () => Date = () => new Date()) {
   async function proof(principal: AuthenticatedUser): Promise<string> {
     assertManagedSession(principal)
+    if (principal.audience !== 'staff') throw new AdministrationError('forbidden')
     const verified = await authentication.verifyCurrentSession(principal), time = now().getTime()
     if (!verified || verified.issuer !== authentication.issuer || verified.sessionId !== authentication.sessionId
       || verified.sessionId !== principal.sessionId || verified.subjectId !== principal.userId

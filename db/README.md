@@ -8,6 +8,19 @@ edit an already applied migration; use a new migration for subsequent changes.
 Apply all reviewed files in `supabase/migrations/` in order; `schema.sql` alone does
 not include later migrations such as immutable channel routing.
 
+The audience foundation requires `20260913091003_session_audience.sql`, after
+maintenance planning, before the matching PostgreSQL application code. It defaults
+existing session rows to staff while preserving old `a4` cookies and credentials.
+New resident `r1` sessions cannot authorize staff routes or SQL commands. Set or
+clear `session_audience` on every pooled transaction; omission supports legacy staff
+context only when the actual session is staff. No new role is introduced. This
+migration does not itself enable enrollment. The next additive migration,
+`20260913160945_resident_enrollment.sql`, requires the restricted enrollment executor
+and adds the seven normalized policy/invitation/binding/attempt/receipt/event/budget
+tables. Apply it before the matching resident HTTP code. Hosted rollout and real
+property protocol approval are separate from local implementation; see
+[ADR 0013](../docs/adr/0013-resident-authority-consent.md).
+
 ## Opt-in runtime
 
 `src/application/runtime.ts` connects the persisted authorization/property repositories
@@ -65,6 +78,8 @@ current membership, organization/property status and explicit grants per operati
 | `GET/POST /api/account` | Personal password change and active-session list/revocation. Requires a current registered user session; mutations require same-origin JSON and a signed user/session-bound form token. Independent of property access; absent in legacy mode. |
 | `GET/POST /api/mfa` | Own passkey setup, verification, factor management and recovery. Exact configured origin, registered-session binding and CSRF checks on POST. Finite commands only; absent in legacy mode. |
 | `GET/POST /api/organizations` | Scoped existing-member directory and full access replacement; fresh organization-administration MFA, org/action/session-bound form tokens and atomic versioned receipts. Independent of property publication; absent in legacy mode. |
+| `GET/POST /api/resident-access` | Staff configure-only policy, completed recipient-check invitations, receipt reconciliation and scoped revocation. Current staff session, property/configuration-bound form and fresh administration MFA for changes. No outbound delivery. |
+| `GET/POST /api/resident` | Separate resident sign-in, browser-bound invitation exchange, explicit new/existing account activation, own bindings/receipts and logout. The fixed `?resource=mfa` surface provides resident own-account passkeys. No staff property rights or maintenance/entry consent. |
 | `GET/POST /api/resident-services` | Staff-only property resident records, maintenance intake, notes, triage and paginated history; configure-only source changes. Property/configuration/session-bound forms, atomic receipts and current context checks. No dispatch or caller verification; absent in legacy mode. |
 | `GET/POST /api/maintenance-plans` | Scoped owner policy, approved vendors, versioned proposals and immutable decisions. Separate bound forms; protected actions require fresh administration MFA. Operate reads/proposals, configure vendor/decision actions, owner-only policy. No external execution; absent in legacy mode. |
 | `GET/POST /api/workflows` | Property-scoped action queue; read permission for bounded listing, configure permission and same-origin JSON for recovery. Required expected row revision is checked under lock; no action creation, connector execution or legacy fallback. |
@@ -251,17 +266,19 @@ separately by the deployment secret store. There are no database passwords in SQ
 | `atrium_mfa_executor` | NOLOGIN owner of finite passkey commands. Self-only factor/challenge/proof/recovery writes under forced RLS, plus security audit. Does not receive raw credential writes or property data access. Runtime roles cannot inherit or assume it. |
 | `atrium_organization_executor` | NOLOGIN owner of scoped organization directory and full existing-member access commands. Current administration proof, last-owner protection and atomic command/audit history; no credential writes. |
 | `atrium_resident_services_executor` | NOLOGIN owner of finite resident/service and maintenance-planning mutation commands. Staff-only property records, immutable source/event/receipt history, versioned triage and policy-bound decisions under forced RLS; no caller identity, entry or dispatch authority. |
+| `atrium_enrollment_executor` | NOLOGIN/NOBYPASSRLS owner of two finite staff/resident enrollment commands. Scoped approved recipient checks, digest-only invitations, atomic new-account activation or authenticated existing-account binding, bounded attempts and immutable receipts; no runtime inheritance or general identity directory. |
 | `atrium_maintenance_approval_reader` | NOLOGIN/NOBYPASSRLS owner of the finite decision-authority reader. Returns current qualifying role/access for an existing scoped decision without changing requester context or exposing a general user directory. No runtime inheritance. |
 | `atrium_app` | Scoped property repositories plus finite existing-member administration commands. Configuration reads, operational document/calendar writes and scoped audit append/read; service writes go through their finite command. Cannot read password hashes, directly write membership/configuration/channel-binding tables, truncate tables, or modify audit history. |
 
-All ten must be `NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`.
+All eleven must be `NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`.
 Provision `atrium_account_executor NOLOGIN` before the account-security migration
 and `atrium_login_executor NOLOGIN` before the login-protection migration. Provision
 `atrium_session_executor NOLOGIN` before the user-sessions migration and
 `atrium_mfa_executor NOLOGIN` before the WebAuthn migration. Provision
 `atrium_organization_executor NOLOGIN` and `atrium_resident_services_executor NOLOGIN`
 before their respective additive migrations. Provision
-`atrium_maintenance_approval_reader NOLOGIN` before maintenance-planning. Grant
+`atrium_maintenance_approval_reader NOLOGIN` before maintenance-planning and
+`atrium_enrollment_executor NOLOGIN` before resident-enrollment. Grant
 these executor roles only to `atrium_admin` so migrations can transfer function
 ownership; do not grant them to either runtime login. The migration grants the
 authenticator explicit execution of the login reservation while denying execution
@@ -287,12 +304,12 @@ Never use session-scoped `SET` for request identity.
 
 | Transaction | Local settings |
 | --- | --- |
-| Staff property operation | `actor_user_id`, `credential_version`, `session_id`, `organization_id`, `property_id` |
+| Staff property operation | `actor_user_id`, `credential_version`, `session_id`, `session_audience=staff`, `organization_id`, `property_id` |
 | Verified channel property operation | `channel_binding_id`, `channel_binding_version`, `organization_id`, `property_id`; no staff actor or session |
 | Pre-login attempt reservation | All authorization settings empty; only two server-derived HMAC keys enter the finite function |
 | Password lookup | `login_username` only |
-| Session commands / identity lookup | `actor_user_id`, `credential_version`, `session_id`; registration has no session yet |
-| Staff authorization lookup | `actor_user_id`, `credential_version`, `session_id` for HTTP users |
+| Session commands / identity lookup | `actor_user_id`, `credential_version`, `session_id`, `session_audience`; registration has no session yet |
+| Staff authorization lookup | `actor_user_id`, `credential_version`, `session_id`, `session_audience=staff` for HTTP users |
 | Channel authorization lookup | `channel_provider`, `channel_external_id` |
 
 These settings are a **trusted server boundary**. The role owning a connection can
@@ -343,7 +360,7 @@ work and accepted background workflows are not canceled by browser logout.
 | --- | --- |
 | `users`, `user_credentials` | Stable staff identity and separately protected scrypt hash. Canonical username is unique. Updating/deleting a hash advances the user's credential version. |
 | `login_attempt_buckets` | `(bucket_kind, bucket_key)` for private username/client HMAC digests and bounded timestamp queues. Only the finite reservation function and authorized maintenance can access these rows; they are distinct from personal password-change attempts. |
-| `user_sessions` | UUID session records with user/version, coarse label, fixed expiration, last connection and irreversible revocation. At most 20 active per user/version; historical rows retained. |
+| `user_sessions` | UUID session records with user/version, immutable staff/resident audience, coarse label, fixed expiration, last connection and irreversible revocation. At most 20 active per user/version/audience; historical rows retained. |
 | `user_session_events` | Append-only registration/revocation lifecycle audit, including session-cap eviction. No caller, credential or raw user-agent payload. |
 | `organizations` | Client boundary with status and permission version. |
 | `properties` | One organization, validated database timezone, status and nullable current configuration version. |
@@ -354,6 +371,10 @@ work and accepted background workflows are not canceled by browser logout.
 | `operational_documents` | `(organization_id, property_id, key)`, JSON value and revision; adapts the existing document store. |
 | `calendars` | One row per organization/property, JSON state and revision; adapts the existing atomic calendar. |
 | `audit_events` | Scoped, append-only for runtime roles, with operation/key, exact actor, request and optional configuration version. No transcript/contact/body payload column. |
+| `resident_enrollment_policies`, `resident_enrollment_invites` | Versioned property recipient protocol and immutable check evidence with digest-only expiring one-use invitation. No contact-based linking or delivery claim. |
+| `resident_account_bindings` | Versioned property residency-to-account connection. Current authority is derived from policy/context/account state; revocation preserves other accounts and properties. |
+| `resident_enrollment_attempts`, `resident_enrollment_budgets` | Bounded acceptance reservation and pre-crypto token/client budgets. No raw invitation or plaintext password. |
+| `resident_enrollment_commands`, `resident_enrollment_events` | Immutable command receipts and audit history, committed atomically with enrollment changes. |
 | `organization_people`, `property_residents` | Immutable organization person core and property-specific occupancy relationship; no global PII or contact-based identity merge. |
 | `resident_sources`, `resident_events` | Original property source observations, occupancy dates and staff review/revocation history. Source review does not establish channel identity. |
 | `service_cases`, `service_events`, `service_commands` | Scoped intake, versioned triage, append-only history and canonical idempotency receipts; no external dispatch or completion claim. |

@@ -11,6 +11,7 @@ import {verifyOrganizationSession} from '../helpers/organization-session.mjs'
 import {TEST_AUTH_ORIGIN} from '../helpers/mfa-session.mjs'
 let db,runtime,password,other
 const scopes=new Map(),principals=new Map(),proofs=new Map()
+const enrollmentTables=['resident_enrollment_events','resident_enrollment_commands','resident_enrollment_attempts','resident_account_bindings','resident_enrollment_invites','resident_enrollment_policies','resident_enrollment_budgets']
 const tables=['maintenance_plan_events','maintenance_decisions','maintenance_plans','maintenance_vendors','maintenance_policies','maintenance_commands','service_events','service_commands','service_cases','resident_events','resident_sources','property_residents','organization_people']
 before(async()=>{
  db=await createFoundationTestDatabase();other=db.createAppConnection();({password}=await seedFoundationTestDatabase(db.admin))
@@ -33,7 +34,7 @@ before(async()=>{
  scopes.set('sibling',await runtime.authorization.authorizeProperty(principals.get('owner-a'),'property-a2','operate'));proofs.set('sibling',proofs.get('owner-a'))
 })
 beforeEach(async()=>{
- await db.admin.query(`TRUNCATE ${tables.map(t=>'atrium.'+t).join(',')}`)
+ await db.admin.query(`TRUNCATE ${[...enrollmentTables,...tables].map(t=>'atrium.'+t).join(',')}`)
  await db.admin.query("UPDATE atrium.memberships SET status='active',access=CASE WHEN user_id IN ('staff-a','admin-a') THEN 'properties' ELSE 'organization' END,role=CASE user_id WHEN 'owner-a' THEN 'owner' WHEN 'owner-b' THEN 'owner' WHEN 'admin-a' THEN 'admin' WHEN 'viewer-a' THEN 'viewer' ELSE 'staff' END")
  await db.admin.query("UPDATE atrium.property_grants SET status='active'")
  await db.admin.query("UPDATE atrium.properties SET published_configuration_version=1,status='active' WHERE id IN ('property-a1','property-a2','property-b1')")

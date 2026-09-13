@@ -9231,6 +9231,7 @@ function residentHtml(record) {
     '<div class="sv-boundary"><strong>Reviewed occupancy source</strong><p>This staff-reviewed record does not verify an incoming caller or authorize entry.</p></div>' +
     facts([['Occupancy begins', A.fmt.dayLong(record.startsOn)], ['Occupancy ends (exclusive)', record.endsOn ? A.fmt.dayLong(record.endsOn) : 'No end recorded'], ['Phone claim', record.phone], ['Email claim', record.email]]) +
     `<section class="sv-section"><h3>Source and review</h3>${facts([['Source reference', record.source.reference], ['Source version', record.source.version], ['Observed', A.fmt.dateTime(record.source.observedAt)], ['Review valid until', A.fmt.dateTime(record.source.validUntil)], ['Reviewed', A.fmt.dateTime(record.reviewedAt)]])}</section>` +
+    (overview?.canManageResidents && A.can('configure') && !error ? `<div class="sv-actions"><a class="btn" data-resident-access href="/api/resident-access?organizationId=${encodeURIComponent(scope.organizationId)}&amp;propertyId=${encodeURIComponent(scope.propertyId)}&amp;residentId=${encodeURIComponent(record.id)}">Manage resident account access</a></div>` : '') +
     (overview?.canManageResidents && A.can('configure') && record.status === 'active' && !error ? '<div class="sv-actions"><button type="button" class="btn btn-primary" data-command="review-resident">Review source</button><button type="button" class="btn" data-command="revoke-resident">Revoke record</button></div>' : '')
 }
 function requestHtml(value) {

@@ -15,7 +15,7 @@ export class PostgresPasswordChangeRepository implements PasswordChangeRepositor
   async reserve(principal: AuthenticatedUser, attemptId: string): Promise<PasswordChangeReservation> {
     assertAuthenticatedUser(principal)
     if (!validId(attemptId)) throw new PasswordChangeError('password_change_unavailable')
-    const result = await this.connection.transaction({ actorUserId: principal.userId, credentialVersion: principal.credentialVersion,
+    const result = await this.connection.transaction({ actorUserId: principal.userId, credentialVersion: principal.credentialVersion, sessionAudience: principal.audience,
       ...(principal.sessionId ? { actorSessionId: principal.sessionId } : {}) },
       client => client.query('SELECT * FROM atrium.reserve_password_change($1)', [attemptId]))
     const row = result.rows[0]
@@ -36,7 +36,7 @@ export class PostgresPasswordChangeRepository implements PasswordChangeRepositor
   async commit(principal: AuthenticatedUser, reservation: PasswordChangeReservation, replacementHash: string): Promise<void> {
     assertAuthenticatedUser(principal)
     if (!validId(reservation.attemptId) || reservation.credentialVersion !== principal.credentialVersion) throw new PasswordChangeError('unauthenticated')
-    const result = await this.connection.transaction({ actorUserId: principal.userId, credentialVersion: principal.credentialVersion,
+    const result = await this.connection.transaction({ actorUserId: principal.userId, credentialVersion: principal.credentialVersion, sessionAudience: principal.audience,
       ...(principal.sessionId ? { actorSessionId: principal.sessionId } : {}) },
       client => client.query('SELECT atrium.commit_password_change($1,$2,$3) AS outcome',
         [reservation.attemptId, reservation.passwordHash, replacementHash]))

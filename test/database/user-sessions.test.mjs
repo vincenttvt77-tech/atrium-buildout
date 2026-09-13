@@ -32,9 +32,9 @@ async function user() {
 function managed(user, record) {
   return issueAuthenticatedUser({ id:user.userId,username:user.username,displayName:user.displayName,credentialVersion:user.credentialVersion,status:'active' }, { id:record.id,expiresAt:record.expiresAt })
 }
-const create = (user, selected=repo) => selected.start(user,{id:randomUUID(),label:'Synthetic browser'})
-const claims = record => ({userId:record.userId,credentialVersion:record.credentialVersion,sessionId:record.id,expiresAt:record.expiresAt})
-const context = principal => ({actorUserId:principal.userId,credentialVersion:principal.credentialVersion,actorSessionId:principal.sessionId})
+const create = (user, selected=repo) => selected.start(user,{id:randomUUID(),label:'Synthetic browser',audience:user.audience})
+const claims = record => ({userId:record.userId,credentialVersion:record.credentialVersion,sessionId:record.id,expiresAt:record.expiresAt,audience:record.audience})
+const context = principal => ({actorUserId:principal.userId,credentialVersion:principal.credentialVersion,actorSessionId:principal.sessionId,sessionAudience:principal.audience})
 const rows = async principal => (await db.admin.query('SELECT * FROM atrium.user_sessions WHERE user_id=$1 ORDER BY created_at_ms,id',[principal.userId])).rows
 const audits = async principal => (await db.admin.query('SELECT * FROM atrium.user_session_events WHERE user_id=$1 ORDER BY at_ms,session_id,operation',[principal.userId])).rows
 async function historical(principal,ageMs,expired=false) {
@@ -42,7 +42,7 @@ async function historical(principal,ageMs,expired=false) {
   const created=time-(expired?28800001:ageMs), id=randomUUID()
   await db.admin.query(`INSERT INTO atrium.user_sessions(id,user_id,credential_version,label,created_at_ms,last_seen_at_ms,expires_at_ms)
     VALUES($1,$2,1,'Synthetic historical browser',$3,$3,$4)`,[id,principal.userId,created,created+28800000])
-  return {id,userId:principal.userId,credentialVersion:1,label:'Synthetic historical browser',createdAt:created,lastSeenAt:created,expiresAt:created+28800000,revokedAt:null}
+  return {id,userId:principal.userId,credentialVersion:1,label:'Synthetic historical browser',audience:'staff',createdAt:created,lastSeenAt:created,expiresAt:created+28800000,revokedAt:null}
 }
 async function waitingForLocks(expected=1) {
   for(let attempt=0;attempt<100;attempt++) {
@@ -84,9 +84,9 @@ test('registration uses the DB clock and one immutable session/audit commit with
   assert.equal(tx.session,tx.audit)
   assert.equal((await db.admin.query('SELECT password_hash FROM atrium.user_credentials WHERE user_id=$1',[u.userId])).rows[0].password_hash,hash)
   for(const sql of ["UPDATE atrium.user_sessions SET label='Replacement' WHERE id=$1","UPDATE atrium.user_sessions SET expires_at_ms=expires_at_ms+1 WHERE id=$1","DELETE FROM atrium.user_sessions WHERE id=$1","UPDATE atrium.user_session_events SET reason='session_limit' WHERE session_id=$1","DELETE FROM atrium.user_session_events WHERE session_id=$1"]) await assert.rejects(db.admin.query(sql,[r.id]),{code:'23514'})
-  await assert.rejects(repo.start({...u},{id:randomUUID(),label:'Browser'}),{code:'unauthenticated'})
-  await assert.rejects(repo.start(managed(u,r),{id:randomUUID(),label:'Browser'}),{code:'invalid_session'})
-  await assert.rejects(repo.start(u,{id:randomUUID(),label:'\nInjected'}),{code:'invalid_session'})
+  await assert.rejects(repo.start({...u},{id:randomUUID(),label:'Browser',audience:'staff'}),{code:'unauthenticated'})
+  await assert.rejects(repo.start(managed(u,r),{id:randomUUID(),label:'Browser',audience:'staff'}),{code:'invalid_session'})
+  await assert.rejects(repo.start(u,{id:randomUUID(),label:'\nInjected',audience:'staff'}),{code:'invalid_session'})
 })
 
 test('grantless identity sees only own active sessions; foreign and repeated revokes disclose nothing',async()=>{

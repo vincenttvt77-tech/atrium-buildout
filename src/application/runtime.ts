@@ -24,6 +24,8 @@ import type { CalendarPort } from '../booking/types.ts'
 import { validateSettings } from '../calendar/settings.ts'
 import type { TourSettings } from '../calendar/settings.ts'
 import { parseCookies, OPS_COOKIE } from '../ops/session.ts'
+import { RESIDENT_COOKIE } from '../auth/session.ts'
+import { assertStaffUser } from '../auth/identity.ts'
 
 export { isPostgresRuntime } from '../database/mode.ts'
 export { runWithPropertyRuntime, currentPropertyRuntime } from '../database/request.ts'
@@ -61,6 +63,7 @@ const header = (headers: Headers, key: string): string | undefined => {
 
 export class DatabaseRuntime {
   readonly authorization: ReturnType<typeof createAuthorizationService>
+  readonly residentAuthentication: Pick<ReturnType<typeof createAuthorizationService>, 'authenticatePassword' | 'authenticateSession'>
   readonly passwordChanges: ReturnType<typeof createPasswordChangeService>
   readonly sessions: ReturnType<typeof createSessionManagementService>
   readonly loginProtection: ReturnType<typeof createLoginProtection>
@@ -75,6 +78,9 @@ export class DatabaseRuntime {
     this.app = options.app; this.auth = options.auth; this.sessionSecret = options.sessionSecret
     this.authOrigin = options.authOrigin
     this.authorization = createAuthorizationService(new PgAuthorizationRepository(options.auth))
+    const residentAuthentication = createAuthorizationService(new PgAuthorizationRepository(options.auth), 'resident')
+    this.residentAuthentication = Object.freeze({ authenticatePassword: residentAuthentication.authenticatePassword,
+      authenticateSession: residentAuthentication.authenticateSession })
     this.passwordChanges = createPasswordChangeService(new PostgresPasswordChangeRepository(options.auth))
     this.loginProtection = createLoginProtection(new PostgresLoginProtectionRepository(options.auth), options.sessionSecret)
     this.sessions = createSessionManagementService(new PostgresUserSessionRepository(options.auth))
@@ -91,14 +97,25 @@ export class DatabaseRuntime {
   authenticate(headers: Headers, now: Date): Promise<AuthenticatedUser | null> {
     return this.authorization.authenticateSession(parseCookies(headers.cookie)[OPS_COOKIE], now, this.sessionSecret)
   }
+  /** Account control only; a resident relationship and purpose still require separate verification. */
+  authenticateResident(headers: Headers, now: Date): Promise<AuthenticatedUser | null> {
+    return this.residentAuthentication.authenticateSession(parseCookies(headers.cookie)[RESIDENT_COOKIE], now, this.sessionSecret)
+  }
   /** Every interactive password login reserves shared budgets before hash lookup. */
   async signIn(username: unknown, password: unknown, clientAddress: unknown, userAgent?: unknown): Promise<AuthenticatedUser | null> {
     await this.loginProtection.reserve(username, clientAddress)
     const principal = await this.authorization.authenticatePassword(username, password)
     return principal ? this.sessions.start(principal, { label: sessionLabel(userAgent) }) : null
   }
+  /** Both portals consume the same account/network throttles before password work. */
+  async signInResident(username: unknown, password: unknown, clientAddress: unknown, userAgent?: unknown): Promise<AuthenticatedUser | null> {
+    await this.loginProtection.reserve(username, clientAddress)
+    const principal = await this.residentAuthentication.authenticatePassword(username, password)
+    return principal ? this.sessions.start(principal, { label: sessionLabel(userAgent) }) : null
+  }
   async loadUserProperty(principal: AuthenticatedUser, selected: {organizationId: unknown; propertyId: unknown},
     permission: Permission, requestId: string = randomUUID()): Promise<ResolvedPropertyRuntime> {
+    assertStaffUser(principal)
     if (principal.sessionId) await this.mfa.requireLogin(principal)
     if (typeof selected.organizationId !== 'string' || typeof selected.propertyId !== 'string' || !selected.organizationId || !selected.propertyId) {
       throw new RuntimeRequestError(428, 'property_selection_required', 'Choose a property before opening this workspace.')

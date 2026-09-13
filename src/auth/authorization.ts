@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto'
 import { verifyPassword } from '../ops/accounts.ts'
-import { issueAuthenticatedUser, assertAuthenticatedUser } from './identity.ts'
+import { issueAuthenticatedUser, assertStaffUser } from './identity.ts'
 import { validateSessionRecord } from './session-management.ts'
-import { verifyUserSessionClaims } from './session.ts'
+import { verifyUserSessionClaims, verifyResidentSessionClaims } from './session.ts'
 import { AuthorizationError } from './model.ts'
 import type { AuthorizationRepository, AuthenticatedUser, AuthorizedScope, AuthorizedProperty, User, Property,
-  Organization, PropertyGrant, ScopeActor, Permission, AuthLookupContext } from './model.ts'
+  Organization, PropertyGrant, ScopeActor, Permission, AuthLookupContext, SessionAudience } from './model.ts'
 import { normalizeUsername, validId, validVersion, validateUser, validateOrganization, validateProperty, validateMembership,
   validatePropertyGrant, validateChannelBinding, rolePermissions, requirePermission } from './validation.ts'
 
@@ -40,15 +40,16 @@ export function assertAuthorizedScope(value: unknown, permission?: Permission): 
 }
 
 /** These methods require server-owned repositories; no browser claim becomes authority. */
-export function createAuthorizationService(repository: AuthorizationRepository) {
+export function createAuthorizationService(repository: AuthorizationRepository, audience: SessionAudience = 'staff') {
+  if (audience !== 'staff' && audience !== 'resident') throw new AuthorizationError('invalid_record')
   async function currentUser(principal: AuthenticatedUser): Promise<User> {
-    assertAuthenticatedUser(principal)
+    assertStaffUser(principal)
     if (principal.sessionId !== undefined) {
       const session = await repository.resolveSession({ userId: principal.userId, credentialVersion: principal.credentialVersion,
-        sessionId: principal.sessionId, expiresAt: principal.sessionExpiresAt! })
+        sessionId: principal.sessionId, expiresAt: principal.sessionExpiresAt!, audience: principal.audience })
       if (!session || validateSessionRecord(session).revokedAt !== null || session.id !== principal.sessionId
         || session.userId !== principal.userId || session.credentialVersion !== principal.credentialVersion
-        || session.expiresAt !== principal.sessionExpiresAt) throw new AuthorizationError('unauthenticated')
+        || session.expiresAt !== principal.sessionExpiresAt || session.audience !== 'staff') throw new AuthorizationError('unauthenticated')
     }
     const raw = await repository.getUser(principal.userId)
     if (!raw) throw new AuthorizationError('unauthenticated')
@@ -86,22 +87,22 @@ export function createAuthorizationService(repository: AuthorizationRepository) 
     if (!raw) return null
     const user = validateUser(raw)
     if (user.id !== credential.userId || user.username !== normalized) invalid()
-    return user.status === 'active' && user.credentialVersion === credential.credentialVersion ? issueAuthenticatedUser(user) : null
+    return user.status === 'active' && user.credentialVersion === credential.credentialVersion ? issueAuthenticatedUser(user, undefined, audience) : null
   }
 
   async function authenticateSession(token: string | undefined, now: Date, secret: string): Promise<AuthenticatedUser | null> {
-    const claims = verifyUserSessionClaims(token, now, secret)
+    const claims = (audience === 'staff' ? verifyUserSessionClaims : verifyResidentSessionClaims)(token, now, secret)
     if (!claims) return null
     const rawSession = await repository.resolveSession(claims)
     if (!rawSession) return null
     const session = validateSessionRecord(rawSession)
     if (session.id !== claims.sessionId || session.userId !== claims.userId || session.credentialVersion !== claims.credentialVersion
-      || session.revokedAt !== null || session.expiresAt !== claims.expiresAt) return null
+      || session.revokedAt !== null || session.expiresAt !== claims.expiresAt || session.audience !== audience || session.audience !== claims.audience) return null
     const raw = await repository.getUser(claims.userId)
     if (!raw) return null
     const user = validateUser(raw)
     if (user.id !== claims.userId) invalid()
-    return user.status === 'active' && user.credentialVersion === claims.credentialVersion ? issueAuthenticatedUser(user, { id: session.id, expiresAt: session.expiresAt }) : null
+    return user.status === 'active' && user.credentialVersion === claims.credentialVersion ? issueAuthenticatedUser(user, { id: session.id, expiresAt: session.expiresAt }, audience) : null
   }
 
   async function authorizeProperty(principal: AuthenticatedUser, propertyId: string, permission: Permission): Promise<AuthorizedScope> {

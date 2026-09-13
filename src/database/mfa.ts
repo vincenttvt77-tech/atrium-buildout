@@ -43,6 +43,7 @@ function factor(value: unknown): asserts value is MfaFactor {
 function assurance(value: unknown, principal: AuthenticatedUser): asserts value is MfaAssurance {
   check(object(value)); binding(value, principal)
   check(validSessionId(value.id) && validSessionId(value.factorId) && purpose(value.purpose)
+    && (value.purpose !== 'organization_administration' || principal.audience === 'staff')
     && millis(value.verifiedAt) && millis(value.expiresAt) && value.expiresAt > value.verifiedAt
     && value.expiresAt <= principal.sessionExpiresAt!
     && (value.purpose === 'session_login' || value.expiresAt - value.verifiedAt <= 600000))
@@ -67,7 +68,7 @@ export class PostgresMfaRepository implements MfaRepository {
     let result: { value: T } | { error: MfaCode; retry?: number }
     try {
       result = await this.connection.transaction({ actorUserId: principal.userId, credentialVersion: principal.credentialVersion,
-        actorSessionId: principal.sessionId! }, async client => {
+        actorSessionId: principal.sessionId!, sessionAudience: principal.audience }, async client => {
         // The function name is a closed compile-time union, never a request selector.
         if (!commands.includes(command)) throw unavailable()
         const rows = (await client.query(`SELECT atrium.mfa_${command}($1::jsonb,$2,$3,$4) AS value`,
