@@ -13,7 +13,7 @@ import { defaultSettings, validateSettings } from '../../src/calendar/settings.t
 export const HOSTED_DEMO = Object.freeze({ organizationId: 'org-demo-larkin', propertyId: 'prop-demo',
   userId: 'user-demo-larkin', membershipId: 'member-demo-larkin', name: 'The Larkin · Demo' })
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
-const EXECUTORS = ['atrium_account_executor', 'atrium_login_executor', 'atrium_session_executor', 'atrium_mfa_executor']
+const EXECUTORS = ['atrium_account_executor', 'atrium_login_executor', 'atrium_session_executor', 'atrium_mfa_executor', 'atrium_organization_executor']
 const RUNTIME_ROLES = ['atrium_app', 'atrium_authenticator']
 const ROLES = ['atrium_admin', ...EXECUTORS, ...RUNTIME_ROLES]
 const LOCK = 'atrium-hosted-demo-bootstrap-v1'
@@ -83,16 +83,17 @@ async function transaction(client, work) {
     return result
   } catch (error) { await client.query('ROLLBACK'); throw error }
 }
-async function roleSafety(client) {
+async function roleSafety(client, executors = EXECUTORS) {
+  const checkedRoles = ['atrium_admin', ...executors, ...RUNTIME_ROLES]
   const roles = (await client.query(`SELECT rolname,rolcanlogin,rolsuper,rolbypassrls,rolcreaterole,rolcreatedb,rolreplication
-    FROM pg_catalog.pg_roles WHERE rolname=ANY($1::text[])`, [ROLES])).rows
-  if (roles.length !== ROLES.length || roles.some(role => role.rolcanlogin !== RUNTIME_ROLES.includes(role.rolname)
+    FROM pg_catalog.pg_roles WHERE rolname=ANY($1::text[])`, [checkedRoles])).rows
+  if (roles.length !== checkedRoles.length || roles.some(role => role.rolcanlogin !== RUNTIME_ROLES.includes(role.rolname)
     || role.rolsuper || role.rolbypassrls || role.rolcreaterole || role.rolcreatedb || role.rolreplication)) failState()
   const memberships = (await client.query(`SELECT m.rolname member,p.rolname parent FROM pg_catalog.pg_auth_members a
     JOIN pg_catalog.pg_roles m ON m.oid=a.member JOIN pg_catalog.pg_roles p ON p.oid=a.roleid
-    WHERE m.rolname=ANY($1::text[])`, [ROLES])).rows
-  if (memberships.some(edge => edge.member !== 'atrium_admin' || !EXECUTORS.includes(edge.parent))) failState()
-  for (const executor of EXECUTORS) {
+    WHERE m.rolname=ANY($1::text[])`, [checkedRoles])).rows
+  if (memberships.some(edge => edge.member !== 'atrium_admin' || !executors.includes(edge.parent))) failState()
+  for (const executor of executors) {
     if (!(await client.query('SELECT pg_catalog.pg_has_role($1,$2,\'MEMBER\') allowed', ['atrium_admin', executor])).rows[0].allowed) failState()
   }
   // Empty-table queries cannot prove isolation. Refuse catalogue drift before
@@ -130,10 +131,20 @@ async function prepareRoles(client, manifest, secrets) {
       || ROLES.includes(identity.current_role)) failState()
     const marker = (await client.query("SELECT to_regclass('atrium_hosted.bootstrap') marker")).rows[0].marker
     if (marker) {
-      await roleSafety(client)
+      const extend = !(await client.query("SELECT 1 FROM pg_catalog.pg_roles WHERE rolname='atrium_organization_executor'")).rowCount
+      await roleSafety(client, extend ? EXECUTORS.filter(role => role !== 'atrium_organization_executor') : EXECUTORS)
       await client.query('SET LOCAL ROLE atrium_admin')
       const prior = (await client.query('SELECT manifest FROM atrium_hosted.bootstrap WHERE id=1')).rows[0]
       if (!prior || !isDeepStrictEqual(prior.manifest, manifest)) failState()
+      if (extend) {
+        // Add one new finite executor only to a verified prior bootstrap. Never repair a
+        // removed executor after its migration, or modify existing credentials/ACLs.
+        if ((await client.query("SELECT 1 FROM atrium_migrations.history WHERE version LIKE '%organization_administration%' LIMIT 1")).rowCount) failState()
+        await client.query('RESET ROLE')
+        await client.query('CREATE ROLE atrium_organization_executor NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOREPLICATION')
+        await client.query('GRANT atrium_organization_executor TO atrium_admin')
+        await roleSafety(client)
+      }
       return false
     }
     const existing = (await client.query(`SELECT 1 FROM pg_catalog.pg_roles WHERE rolname=ANY($1::text[])
@@ -229,7 +240,7 @@ export async function bootstrapHostedDemoDatabase({ client, appPassword, authPas
     stage = 'lock'
     await client.query('SELECT pg_catalog.pg_advisory_lock(pg_catalog.hashtextextended($1,0))', [LOCK]); locked = true
     stage = 'roles'; const rolesCreated = await prepareRoles(client, manifest, { appPassword, authPassword })
-    stage = 'migrations'; const migrations = await applyDatabaseMigrations(client)
+    stage = 'migrations'; const migrations = await applyDatabaseMigrations(client, join(root, 'supabase', 'migrations'))
     stage = 'seed'; const seeded = await seed(client, account, bindings, source)
     stage = 'verify'; await roleSafety(client)
     const configurationVersion = await verifySeed(client, bindings)

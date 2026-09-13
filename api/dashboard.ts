@@ -125,7 +125,7 @@ function propertyPicker(principal: AuthenticatedUser, properties: readonly Autho
         <strong style="display:block;color:var(--ink)">${escapeHtml(property.name)}</strong>
         <span style="font-size:13px;color:var(--muted)">${escapeHtml(property.organizationName)} · ${escapeHtml(property.role)}</span>
       </a>`).join('')}</nav>` : '<p role="status">Your account does not have access to an active property. Contact your organization administrator.</p>'}
-    <p><a href="/api/account">Account security</a></p>
+    <p><a href="/api/account">Account security</a> · <a href="/api/organizations">Team</a></p>
     <form id="signout-form" data-user-id="${escapeHtml(principal.userId)}" data-session-id="${escapeHtml(principal.sessionId)}" data-form-token="${escapeHtml(token)}"><button type="submit" disabled>Sign out</button></form>
     <p id="signout-notice" role="status" aria-live="polite"></p><p id="signout-next" hidden><a href="/api/dashboard">Reload this page</a></p>
     <noscript>JavaScript is required to sign out securely.</noscript>
