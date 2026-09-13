@@ -10,7 +10,7 @@ import { createTestPostgres } from '../../scripts/lib/postgres-test.mjs'
 import { bootstrapHostedDemoDatabase } from '../../scripts/lib/hosted-demo-database.mjs'
 import { hashPassword } from '../../src/ops/accounts.ts'
 
-for (const baselineSpec of [{ count: 8, next: '_organization_administration.sql' }, { count: 9, next: '_resident_services.sql' }]) {
+for (const baselineSpec of [{ count: 8, next: '_organization_administration.sql' }, { count: 9, next: '_resident_services.sql' }, { count: 10, next: '_maintenance_planning.sql' }]) {
 test(`verified ${baselineSpec.count}-migration hosted workspace upgrades without rotating credentials or repairing unsafe state`, async () => {
   const db = await createTestPostgres(), oldRoot = await mkdtemp(join(tmpdir(), 'atrium-team-upgrade-'))
   const sourceRoot = fileURLToPath(new URL('../../', import.meta.url)), secret = () => randomBytes(36).toString('base64url')
@@ -35,7 +35,8 @@ test(`verified ${baselineSpec.count}-migration hosted workspace upgrades without
     assert.equal(original.migrations.length, baselineSpec.count)
     // Reconstruct the actual prior role set, without touching records or credentials.
     const missingRoles = baselineSpec.count === 8
-      ? ['atrium_organization_executor', 'atrium_resident_services_executor'] : ['atrium_resident_services_executor']
+      ? ['atrium_organization_executor', 'atrium_resident_services_executor', 'atrium_maintenance_approval_reader']
+      : baselineSpec.count === 9 ? ['atrium_resident_services_executor', 'atrium_maintenance_approval_reader'] : ['atrium_maintenance_approval_reader']
     for (const role of missingRoles) {
       await db.admin.query(`REVOKE ${pg.escapeIdentifier(role)} FROM atrium_admin`)
       await db.admin.query(`DROP ROLE ${pg.escapeIdentifier(role)}`)

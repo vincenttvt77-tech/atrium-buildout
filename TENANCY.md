@@ -237,3 +237,20 @@ context. A stale source triggers current review even after historical triage.
 Versioned commands and exact replay receipts preserve history and prevent duplicate
 writes after an interrupted save. See [ADR 0010](docs/adr/0010-resident-service-records.md)
 for the complete boundary and remaining verification/fulfillment work.
+
+### Maintenance plans and approval authority
+
+The PostgreSQL-only `/api/maintenance-plans` endpoint scopes rules, vendor records,
+plans and decisions to the selected organization/property. Operators prepare or
+withdraw plans. Publishing financial policy requires a current owner; vendor
+review and human approval require configure authority and fresh exact-session
+organization-administration verification. Policy determines the delegated spending
+ceiling and whether a different preparer/approver is required.
+
+Each plan binds the current request, resident context, configuration, policy,
+vendor, exact work and all-in USD ceiling. Current role/grant loss or a material
+change invalidates the relevant approval; revision and new approval are required.
+History and emergency evidence remain. No record grants resident identity or entry
+permission, or confirms dispatch, payment or an appointment. Planning attention is
+currently visible in case detail, not a complete approval inbox. See
+[ADR 0011](docs/adr/0011-maintenance-authority.md).

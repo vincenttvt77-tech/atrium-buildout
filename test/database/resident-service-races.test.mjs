@@ -9,6 +9,7 @@ import {verifyMfaSession,TEST_AUTH_ORIGIN} from '../helpers/mfa-session.mjs'
 
 let db,runtime,connection,owner,staff,password,ownerScope,staffScope
 const tables=['service_events','service_commands','service_cases','resident_events','resident_sources','property_residents','organization_people']
+const planningTables=['maintenance_commands','maintenance_plan_events','maintenance_decisions','maintenance_plans','maintenance_vendors','maintenance_policies']
 before(async()=>{
  db=await createFoundationTestDatabase();({password}=await seedFoundationTestDatabase(db.admin));connection=db.createAppConnection()
  runtime=createDatabaseRuntime({app:db.app,auth:db.auth,sessionSecret:'synthetic-resident-service-race-secret',authOrigin:TEST_AUTH_ORIGIN})
@@ -23,7 +24,7 @@ before(async()=>{
  ownerScope=await runtime.authorization.authorizeProperty(owner,'property-a1','configure');staffScope=await runtime.authorization.authorizeProperty(staff,'property-a1','operate')
 })
 beforeEach(async()=>{
- await db.admin.query(`TRUNCATE ${tables.map(t=>`atrium.${t}`).join(',')}`)
+ await db.admin.query(`TRUNCATE ${[...planningTables,...tables].map(t=>`atrium.${t}`).join(',')}`)
  await db.admin.query("UPDATE atrium.properties SET published_configuration_version=1 WHERE id='property-a1'")
  await db.admin.query("UPDATE atrium.memberships SET status='active'")
  await db.admin.query("UPDATE atrium.property_grants SET status='active'")

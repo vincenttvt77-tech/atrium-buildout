@@ -13,7 +13,7 @@ import { defaultSettings, validateSettings } from '../../src/calendar/settings.t
 export const HOSTED_DEMO = Object.freeze({ organizationId: 'org-demo-larkin', propertyId: 'prop-demo',
   userId: 'user-demo-larkin', membershipId: 'member-demo-larkin', name: 'The Larkin · Demo' })
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
-const EXECUTORS = ['atrium_account_executor', 'atrium_login_executor', 'atrium_session_executor', 'atrium_mfa_executor', 'atrium_organization_executor', 'atrium_resident_services_executor']
+const EXECUTORS = ['atrium_account_executor', 'atrium_login_executor', 'atrium_session_executor', 'atrium_mfa_executor', 'atrium_organization_executor', 'atrium_resident_services_executor', 'atrium_maintenance_approval_reader']
 const RUNTIME_ROLES = ['atrium_app', 'atrium_authenticator']
 const ROLES = ['atrium_admin', ...EXECUTORS, ...RUNTIME_ROLES]
 const LOCK = 'atrium-hosted-demo-bootstrap-v1'
@@ -134,6 +134,7 @@ async function prepareRoles(client, manifest, secrets) {
       const additions = [
         ['atrium_organization_executor', '%organization_administration%'],
         ['atrium_resident_services_executor', '%resident_services%'],
+        ['atrium_maintenance_approval_reader', '%maintenance_planning%'],
       ]
       const missing = []
       for (const [role, migration] of additions) {
