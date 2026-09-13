@@ -51,6 +51,13 @@ send updates or establish resolution; those lifecycle steps remain open. Service
 requires staff `operate` access, while source review/revocation requires `configure`.
 It stays unavailable in legacy mode. See [the service decision](docs/adr/0010-resident-service-records.md).
 
+Service also provides owner-published spending rules, reviewed property vendors
+and versioned work plans with manager/owner decisions. Approval binds the exact
+scope, cost and current context; later changes require review. These controls
+record internal authority, with entry, availability and dispatch shown separately.
+Planning readiness currently appears on case detail; a complete approval inbox and
+verified execution remain open. See [maintenance authority](docs/adr/0011-maintenance-authority.md).
+
 ## The one idea worth understanding
 
 Every rule that matters is enforced in **code the model cannot argue with** — not in the

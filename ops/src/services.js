@@ -10,7 +10,7 @@ const CONTEXT = { current: 'Source review current', expired: 'Source review expi
 const CATEGORIES = { plumbing: 'Plumbing', electrical: 'Electrical', heating_cooling: 'Heating & cooling', appliance: 'Appliance', pest: 'Pest', access: 'Access', other: 'Other' }
 const ORIGINS = { resident_report: 'Resident report', staff_observation: 'Staff observation', unknown: 'Not established' }
 const PRIORITIES = { routine: 'Routine', urgent: 'Urgent', emergency: 'Emergency' }
-const FILTERS = { requests: [['attention', 'Needs review'], ['waiting', 'Waiting'], ['planning', 'Planning'], ['all', 'All requests']], residents: [['active', 'Active records'], ['revoked', 'Revoked'], ['all', 'All records']] }
+const FILTERS = { vendors: [['approved', 'Approved vendors'], ['suspended', 'Suspended'], ['all', 'All vendors']], requests: [['attention', 'Needs review'], ['waiting', 'Waiting'], ['planning', 'Planning'], ['all', 'All requests']], residents: [['active', 'Active records'], ['revoked', 'Revoked'], ['all', 'All records']] }
 const FILTER_STATES = { attention: ['needs_triage', 'management_review', 'emergency_review'], waiting: ['waiting_information'], planning: ['ready_for_planning'], all: Object.keys(STATES) }
 const ERRORS = { service_version_conflict: 'This record changed. Refresh and review the latest version.', service_request_conflict: 'This request reference was used for a different change. Reload and review before continuing.', service_context_required: 'Current resident source context is required for that planning step. Review the resident record first.', service_emergency_hold: 'Emergency evidence holds this request for management review. It cannot be downgraded through ordinary triage.', service_not_found: 'This record is no longer available in this property.', service_invalid_input: 'Some details were refused. Review the form and its dates before trying again.' }
 const ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/
@@ -121,7 +121,8 @@ function requestHtml(value) {
   const r = value.request, contextNeedsReview = r.contextNeedsReview || r.location.kind === 'unknown' || r.location.kind === 'unit' && r.requestOrigin !== 'staff_observation' && value.resident.state !== 'current', emergency = r.priority === 'emergency' || r.emergencyKinds.length > 0
   let html = `<div class="sv-detail-head">${chip(r.contextNeedsReview ? 'Context needs review' : STATES[r.state], emergency || r.contextNeedsReview)}<h2 tabindex="-1" data-key="service-detail-heading">${esc(r.summary)}</h2><p>${esc(locationLabel(r.location))} · ${esc(CATEGORIES[r.category])}</p></div>`
   if (emergency) html += `<section class="sv-safety" role="alert">${safetyNotice}${value.safetyInstructions.map(instruction => `<p>${esc(instruction)}</p>`).join('')}</section>`
-  html += `<section class="sv-next"><span class="page-eyebrow">NEXT STEP</span><h3>${esc(r.state === 'emergency_review' ? 'Management emergency review' : r.state === 'ready_for_planning' && contextNeedsReview ? 'Review current request context before planning' : r.state === 'needs_triage' ? 'Review the issue and context' : r.state === 'waiting_information' ? 'Gather the missing information' : r.state === 'management_review' ? 'Management decision needed' : 'Prepare an authorized work plan')}</h3><p>Not dispatched · No notification sent. Planning is not approval or a confirmed appointment.</p>${r.state === 'ready_for_planning' && contextNeedsReview ? '<p><strong>The earlier triage remains in history; current unit or occupancy context needs review before planning.</strong></p>' : ''}</section>` +
+  html += `<section class="sv-next"><span class="page-eyebrow">NEXT STEP</span><h3>${esc(r.state === 'emergency_review' ? 'Management emergency review' : r.state === 'ready_for_planning' && contextNeedsReview ? 'Review current request context before planning' : r.state === 'needs_triage' ? 'Review the issue and context' : r.state === 'waiting_information' ? 'Gather the missing information' : r.state === 'management_review' ? 'Management decision needed' : 'Review the current work plan')}</h3><p>Not dispatched · No notification sent. Planning is not approval or a confirmed appointment.</p>${r.state === 'ready_for_planning' && contextNeedsReview ? '<p><strong>The earlier triage remains in history; current unit or occupancy context needs review before planning.</strong></p>' : ''}</section>` +
+    (A.maintenancePlans ? '<div class="sv-planning-case"></div>' : '') +
     `<section class="sv-section"><h3>Reported issue</h3><p class="sv-pre">${esc(r.description)}</p>${facts([['Request origin', ORIGINS[r.requestOrigin]], ['Reported priority', PRIORITIES[r.reportedPriority]], ['Current priority', PRIORITIES[r.priority]], ['First reported', A.fmt.dateTime(r.createdAt)], ['Last changed', A.fmt.dateTime(r.updatedAt)]])}${JSON.stringify(r.intakeLocation) !== JSON.stringify(r.location) || r.residentIdAtIntake !== r.residentId ? '<details class="sv-form-details"><summary>Original intake context</summary>' + facts([['Location at intake', locationLabel(r.intakeLocation)], ['Resident source at intake', r.residentNameAtIntake || 'Not established'], ['Source record version at intake', r.residentVersionAtIntake === null ? 'Not established' : String(r.residentVersionAtIntake)]]) + '</details>' : ''}</section>` +
     `<section class="sv-section"><h3>Resident context</h3>${chip(CONTEXT[value.resident.state], value.resident.state !== 'current')}<p>${esc(value.resident.displayName || 'No resident established')}${r.residentNameAtIntake && r.residentNameAtIntake !== value.resident.displayName ? ` · Originally linked as ${esc(r.residentNameAtIntake)}` : ''}</p><p class="sv-boundary">Caller identity not verified. No entry permission established.</p>${facts([['Reporter name claim', r.reporterName], ['Reporter phone claim', r.reporterPhone], ['Reporter email claim', r.reporterEmail]])}${r.residentId ? `<button type="button" class="btn" data-resident="${esc(r.residentId)}">Review resident source</button>` : ''}</section>` +
     `<section class="sv-section"><h3>Access notes</h3><p class="sv-pre">${esc(r.accessNotes || 'No access notes recorded.')}</p><p class="small muted">Reported instructions are not permission to enter.</p></section>` +
@@ -136,19 +137,32 @@ function detailHtml() {
   if (!detail) return empty('Select a record', 'See its context, saved history and next step.')
   return (tab === 'residents' ? residentHtml(detail) : requestHtml(detail)) + `<p class="sv-zone">Times in ${esc(A.property.timeZoneLabel)}. Refresh before acting on a changed record.</p>`
 }
+let planning = null
+function syncPlanningControls() {
+  if (!root) return
+  const locked = Boolean(planning?.locked())
+  for (const node of root.querySelectorAll('[data-command="add"], [data-command="note"], [data-command="context"], [data-command="triage"], [data-command="review-resident"], [data-command="revoke-resident"]')) node.disabled = locked || busy || Boolean(pending) || loading || Boolean(error) || !overview
+}
 function paint({ list = true } = {}) {
   if (!visible()) return
   for (const button of root.querySelectorAll('[data-tab]')) button.setAttribute('aria-pressed', String(button.dataset.tab === tab))
   replace(root.querySelector('.sv-filters'), FILTERS[tab].map(([key, label]) => `<button type="button" class="btn" data-filter="${key}" aria-pressed="${filter === key}">${esc(label)}</button>`).join(''))
-  const add = root.querySelector('[data-command="add"]'); add.textContent = tab === 'requests' ? 'Record request' : 'Add reviewed record'; add.hidden = tab === 'residents' && !(overview?.canManageResidents && A.can('configure')); add.disabled = loading || !overview || Boolean(error) || busy || Boolean(pending)
+  const directory = tab === 'vendors' && planning
+  for (const key of ['.sv-workspace', '.sv-filters', '.sv-loaded', '.sv-unit-filter']) { const node = root.querySelector(key); if (node) node.hidden = Boolean(directory) }
+  const directoryHost = root.querySelector('.sv-planning-directory'); if (directoryHost) directoryHost.hidden = !directory
+  const add = root.querySelector('[data-command="add"]'); add.textContent = tab === 'requests' ? 'Record request' : 'Add reviewed record'; add.hidden = Boolean(directory) || tab === 'residents' && !(overview?.canManageResidents && A.can('configure')); add.disabled = loading || !overview || Boolean(error) || busy || Boolean(pending)
   const refresh = root.querySelector('[data-command="refresh"]'); refresh.disabled = loading || busy; refresh.textContent = loading ? 'Refreshing…' : 'Refresh'
   root.querySelector('.sv-loaded').textContent = loading ? 'Checking saved service records…' : checkedAt ? `${items.length} records shown · checked ${A.fmt.time(checkedAt)}` : 'No records received yet'
   replace(root.querySelector('.sv-errors'), (error ? A.html.banner('warn', error) : '') + (pending ? A.html.banner('warn', 'The last save is unconfirmed. Check the same change before starting another.', { actionsHtml: '<button type="button" class="btn" data-command="retry">Check saved change</button><button type="button" class="btn" data-command="reload">Reload page</button>' }) : ''))
+  if (directory) { planning.attach(directoryHost, { mode: 'directory' }); syncPlanningControls(); return }
   const listNode = root.querySelector('.sv-results'); listNode.setAttribute('aria-busy', String(loading))
   if (list) replace(listNode, listHtml()); else for (const button of listNode.querySelectorAll('[data-select]')) button.setAttribute('aria-current', String(button.dataset.select === selected))
   replace(root.querySelector('.sv-detail'), detailHtml())
+  if (planning && tab === 'requests' && detail?.request && !detailLoading && !detailError) planning.attach(root.querySelector('.sv-planning-case'), { mode: 'case', request: detail.request })
+  else planning?.deactivate()
   const more = root.querySelector('[data-command="more"]'); more.hidden = !cursor; more.disabled = loading || busy
   for (const node of root.querySelectorAll('[data-command="note"], [data-command="context"], [data-command="triage"], [data-command="review-resident"], [data-command="revoke-resident"]')) node.disabled = busy || Boolean(pending) || loading || Boolean(error)
+  syncPlanningControls()
 }
 async function getOverview() {
   const body = await bounded(A.api.get(ENDPOINT + '?resource=overview'))
@@ -157,6 +171,7 @@ async function getOverview() {
   return { formToken: body.formToken, canManageResidents: body.canManageResidents, units: body.units.map(row => ({ id: row.id, label: row.label })) }
 }
 async function load(more = false) {
+  if (tab === 'vendors' && planning) return planning.refresh()
   if (!visible() || busy || more && (loading || !cursor)) return
   const turn = ++epoch, savedTab = tab, savedFilter = filter, savedUnit = unit, before = more ? cursor : null
   const focusMore = more && document.activeElement?.dataset?.command === 'more'
@@ -316,7 +331,7 @@ function immediateSafety(body) {
   box.hidden = !urgent; if (urgent) box.innerHTML = safetyNotice
 }
 function openForm(kind, recovery = null) {
-  if (!visible() || panel || busy || !overview || !recovery && (pending || loading || error)) return
+  if (!visible() || panel || busy || planning?.locked() || !overview || !recovery && (pending || loading || error)) return
   const residentAction = ['add_resident', 'review_resident', 'revoke_resident'].includes(kind)
   if (residentAction && !(overview.canManageResidents && A.can('configure'))) return
   const original = residentAction ? (kind === 'add_resident' ? null : detail) : (kind === 'create_request' ? null : detail?.request)
@@ -408,7 +423,7 @@ function openForm(kind, recovery = null) {
   } }, onClose() { closed = true; residentGeneration++; panel = null } }
   panel = A.dialog(options)
 }
-function deactivate() { active = false; epoch++; detailEpoch++; loading = false; detailLoading = false; if (panel) panel.close() }
+function deactivate() { active = false; epoch++; detailEpoch++; loading = false; detailLoading = false; if (panel) panel.close(); planning?.deactivate() }
 const view = {
   title: 'Service', icon: 'home',
   mount(el) {
@@ -416,9 +431,14 @@ const view = {
     root.innerHTML = `<header class="page-hero sv-hero"><div><span class="page-eyebrow">RESIDENT OPERATIONS · ${esc(A.property.name)}</span><h1 tabindex="-1">Service</h1><p>Understand the issue, review the resident context, and give every request a clear next step.</p></div><div class="page-hero-actions"><button type="button" class="btn btn-primary" data-command="add">Record request</button><button type="button" class="btn" data-command="refresh">Refresh</button></div></header>` +
       '<div class="sv-story"><div><span>01</span><strong>Record the issue</strong><p>Keep the report and location together.</p></div><div><span>02</span><strong>Review the context</strong><p>Separate source evidence from caller identity.</p></div><div><span>03</span><strong>Plan the next step</strong><p>Saved triage, with dispatch still pending.</p></div></div>' +
       '<div class="sv-toolbar"><div class="sv-tabs" role="group" aria-label="Service workspace"><button type="button" class="btn" data-tab="requests">Requests</button><button type="button" class="btn" data-tab="residents">Resident records</button></div><div class="sv-unit-filter"></div></div><div class="sv-filters" role="group" aria-label="Filter service records"></div><p class="sv-loaded" role="status"></p><div class="sv-errors"></div>' +
-      '<div class="sv-workspace"><section class="sv-browser" aria-label="Service records"><div class="sv-results" aria-busy="false"></div><div class="sv-pagination"><button type="button" class="btn" data-command="more" hidden>Load more records</button></div></section><section class="sv-detail" id="sv-detail" aria-label="Selected service record"></section></div>'
+      '<div class="sv-planning-notice"></div><div class="sv-planning-directory" hidden></div><div class="sv-workspace"><section class="sv-browser" aria-label="Service records"><div class="sv-results" aria-busy="false"></div><div class="sv-pagination"><button type="button" class="btn" data-command="more" hidden>Load more records</button></div></section><section class="sv-detail" id="sv-detail" aria-label="Selected service record"></section></div>'
+    if (A.maintenancePlans) {
+      planning = A.maintenancePlans.create({ isActive: visible, canOpen: () => !busy && !pending && !panel, onChange: syncPlanningControls })
+      const tabs = root.querySelector('.sv-tabs'); if (tabs) tabs.insertAdjacentHTML('beforeend', '<button type="button" class="btn" data-tab="vendors">Vendors &amp; rules</button>')
+      planning.setNotice(root.querySelector('.sv-planning-notice'))
+    }
     root.addEventListener('click', event => {
-      const button = event.target.closest('button'); if (!button || !root.contains(button) || button.disabled || busy) return
+      const button = event.target.closest('button'); if (!button || !root.contains(button) || button.disabled || busy || planning?.busy) return
       if (button.dataset.tab && FILTERS[button.dataset.tab]) A.navigate('services', { tab: button.dataset.tab })
       else if (button.dataset.filter && FILTERS[tab].some(([key]) => key === button.dataset.filter)) A.navigate('services', { tab, state: button.dataset.filter, unit })
       else if (button.dataset.select) select(button.dataset.select)
@@ -440,13 +460,13 @@ const view = {
   },
   render() {
     if (!A.can('operate') || A.route().name !== 'services') return
-    const params = A.route().params, nextTab = params.tab === 'residents' ? 'residents' : 'requests'
-    const nextFilter = FILTERS[nextTab].some(([key]) => key === params.state) ? params.state : nextTab === 'requests' ? 'attention' : 'active', nextUnit = params.unit || ''
+    const params = A.route().params, nextTab = params.tab === 'vendors' && planning ? 'vendors' : params.tab === 'residents' ? 'residents' : 'requests'
+    const nextFilter = FILTERS[nextTab].some(([key]) => key === params.state) ? params.state : nextTab === 'requests' ? 'attention' : nextTab === 'vendors' ? 'approved' : 'active', nextUnit = params.unit || ''
     if (tab !== nextTab || filter !== nextFilter || unit !== nextUnit) { deactivate(); tab = nextTab; filter = nextFilter; unit = nextUnit; items = []; cursor = null; selected = validId(params.id || '') ? params.id : null; loaded = false; detail = null; error = ''; checkedAt = null }
-    const entered = !active; active = true; paint(); if (entered) load()
+    const entered = !active; active = true; paint(); if (entered && nextTab !== 'vendors') load()
   },
 }
-window.addEventListener('pagehide', () => { deactivate(); pending = null; overview = null; items = []; detail = null; root?.replaceChildren() })
+window.addEventListener('pagehide', () => { deactivate(); planning?.deactivate(true); pending = null; overview = null; items = []; detail = null; root?.replaceChildren() })
 window.addEventListener('pageshow', event => { if (event.persisted) location.reload() })
 A.register('services', view)
 })()

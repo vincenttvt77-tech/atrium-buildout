@@ -66,6 +66,7 @@ current membership, organization/property status and explicit grants per operati
 | `GET/POST /api/mfa` | Own passkey setup, verification, factor management and recovery. Exact configured origin, registered-session binding and CSRF checks on POST. Finite commands only; absent in legacy mode. |
 | `GET/POST /api/organizations` | Scoped existing-member directory and full access replacement; fresh organization-administration MFA, org/action/session-bound form tokens and atomic versioned receipts. Independent of property publication; absent in legacy mode. |
 | `GET/POST /api/resident-services` | Staff-only property resident records, maintenance intake, notes, triage and paginated history; configure-only source changes. Property/configuration/session-bound forms, atomic receipts and current context checks. No dispatch or caller verification; absent in legacy mode. |
+| `GET/POST /api/maintenance-plans` | Scoped owner policy, approved vendors, versioned proposals and immutable decisions. Separate bound forms; protected actions require fresh administration MFA. Operate reads/proposals, configure vendor/decision actions, owner-only policy. No external execution; absent in legacy mode. |
 | `GET/POST /api/workflows` | Property-scoped action queue; read permission for bounded listing, configure permission and same-origin JSON for recovery. Required expected row revision is checked under lock; no action creation, connector execution or legacy fallback. |
 | `GET /api/properties` | Authenticated, unscoped catalogue of properties this user can read. It exposes safe labels, role/permissions and navigation links, not property inventories or credentials. |
 | `GET /api/leads`, `/api/calendar`, `/api/vapi` | Require the user session and all three explicit property headers below; permission is `read`. |
@@ -249,16 +250,18 @@ separately by the deployment secret store. There are no database passwords in SQ
 | `atrium_session_executor` | NOLOGIN owner of four finite session commands and the current-session transaction fence. Own-user registry changes and append-only lifecycle audit under forced RLS; user row locking cannot change identity. No credential or property access. Runtime logins cannot inherit or assume this role. |
 | `atrium_mfa_executor` | NOLOGIN owner of finite passkey commands. Self-only factor/challenge/proof/recovery writes under forced RLS, plus security audit. Does not receive raw credential writes or property data access. Runtime roles cannot inherit or assume it. |
 | `atrium_organization_executor` | NOLOGIN owner of scoped organization directory and full existing-member access commands. Current administration proof, last-owner protection and atomic command/audit history; no credential writes. |
-| `atrium_resident_services_executor` | NOLOGIN owner of one finite resident/service mutation command. Staff-only property records, immutable source/event/receipt history and versioned triage under forced RLS; no caller identity, entry or dispatch authority. |
+| `atrium_resident_services_executor` | NOLOGIN owner of finite resident/service and maintenance-planning mutation commands. Staff-only property records, immutable source/event/receipt history, versioned triage and policy-bound decisions under forced RLS; no caller identity, entry or dispatch authority. |
+| `atrium_maintenance_approval_reader` | NOLOGIN/NOBYPASSRLS owner of the finite decision-authority reader. Returns current qualifying role/access for an existing scoped decision without changing requester context or exposing a general user directory. No runtime inheritance. |
 | `atrium_app` | Scoped property repositories plus finite existing-member administration commands. Configuration reads, operational document/calendar writes and scoped audit append/read; service writes go through their finite command. Cannot read password hashes, directly write membership/configuration/channel-binding tables, truncate tables, or modify audit history. |
 
-All nine must be `NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`.
+All ten must be `NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`.
 Provision `atrium_account_executor NOLOGIN` before the account-security migration
 and `atrium_login_executor NOLOGIN` before the login-protection migration. Provision
 `atrium_session_executor NOLOGIN` before the user-sessions migration and
 `atrium_mfa_executor NOLOGIN` before the WebAuthn migration. Provision
 `atrium_organization_executor NOLOGIN` and `atrium_resident_services_executor NOLOGIN`
-before their respective additive migrations. Grant
+before their respective additive migrations. Provision
+`atrium_maintenance_approval_reader NOLOGIN` before maintenance-planning. Grant
 these executor roles only to `atrium_admin` so migrations can transfer function
 ownership; do not grant them to either runtime login. The migration grants the
 authenticator explicit execution of the login reservation while denying execution
@@ -354,6 +357,8 @@ work and accepted background workflows are not canceled by browser logout.
 | `organization_people`, `property_residents` | Immutable organization person core and property-specific occupancy relationship; no global PII or contact-based identity merge. |
 | `resident_sources`, `resident_events` | Original property source observations, occupancy dates and staff review/revocation history. Source review does not establish channel identity. |
 | `service_cases`, `service_events`, `service_commands` | Scoped intake, versioned triage, append-only history and canonical idempotency receipts; no external dispatch or completion claim. |
+| `maintenance_policies`, `maintenance_vendors` | Immutable property authority rules and vendor review versions, including original evidence timestamps and distinct availability reports. |
+| `maintenance_plans`, `maintenance_decisions`, `maintenance_plan_events`, `maintenance_commands` | Exact version-bound work proposals, one human decision per revision, retained safety/history and atomic command receipts. |
 
 IDs accept the application's bounded stable ID format; they are not inferred from a
 legacy tenant name. Relational references repeat organization/property ownership.
@@ -512,3 +517,20 @@ Attention filter before pagination. Stored triage history never silently grants
 entry, spending or continued occupancy authority. See
 [ADR 0010](../docs/adr/0010-resident-service-records.md) for source review, emergency
 holds, practical vacant/common-area planning, privacy and remaining lifecycle work.
+
+## Maintenance planning
+
+Apply the additive maintenance-planning migration after provisioning its finite
+approval reader. `atrium.execute_maintenance_planning(jsonb,bigint,uuid)` performs
+bounded commands under the service executor. `atrium.maintenance_decision_authority(uuid)`
+returns current role/authority only for an existing decision under the unchanged
+requester's scope. Runtime users cannot inherit either role or directly mutate
+planning tables. Policy publishing, vendor review and decisions recheck a fresh
+exact-session administration proof inside the command.
+
+Sources and commands remain retry-stable; final database-time checks govern
+current authority. Automatic and human financial authority are separate from
+resident approval, entry, vendor readiness and dispatch. See
+[ADR 0011](../docs/adr/0011-maintenance-authority.md) for version binding, emergency
+receipts, expired-vendor suspension and the remaining approval inbox and execution
+work. Hosted activation and actual provider acceptance remain separate gates.

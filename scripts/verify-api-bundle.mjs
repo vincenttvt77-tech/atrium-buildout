@@ -27,7 +27,7 @@ const probe = String.raw`
       json(body) { this.body = body; }, send(body) { this.body = body; }, end(body) { this.body = body; } };
     await loaded.default({ method: 'GET', headers: {}, query: {}, body: undefined }, res);
     const expected = file === 'vapi-sync.mjs' ? 405
-      : ['properties.mjs', 'account.mjs', 'mfa.mjs', 'workflows.mjs', 'organizations.mjs', 'resident-services.mjs'].includes(file) && !process.env.ATRIUM_RUNTIME_MODE ? 404 : 503;
+      : ['properties.mjs', 'account.mjs', 'mfa.mjs', 'workflows.mjs', 'organizations.mjs', 'resident-services.mjs', 'maintenance-plans.mjs'].includes(file) && !process.env.ATRIUM_RUNTIME_MODE ? 404 : 503;
     assert.equal(res.code, expected, file + ': incomplete runtime must refuse without contacting a service');
     assert.match(String(res.headers['cache-control']), /no-store/, file + ': private response must not be cached');
     assert.match(String(res.headers['x-robots-tag']), /noindex/, file + ': private response must not be indexed');

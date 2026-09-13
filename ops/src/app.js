@@ -576,7 +576,7 @@ let gated = false
 let serviceWritesInFlight = 0
 let serviceSignInPending = false
 let scopeEpoch = 0
-const PROPERTY_ENDPOINTS = new Set(['/api/vapi', '/api/calendar', '/api/leads', '/api/vapi-sync', '/api/workflows', '/api/resident-services'])
+const PROPERTY_ENDPOINTS = new Set(['/api/vapi', '/api/calendar', '/api/leads', '/api/vapi-sync', '/api/workflows', '/api/resident-services', '/api/maintenance-plans'])
 const propertyEndpoint = path => PROPERTY_ENDPOINTS.has(String(path).split('?')[0])
 const JSON_HEADERS = { accept: 'application/json' }
 function accessError(message, status = 409) { const error = new Error(message); error.status = status; error.propertyAccess = true; return error }
@@ -619,7 +619,7 @@ function gate() {
 async function request(path, init) {
   if (gated) throw signedOut()
   const propertyRequest = propertyEndpoint(path), scoped = databaseMode && propertyRequest
-  const serviceSave = String(path).split('?')[0] === '/api/resident-services' && init?.method === 'POST'
+  const serviceSave = ['/api/resident-services', '/api/maintenance-plans'].includes(String(path).split('?')[0]) && init?.method === 'POST'
   const serviceOutcome = () => serviceSave || serviceWritesInFlight > 0 || serviceSignInPending ? 'The service save is unconfirmed and may have been recorded. ' : ''
   if (propertyRequest && documentAccessIssue) throw accessError(documentAccessIssue.message, documentAccessIssue.status)
   const epoch = scopeEpoch
@@ -649,7 +649,8 @@ async function request(path, init) {
   if (!r.ok) {
     if (propertyRequest && r.status === 409 && body && body.code === 'portal_tenant_changed')
       throw invalidateDocument('The signed-in account changed in another tab. Reload the workspace before viewing or making changes.')
-    if (scoped && r.status === 403) throw invalidateDocument(serviceOutcome() + 'Access to this property or operation is no longer available. Choose a property you can access or reload to refresh your permissions.', 403)
+    const planningStepUp = String(path).split('?')[0] === '/api/maintenance-plans' && body?.code === 'planning_mfa_required'
+    if (scoped && r.status === 403 && !planningStepUp) throw invalidateDocument(serviceOutcome() + 'Access to this property or operation is no longer available. Choose a property you can access or reload to refresh your permissions.', 403)
     if (scoped && (r.status === 428 || (r.status === 409 && /property|configuration|scope/.test(String(body && body.code))))) {
       throw invalidateDocument(serviceOutcome() + 'The property configuration changed. Reload this property before continuing.')
     }
@@ -679,14 +680,14 @@ function checkCalendarTimeZone(data) {
 const api = {
   get(path) { return request(path, { headers: JSON_HEADERS }) },
   async post(path, body, opts) {
-    const endpoint = String(path).split('?')[0], serviceWrite = endpoint === '/api/resident-services'
+    const endpoint = String(path).split('?')[0], serviceWrite = ['/api/resident-services', '/api/maintenance-plans'].includes(endpoint)
     if (serviceWrite) serviceWritesInFlight++
     try {
-      const needed = endpoint === '/api/vapi-sync' || endpoint === '/api/workflows' || (endpoint === '/api/resident-services' && ['add_resident', 'review_resident', 'revoke_resident'].includes(body?.action)) || (endpoint === '/api/calendar' && body && body.action === 'settings') ? 'configure' : 'operate'
+      const needed = endpoint === '/api/vapi-sync' || endpoint === '/api/workflows' || (endpoint === '/api/resident-services' && ['add_resident', 'review_resident', 'revoke_resident'].includes(body?.action)) || (endpoint === '/api/maintenance-plans' && ['publish_policy', 'save_vendor', 'decide_plan'].includes(body?.action)) || (endpoint === '/api/calendar' && body && body.action === 'settings') ? 'configure' : 'operate'
       if (propertyEndpoint(path) && !permissionAllowed(needed)) throw accessError('Your access is view only for this operation.', 403)
       if (endpoint === '/api/calendar') body = { ...body, ...calendarRequestRange(), expectedTimeZone: propertyTimeZone }
       return await request(path, {
-        method: 'POST', headers: { ...JSON_HEADERS, 'content-type': 'application/json', ...(endpoint === '/api/resident-services' ? { 'x-atrium-service-form': opts?.formToken, 'x-atrium-service-action': body?.action } : {}) }, body: JSON.stringify(body ?? {}),
+        method: 'POST', headers: { ...JSON_HEADERS, 'content-type': 'application/json', ...(endpoint === '/api/resident-services' ? { 'x-atrium-service-form': opts?.formToken, 'x-atrium-service-action': body?.action } : endpoint === '/api/maintenance-plans' ? { 'x-atrium-planning-form': opts?.formToken, 'x-atrium-planning-action': body?.action } : {}) }, body: JSON.stringify(body ?? {}),
       })
     } catch (e) {
       if (!e.signedOut) {
