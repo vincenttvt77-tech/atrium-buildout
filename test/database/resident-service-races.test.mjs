@@ -1,3 +1,4 @@
+import { consentTables } from '../helpers/consent-tables.mjs'
 import {before,beforeEach,after,test} from 'node:test'
 import assert from 'node:assert/strict'
 import {randomUUID} from 'node:crypto'
@@ -25,7 +26,7 @@ before(async()=>{
  ownerScope=await runtime.authorization.authorizeProperty(owner,'property-a1','configure');staffScope=await runtime.authorization.authorizeProperty(staff,'property-a1','operate')
 })
 beforeEach(async()=>{
- await db.admin.query(`TRUNCATE ${[...enrollmentTables,...planningTables,...tables].map(t=>`atrium.${t}`).join(',')}`)
+ await db.admin.query(`TRUNCATE ${[...consentTables,...enrollmentTables,...planningTables,...tables].map(t=>`atrium.${t}`).join(',')}`)
  await db.admin.query("UPDATE atrium.properties SET published_configuration_version=1 WHERE id='property-a1'")
  await db.admin.query("UPDATE atrium.memberships SET status='active'")
  await db.admin.query("UPDATE atrium.property_grants SET status='active'")

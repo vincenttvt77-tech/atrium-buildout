@@ -124,8 +124,9 @@ export interface MaintenanceAssessment {
   requiredApprover: 'owner' | 'admin_or_owner' | null
   spendingAuthorized: boolean
   residentApprovalRequired: boolean
-  residentApprovalVerified: false
-  entryAuthorized: false
+  residentApprovalVerified: boolean
+  entryPermissionRequired: boolean
+  entryAuthorized: boolean
   dispatchStatus: 'not_dispatched'
   notificationStatus: 'not_sent'
 }
@@ -140,6 +141,8 @@ export interface MaintenancePlanDetail {
   canDecide: boolean
   history: MaintenancePlanHistoryEntry[]
   nextHistoryCursor: ServiceCursor | null
+  evaluatedAt: string
+  refreshAt: string | null
 }
 export interface MaintenancePlanningOverview {
   policy: MaintenancePolicy | null

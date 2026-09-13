@@ -1,3 +1,4 @@
+import { consentTables } from '../helpers/consent-tables.mjs'
 import {before,beforeEach,after,test} from 'node:test'
 import assert from 'node:assert/strict'
 import {setTimeout as delay} from 'node:timers/promises'
@@ -34,7 +35,7 @@ before(async()=>{
  scopes.set('sibling',await runtime.authorization.authorizeProperty(principals.get('owner-a'),'property-a2','operate'));proofs.set('sibling',proofs.get('owner-a'))
 })
 beforeEach(async()=>{
- await db.admin.query(`TRUNCATE ${[...enrollmentTables,...tables].map(t=>'atrium.'+t).join(',')}`)
+ await db.admin.query(`TRUNCATE ${[...consentTables,...enrollmentTables,...tables].map(t=>'atrium.'+t).join(',')}`)
  await db.admin.query("UPDATE atrium.memberships SET status='active',access=CASE WHEN user_id IN ('staff-a','admin-a') THEN 'properties' ELSE 'organization' END,role=CASE user_id WHEN 'owner-a' THEN 'owner' WHEN 'owner-b' THEN 'owner' WHEN 'admin-a' THEN 'admin' WHEN 'viewer-a' THEN 'viewer' ELSE 'staff' END")
  await db.admin.query("UPDATE atrium.property_grants SET status='active'")
  await db.admin.query("UPDATE atrium.properties SET published_configuration_version=1,status='active' WHERE id IN ('property-a1','property-a2','property-b1')")

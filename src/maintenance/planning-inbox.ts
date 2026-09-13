@@ -32,6 +32,19 @@ export function canDecideMaintenancePlan(input: MaintenanceAuthorityInput, asses
     && (!policy?.requireIndependentApprover || plan.preparedBy !== actor.userId))
 }
 
+function residentSetupNeeded(input: MaintenanceAuthorityInput, assessment: MaintenanceAssessment): boolean {
+  if (assessment.readiness !== 'awaiting_resident') return false
+  if (!input.consent) return true
+  const required = [assessment.residentApprovalRequired ? 'work' : null, assessment.entryPermissionRequired ? 'entry' : null].filter(Boolean)
+  for (const purpose of required) {
+    const current = input.consent.purposes.find(value => value.purpose === purpose)
+    if (!current || !current.required || !current.requestId || current.holds.some(hold => hold !== 'awaiting_decisions')) return true
+    const verified = purpose === 'work' ? assessment.residentApprovalVerified : assessment.entryAuthorized
+    if (!verified && (current.effective || !current.holds.includes('awaiting_decisions'))) return true
+  }
+  return required.length === 0
+}
+
 function nextStep(input: MaintenanceAuthorityInput, assessment: MaintenanceAssessment, actor: MaintenanceInboxActor, canDecide: boolean, now: Date): MaintenanceInboxNextStep {
   const step = (kind: MaintenanceInboxNextStep['kind'], label: string,
     responsible: MaintenanceInboxNextStep['responsible'] = 'property_team', availableInPortal = true): MaintenanceInboxNextStep =>
@@ -57,7 +70,9 @@ function nextStep(input: MaintenanceAuthorityInput, assessment: MaintenanceAsses
       assessment.requiredApprover === 'owner' ? 'Request an owner decision' : 'Request a manager or owner decision',
       assessment.requiredApprover === 'owner' ? 'owner' : 'manager_or_owner', canDecide)
     case 'management_review': return step('management_review', 'Review the restriction, vendor or total cost with management', 'manager_or_owner', actor.configure)
-    case 'awaiting_resident': return step('verify_resident', 'Establish verified resident approval or entry authority', 'verified_resident', false)
+    case 'awaiting_resident': return step('verify_resident', assessment.residentApprovalRequired && !assessment.residentApprovalVerified
+      ? 'Review resident work approval and any required entry permission' : 'Review permission for the current apartment-entry window',
+      residentSetupNeeded(input, assessment) ? 'property_team' : 'verified_resident')
     case 'awaiting_vendor': return step('confirm_vendor_availability', 'Review current vendor availability', 'manager_or_owner', actor.configure)
     case 'authorized_plan': return step('arrange_work', 'Arrange and verify the work appointment', 'property_team', false)
   }
@@ -67,7 +82,7 @@ export function projectMaintenanceInboxItem(input: MaintenanceAuthorityInput, ac
   const assessment = evaluateMaintenancePlan(input, now), canDecide = canDecideMaintenancePlan(input, assessment, actor)
   const next = nextStep(input, assessment, actor, canDecide, now), { request, plan } = input
   const waiting = ['awaiting_resident', 'awaiting_vendor', 'authorized_plan'].includes(assessment.readiness)
-    && !['review_emergency', 'review_context'].includes(next.kind)
+    && !['review_emergency', 'review_context'].includes(next.kind) && !residentSetupNeeded(input, assessment)
   return { id: request.id, caseVersion: request.version, summary: request.summary, location: { ...request.location },
     category: request.category, priority: request.priority, createdAt: request.createdAt, updatedAt: request.updatedAt,
     planId: plan?.id ?? null, planVersion: plan?.version ?? null, planPreparedAt: plan?.preparedAt ?? null,

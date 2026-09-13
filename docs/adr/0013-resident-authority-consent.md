@@ -1,6 +1,6 @@
 # ADR 0013 — Resident authentication and consent boundaries
 
-Status: session audience foundation and first-party enrollment accepted locally. Exact work and entry consent remain subsequent work. This decision does not activate a hosted deployment.
+Status: session audiences, first-party enrollment and exact work/entry consent accepted. Consent implementation is under integration verification. This decision does not activate a hosted deployment.
 
 ## Shared account, separate session audiences
 
@@ -40,15 +40,31 @@ Losing an issuance response cannot recover a digest-only handoff URL. Staff firs
 
 Apply additive `20260913160945_resident_enrollment.sql` after the audience migration and provision the restricted `atrium_enrollment_executor` before applying it. A database-first upgrade preserves existing users, credentials and staff sessions. Local tests and screens do not establish that these migrations or a real property protocol are active in a hosted environment.
 
-## Required consent and fulfillment work
+## Exact work and entry consent
 
-Enrollment needs an explicit current property-residency-to-user binding and an approved identity/delivery protocol. Staff must not create a known password and label subsequent actions independent resident consent. A new resident chooses their credentials; linking an existing account requires authenticating that account. Never merge or link global accounts by matching email, phone, name or unit. Invitations must be scoped, expiring, revocable and one-use, with atomic activation and recoverable receipts.
+Property owners publish current consent rules, including explicit funding, the recipient and entry review protocols, expiry limits and a staff help route. The first supported funding policy is `property_no_resident_charge`: the property pays and the resident owes zero. A cost ceiling alone cannot imply this arrangement. Other funding and assisted consent protocols need separate implementation.
 
-Resident authority must be opaque and separate from staff property scope. Future resident reads must project only the person's permitted information, including a staff-reviewed resident-facing work summary. Do not expose staff notes, directories or the complete maintenance authority graph. Current enrollment, residency evidence and property policy must be rechecked after waits and immediately before committing decisions.
+Staff review the complete current household roster, including members who are not required to decide, and record each required person's work and entry authority against their actual resident-account binding. Enrollment and occupancy alone confer neither authority. An empty required set is held; a genuinely unnecessary purpose is explicitly marked `not_required`. Renewing revoked authority requires a reviewed new revision of the same binding/purpose chain. A new binding needs its own authority chain.
 
-Work consent and entry permission are separate decisions. Each binds the exact case, unit, work scope, plan/policy/vendor revisions, currency/cost ceiling, terms and relevant authority versions. Entry additionally requires explicit date/time boundaries and timezone; nonexistent or repeated local times need explicit resolution. Material changes require new consent. Fresh purpose-specific assurance, explicit decline, revocation, immutable history, exact replay receipts and unknown-outcome recovery remain required.
+Work and entry requests have independent IDs and revisions. Their common material digest binds the exact case, plan, scope, all-in property cost, funding, named internal team/vendor and current financial authority. Each purpose additionally pins its own reviewed roster/authority and public terms. Entry adds a bounded window with timezone, local time and explicit offset; local values must agree with the actual timezone at both endpoints. Changing only that window requires new entry decisions while unchanged work consent remains valid. Shared material changes hold both purposes.
 
-A saved approval must never claim vendor dispatch, delivery, payment, appointment acceptance or resolution. Those require current downstream authority and verified provider effects. The complete maintenance lifecycle and wider product scope remain open.
+`/api/maintenance-consent` is staff-only. Policy and household/authority changes require current configure access and fresh administration MFA; request publication requires operate access. Case-specific forms cannot select another case or unit. `/api/resident-consent` accepts only resident sessions and projects the person's own public terms, decisions, receipt and history. It does not expose the household directory, sources, staff notes, other people's decisions or security material.
+
+Approval requires a new user-verifying passkey assertion for that exact request, revision, terms/material digests, resident, credential version, session, security state, RP and origin. Its private proof brand is distinct from ordinary login or administration verification. Reservation, one-use attempt, shared factor-counter revision compare-and-swap, decision and recovery receipt are checked and committed atomically. Even a zero-counter authenticator uses the shared revision to reject concurrent reuse. A staff-held password, browser flag, caller statement or generic MFA proof cannot become resident approval.
+
+Every required person's grant must remain current. Source/policy/occupancy/binding changes, lost purpose authority, disabled accounts, credential changes, revoked signing factors and changed terms hold permission. Ordinary logout, session expiry, unrelated factor use or adding another passkey does not erase a completed grant. The response deadline closes new approvals; it does not invalidate a completed grant before its own consent or entry expiry.
+
+Residents can decline, reconsider and revoke only their exact current grant, with immutable versioned history. Historical terms and self-reduction remain available after source expiry or staff withdrawal through a current authenticated resident session with its ordinary login MFA. A new grant still needs current authority. Historical receipts do not restore permission. Unknown saves retain their non-authorizing command/request identifiers for explicit receipt lookup; the client never silently issues a new command or retries the write.
+
+The finite `atrium_consent_executor` has NOLOGIN/NOBYPASSRLS and fixed private-schema command entry points, not general identity or credential access. Writes discover a bounded relevant user set, acquire sorted user locks before session/security, organization and exclusive property locks, then rediscover the graph and reject changed membership of that set. Planning reads use a minimal consent projection under the existing scoped property transaction. Detail/inbox compare initial and final evidence before filtering or pagination, and HTTP responses check current projection deadlines after their final awaited authorization check. History and receipts are not capped by a current-permission deadline.
+
+Apply `20260913173058_resident_consent.sql` after enrollment, with its restricted executor provisioned first. Historical migrations remain immutable. The local runner and native fixtures support this additive upgrade; hosted database/runtime activation remains separate.
+
+## Remaining fulfillment
+
+Consent contributes current readiness to maintenance detail and Work plans. Missing or stale setup, declined and revoked decisions need property-team attention; a current request awaiting required decisions belongs with resident follow-up. It records no appointment, dispatch, delivery, payment or resolution.
+
+Full fulfillment still needs an exact job manifest, current consent and spending admission at execution, transactional outbox integration, authorized provider adapters, replay-safe dispatch/readback, appointment acceptance, resident updates and evidence-based closure. A changed or revoked permission after external commitment must enter reconciliation rather than merely displaying a local cancellation. Real provider, physical-device, accessible assisted/SMS protocol and hosted rollout acceptance remain required for the wider product.
 
 ## Related decisions
 

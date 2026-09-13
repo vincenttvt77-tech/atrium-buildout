@@ -34,8 +34,9 @@ passkey enrollment, session verification and recovery are implemented; see
 Staff and resident sessions have separate persisted audiences, cookie signatures and
 authorization checks, even when the same account has staff memberships. The staff
 account page lists staff logins. The PostgreSQL resident portal adds property-approved
-one-use invitations, resident-controlled sign-in and scoped connection status;
-exact maintenance work and entry consent remain subsequent work; see [resident authority boundaries](docs/adr/0013-resident-authority-consent.md)
+one-use invitations, resident-controlled sign-in and scoped connection status.
+Separate resident work approval and apartment-entry permission bind reviewed terms
+to the current plan and each required household member; see [resident authority boundaries](docs/adr/0013-resident-authority-consent.md)
 for the database-first rollout and remaining flows.
 
 The PostgreSQL **Work queue** shows persisted background actions by property,
@@ -68,6 +69,15 @@ Refresh catches changes to earlier pages. Opening a row reloads exact case/plan
 authority before any decision. Verified external execution remains open. See
 [maintenance authority](docs/adr/0011-maintenance-authority.md) and the
 [planning inbox contract](docs/adr/0012-maintenance-planning-inbox.md).
+
+The work-plan **Review resident decisions** link opens property consent rules, a complete
+reviewed household roster and separate work/entry requests. Residents review their
+own terms and approve with their own passkey, decline, reconsider or revoke a saved
+grant. Current planning reflects every required decision; changing only entry timing
+preserves unchanged work approval. The first funding policy explicitly charges the
+resident nothing. A saved decision records permission, not an appointment or dispatch.
+These managed features require the additive consent migration and configured property
+authority; publishing application code does not activate them in the hosted legacy demo.
 
 ## The one idea worth understanding
 

@@ -1,3 +1,4 @@
+import { consentTables } from '../helpers/consent-tables.mjs'
 import {before,beforeEach,after,test} from 'node:test'
 import assert from 'node:assert/strict'
 import {setTimeout as delay} from 'node:timers/promises'
@@ -34,7 +35,7 @@ before(async()=>{
  scopes.set('sibling',await runtime.authorization.authorizeProperty(principals.get('owner-a'),'property-a2','operate'));proofs.set('sibling',proofs.get('owner-a'))
 })
 beforeEach(async()=>{
- await db.admin.query(`TRUNCATE ${[...enrollmentTables,...tables].map(t=>'atrium.'+t).join(',')}`)
+ await db.admin.query(`TRUNCATE ${[...consentTables,...enrollmentTables,...tables].map(t=>'atrium.'+t).join(',')}`)
  await db.admin.query("UPDATE atrium.memberships SET status='active',access=CASE WHEN user_id IN ('staff-a','admin-a') THEN 'properties' ELSE 'organization' END,role=CASE user_id WHEN 'owner-a' THEN 'owner' WHEN 'owner-b' THEN 'owner' WHEN 'admin-a' THEN 'admin' WHEN 'viewer-a' THEN 'viewer' ELSE 'staff' END")
  await db.admin.query("UPDATE atrium.property_grants SET status='active'")
  await db.admin.query("UPDATE atrium.properties SET published_configuration_version=1,status='active' WHERE id IN ('property-a1','property-a2','property-b1')")
@@ -86,6 +87,16 @@ test('empty inbox reports checked scope metadata without fabricated totals or ac
  assert.equal(page.policyVersion,null);assert.equal(page.policyValidUntil,null);assert.equal(page.refreshAt,null)
  assert.match(page.evaluatedAt,/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/)
  assert.equal('total' in page,false)
+})
+
+test('an unmatched unit and an exhausted cursor return an authorized empty page',async()=>{
+ await publish();const caseId=await create(),current=await repo().getPlan(caseId)
+ for(const query of [{unitId:'absent-unit'}, {before:{id:caseId,createdAt:current.request.createdAt}}]) {
+  const page=await repo().listInbox({limit:25,filter:'all',...query})
+  assert.deepEqual(page.items,[]);assert.equal(page.nextCursor,null);assert.equal(page.scanIncomplete,false)
+ }
+ const sibling=await repo('sibling').listInbox({limit:25,filter:'all'})
+ assert.deepEqual(sibling.items,[])
 })
 
 test('current readiness, next steps and decision capability match detail with minimal list fields',async()=>{

@@ -21,6 +21,13 @@ tables. Apply it before the matching resident HTTP code. Hosted rollout and real
 property protocol approval are separate from local implementation; see
 [ADR 0013](../docs/adr/0013-resident-authority-consent.md).
 
+Exact work/entry consent adds `20260913173058_resident_consent.sql` after enrollment.
+Provision `atrium_consent_executor` first. Its ten private tables retain property
+rules, complete rosters, purpose authority, versioned requests/recipients/decisions,
+command receipts and bounded passkey ceremonies/budgets. The matching maintenance
+detail/inbox uses this schema even when no requests exist; apply it before updating
+a PostgreSQL runtime. This does not activate hosted features or dispatch work.
+
 ## Opt-in runtime
 
 `src/application/runtime.ts` connects the persisted authorization/property repositories
@@ -82,6 +89,8 @@ current membership, organization/property status and explicit grants per operati
 | `GET/POST /api/resident` | Separate resident sign-in, browser-bound invitation exchange, explicit new/existing account activation, own bindings/receipts and logout. The fixed `?resource=mfa` surface provides resident own-account passkeys. No staff property rights or maintenance/entry consent. |
 | `GET/POST /api/resident-services` | Staff-only property resident records, maintenance intake, notes, triage and paginated history; configure-only source changes. Property/configuration/session-bound forms, atomic receipts and current context checks. No dispatch or caller verification; absent in legacy mode. |
 | `GET/POST /api/maintenance-plans` | Scoped owner policy, approved vendors, versioned proposals and immutable decisions. Separate bound forms; protected actions require fresh administration MFA. Operate reads/proposals, configure vendor/decision actions, owner-only policy. No external execution; absent in legacy mode. |
+| `GET/POST /api/maintenance-consent` | Staff-only property rules, reviewed household/purpose authority, separate work/entry requests and exact-case history/receipts. Configure changes need fresh administration MFA; request publication needs operate. No resident impersonation or delivery. |
+| `GET/POST /api/resident-consent` | Own resident terms, history, command receipts, decline/reconsider/revoke and a new exact-terms passkey ceremony for each grant. No caller-selected property authority or staff session substitution. |
 | `GET/POST /api/workflows` | Property-scoped action queue; read permission for bounded listing, configure permission and same-origin JSON for recovery. Required expected row revision is checked under lock; no action creation, connector execution or legacy fallback. |
 | `GET /api/properties` | Authenticated, unscoped catalogue of properties this user can read. It exposes safe labels, role/permissions and navigation links, not property inventories or credentials. |
 | `GET /api/leads`, `/api/calendar`, `/api/vapi` | Require the user session and all three explicit property headers below; permission is `read`. |
@@ -267,10 +276,11 @@ separately by the deployment secret store. There are no database passwords in SQ
 | `atrium_organization_executor` | NOLOGIN owner of scoped organization directory and full existing-member access commands. Current administration proof, last-owner protection and atomic command/audit history; no credential writes. |
 | `atrium_resident_services_executor` | NOLOGIN owner of finite resident/service and maintenance-planning mutation commands. Staff-only property records, immutable source/event/receipt history, versioned triage and policy-bound decisions under forced RLS; no caller identity, entry or dispatch authority. |
 | `atrium_enrollment_executor` | NOLOGIN/NOBYPASSRLS owner of two finite staff/resident enrollment commands. Scoped approved recipient checks, digest-only invitations, atomic new-account activation or authenticated existing-account binding, bounded attempts and immutable receipts; no runtime inheritance or general identity directory. |
+| `atrium_consent_executor` | NOLOGIN/NOBYPASSRLS owner of finite staff/resident consent commands and minimal scoped planning projection. Current household/purpose authority, immutable terms/decisions/receipts and exact resident passkey counter/ceremony commit; no credential writes, runtime inheritance or dispatch. |
 | `atrium_maintenance_approval_reader` | NOLOGIN/NOBYPASSRLS owner of the finite decision-authority reader. Returns current qualifying role/access for an existing scoped decision without changing requester context or exposing a general user directory. No runtime inheritance. |
 | `atrium_app` | Scoped property repositories plus finite existing-member administration commands. Configuration reads, operational document/calendar writes and scoped audit append/read; service writes go through their finite command. Cannot read password hashes, directly write membership/configuration/channel-binding tables, truncate tables, or modify audit history. |
 
-All eleven must be `NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`.
+All twelve must be `NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`.
 Provision `atrium_account_executor NOLOGIN` before the account-security migration
 and `atrium_login_executor NOLOGIN` before the login-protection migration. Provision
 `atrium_session_executor NOLOGIN` before the user-sessions migration and
@@ -278,7 +288,8 @@ and `atrium_login_executor NOLOGIN` before the login-protection migration. Provi
 `atrium_organization_executor NOLOGIN` and `atrium_resident_services_executor NOLOGIN`
 before their respective additive migrations. Provision
 `atrium_maintenance_approval_reader NOLOGIN` before maintenance-planning and
-`atrium_enrollment_executor NOLOGIN` before resident-enrollment. Grant
+`atrium_enrollment_executor NOLOGIN` before resident-enrollment and
+`atrium_consent_executor NOLOGIN` before resident-consent. Grant
 these executor roles only to `atrium_admin` so migrations can transfer function
 ownership; do not grant them to either runtime login. The migration grants the
 authenticator explicit execution of the login reservation while denying execution
@@ -375,6 +386,9 @@ work and accepted background workflows are not canceled by browser logout.
 | `resident_account_bindings` | Versioned property residency-to-account connection. Current authority is derived from policy/context/account state; revocation preserves other accounts and properties. |
 | `resident_enrollment_attempts`, `resident_enrollment_budgets` | Bounded acceptance reservation and pre-crypto token/client budgets. No raw invitation or plaintext password. |
 | `resident_enrollment_commands`, `resident_enrollment_events` | Immutable command receipts and audit history, committed atomically with enrollment changes. |
+| `consent_policies`, `consent_rosters`, `consent_roster_members`, `consent_authorities` | Versioned no-resident-charge policy, reviewed complete household and independent binding/purpose authority. Occupancy or account enrollment alone cannot grant permission. |
+| `consent_requests`, `consent_recipients`, `consent_decisions`, `consent_commands` | Independent work/entry revisions, required recipient graph, exact resident decisions and atomic actor-owned recovery receipts. Historical evidence is immutable; current effectiveness is derived. |
+| `consent_ceremonies`, `consent_budgets` | Expiring one-use terms-bound passkey attempts and bounded resident verification budget. Factor counter revision is shared with ordinary MFA; runtime roles cannot directly write these tables. |
 | `organization_people`, `property_residents` | Immutable organization person core and property-specific occupancy relationship; no global PII or contact-based identity merge. |
 | `resident_sources`, `resident_events` | Original property source observations, occupancy dates and staff review/revocation history. Source review does not establish channel identity. |
 | `service_cases`, `service_events`, `service_commands` | Scoped intake, versioned triage, append-only history and canonical idempotency receipts; no external dispatch or completion claim. |
@@ -555,3 +569,21 @@ resident approval, entry, vendor readiness and dispatch. See
 [ADR 0011](../docs/adr/0011-maintenance-authority.md) for version binding, emergency
 receipts, expired-vendor suspension and the remaining approval inbox and execution
 work. Hosted activation and actual provider acceptance remain separate gates.
+
+## Resident work and entry consent
+
+`atrium.consent_staff(text,jsonb,bigint,uuid)` and
+`atrium.consent_resident(text,jsonb)` are the only consent write entry points.
+Staff commands bind a selected case and current property authority; resident commands
+derive scope from their own retained recipient records. Sorted relevant-user locks
+precede session/security, organization and exclusive property admission. New grants
+recheck exact terms, current required household authority and the one-use assertion
+before atomically updating the shared factor counter revision and saving the decision.
+
+`atrium.consent_planning(uuid[],bigint)` returns only minimal current work/entry
+evidence for up to 201 selected cases. The existing property transaction compares
+initial and final graphs; the helper does not take nested user locks. HTTP expiry
+checks follow final awaited authorization. Resident history and self-revocation
+remain separate from current grant readiness. See
+[ADR 0013](../docs/adr/0013-resident-authority-consent.md) for the complete contract
+and remaining provider/assisted-consent implementation.

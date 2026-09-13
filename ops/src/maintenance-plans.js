@@ -7,7 +7,7 @@ const ENDPOINT = '/api/maintenance-plans', esc = A.escapeHtml
 const SCOPE = Object.freeze({ organizationId: window.ATRIUM_PROPERTY.organizationId, propertyId: window.ATRIUM_PROPERTY.propertyId })
 const CATEGORIES = { plumbing: 'Plumbing', electrical: 'Electrical', heating_cooling: 'Heating & cooling', appliance: 'Appliance', pest: 'Pest', access: 'Access', other: 'Other' }
 const RESTRICTIONS = { legal: 'Legal', structural: 'Structural', safety_sensitive: 'Safety sensitive', unusual: 'Unusual work', other_restricted: 'Other restricted work' }
-const READINESS = { needs_plan: 'Prepare a work plan', needs_policy: 'Authority rules needed', stale_plan: 'Review the changed plan', needs_context: 'Review request context', emergency_review: 'Emergency review', management_review: 'Management review', awaiting_manager: 'Manager approval needed', awaiting_owner: 'Owner approval needed', rejected: 'Plan rejected', withdrawn: 'Plan withdrawn', awaiting_resident: 'Resident approval not established', awaiting_vendor: 'Vendor readiness needs review', authorized_plan: 'Authorized plan — not dispatched' }
+const READINESS = { needs_plan: 'Prepare a work plan', needs_policy: 'Authority rules needed', stale_plan: 'Review the changed plan', needs_context: 'Review request context', emergency_review: 'Emergency review', management_review: 'Management review', awaiting_manager: 'Manager approval needed', awaiting_owner: 'Owner approval needed', rejected: 'Plan rejected', withdrawn: 'Plan withdrawn', awaiting_resident: 'Resident decisions needed', awaiting_vendor: 'Vendor readiness needs review', authorized_plan: 'Authorized plan — not dispatched' }
 const TIERS = { automatic: 'Within automatic authority', approval_required: 'Approval required', management_escalation: 'Management escalation', emergency: 'Emergency protocol' }
 const ERRORS = { planning_invalid_input: 'Review the fields, source dates and spending limits.', planning_not_found: 'This record is no longer available in this property.', planning_version_conflict: 'The case, rules or plan changed. Refresh and review the latest record.', planning_request_conflict: 'This change reference already belongs to a different command. Reload before continuing.', planning_not_ready: 'Current prerequisites do not permit this change. Refresh and review the next step.' }
 const ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/
@@ -48,7 +48,7 @@ function cursor(value, rows) {
 }
 function readAssessment(a) {
   if (!obj(a) || !own(READINESS,a.readiness) || !(a.tier === null || own(TIERS,a.tier)) || !Array.isArray(a.reasons) || a.reasons.length > 50 || !a.reasons.every(x => text(x,240))
-    || ![null,'owner','admin_or_owner'].includes(a.requiredApprover) || !bool(a.spendingAuthorized) || !bool(a.residentApprovalRequired) || a.residentApprovalVerified !== false || a.entryAuthorized !== false || a.dispatchStatus !== 'not_dispatched' || a.notificationStatus !== 'not_sent') throw bad()
+    || ![null,'owner','admin_or_owner'].includes(a.requiredApprover) || !bool(a.spendingAuthorized) || !bool(a.residentApprovalRequired) || !bool(a.residentApprovalVerified) || !bool(a.entryPermissionRequired) || !bool(a.entryAuthorized) || a.residentApprovalVerified && (!a.residentApprovalRequired || !a.spendingAuthorized) || a.entryAuthorized && (!a.entryPermissionRequired || !a.spendingAuthorized) || a.dispatchStatus !== 'not_dispatched' || a.notificationStatus !== 'not_sent') throw bad()
   return Object.freeze(copy(a))
 }
 const NEXT_STEPS = ['review_emergency','review_context','publish_policy','prepare_plan','revise_plan','review_decision','management_review','verify_resident','confirm_vendor_availability','arrange_work']
@@ -82,7 +82,7 @@ function inboxRowHtml(row, selected) {
   return `<button type="button" class="sv-row mp-inbox-row" data-select="${esc(row.id)}" data-key="service:${esc(row.id)}" aria-current="${row.id===selected}" aria-controls="sv-detail"><span class="sv-row-top"><strong>${esc(row.summary)}</strong>${A.html.chip(row.assessment.readiness==='emergency_review'?'chip-warn':'chip-neutral',row.assessment.readiness==='emergency_review'?'warning':'clock',READINESS[row.assessment.readiness])}</span><span class="sv-row-context">${esc(location)} · ${esc(CATEGORIES[row.category])}</span><span class="mp-inbox-step">${esc(row.nextStep.label)}</span><span class="mp-inbox-meta">${esc(RESPONSIBLE[row.nextStep.responsible])} · ${esc(money(row.maximumCents))}${row.maximumCents!==null?' ceiling'+(row.includesAllCharges?' · all charges':' · charges incomplete'):''}</span><span class="sv-row-date">${row.planPreparedAt?'Plan prepared '+esc(A.fmt.dateTime(row.planPreparedAt)):'Request recorded '+esc(A.fmt.dateTime(row.createdAt))}</span></button>`
 }
 function readDetail(v, caseId) {
-  if (!obj(v) || !obj(v.request) || v.request.id !== caseId || !scoped(v.request) || !version(v.request.version) || !text(v.request.summary, 160) || !own(CATEGORIES, v.request.category)
+  if (!obj(v) || !instant(v.evaluatedAt) || !nullable(v.refreshAt,instant) || Date.parse(v.evaluatedAt)>Date.now()+5000 || v.refreshAt!==null&&Date.parse(v.refreshAt)<=Date.parse(v.evaluatedAt) || !obj(v.request) || v.request.id !== caseId || !scoped(v.request) || !version(v.request.version) || !text(v.request.summary, 160) || !own(CATEGORIES, v.request.category)
     || !bool(v.request.contextNeedsReview) || !Array.isArray(v.request.emergencyKinds) || !v.request.emergencyKinds.every(x => text(x, 80)) || !['routine','urgent','emergency'].includes(v.request.priority)
     || !obj(v.resident) || v.resident.callerIdentityVerified !== false || v.resident.entryAuthorized !== false || !bool(v.canDecide)) throw bad()
   const policy = readPolicy(v.policy), vendor = v.vendor === null ? null : readVendor(v.vendor), p = v.plan
@@ -145,11 +145,19 @@ function readSourceForm(body,previous,days,prefix='',requireCurrent=true) {
 }
 
 function create(options) {
-  let host=null, noticeHost=null, mode='', caseId=null, caseVersion=null, generation=0, detailGeneration=0, overview=null, detail=null, vendors=[], vendor=null, vendorCursor=null, vendorFilter='approved', selectedVendor=null, loading=false, detailLoading=false, error='', detailError='', dialog=null, busy=false, pending=null, toast=null
+  let host=null, noticeHost=null, mode='', caseId=null, caseVersion=null, generation=0, detailGeneration=0, overview=null, detail=null, vendors=[], vendor=null, vendorCursor=null, vendorFilter='approved', selectedVendor=null, loading=false, detailLoading=false, error='', detailError='', dialog=null, busy=false, pending=null, toast=null, detailExpired=false, detailTimer=null
   const active=()=>Boolean(host && options.isActive() && A.can('operate'))
   const locked=()=>busy || Boolean(pending) || Boolean(dialog)
   function bounded(promise) { let timer; return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Object.assign(new Error('The request has not been confirmed.'),{uncertain:true})),15000)})]).finally(()=>clearTimeout(timer)) }
   function changed() { renderNotice(); options.onChange?.() }
+  function armDetail(){
+    clearTimeout(detailTimer);detailTimer=null
+    if(mode!=='case'||!detail?.refreshAt)return
+    const expire=()=>{if(!active()||mode!=='case')return;detailExpired=true;if(!busy&&!pending)dialog?.close();render();A.announce('Work plan status expired. Refresh before making changes.')}
+    const wait=Date.parse(detail.refreshAt)-Date.now()
+    if(wait<=0)expire();else detailTimer=setTimeout(expire,Math.min(wait,2147483647))
+  }
+
   function renderNotice() {
     if (!noticeHost) return
     noticeHost.innerHTML = pending ? '<div class="mp-warning" role="alert"><strong>Planning change is unconfirmed</strong><p>'+(pending.needsVerification?'Verify administrator access, then reload and check the saved record before making another change.':'The change may have been recorded. Recheck the exact reviewed change before starting another.')+'</p>'+ (pending.needsVerification?'<a class="btn" href="/api/mfa">Verify administrator access</a>':btn('retry','Check this exact change'))+' <a class="btn" href="'+esc(location.pathname||'/api/dashboard')+'" data-mp="reload">Reload current property</a></div>' : ''
@@ -166,12 +174,15 @@ function create(options) {
   function planHtml() {
     if(!detail) return '<p>'+(detailError?esc(detailError):'Checking the saved work plan…')+'</p>'
     const {plan:p,assessment:a,decision:d}=detail
-    return `<div class="mp-section-title"><div><span class="page-eyebrow">WORK PLAN</span><h3 tabindex="-1" data-mp-heading>${esc(READINESS[a.readiness])}</h3></div>${btn('refresh','Refresh plan')}</div>`+
+    return `<div class="mp-section-title"><div><span class="page-eyebrow">WORK PLAN</span><h3 tabindex="-1" data-mp-heading>${esc(detailExpired?'Refresh current work plan':READINESS[a.readiness])}</h3></div>${btn('refresh','Refresh plan')}</div>`+
       (a.readiness==='emergency_review'?SAFETY+detail.safetyInstructions.map(s=>'<p class="sv-safety">'+esc(s)+'</p>').join(''):'')+
       (a.tier?'<span class="mp-tier">'+esc(TIERS[a.tier])+'</span>':'')+
-      '<p class="mp-boundary">Not dispatched · No notification sent. Entry permission and caller identity are not established.</p>'+
+      '<p class="mp-boundary">Not dispatched · No notification sent. Caller identity is not established by the intake record.</p>'+
+      (detailExpired?'<p class="mp-warning" role="status">This assessment reached its review deadline. Refresh to check current work approval and entry permission before making a change.</p>':'')+
+      facts([['Resident work approval',detailExpired?'Refresh needed':!a.residentApprovalRequired?'Not required':a.residentApprovalVerified?'Current required approvals recorded':'Required approvals still needed'],['Apartment entry permission',detailExpired?'Refresh needed':!a.entryPermissionRequired?'Not required':a.entryAuthorized?'Current required permission recorded':'Required permission still needed'],['Status checked',A.fmt.dateTime(detail.evaluatedAt)]])+
+      '<div class="mp-actions"><a class="btn" data-mp-consent href="/api/maintenance-consent?organizationId='+encodeURIComponent(SCOPE.organizationId)+'&amp;propertyId='+encodeURIComponent(SCOPE.propertyId)+'&amp;caseId='+encodeURIComponent(caseId)+'">Review resident decisions</a></div>'+
       (a.reasons.length?'<ul class="mp-reasons">'+a.reasons.map(r=>'<li>'+esc(r)+'</li>').join('')+'</ul>':'')+
-      (p?`<div class="mp-plan-scope"><h4>Scope of work · revision ${p.version}</h4><p>${esc(p.scopeOfWork)}</p></div>`+facts([['Route',p.route==='internal'?'Internal · '+p.internalTeam:detail.vendor?.name||'Vendor record unavailable'],['Maximum per job (USD)',money(p.maximumCents)],['Charges',p.includesAllCharges?'Includes tax, callout, materials and contingency':'All-in total not established'],['Entry requirement',p.accessRequirement==='unit_entry'?'Unit entry required — not authorized':'No unit entry proposed'],['Bound authority rule','Version '+p.policyVersion],['Bound request','Version '+p.caseVersion]])+(detail.vendor?note(availability(detail.vendor)):'')+(d?'<div class="mp-decision"><strong>'+esc(d.decision==='approve'?'Approval recorded':'Rejection recorded')+'</strong><p>'+esc(A.fmt.dateTime(d.decidedAt))+' · '+esc(d.actorRole==='owner'?'Owner':'Manager')+(d.authorityCurrent?'':' · Approver authority no longer current')+'</p><p>'+esc(d.reason)+'</p></div>':''):note('Prepare a precise scope and all-in spending ceiling. This records a proposed plan; it does not contact a vendor.'))+
+      (p?`<div class="mp-plan-scope"><h4>Scope of work · revision ${p.version}</h4><p>${esc(p.scopeOfWork)}</p></div>`+facts([['Route',p.route==='internal'?'Internal · '+p.internalTeam:detail.vendor?.name||'Vendor record unavailable'],['Maximum per job (USD)',money(p.maximumCents)],['Charges',p.includesAllCharges?'Includes tax, callout, materials and contingency':'All-in total not established'],['Entry requirement',p.accessRequirement==='unit_entry'?'Unit entry required; see current permission above':'No unit entry proposed'],['Bound authority rule','Version '+p.policyVersion],['Bound request','Version '+p.caseVersion]])+(detail.vendor?note(availability(detail.vendor)):'')+(d?'<div class="mp-decision"><strong>'+esc(d.decision==='approve'?'Approval recorded':'Rejection recorded')+'</strong><p>'+esc(A.fmt.dateTime(d.decidedAt))+' · '+esc(d.actorRole==='owner'?'Owner':'Manager')+(d.authorityCurrent?'':' · Approver authority no longer current')+'</p><p>'+esc(d.reason)+'</p></div>':''):note('Prepare a precise scope and all-in spending ceiling. This records a proposed plan; it does not contact a vendor.'))+
       '<div class="mp-actions">'+btn('prepare',p?'Revise work plan':'Prepare work plan',true,!overview?.policy || a.readiness==='emergency_review')+(p&&!p.withdrawnAt?btn('withdraw','Withdraw plan'):'')+(detail.canDecide?btn('approve','Review approval',true)+btn('reject','Reject plan'):'')+(!overview?.policy && overview?.canPublishPolicy?btn('policy','Set authority rules'):'')+'</div>'+historyHtml()
   }
   function vendorHtml(v) {
@@ -184,7 +195,7 @@ function create(options) {
     host.innerHTML='<div class="mp-workspace"'+(loading?' aria-busy="true"':'')+'>'+(error?'<div class="mp-warning" role="alert">'+esc(error)+'</div>':'')+
       (!overview?'<p>'+(error?'Maintenance authority could not be loaded.':'Loading maintenance authority…')+'</p>'+(error?btn('refresh','Retry loading'): ''):mode==='case'?planHtml():policyHtml()+'<div class="mp-section-title"><div><span class="page-eyebrow">APPROVED DIRECTORY</span><h3>Vendors</h3></div><div class="mp-actions">'+(overview.canManageVendors?btn('add-vendor','Add vendor',true):'')+btn('refresh','Refresh')+'</div></div><div class="mp-filters">'+[['approved','Approved'],['suspended','Suspended'],['all','All vendors']].map(([v,l])=>`<button type="button" class="btn" data-mp-filter="${v}" aria-pressed="${v===vendorFilter}">${l}</button>`).join('')+'</div><p class="mp-small">'+vendors.length+' vendors shown · availability is reported, not a booking.</p><div class="mp-directory"><section><div class="mp-vendor-list">'+(vendors.length?vendors.map(v=>`<button type="button" class="mp-vendor-row" data-mp-vendor="${esc(v.id)}" aria-current="${v.id===selectedVendor}"><strong>${esc(v.name)}</strong><span>${esc(v.categories.map(c=>CATEGORIES[c]).join(', '))}</span><span>${esc(availability(v))}</span></button>`).join(''):'<p class="mp-empty">'+(loading?'Checking vendor records…':'No vendors in this result.')+'</p>')+'</div>'+ (vendorCursor?btn('more','Load more vendors'):'')+'</section><section class="mp-vendor-detail">'+vendorHtml(vendor)+'</section></div>')+'</div>'
     const list=host.querySelector('.mp-vendor-list'); if(list) list.scrollTop=previousTop
-    for(const button of host.querySelectorAll('button')) button.disabled=button.disabled || busy || Boolean(pending) || Boolean(dialog) || loading || (Boolean(error) && button.dataset.mp !== 'refresh') || detailLoading
+    for(const button of host.querySelectorAll('button')) button.disabled=button.disabled || busy || Boolean(pending) || Boolean(dialog) || loading || (Boolean(error) && button.dataset.mp !== 'refresh') || detailLoading || detailExpired && mode==='case' && !['refresh','history'].includes(button.dataset.mp)
     changed()
   }
   async function getOverview() {
@@ -202,7 +213,7 @@ function create(options) {
       if(savedMode==='case') {
         const b=await bounded(A.api.get(ENDPOINT+'?'+new URLSearchParams({resource:'plan',caseId:savedId}))), d=readDetail({...b.detail,safetyInstructions:b.safetyInstructions,safetyCallEmergencyServices:b.safetyCallEmergencyServices},savedId)
         if(!active()||generation!==turn) return
-        overview=o;detail=d;detailError=''
+        overview=o;detail=d;detailError='';detailExpired=false;armDetail()
       } else {
         const q=new URLSearchParams({resource:'vendors',status:savedFilter,limit:'25'});if(before){q.set('beforeCreatedAt',before.createdAt);q.set('beforeId',before.id)}
         const b=await bounded(A.api.get(ENDPOINT+'?'+q));if(!Array.isArray(b.vendors)||b.vendors.length>25)throw bad()
@@ -264,7 +275,7 @@ function create(options) {
     return '<div class="mp-review">'+warning+content+'<h4>Reason</h4><p class="mp-pre">'+esc(command.reason||d?.reason)+'</p>'+note('Recording this change does not dispatch, notify, pay anyone or grant entry permission.')+'</div>'
   }
   function open(kind,decision=null,recovery=null){
-    if(!(recovery?options.isActive()&&A.can('operate'):active())||dialog||busy||!overview||!recovery&&(pending||loading||error||options.canOpen?.()===false))return
+    if(!(recovery?options.isActive()&&A.can('operate'):active())||dialog||busy||!overview||!recovery&&(pending||loading||error||mode==='case'&&detailExpired||options.canOpen?.()===false))return
     if(!recovery&&(kind==='publish_policy'&&!overview.canPublishPolicy||kind==='save_vendor'&&!overview.canManageVendors||kind==='decide_plan'&&!detail?.canDecide||kind==='prepare_plan'&&(!detail?.policy||detail.assessment.readiness==='emergency_review')||kind==='withdraw_plan'&&(!detail?.plan||detail.plan.withdrawnAt)))return
     toast?.close?.();toast=null
     const original=copy(kind==='publish_policy'?overview.policy:kind==='save_vendor'?decision==='new'?null:vendor:detail),epoch=generation
@@ -305,9 +316,9 @@ function create(options) {
     if(!node)return
     const nextMode=context.mode,nextId=context.request?.id||null,nextVersion=context.request?.version||null,changedContext=mode!==nextMode||caseId!==nextId||caseVersion!==nextVersion
     if(host!==node){host=node;host.addEventListener('click',handle)}
-    if(changedContext){generation++;detailGeneration++;dialog?.close();mode=nextMode;caseId=nextId;caseVersion=nextVersion;detail=null;error='';loading=false;detailLoading=false;render();load()}else render()
+    if(changedContext){clearTimeout(detailTimer);detailTimer=null;detailExpired=false;generation++;detailGeneration++;dialog?.close();mode=nextMode;caseId=nextId;caseVersion=nextVersion;detail=null;error='';loading=false;detailLoading=false;render();load()}else render()
   }
-  function deactivate(clear=false){generation++;detailGeneration++;dialog?.close();host=null;mode='';caseId=null;caseVersion=null;detail=null;vendor=null;loading=false;detailLoading=false;if(clear){pending=null;overview=null;vendors=[];noticeHost=null;toast?.close?.()}}
+  function deactivate(clear=false){clearTimeout(detailTimer);detailTimer=null;detailExpired=false;generation++;detailGeneration++;dialog?.close();host=null;mode='';caseId=null;caseVersion=null;detail=null;vendor=null;loading=false;detailLoading=false;if(clear){pending=null;overview=null;vendors=[];noticeHost=null;toast?.close?.()}}
   return Object.freeze({attach,deactivate,locked,refresh:()=>load(),setNotice(node){if(noticeHost!==node){noticeHost=node;node?.addEventListener('click',handle)}renderNotice()},get pending(){return Boolean(pending)},get busy(){return busy},get open(){return Boolean(dialog)}})
 }
 A.maintenancePlans=Object.freeze({create,inbox:Object.freeze({readPage:readInboxPage,rowHtml:inboxRowHtml})})

@@ -9,6 +9,14 @@ import type { MfaConfiguration, MfaChallengeClaim, MfaFactor, VerifiedWebAuthn }
 import { validId, validVersion } from './validation.ts'
 import { validSessionId } from './session.ts'
 
+/** Cryptographic assertion inputs only; caller-specific authority stays in its own claim. */
+export interface AuthenticationAssertionClaim {
+  id: string; attemptId: string; responseDigest: string; challengeHash: string
+  userId: string; sessionId: string; credentialVersion: number; securityVersion: number
+  origin: string; rpId: string; userHandle: string; expiresAt: number
+  factor: MfaFactor
+}
+
 const brands = new WeakSet<object>()
 const TRANSPORTS = new Set(['usb', 'nfc', 'ble', 'internal', 'hybrid', 'smart-card'])
 const hash = (value: string) => createHash('sha256').update(value).digest('hex')
@@ -112,7 +120,7 @@ function validatedClaim(raw: MfaChallengeClaim): MfaChallengeClaim {
   else { check(claim.factor !== null); factor(claim.factor!) }
   return freeze(claim)
 }
-function validatedResponse(claim: MfaChallengeClaim, raw: unknown): RegistrationResponseJSON | AuthenticationResponseJSON {
+function validatedResponse(claim: MfaChallengeClaim | AuthenticationAssertionClaim, raw: unknown): RegistrationResponseJSON | AuthenticationResponseJSON {
   const { text, data } = jsonSnapshot(raw)
   check(timingSafeEqual(Buffer.from(hash(text), 'hex'), Buffer.from(claim.responseDigest, 'hex')))
   check(Object.keys(data).every(key => ['id', 'rawId', 'type', 'response', 'clientExtensionResults', 'authenticatorAttachment'].includes(key)))
@@ -125,7 +133,7 @@ function validatedResponse(claim: MfaChallengeClaim, raw: unknown): Registration
   const client = JSON.parse(clientText) as Record<string, unknown>
   check(isRecord(client) && (client.crossOrigin === undefined || client.crossOrigin === false) && client.topOrigin === undefined)
   base64(client.challenge, 128, 16)
-  if (claim.kind === 'registration') {
+  if ('kind' in claim && claim.kind === 'registration') {
     check(Object.keys(response).every(key => ['clientDataJSON', 'attestationObject', 'transports', 'authenticatorData', 'publicKeyAlgorithm', 'publicKey'].includes(key)))
     const attestation = decodeAttestationObject(new Uint8Array(base64(response.attestationObject, 24_576)))
     // Only the advertised unsigned format is accepted. Other attestation formats
@@ -142,6 +150,48 @@ function validatedResponse(claim: MfaChallengeClaim, raw: unknown): Registration
     if (response.userHandle !== undefined) { base64(response.userHandle, 64); check(response.userHandle === claim.userHandle) }
   }
   return data as unknown as RegistrationResponseJSON | AuthenticationResponseJSON
+}
+
+async function authenticate(claim: AuthenticationAssertionClaim, wire: AuthenticationResponseJSON) {
+  const current = claim.factor
+  const expectedChallenge = (challenge: string): boolean => {
+    try { base64(challenge, 128, 16); return hash(challenge) === claim.challengeHash } catch { return false }
+  }
+  const verified = await verifyAuthenticationResponse({ response: wire,
+    expectedChallenge, expectedOrigin: claim.origin, expectedRPID: claim.rpId, expectedType: 'webauthn.get', requireUserVerification: true,
+    credential: { id: current.credentialId, publicKey: new Uint8Array(keyBytes(current.publicKey)), counter: current.counter } })
+  const info = verified.authenticationInfo
+  check(verified.verified && info.userVerified && info.credentialID === current.credentialId && uint32(info.newCounter)
+    && (info.credentialDeviceType === 'multiDevice') === current.backupEligible)
+  return { newCounter: info.newCounter, backedUp: info.credentialBackedUp }
+}
+
+/**
+ * Shared real assertion verification. This result is deliberately not an MFA or
+ * consent capability. Each caller validates its complete authority context and
+ * uses its own private brand; persistence rechecks the stored claim before commit.
+ */
+export async function verifyAuthenticationAssertion<T extends AuthenticationAssertionClaim>(rawClaim: T, response: unknown): Promise<{
+  claim: Readonly<T>; newCounter: number; backedUp: boolean
+}> {
+  try {
+    const claim = jsonSnapshot(rawClaim).data as unknown as T
+    check(validId(claim.id) && validId(claim.attemptId) && /^[a-f0-9]{64}$/.test(claim.responseDigest)
+      && /^[a-f0-9]{64}$/.test(claim.challengeHash) && validId(claim.userId) && validSessionId(claim.sessionId)
+      && validVersion(claim.credentialVersion) && validVersion(claim.securityVersion) && finiteTime(claim.expiresAt)
+      && !('kind' in claim))
+    if (claim.expiresAt <= Date.now()) throw new MfaError('challenge_expired')
+    trustedLocation(claim.origin, claim.rpId); base64(claim.userHandle, 64)
+    check(claim.factor !== null); factor(claim.factor)
+    freeze(claim)
+    const wire = validatedResponse(claim, response) as AuthenticationResponseJSON
+    const result = await authenticate(claim, wire)
+    if (claim.expiresAt <= Date.now()) throw new MfaError('challenge_expired')
+    return freeze({ claim, ...result })
+  } catch (error) {
+    if (error instanceof MfaError) throw error
+    throw new MfaError('verification_failed')
+  }
 }
 
 export function assertVerifiedWebAuthn(value: unknown): asserts value is VerifiedWebAuthn {
@@ -195,14 +245,8 @@ export async function verifyWebAuthn(rawClaim: MfaChallengeClaim, response: unkn
         backupEligible: info.credentialDeviceType === 'multiDevice', backedUp: info.credentialBackedUp,
         transports: transports(info.credential.transports) } }
     } else {
-      const current = claim.factor!
-      const verified = await verifyAuthenticationResponse({ response: wire as AuthenticationResponseJSON,
-        expectedChallenge, expectedOrigin: claim.origin, expectedRPID: claim.rpId, expectedType: 'webauthn.get', requireUserVerification: true,
-        credential: { id: current.credentialId, publicKey: new Uint8Array(keyBytes(current.publicKey)), counter: current.counter } })
-      const info = verified.authenticationInfo
-      check(verified.verified && info.userVerified && info.credentialID === current.credentialId && uint32(info.newCounter)
-        && (info.credentialDeviceType === 'multiDevice') === current.backupEligible)
-      result = { kind: 'authentication', claim, newCounter: info.newCounter, backedUp: info.credentialBackedUp }
+      const verified = await authenticate({ ...claim, factor: claim.factor! }, wire as AuthenticationResponseJSON)
+      result = { kind: 'authentication', claim, ...verified }
     }
     if (claim.expiresAt <= Date.now()) throw new MfaError('challenge_expired')
     freeze(result); brands.add(result)

@@ -13,7 +13,7 @@ import { DatabaseConnection } from '../../src/database/connection.ts'
 import { PgAuthorizationRepository } from '../../src/database/authorization.ts'
 import { createAuthorizationService } from '../../src/auth/authorization.ts'
 
-for (const baselineSpec of [{ count: 8, next: '_organization_administration.sql' }, { count: 9, next: '_resident_services.sql' }, { count: 10, next: '_maintenance_planning.sql' }, { count: 11, next: '_session_audience.sql' }, { count: 12, next: '_resident_enrollment.sql' }]) {
+for (const baselineSpec of [{ count: 8, next: '_organization_administration.sql' }, { count: 9, next: '_resident_services.sql' }, { count: 10, next: '_maintenance_planning.sql' }, { count: 11, next: '_session_audience.sql' }, { count: 12, next: '_resident_enrollment.sql' }, { count: 13, next: '_resident_consent.sql' }]) {
 test(`verified ${baselineSpec.count}-migration hosted workspace upgrades without rotating credentials or repairing unsafe state`, async () => {
   const db = await createTestPostgres(), oldRoot = await mkdtemp(join(tmpdir(), 'atrium-team-upgrade-'))
   const sourceRoot = fileURLToPath(new URL('../../', import.meta.url)), secret = () => randomBytes(36).toString('base64url')
@@ -37,7 +37,7 @@ test(`verified ${baselineSpec.count}-migration hosted workspace upgrades without
     const original = await bootstrapHostedDemoDatabase({ ...input, root: oldRoot })
     assert.equal(original.migrations.length, baselineSpec.count)
     // Reconstruct the actual prior role set, without touching records or credentials.
-    const missingRoles = ['atrium_enrollment_executor', ...(baselineSpec.count === 8
+    const missingRoles = ['atrium_consent_executor', ...(baselineSpec.count < 13 ? ['atrium_enrollment_executor'] : []), ...(baselineSpec.count === 8
       ? ['atrium_organization_executor', 'atrium_resident_services_executor', 'atrium_maintenance_approval_reader']
       : baselineSpec.count === 9 ? ['atrium_resident_services_executor', 'atrium_maintenance_approval_reader']
       : baselineSpec.count === 10 ? ['atrium_maintenance_approval_reader'] : [])]

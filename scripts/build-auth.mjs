@@ -5,7 +5,7 @@ import { resolve } from 'node:path'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 export async function buildAuthClient() {
-  for (const [directory, name] of [['auth', 'mfa'], ['auth', 'organization'], ['residents', 'access'], ['residents', 'portal']]) {
+  for (const [directory, name] of [['auth', 'mfa'], ['auth', 'organization'], ['residents', 'access'], ['residents', 'portal'], ['residents', 'consent'], ['residents', 'consent-staff']]) {
     const result = await build({ absWorkingDir: root, entryPoints: [`src/${directory}/${name}-client.js`],
       bundle: true, write: false, platform: 'browser', format: 'iife', target: ['es2022'], minify: true,
       legalComments: 'inline' })

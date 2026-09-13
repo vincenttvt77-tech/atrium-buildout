@@ -11,6 +11,7 @@ import { parsePlanningCommand, parsePolicyDetails, parseVendorDetails, parsePlan
 import { evaluateMaintenancePlan } from '../maintenance/authority.ts'
 import { validateMaintenanceInboxQuery, projectMaintenanceInboxItem, canDecideMaintenancePlan, maintenanceInboxScanLimit } from '../maintenance/planning-inbox.ts'
 import type { MaintenanceInboxActor } from '../maintenance/planning-inbox.ts'
+import { readMaintenanceConsentGraph } from '../maintenance/planning-consent.ts'
 import { parseServiceCommand, validateServiceListQuery, serviceStates } from '../maintenance/validation.ts'
 import type { ServiceCase, ServiceCursor } from '../maintenance/model.ts'
 import { parseResidentDetails, recordId, isoTimestamp } from '../residents/validation.ts'
@@ -41,12 +42,15 @@ const dataQuery = `SELECT atrium.service_case_json(c)||${currentCase} AS request
  CASE WHEN v.id IS NULL THEN NULL ELSE atrium.maintenance_vendor_json(v) END AS vendor,
  CASE WHEN d.id IS NULL THEN NULL ELSE jsonb_build_object('id',d.id,'planId',d.plan_id,'planVersion',d.plan_version,
   'decision',d.decision,'actorUserId',d.actor_user_id,'actorRole',d.actor_role,'reason',d.reason,'decidedAt',atrium.service_iso(d.decided_at))
-  ||atrium.maintenance_decision_authority(d.id) END AS decision,
+ ||atrium.maintenance_decision_authority(d.id) END AS decision,
+ atrium.service_iso(rs.starts_on::timestamp AT TIME ZONE prop.time_zone) AS "residentStartsAt",
+ atrium.service_iso(rs.ends_on::timestamp AT TIME ZONE prop.time_zone) AS "residentEndsAt",
  atrium.maintenance_actor_role() AS role,atrium.can_access_property($1,$2,'configure') AS configure,
  atrium.service_iso(clock_timestamp()) AS now
  FROM atrium.service_cases c JOIN atrium.properties prop ON prop.organization_id=c.organization_id AND prop.id=c.property_id
  JOIN atrium.property_configurations cfg ON cfg.organization_id=prop.organization_id AND cfg.property_id=prop.id AND cfg.version=prop.published_configuration_version AND cfg.status='published'
  LEFT JOIN atrium.property_residents r ON r.organization_id=c.organization_id AND r.property_id=c.property_id AND r.id=c.resident_id
+ LEFT JOIN atrium.resident_sources rs ON rs.organization_id=r.organization_id AND rs.property_id=r.property_id AND rs.resident_id=r.id AND rs.id=r.source_id
  LEFT JOIN LATERAL(SELECT * FROM atrium.maintenance_policies WHERE organization_id=c.organization_id AND property_id=c.property_id ORDER BY version DESC LIMIT 1) pol ON true
  LEFT JOIN LATERAL(SELECT * FROM atrium.maintenance_plans WHERE organization_id=c.organization_id AND property_id=c.property_id AND case_id=c.id ORDER BY version DESC LIMIT 1) pl ON true
  LEFT JOIN LATERAL(SELECT * FROM atrium.maintenance_vendors WHERE organization_id=c.organization_id AND property_id=c.property_id AND id=pl.vendor_id ORDER BY version DESC LIMIT 1) v ON true
@@ -138,6 +142,16 @@ export class PostgresMaintenancePlanningRepository implements MaintenancePlannin
     }
   }
   private scoped(row: Row): void { if(row.organizationId!==this.scope.organizationId || row.propertyId!==this.scope.propertyId) bad() }
+  private async consentGraph(client: PoolClient, caseIds: string[]) {
+    if (!caseIds.length) {
+      const row = (await client.query('SELECT atrium.service_iso(clock_timestamp()) AS now')).rows[0]
+      return { items: readMaintenanceConsentGraph([], [], this.configurationVersion), evaluatedAt: date(row?.now) }
+    }
+    const row = (await client.query(`WITH graph AS MATERIALIZED
+      (SELECT atrium.consent_planning($1::uuid[],$2::bigint) AS value)
+      SELECT value,atrium.service_iso(clock_timestamp()) AS now FROM graph`, [caseIds, this.configurationVersion])).rows[0]
+    return { items: readMaintenanceConsentGraph(row?.value, caseIds, this.configurationVersion), evaluatedAt: date(row?.now) }
+  }
   private policy(value: unknown): MaintenancePolicy | null {
     if(value===null)return null
     const r=obj(value);this.scoped(r)
@@ -235,26 +249,31 @@ export class PostgresMaintenancePlanningRepository implements MaintenancePlannin
       const first=await readGraph(parameters)
       if(!Array.isArray(first.candidates) || first.candidates.length>maintenanceInboxScanLimit+1)bad()
       this.inboxActor(obj(first.metadata))
-      const candidateIds=first.candidates.map((candidate:unknown)=>{
+      const candidateIds:string[]=first.candidates.map((candidate:unknown)=>{
         const key=obj(obj(candidate).request).id
         if(!uuid(key))bad()
         return key
       })
       if(new Set(candidateIds).size!==candidateIds.length)bad()
+      const firstConsent = await this.consentGraph(client, candidateIds)
       // Validate all fetched rows, including nonmatches and lookahead. Otherwise a
       // concurrent change could turn an excluded row into a match behind the cursor.
       const final=await readGraph([...parameters.slice(0,6),candidateIds])
+      const finalConsent = await this.consentGraph(client, candidateIds)
       const metadata=obj(final.metadata),actor=this.inboxActor(metadata)
       if(JSON.stringify(first.metadata)!==JSON.stringify(final.metadata) || JSON.stringify(first.candidates)!==JSON.stringify(final.candidates))bad('planning_version_conflict')
+      if(JSON.stringify(candidateIds.map(key=>firstConsent.items.get(key)))!==JSON.stringify(candidateIds.map(key=>finalConsent.items.get(key))))bad('planning_version_conflict')
       const policy=this.policy(metadata.policy)
-      const evaluatedAt=date(final.now),now=new Date(evaluatedAt),items:MaintenanceInboxItem[]=[]
+      const evaluatedAt=finalConsent.evaluatedAt,startedAt=date(first.now),now=new Date(evaluatedAt),items:MaintenanceInboxItem[]=[]
       let refreshAt:string|null=null
       const boundary=(value:unknown)=>{
         if(value===null || value===undefined)return
         const stamp=date(value)
+        if(stamp>startedAt && stamp<=evaluatedAt)bad('planning_version_conflict')
         if(stamp>evaluatedAt && (refreshAt===null || stamp<refreshAt))refreshAt=stamp
       }
       boundary(policy?.observedAt);boundary(policy?.validUntil)
+      for(const consent of finalConsent.items.values())boundary(consent.refreshAt)
       for(const value of final.candidates as unknown[]) {
         const row=obj(value)
         if(row.resident!==null)for(const key of ['validUntil','startsAt','endsAt'])boundary(obj(row.resident)[key])
@@ -265,8 +284,9 @@ export class PostgresMaintenancePlanningRepository implements MaintenancePlannin
         if(scannedCount===maintenanceInboxScanLimit || items.length===query.limit)break
         const row=obj(value),request=this.request(row.request),resident=this.inboxResident(row.resident)
         if(request.residentId!==resident.residentId)bad()
+        const consent=finalConsent.items.get(request.id)??bad()
         const item=projectMaintenanceInboxItem({request,resident,policy,plan:this.plan(row.plan),vendor:this.vendor(row.vendor),
-          decision:this.decision(row.decision),configurationVersion:this.configurationVersion},actor,now)
+          decision:this.decision(row.decision),configurationVersion:this.configurationVersion,consent},actor,now)
         scannedCount++;last={createdAt:request.createdAt,id:request.id}
         if(query.filter==='all' || item.group===query.filter)items.push(item)
       }
@@ -320,17 +340,30 @@ export class PostgresMaintenancePlanningRepository implements MaintenancePlannin
       const parameters=[this.scope.organizationId,this.scope.propertyId,uuid(caseId)?caseId:null]
       const first=(await c.query(dataQuery,parameters)).rows[0]
       if(!first)return null
+      const firstConsent=await this.consentGraph(c,[caseId])
       const request=this.request(first.request),resident=this.resident(first.resident),policy=this.policy(first.policy),plan=this.plan(first.plan),vendor=this.vendor(first.vendor),decision=this.decision(first.decision)
       const history=await this.history(c,caseId,{limit:26}),shown=history.slice(0,25),last=shown.at(-1)
       const final=(await c.query(dataQuery,parameters)).rows[0]
+      const finalConsent=await this.consentGraph(c,[caseId])
       const stable=(r:Row)=>JSON.stringify({...r,now:undefined})
       if(!final || stable(first)!==stable(final))bad('planning_version_conflict')
-      const assessment=evaluateMaintenancePlan({request,resident,policy,plan,vendor,decision,configurationVersion:this.configurationVersion},new Date(date(final.now)))
+      const consent=finalConsent.items.get(caseId)??bad()
+      if(JSON.stringify(firstConsent.items.get(caseId))!==JSON.stringify(consent))bad('planning_version_conflict')
+      const evaluatedAt=finalConsent.evaluatedAt,startedAt=date(first.now)
+      const boundaries=[policy?.observedAt,policy?.validUntil,vendor?.observedAt,vendor?.validUntil,
+        vendor?.availabilityObservedAt,vendor?.availabilityValidUntil,first.resident?.source?.validUntil,
+        first.residentStartsAt,first.residentEndsAt,consent?.refreshAt]
+        .filter((value):value is string=>value!==undefined && value!==null).map(date)
+      if(boundaries.some(value=>value>startedAt && value<=evaluatedAt))bad('planning_version_conflict')
+      const refreshAt=boundaries.filter(value=>value>evaluatedAt).sort()[0]??null
+      const input={request,resident,policy,plan,vendor,decision,configurationVersion:this.configurationVersion,consent}
+      const assessment=evaluateMaintenancePlan(input,new Date(evaluatedAt))
       if(this.scope.actor.kind!=='user')return bad()
       if(!['owner','admin','staff'].includes(final.role) || typeof final.configure!=='boolean')bad()
-      const canDecide=canDecideMaintenancePlan({request,resident,policy,plan,vendor,decision,configurationVersion:this.configurationVersion},assessment,
+      const canDecide=canDecideMaintenancePlan(input,assessment,
         {userId:this.scope.actor.userId,role:final.role,configure:final.configure})
-      return {request,resident,policy,plan,vendor,decision,assessment,canDecide,history:shown,nextHistoryCursor:history.length>25 && last?{id:last.id,createdAt:last.createdAt}:null}
+      return {request,resident,policy,plan,vendor,decision,assessment,canDecide,history:shown,
+        nextHistoryCursor:history.length>25 && last?{id:last.id,createdAt:last.createdAt}:null,evaluatedAt,refreshAt}
     })
   }
   async execute(input: MaintenancePlanningCommand,proofId?:string): Promise<MaintenancePlanningReceipt> {

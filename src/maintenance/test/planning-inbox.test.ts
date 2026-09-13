@@ -89,7 +89,26 @@ test('all-in financial authorization remains waiting for actual fulfillment; unk
   f.plan!.maximumCents = 0
   assert.equal(row(f).maximumCents, 0); assert.equal(row(f).assessment.spendingAuthorized, true)
   f.plan!.accessRequirement = 'unit_entry'
-  assert.equal(row(f).nextStep.kind, 'verify_resident'); assert.equal(row(f).nextStep.availableInPortal, false)
+  assert.equal(row(f).nextStep.kind, 'verify_resident'); assert.equal(row(f).nextStep.availableInPortal, true)
+  assert.equal(row(f).nextStep.responsible, 'property_team')
+  assert.equal(row(f).assessment.entryPermissionRequired, true)
+  assert.equal(row(f).assessment.residentApprovalRequired, false)
+  assert.equal(row(f).group, 'attention', 'Missing consent setup needs a staff action before residents can decide')
+})
+test('only current published requests awaiting actual resident decisions belong in the waiting group', () => {
+  const f = fixture(); f.plan!.accessRequirement = 'unit_entry'
+  const materialDigest = 'a'.repeat(64), refreshAt = '2026-09-13T13:00:00.000Z'
+  f.consent = { caseId: f.request.id, caseVersion: f.request.version, planId: f.plan!.id, planVersion: f.plan!.version,
+    configurationVersion: f.configurationVersion, materialDigest, revision: 'b'.repeat(64), refreshAt,
+    purposes: [{ purpose: 'work', requestId: null, requestVersion: null, materialDigest: null, required: false, effective: false, holds: ['not_required'], refreshAt: null },
+      { purpose: 'entry', requestId: 'entry-one', requestVersion: 1, materialDigest, required: true, effective: false, holds: ['awaiting_decisions'], refreshAt }] }
+  assert.equal(row(f).group, 'waiting'); assert.equal(row(f).nextStep.responsible, 'verified_resident')
+  for (const hold of ['unconfigured','roster_changed','authority_changed','missing_required_recipient','declined','revoked','response_expired'] as const) {
+    f.consent.purposes[1].holds = [hold]
+    assert.equal(row(f).group, 'attention', hold); assert.equal(row(f).nextStep.responsible, 'property_team')
+  }
+  f.consent.purposes[1].holds = ['awaiting_decisions']; f.consent.purposes[1].requestId = null
+  assert.equal(row(f).group, 'attention')
 })
 test('minimal inbox rows never project reporter, access, resident or full plan prose', () => {
   const f = fixture(); f.request.reporterName = 'PRIVATE_REPORTER'; f.request.reporterPhone = '+15555550101'

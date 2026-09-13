@@ -3,6 +3,8 @@ import type { ResidentContext } from '../residents/model.ts'
 import { detectEmergency } from '../escalation/emergency.ts'
 import { MaintenancePlanningError } from './planning-model.ts'
 import type { MaintenanceAssessment, MaintenancePolicy, MaintenancePlan, MaintenanceVendor, MaintenanceDecision, MaintenanceReadiness, MaintenanceTier } from './planning-model.ts'
+import { projectPlanConsent } from './planning-consent.ts'
+import type { MaintenanceConsentEvidence } from './planning-consent.ts'
 
 export interface MaintenanceAuthorityInput {
   request: ServiceCase
@@ -12,6 +14,7 @@ export interface MaintenanceAuthorityInput {
   vendor: MaintenanceVendor | null
   decision: MaintenanceDecision | null
   configurationVersion: number
+  consent?: MaintenanceConsentEvidence
 }
 /** A conservative supplement to explicit human classification, not legal analysis. */
 export function hasRestrictedMaintenanceText(text: string): boolean {
@@ -27,7 +30,8 @@ export function evaluateMaintenancePlan(input: MaintenanceAuthorityInput, now: D
   const { request, resident, policy, plan, vendor, decision } = input
   const base: MaintenanceAssessment = { tier: null, readiness: 'needs_plan', reasons: [], requiredApprover: null,
     spendingAuthorized: false, residentApprovalRequired: policy?.requireResidentApproval ?? true,
-    residentApprovalVerified: false, entryAuthorized: false, dispatchStatus: 'not_dispatched', notificationStatus: 'not_sent' }
+    residentApprovalVerified: false, entryPermissionRequired: plan?.accessRequirement === 'unit_entry', entryAuthorized: false,
+    dispatchStatus: 'not_dispatched', notificationStatus: 'not_sent' }
   const hold = (readiness: MaintenanceReadiness, reason: string, tier: MaintenanceTier | null = null): MaintenanceAssessment =>
     ({ ...base, readiness, reasons: [reason], tier })
   const words = [request.summary, request.description, request.accessNotes, plan?.scopeOfWork, plan?.reason, decision?.reason].filter(Boolean).join('\n')
@@ -93,9 +97,18 @@ export function evaluateMaintenancePlan(input: MaintenanceAuthorityInput, now: D
   }
   base.spendingAuthorized = true
   // Resident approval and unit entry are independent of a manager's spending decision.
-  base.residentApprovalRequired = policy.requireResidentApproval || plan.accessRequirement === 'unit_entry'
-  if (base.residentApprovalRequired) return { ...base, readiness: 'awaiting_resident',
-    reasons: ['The spending decision is recorded, but verified resident approval or unit-entry authority is still required.'] }
+  const consent = projectPlanConsent({ caseId: request.id, caseVersion: request.version, planId: plan.id, planVersion: plan.version,
+    configurationVersion: input.configurationVersion, workRequired: policy.requireResidentApproval,
+    entryRequired: plan.accessRequirement === 'unit_entry' }, input.consent, now)
+  base.residentApprovalRequired = consent.residentApprovalRequired
+  base.residentApprovalVerified = consent.residentApprovalVerified
+  base.entryPermissionRequired = consent.entryPermissionRequired
+  base.entryAuthorized = consent.entryAuthorized
+  if (consent.needsReview) return { ...base, readiness: 'awaiting_resident', reasons: [
+    ...(base.residentApprovalRequired && !base.residentApprovalVerified ? ['Verified work approval is still required from every required resident.'] : []),
+    ...(base.entryPermissionRequired && !base.entryAuthorized ? ['Permission for the current apartment-entry window is still required from every required resident.'] : []),
+    'Review the current resident authority and exact work or entry terms before arranging this job.',
+  ] }
   if (plan.route === 'vendor' && (!vendor || vendor.availability !== 'available'
     || !current(vendor.availabilityObservedAt, vendor.availabilityValidUntil, time))) {
     return { ...base, readiness: 'awaiting_vendor', reasons: ['The spending decision is recorded. Confirm current vendor availability before arranging work.'] }

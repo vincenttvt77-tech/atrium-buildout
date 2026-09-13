@@ -70,8 +70,11 @@ must match even for a person with staff memberships. Resident account authentica
 alone grants no property/residency or consent authority. The first-party resident portal
 uses separately approved recipient checks, scoped one-use invitations and atomic
 account bindings. It exposes only the signed-in resident’s own connection state.
-Activation grants no maintenance consent or entry permission. Apply both additive
-audience and enrollment migrations before this code uses a PostgreSQL database;
+Activation grants no maintenance consent or entry permission. Separate resident
+decision pages use reviewed household/purpose authority and a passkey assertion
+bound to the exact work or entry request. Staff cannot submit these decisions as a
+resident. Apply the additive audience, enrollment and consent migrations in order
+before the matching code uses a PostgreSQL database;
 existing staff cookies remain valid. See
 [resident authority boundaries](docs/adr/0013-resident-authority-consent.md).
 

@@ -1,3 +1,4 @@
+import { consentTables } from '../helpers/consent-tables.mjs'
 import { before, beforeEach, after, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { randomBytes, randomUUID } from 'node:crypto'
@@ -17,7 +18,7 @@ before(async()=>{
  passwordHash=await hashPassword('synthetic-resident-chosen-password');replacementHash=await hashPassword('synthetic-rotated-resident-password')
 },{timeout:120_000})
 beforeEach(async()=>{
- await f.db.admin.query(`TRUNCATE ${tables.map(t=>`atrium.${t}`).join(',')}`)
+ await f.db.admin.query(`TRUNCATE ${[...consentTables,...tables].map(t=>`atrium.${t}`).join(',')}`)
  await f.db.admin.query("UPDATE atrium.memberships SET status='active'")
  await f.publish(f.residents['property-a1'][0])
 })

@@ -116,7 +116,8 @@ export default async function handler(req: any, res: any) {
       const kinds = [...new Set([...detail.request.emergencyKinds, ...(detail.plan?.emergencyKinds ?? [])])]
       const lifeKinds = ['gas', 'smoke_or_fire', 'carbon_monoxide', 'injury', 'intruder']
       await send({ detail, safetyInstructions: kinds.map(kind => safetyInstruction({ kind, matched: '', callEmergencyServices: lifeKinds.includes(kind) })),
-        safetyCallEmergencyServices: kinds.some(kind => lifeKinds.includes(kind)) }); return
+        safetyCallEmergencyServices: kinds.some(kind => lifeKinds.includes(kind)) },
+        detail.refreshAt === null ? undefined : Date.parse(detail.refreshAt)); return
     }
     if (Object.keys(req.query ?? {}).length) return invalid()
     if (!isSameOriginJsonRequest(headers) || headers.origin !== runtime.authenticationOrigin

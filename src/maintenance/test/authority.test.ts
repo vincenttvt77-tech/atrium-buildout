@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { evaluateMaintenancePlan } from '../authority.ts'
 import type { MaintenanceAuthorityInput } from '../authority.ts'
+import type { MaintenanceConsentEvidence } from '../planning-consent.ts'
 
 const now = new Date('2026-09-13T12:00:00.000Z')
 function fixture(): MaintenanceAuthorityInput {
@@ -32,6 +33,29 @@ function approval(input: MaintenanceAuthorityInput, role: 'owner' | 'admin' = 'a
     actorUserId: 'approver-one', actorRole: role, currentRole: role, reason: 'Reviewed the exact scope and complete ceiling',
     decidedAt: now.toISOString(), authorityCurrent: true }
 }
+function residentPermission(input: MaintenanceAuthorityInput): MaintenanceConsentEvidence {
+  const materialDigest = 'a'.repeat(64), refreshAt = '2026-09-13T13:00:00.000Z'
+  return { caseId: input.request.id, caseVersion: input.request.version, planId: input.plan!.id, planVersion: input.plan!.version,
+    configurationVersion: input.configurationVersion, materialDigest, revision: 'b'.repeat(64), refreshAt,
+    purposes: [{ purpose: 'work', requestId: 'work-one', requestVersion: 1, materialDigest, required: true, effective: true, holds: [], refreshAt },
+      { purpose: 'entry', requestId: 'entry-one', requestVersion: 1, materialDigest, required: true, effective: true, holds: [], refreshAt }] }
+}
+test('current exact resident permissions complete the planning review without claiming dispatch or caller identity', () => {
+  const f = fixture(); f.plan!.accessRequirement = 'unit_entry'; f.policy!.requireResidentApproval = true; f.consent = residentPermission(f)
+  const result = evaluateMaintenancePlan(f, now)
+  assert.equal(result.readiness, 'authorized_plan'); assert.equal(result.residentApprovalVerified, true); assert.equal(result.entryAuthorized, true)
+  assert.equal(result.dispatchStatus, 'not_dispatched'); assert.equal(result.notificationStatus, 'not_sent')
+  assert.equal(f.request.callerIdentityVerified, false); assert.equal(f.resident.entryAuthorized, false)
+})
+test('resident consent never supplies missing financial approval or clears an emergency hold', () => {
+  const f = fixture(); f.plan!.accessRequirement = 'unit_entry'; f.plan!.maximumCents = 75000; f.consent = residentPermission(f)
+  assert.equal(evaluateMaintenancePlan(f, now).readiness, 'awaiting_owner')
+  approval(f, 'owner'); assert.equal(evaluateMaintenancePlan(f, now).readiness, 'authorized_plan')
+  f.decision!.authorityCurrent = false
+  assert.equal(evaluateMaintenancePlan(f, now).readiness, 'stale_plan')
+  f.request.priority = 'emergency'
+  assert.equal(evaluateMaintenancePlan(f, now).readiness, 'emergency_review')
+})
 test('routine authority includes the exact ceiling and never claims execution or entry', () => {
   const f = fixture(), at = evaluateMaintenancePlan(f, now)
   assert.equal(at.tier, 'automatic'); assert.equal(at.readiness, 'authorized_plan'); assert.equal(at.spendingAuthorized, true)

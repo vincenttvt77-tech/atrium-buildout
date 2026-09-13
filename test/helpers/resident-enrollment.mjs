@@ -9,7 +9,7 @@ import { defaultSettings } from '../../src/calendar/settings.ts'
 import { verifyOrganizationSession } from './organization-session.mjs'
 
 /** Disposable native database and actual HTTP handlers; all values and passkeys are synthetic. */
-export async function createEnrollmentFixture() {
+export async function createEnrollmentFixture({ additionalRoutes = [] } = {}) {
   const previous = { ...process.env }, originalFetch = globalThis.fetch, errors = [], remoteRequests = []
   for (const key of ['ATRIUM_SIMULATION','ATRIUM_DATABASE_URL','ATRIUM_AUTH_DATABASE_URL','OPS_ACCOUNTS_JSON',
     'OPS_DASHBOARD_PASSCODE','DASHBOARD_TOKEN','VAPI_API_KEY','VAPI_PRIVATE_KEY','VAPI_ASSISTANT_ID','VERCEL']) delete process.env[key]
@@ -17,7 +17,9 @@ export async function createEnrollmentFixture() {
   let db, server, runtime, origin
   const secret = randomBytes(40).toString('base64url'), actors = {}, residents = {}
   try {
-    const routes = new Map(await Promise.all(['dashboard','resident','resident-access','mfa','resident-services','properties']
+    const permittedAdditionalRoutes = ['resident-consent', 'maintenance-consent', 'maintenance-plans']
+    assert.ok(additionalRoutes.every(name => permittedAdditionalRoutes.includes(name)))
+    const routes = new Map(await Promise.all([...new Set(['dashboard','resident','resident-access','mfa','resident-services','properties', ...additionalRoutes])]
       .map(async name => [`/api/${name}`, (await import(`../../api/${name}.ts`)).default])))
     db = await createFoundationTestDatabase()
     const { password } = await seedFoundationTestDatabase(db.admin)

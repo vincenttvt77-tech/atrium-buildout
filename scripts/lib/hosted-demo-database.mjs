@@ -13,7 +13,7 @@ import { defaultSettings, validateSettings } from '../../src/calendar/settings.t
 export const HOSTED_DEMO = Object.freeze({ organizationId: 'org-demo-larkin', propertyId: 'prop-demo',
   userId: 'user-demo-larkin', membershipId: 'member-demo-larkin', name: 'The Larkin · Demo' })
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
-const EXECUTORS = ['atrium_account_executor', 'atrium_login_executor', 'atrium_session_executor', 'atrium_mfa_executor', 'atrium_organization_executor', 'atrium_resident_services_executor', 'atrium_maintenance_approval_reader', 'atrium_enrollment_executor']
+const EXECUTORS = ['atrium_account_executor', 'atrium_login_executor', 'atrium_session_executor', 'atrium_mfa_executor', 'atrium_organization_executor', 'atrium_resident_services_executor', 'atrium_maintenance_approval_reader', 'atrium_enrollment_executor', 'atrium_consent_executor']
 const RUNTIME_ROLES = ['atrium_app', 'atrium_authenticator']
 const ROLES = ['atrium_admin', ...EXECUTORS, ...RUNTIME_ROLES]
 const LOCK = 'atrium-hosted-demo-bootstrap-v1'
@@ -136,6 +136,7 @@ async function prepareRoles(client, manifest, secrets, directory) {
         ['atrium_resident_services_executor', '%resident_services%'],
         ['atrium_maintenance_approval_reader', '%maintenance_planning%'],
         ['atrium_enrollment_executor', '%resident_enrollment%'],
+        ['atrium_consent_executor', '%resident_consent%'],
       ]
       const missing = []
       for (const [role, migration] of additions) {

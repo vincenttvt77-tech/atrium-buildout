@@ -1,3 +1,4 @@
+import { consentTables } from '../helpers/consent-tables.mjs'
 import { before, beforeEach, after, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { randomBytes, randomUUID } from 'node:crypto'
@@ -18,7 +19,7 @@ before(async () => {
  passwordHash = await hashPassword('synthetic-resident-chosen-password')
 }, {timeout:120_000})
 beforeEach(async () => {
- await f.db.admin.query(`TRUNCATE ${tables.map(t=>`atrium.${t}`).join(',')}`)
+ await f.db.admin.query(`TRUNCATE ${[...consentTables,...tables].map(t=>`atrium.${t}`).join(',')}`)
  await f.publish(f.residents['property-a1'][0])
 })
 after(async () => { await f?.close() })
@@ -92,7 +93,7 @@ test('resident source revision invalidates existing binding dynamically without 
  assert.equal(b.state,'context_changed');assert.equal(b.version,1);assert.equal(b.id,result.bindingId)
 })
 test('staff state and receipts remain scoped, missing policy is disabled, and raw command privileges are finite',async()=>{
- await f.db.admin.query(`TRUNCATE ${tables.map(t=>`atrium.${t}`).join(',')}`)
+ await f.db.admin.query(`TRUNCATE ${[...consentTables,...tables].map(t=>`atrium.${t}`).join(',')}`)
  assert.equal((await repository.staffState(scope,1,f.residents['property-a1'][0])).policy,null)
  await assert.rejects(repository.staffState(scope,1,f.residents['property-b1'][0]),{code:'enrollment_changed'})
  for(const connection of [f.db.app,f.db.auth])for(const table of ['resident_account_bindings','resident_enrollment_attempts','resident_enrollment_budgets']) {
