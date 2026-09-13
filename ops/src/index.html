@@ -22,6 +22,7 @@
 <!-- @include calls.css -->
 <!-- @include units.css -->
 <!-- @include workflows.css -->
+<!-- @include services.css -->
 <!-- @include polish.css -->
 </head>
 <body>
@@ -43,6 +44,7 @@
         <li><a class="nav-item" href="#/leads" data-view="leads"><span class="nav-icon" data-icon="leads"></span><span class="nav-label"><span>Leads</span><small>People &amp; follow-ups</small></span><span class="nav-badge" data-badge="leads"></span></a></li>
         <li><a class="nav-item" href="#/units" data-view="units"><span class="nav-icon" data-icon="units"></span><span class="nav-label"><span>Units</span><small>Apartments &amp; tour briefs</small></span><span class="nav-badge" data-badge="units"></span></a></li>
         <li><a class="nav-item" href="#/calendar" data-view="calendar"><span class="nav-icon" data-icon="calendar"></span><span class="nav-label"><span>Calendar</span><small>Tours &amp; availability</small></span><span class="nav-badge" data-badge="calendar"></span></a></li>
+        <li data-service-only hidden><a class="nav-item" href="#/services" data-view="services"><span class="nav-icon" data-icon="home"></span><span class="nav-label"><span>Service</span><small>Residents &amp; requests</small></span></a></li>
         <li data-postgres-only hidden><a class="nav-item" href="#/workflows" data-view="workflows" aria-label="Work queue"><span class="nav-icon" data-icon="clock"></span><span class="nav-label"><span>Work</span><small>Queue &amp; recovery</small></span></a></li>
         <li><a class="nav-item" href="#/status" data-view="status"><span class="nav-icon" data-icon="status"></span><span class="nav-label"><span>Status</span><small>Connections &amp; access</small></span><span class="nav-badge" data-badge="status"></span></a></li>
       </ul>
@@ -60,6 +62,7 @@
     <section class="view" data-view="leads" hidden></section>
     <section class="view" data-view="units" hidden></section>
     <section class="view" data-view="calendar" hidden></section>
+    <section class="view" data-view="services" hidden></section>
     <section class="view" data-view="workflows" hidden></section>
     <section class="view" data-view="status" hidden></section>
   </main>
@@ -76,5 +79,6 @@
 <!-- @include leads.js -->
 <!-- @include units.js -->
 <!-- @include workflows.js -->
+<!-- @include services.js -->
 </body>
 </html>

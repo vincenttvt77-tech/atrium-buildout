@@ -65,6 +65,7 @@ current membership, organization/property status and explicit grants per operati
 | `GET/POST /api/account` | Personal password change and active-session list/revocation. Requires a current registered user session; mutations require same-origin JSON and a signed user/session-bound form token. Independent of property access; absent in legacy mode. |
 | `GET/POST /api/mfa` | Own passkey setup, verification, factor management and recovery. Exact configured origin, registered-session binding and CSRF checks on POST. Finite commands only; absent in legacy mode. |
 | `GET/POST /api/organizations` | Scoped existing-member directory and full access replacement; fresh organization-administration MFA, org/action/session-bound form tokens and atomic versioned receipts. Independent of property publication; absent in legacy mode. |
+| `GET/POST /api/resident-services` | Staff-only property resident records, maintenance intake, notes, triage and paginated history; configure-only source changes. Property/configuration/session-bound forms, atomic receipts and current context checks. No dispatch or caller verification; absent in legacy mode. |
 | `GET/POST /api/workflows` | Property-scoped action queue; read permission for bounded listing, configure permission and same-origin JSON for recovery. Required expected row revision is checked under lock; no action creation, connector execution or legacy fallback. |
 | `GET /api/properties` | Authenticated, unscoped catalogue of properties this user can read. It exposes safe labels, role/permissions and navigation links, not property inventories or credentials. |
 | `GET /api/leads`, `/api/calendar`, `/api/vapi` | Require the user session and all three explicit property headers below; permission is `read`. |
@@ -247,13 +248,17 @@ separately by the deployment secret store. There are no database passwords in SQ
 | `atrium_login_executor` | NOLOGIN owner of `atrium.reserve_login_attempt(text,text)`. Can maintain only the private forced-RLS login bucket table; cannot read or change identities, credentials or property records. Runtime logins cannot inherit or assume this role. |
 | `atrium_session_executor` | NOLOGIN owner of four finite session commands and the current-session transaction fence. Own-user registry changes and append-only lifecycle audit under forced RLS; user row locking cannot change identity. No credential or property access. Runtime logins cannot inherit or assume this role. |
 | `atrium_mfa_executor` | NOLOGIN owner of finite passkey commands. Self-only factor/challenge/proof/recovery writes under forced RLS, plus security audit. Does not receive raw credential writes or property data access. Runtime roles cannot inherit or assume it. |
-| `atrium_app` | Property repositories only. Scoped configuration reads and operational document/calendar writes, plus scoped audit append/read. Cannot read password hashes, change memberships/configuration/channel bindings, truncate tables, or modify audit history. |
+| `atrium_organization_executor` | NOLOGIN owner of scoped organization directory and full existing-member access commands. Current administration proof, last-owner protection and atomic command/audit history; no credential writes. |
+| `atrium_resident_services_executor` | NOLOGIN owner of one finite resident/service mutation command. Staff-only property records, immutable source/event/receipt history and versioned triage under forced RLS; no caller identity, entry or dispatch authority. |
+| `atrium_app` | Scoped property repositories plus finite existing-member administration commands. Configuration reads, operational document/calendar writes and scoped audit append/read; service writes go through their finite command. Cannot read password hashes, directly write membership/configuration/channel-binding tables, truncate tables, or modify audit history. |
 
-All seven must be `NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`.
+All nine must be `NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`.
 Provision `atrium_account_executor NOLOGIN` before the account-security migration
 and `atrium_login_executor NOLOGIN` before the login-protection migration. Provision
 `atrium_session_executor NOLOGIN` before the user-sessions migration and
-`atrium_mfa_executor NOLOGIN` before the WebAuthn migration. Grant
+`atrium_mfa_executor NOLOGIN` before the WebAuthn migration. Provision
+`atrium_organization_executor NOLOGIN` and `atrium_resident_services_executor NOLOGIN`
+before their respective additive migrations. Grant
 these executor roles only to `atrium_admin` so migrations can transfer function
 ownership; do not grant them to either runtime login. The migration grants the
 authenticator explicit execution of the login reservation while denying execution
@@ -346,6 +351,9 @@ work and accepted background workflows are not canceled by browser logout.
 | `operational_documents` | `(organization_id, property_id, key)`, JSON value and revision; adapts the existing document store. |
 | `calendars` | One row per organization/property, JSON state and revision; adapts the existing atomic calendar. |
 | `audit_events` | Scoped, append-only for runtime roles, with operation/key, exact actor, request and optional configuration version. No transcript/contact/body payload column. |
+| `organization_people`, `property_residents` | Immutable organization person core and property-specific occupancy relationship; no global PII or contact-based identity merge. |
+| `resident_sources`, `resident_events` | Original property source observations, occupancy dates and staff review/revocation history. Source review does not establish channel identity. |
+| `service_cases`, `service_events`, `service_commands` | Scoped intake, versioned triage, append-only history and canonical idempotency receipts; no external dispatch or completion claim. |
 
 IDs accept the application's bounded stable ID format; they are not inferred from a
 legacy tenant name. Relational references repeat organization/property ownership.
@@ -481,10 +489,26 @@ forced RLS and immutable evidence. Appending the receipt or audit must succeed i
 the same transaction as changing access. The command increments the aggregate
 membership version once; privileged maintenance must preserve that invariant too.
 
-The hosted bootstrap can extend a verified prior eight-migration installation with
-this one executor. It checks all prior role/ACL/RLS safety and the exact saved
+The hosted bootstrap can extend verified eight- or nine-migration installations
+with only the missing organization/resident-service executors. It checks all prior role/ACL/RLS safety and the exact saved
 manifest first, refuses an already-applied migration with a missing role, and never
 rotates existing credentials or seeds over existing records. Its `root` option is
 a complete repository root containing both data and migrations. See
 [ADR 0003](../docs/adr/0003-organization-administration.md) for locking, recovery
 and the separate unimplemented invitation/onboarding contract.
+
+## Resident services
+
+Apply the resident-services migration after provisioning its restricted executor.
+The application reads scoped projections and invokes
+`atrium.execute_resident_service(jsonb,bigint,text[])`; it cannot directly mutate
+these tables. The command rechecks the managed staff session, property/configuration,
+current resource version and source context, then writes the resource, history and
+exact request receipt atomically. Existing source observations are immutable.
+
+Manual sources have a maximum 90-day validity interval and property-local occupancy
+dates. Current context warnings are derived when reading cases and included in the
+Attention filter before pagination. Stored triage history never silently grants
+entry, spending or continued occupancy authority. See
+[ADR 0010](../docs/adr/0010-resident-service-records.md) for source review, emergency
+holds, practical vacant/common-area planning, privacy and remaining lifecycle work.
