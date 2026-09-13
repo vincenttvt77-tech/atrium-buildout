@@ -13,7 +13,7 @@ import { defaultSettings, validateSettings } from '../../src/calendar/settings.t
 export const HOSTED_DEMO = Object.freeze({ organizationId: 'org-demo-larkin', propertyId: 'prop-demo',
   userId: 'user-demo-larkin', membershipId: 'member-demo-larkin', name: 'The Larkin · Demo' })
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
-const EXECUTORS = ['atrium_account_executor', 'atrium_login_executor', 'atrium_session_executor', 'atrium_mfa_executor', 'atrium_organization_executor']
+const EXECUTORS = ['atrium_account_executor', 'atrium_login_executor', 'atrium_session_executor', 'atrium_mfa_executor', 'atrium_organization_executor', 'atrium_resident_services_executor']
 const RUNTIME_ROLES = ['atrium_app', 'atrium_authenticator']
 const ROLES = ['atrium_admin', ...EXECUTORS, ...RUNTIME_ROLES]
 const LOCK = 'atrium-hosted-demo-bootstrap-v1'
@@ -131,18 +131,28 @@ async function prepareRoles(client, manifest, secrets) {
       || ROLES.includes(identity.current_role)) failState()
     const marker = (await client.query("SELECT to_regclass('atrium_hosted.bootstrap') marker")).rows[0].marker
     if (marker) {
-      const extend = !(await client.query("SELECT 1 FROM pg_catalog.pg_roles WHERE rolname='atrium_organization_executor'")).rowCount
-      await roleSafety(client, extend ? EXECUTORS.filter(role => role !== 'atrium_organization_executor') : EXECUTORS)
+      const additions = [
+        ['atrium_organization_executor', '%organization_administration%'],
+        ['atrium_resident_services_executor', '%resident_services%'],
+      ]
+      const missing = []
+      for (const [role, migration] of additions) {
+        if (!(await client.query('SELECT 1 FROM pg_catalog.pg_roles WHERE rolname=$1', [role])).rowCount) missing.push([role, migration])
+      }
+      await roleSafety(client, EXECUTORS.filter(role => !missing.some(([absent]) => absent === role)))
       await client.query('SET LOCAL ROLE atrium_admin')
       const prior = (await client.query('SELECT manifest FROM atrium_hosted.bootstrap WHERE id=1')).rows[0]
       if (!prior || !isDeepStrictEqual(prior.manifest, manifest)) failState()
-      if (extend) {
-        // Add one new finite executor only to a verified prior bootstrap. Never repair a
-        // removed executor after its migration, or modify existing credentials/ACLs.
-        if ((await client.query("SELECT 1 FROM atrium_migrations.history WHERE version LIKE '%organization_administration%' LIMIT 1")).rowCount) failState()
+      for (const [, migration] of missing) {
+        // Extend a verified older bootstrap, never repair a removed installed role.
+        if ((await client.query('SELECT 1 FROM atrium_migrations.history WHERE version LIKE $1 LIMIT 1', [migration])).rowCount) failState()
+      }
+      if (missing.length) {
         await client.query('RESET ROLE')
-        await client.query('CREATE ROLE atrium_organization_executor NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOREPLICATION')
-        await client.query('GRANT atrium_organization_executor TO atrium_admin')
+        for (const [role] of missing) {
+          await client.query(`CREATE ROLE ${pg.escapeIdentifier(role)} NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOREPLICATION`)
+          await client.query(`GRANT ${pg.escapeIdentifier(role)} TO atrium_admin`)
+        }
         await roleSafety(client)
       }
       return false

@@ -215,7 +215,7 @@ export async function openLocalDatabase({ root = ROOT, directory = join(root, '.
     admin = postgres.getPgClient('postgres', '127.0.0.1'); await admin.connect()
     await admin.query('BEGIN')
     try {
-      for (const [role, password] of [['atrium_admin', null], ['atrium_account_executor', null], ['atrium_login_executor', null], ['atrium_session_executor', null], ['atrium_mfa_executor', null], ['atrium_organization_executor', null], ['atrium_app', config.appPassword], ['atrium_authenticator', config.authPassword]]) {
+      for (const [role, password] of [['atrium_admin', null], ['atrium_account_executor', null], ['atrium_login_executor', null], ['atrium_session_executor', null], ['atrium_mfa_executor', null], ['atrium_organization_executor', null], ['atrium_resident_services_executor', null], ['atrium_app', config.appPassword], ['atrium_authenticator', config.authPassword]]) {
         const exists = await admin.query('SELECT 1 FROM pg_catalog.pg_roles WHERE rolname=$1', [role])
         if (!exists.rows.length) await admin.query(`CREATE ROLE ${role} ${password ? `LOGIN PASSWORD ${pg.escapeLiteral(password)}` : 'NOLOGIN'} NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOREPLICATION`)
       }
@@ -224,6 +224,7 @@ export async function openLocalDatabase({ root = ROOT, directory = join(root, '.
       await admin.query('GRANT atrium_session_executor TO atrium_admin')
       await admin.query('GRANT atrium_mfa_executor TO atrium_admin')
       await admin.query('GRANT atrium_organization_executor TO atrium_admin')
+      await admin.query('GRANT atrium_resident_services_executor TO atrium_admin')
       await admin.query('COMMIT')
     } catch (error) { await admin.query('ROLLBACK'); throw error }
     const migrations = await applyDatabaseMigrations(admin)

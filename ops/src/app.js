@@ -573,8 +573,10 @@ const arr = (v) => (Array.isArray(v) ? v : [])
 // ---------------------------------------------------------------------------------------
 
 let gated = false
+let serviceWritesInFlight = 0
+let serviceSignInPending = false
 let scopeEpoch = 0
-const PROPERTY_ENDPOINTS = new Set(['/api/vapi', '/api/calendar', '/api/leads', '/api/vapi-sync', '/api/workflows'])
+const PROPERTY_ENDPOINTS = new Set(['/api/vapi', '/api/calendar', '/api/leads', '/api/vapi-sync', '/api/workflows', '/api/resident-services'])
 const propertyEndpoint = path => PROPERTY_ENDPOINTS.has(String(path).split('?')[0])
 const JSON_HEADERS = { accept: 'application/json' }
 function accessError(message, status = 409) { const error = new Error(message); error.status = status; error.propertyAccess = true; return error }
@@ -598,18 +600,18 @@ function invalidateDocument(message, status = 409) {
   }
   return accessError(message, status)
 }
-function checkResponseScope(data) {
+function checkResponseScope(data, serviceSave = false) {
   if (documentAccessIssue) throw accessError(documentAccessIssue.message, documentAccessIssue.status)
   if (!databaseMode) return
   const scope = data && data.scope
   if (!scope || scope.organizationId !== documentScope.organizationId || scope.propertyId !== documentScope.propertyId
     || scope.configurationVersion !== documentScope.configurationVersion || scope.permissionVersion !== documentScope.permissionVersion) {
-    throw invalidateDocument('The property or your access changed. Reload this property before viewing or making changes.')
+    throw invalidateDocument((serviceSave ? 'The service save is unconfirmed and may have been recorded. ' : '') + 'The property or your access changed. Reload this property before viewing or making changes.')
   }
 }
 function signedOut() { const e = new Error('Signed out'); e.signedOut = true; e.status = 401; return e }
 function gate() {
-  if (gated) return
+  if (gated || serviceSignInPending) return
   gated = true
   stopPolling()
   try { location.reload() } catch (e) { /* nothing else to do */ }
@@ -617,6 +619,8 @@ function gate() {
 async function request(path, init) {
   if (gated) throw signedOut()
   const propertyRequest = propertyEndpoint(path), scoped = databaseMode && propertyRequest
+  const serviceSave = String(path).split('?')[0] === '/api/resident-services' && init?.method === 'POST'
+  const serviceOutcome = () => serviceSave || serviceWritesInFlight > 0 || serviceSignInPending ? 'The service save is unconfirmed and may have been recorded. ' : ''
   if (propertyRequest && documentAccessIssue) throw accessError(documentAccessIssue.message, documentAccessIssue.status)
   const epoch = scopeEpoch
   const headers = { ...(init && init.headers), ...(scoped ? {
@@ -629,23 +633,32 @@ async function request(path, init) {
   } catch (e) {
     const err = new Error("Couldn't reach the server"); err.status = 0; err.network = true; throw err
   }
-  if (r.status === 401) { if (propertyRequest) invalidateDocument('Your session ended. Sign in again.', 401); gate(); throw signedOut() }
+  if (r.status === 401) {
+    const serviceUncertain = serviceSave || serviceWritesInFlight > 0 || serviceSignInPending
+    if (serviceUncertain) serviceSignInPending = true
+    if (propertyRequest || serviceUncertain) invalidateDocument(serviceOutcome() + (serviceUncertain ? 'Your session ended. Before signing in again, note that the last service change may be saved. After sign-in, check the current record before recording another change.' : 'Your session ended. Sign in again.'), 401)
+    // A Service write may have committed before session revalidation failed. Keep the
+    // retired page warning visible until deliberate navigation; never carry its private
+    // command into a replacement login or silently repeat it.
+    if (!serviceUncertain) gate()
+    throw signedOut()
+  }
   let body = null, parsed = false
   try { body = await r.json(); parsed = true } catch (e) { parsed = false }
-  if (propertyRequest && epoch !== scopeEpoch) throw accessError('This response belongs to an earlier property session. Reload the property.')
+  if (propertyRequest && epoch !== scopeEpoch) throw accessError(serviceOutcome() + 'This response belongs to an earlier property session. Reload the property.')
   if (!r.ok) {
     if (propertyRequest && r.status === 409 && body && body.code === 'portal_tenant_changed')
       throw invalidateDocument('The signed-in account changed in another tab. Reload the workspace before viewing or making changes.')
-    if (scoped && r.status === 403) throw invalidateDocument('Access to this property or operation is no longer available. Choose a property you can access or reload to refresh your permissions.', 403)
+    if (scoped && r.status === 403) throw invalidateDocument(serviceOutcome() + 'Access to this property or operation is no longer available. Choose a property you can access or reload to refresh your permissions.', 403)
     if (scoped && (r.status === 428 || (r.status === 409 && /property|configuration|scope/.test(String(body && body.code))))) {
-      throw invalidateDocument('The property configuration changed. Reload this property before continuing.')
+      throw invalidateDocument(serviceOutcome() + 'The property configuration changed. Reload this property before continuing.')
     }
     const msg = body && typeof body.error === 'string' ? body.error : `HTTP ${r.status}`
     if (r.status === 503 && /OPS_DASHBOARD_PASSCODE/.test(msg)) state.notConfigured = true
     const err = new Error(msg); err.status = r.status; err.body = body; throw err
   }
   if (!parsed || body === null || typeof body !== 'object') { const err = new Error('Unexpected response'); err.status = r.status; err.badJson = true; throw err }
-  if (scoped) checkResponseScope(body)
+  if (scoped) checkResponseScope(body, serviceSave || serviceWritesInFlight > 0 || serviceSignInPending)
   if (path.split('?')[0] === '/api/calendar') checkCalendarTimeZone(body)
   return body
 }
@@ -666,20 +679,21 @@ function checkCalendarTimeZone(data) {
 const api = {
   get(path) { return request(path, { headers: JSON_HEADERS }) },
   async post(path, body, opts) {
+    const endpoint = String(path).split('?')[0], serviceWrite = endpoint === '/api/resident-services'
+    if (serviceWrite) serviceWritesInFlight++
     try {
-      const endpoint = String(path).split('?')[0]
-      const needed = endpoint === '/api/vapi-sync' || endpoint === '/api/workflows' || (endpoint === '/api/calendar' && body && body.action === 'settings') ? 'configure' : 'operate'
+      const needed = endpoint === '/api/vapi-sync' || endpoint === '/api/workflows' || (endpoint === '/api/resident-services' && ['add_resident', 'review_resident', 'revoke_resident'].includes(body?.action)) || (endpoint === '/api/calendar' && body && body.action === 'settings') ? 'configure' : 'operate'
       if (propertyEndpoint(path) && !permissionAllowed(needed)) throw accessError('Your access is view only for this operation.', 403)
       if (endpoint === '/api/calendar') body = { ...body, ...calendarRequestRange(), expectedTimeZone: propertyTimeZone }
       return await request(path, {
-        method: 'POST', headers: { ...JSON_HEADERS, 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}),
+        method: 'POST', headers: { ...JSON_HEADERS, 'content-type': 'application/json', ...(endpoint === '/api/resident-services' ? { 'x-atrium-service-form': opts?.formToken, 'x-atrium-service-action': body?.action } : {}) }, body: JSON.stringify(body ?? {}),
       })
     } catch (e) {
       if (!e.signedOut) {
         state.lastWriteError = { message: e.message, status: e.status ?? null, at: new Date().toISOString(), doing: (opts && opts.doing) || null }
       }
       throw e
-    }
+    } finally { if (serviceWrite) serviceWritesInFlight-- }
   },
 }
 
@@ -891,9 +905,9 @@ function apply(resource, data) {
 // Routing and views
 // ---------------------------------------------------------------------------------------
 
-const VIEWS = ['today', 'calls', 'leads', 'units', 'calendar', ...(databaseMode ? ['workflows'] : []), 'status']
-const VIEW_LABEL = { today: 'Today', calls: 'Calls', leads: 'Leads', units: 'Units', calendar: 'Calendar', workflows: 'Work queue', status: 'Status' }
-const VIEW_H1 = { today: 'Today', calls: 'Calls', leads: 'Leads', units: 'Unit workspace', calendar: 'Tour calendar', workflows: 'Work queue', status: 'Status' }
+const VIEWS = ['today', 'calls', 'leads', 'units', 'calendar', ...(databaseMode ? ['workflows', ...(permissionAllowed('operate') ? ['services'] : [])] : []), 'status']
+const VIEW_LABEL = { today: 'Today', calls: 'Calls', leads: 'Leads', units: 'Units', calendar: 'Calendar', workflows: 'Work queue', services: 'Service', status: 'Status' }
+const VIEW_H1 = { today: 'Today', calls: 'Calls', leads: 'Leads', units: 'Unit workspace', calendar: 'Tour calendar', workflows: 'Work queue', services: 'Service', status: 'Status' }
 const modules = {}
 let current = null
 let booted = false
@@ -1017,6 +1031,7 @@ function paintChrome() {
   document.querySelectorAll('[data-workspace-name]').forEach(node => { node.textContent = databaseMode ? property.name : account ? account.displayName : property.name })
   document.querySelectorAll('[data-property-switch]').forEach(node => { node.hidden = !databaseMode })
   document.querySelectorAll('[data-postgres-only]').forEach(node => { node.hidden = !databaseMode })
+  document.querySelectorAll('[data-service-only]').forEach(node => { node.hidden = !databaseMode || !permissionAllowed('operate') })
   document.body.classList.toggle('has-work-queue', databaseMode)
   document.querySelectorAll('[data-view-only]').forEach(node => { node.hidden = !databaseMode || permissionAllowed('operate') })
   if (account) {

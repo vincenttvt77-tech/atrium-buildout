@@ -41,6 +41,16 @@ raw inputs, provider responses and execution credentials. It is unavailable in
 legacy mode, and no background runner or real connector is enabled by this UI.
 An empty queue is not proof that every business workflow has been integrated.
 
+The PostgreSQL **Service** workspace adds staff-recorded maintenance requests,
+triage, notes and history alongside reviewed property resident records. It accepts
+unknown reporters and locations without inventing identity or access permission.
+Unit planning uses current occupancy evidence, with separate rules for explicit
+staff observations and common-area work. Expired or revoked context brings earlier
+planning decisions back to Attention. This increment does not dispatch vendors,
+send updates or establish resolution; those lifecycle steps remain open. Service
+requires staff `operate` access, while source review/revocation requires `configure`.
+It stays unavailable in legacy mode. See [the service decision](docs/adr/0010-resident-service-records.md).
+
 ## The one idea worth understanding
 
 Every rule that matters is enforced in **code the model cannot argue with** — not in the
@@ -119,6 +129,8 @@ src/email/          template rendering with escaping
 src/vapi/           system prompt and assistant config
 src/ops/            the session gate in front of the dashboard and its log
 src/auth/           persisted user sessions, membership/grant and channel authorization
+src/residents/      property occupancy records and original source evidence
+src/maintenance/    service intake, triage, history and reviewed command contracts
 src/properties/     validated immutable published property bundles and request context
 src/database/       restricted PostgreSQL connections and scoped repositories
 src/application/    runtime selection and request-to-property resolution

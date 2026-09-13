@@ -218,3 +218,22 @@ removal is serialized and cannot leave an organization without an active owner.
 A global user may belong to several organizations; changing one membership does
 not change that user's identity or other memberships. This existing-member screen
 does not yet invite staff, establish a verified recipient, or create customers.
+
+### Resident records and service requests
+
+`/api/resident-services` is available only in PostgreSQL mode to registered staff
+with current property `operate` permission and the required session verification.
+Viewers and channel principals cannot read resident contacts or case history.
+Managers with `configure` permission can add, review or revoke occupancy evidence.
+All records, relationships, history and receipts retain organization/property scope.
+An organization person ID contains no shared contact details; names and contacts
+remain property-specific. No phone/email match links records across properties.
+
+Source review establishes a documented occupancy claim, not caller identity,
+household authority, entry consent or spending permission. Intake accepts unknown
+reporters; resident-reported unit planning needs current context. Explicit staff
+observations support known vacant units, and common areas use their own location
+context. A stale source triggers current review even after historical triage.
+Versioned commands and exact replay receipts preserve history and prevent duplicate
+writes after an interrupted save. See [ADR 0010](docs/adr/0010-resident-service-records.md)
+for the complete boundary and remaining verification/fulfillment work.
