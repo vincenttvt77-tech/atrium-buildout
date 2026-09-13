@@ -20,7 +20,7 @@ const history=(overrides={})=>({id:'history-one',planId:'plan-one',planVersion:2
 const detail=(overrides={})=>({request:request(),resident:{state:'not_established',residentId:null,residentVersion:null,displayName:null,unitId:null,callerIdentityVerified:false,entryAuthorized:false},policy:policy(),plan:plan(),vendor:null,decision:null,assessment:assessment(),canDecide:true,history:[history()],nextHistoryCursor:null,...overrides})
 function portal({legacy=false,permissions=['read','operate','configure'],role='owner',mobile=false,reduced=false}={}){
  const scope={...ownership,configurationVersion:3,permissionVersion:'permission-three'},requests=[],dialogs=[],toasts=[],timers=new Map(),listeners=new Map()
- let uuid=0,timerId=0,reloads=0,active=true,handler=defaultHandler,service=null
+ let uuid=0,timerId=0,reloads=0,active=true,handler=defaultHandler,service=null,clock=Date.parse(at)
  const document={readyState:'loading',activeElement:null,addEventListener(){},getElementById(){return null},querySelector(){return null},querySelectorAll:key=>key==='.view'?[host]:[],body:{classList:{toggle(){},add(){},remove(){}}}}
  const camel=k=>k.replace(/-([a-z])/g,(_,c)=>c.toUpperCase())
  function node(){let content='',children=[];const n={dataset:{},attributes:{},value:'',checked:false,disabled:false,hidden:false,isConnected:true,scrollTop:0,scrollLeft:0,writes:0,handlers:new Map(),classList:{add(){},remove(){},toggle(){}},
@@ -31,20 +31,131 @@ function portal({legacy=false,permissions=['read','operate','configure'],role='o
  };return n}
  const host=node(),notice=node(),location={hash:'#/services',pathname:'/api/dashboard',reload(){reloads++}}
  const window={ATRIUM_RUNTIME_MODE:legacy?'legacy':'postgres',ATRIUM_PROPERTY:{...scope,buildingName:'Lake House',timeZone:'America/Chicago',permissions,hours:{}},ATRIUM_ACCOUNT:{username:'operator',tenantId:'larkin'},addEventListener(k,f){if(!listeners.has(k))listeners.set(k,[]);listeners.get(k).push(f)}}
- class FixedDate extends Date{constructor(...args){super(...(args.length?args:[at]))}static now(){return Date.parse(at)}}
- const context={window,document,location,Date:FixedDate,Intl,URLSearchParams,structuredClone,console,crypto:{randomUUID(){return'00000000-0000-4000-8000-'+String(++uuid).padStart(12,'0')}},matchMedia:q=>({matches:q.includes('reduced-motion')?reduced:mobile}),setTimeout(fn,delay){const id=++timerId;timers.set(id,{fn,delay});return id},clearTimeout(id){timers.delete(id)},setInterval(){},clearInterval(){},fetch:async(path,init)=>{requests.push({path,...init});return handler(path,init)}}
+ class FixedDate extends Date{constructor(...args){super(...(args.length?args:[clock]))}static now(){return clock}}
+ const context={window,document,location,Date:FixedDate,Intl,URLSearchParams,structuredClone,console,crypto:{randomUUID(){return'00000000-0000-4000-8000-'+String(++uuid).padStart(12,'0')}},matchMedia:q=>({matches:q.includes('reduced-motion')?reduced:mobile}),setTimeout(fn,delay){const id=++timerId;timers.set(id,{fn,delay,fireAt:clock+delay});return id},clearTimeout(id){timers.delete(id)},setInterval(){},clearInterval(){},fetch:async(path,init)=>{requests.push({path,...init});return handler(path,init)}}
  runInNewContext(app.replace('window.Atrium = {','window.planningAppTest = { emit, markBooted() { booted = true }, accessIssue: () => documentAccessIssue }; window.Atrium = {'),context)
  const A=window.Atrium;A.toast=(message,options)=>{const r={message,options,closed:false,close(){r.closed=true}};toasts.push(r);return r};A.announce=()=>{};A.paintPermissions=()=>{}
  A.dialog=options=>{const body=node(),d={body,options,error:null,primary:{...options.primary},closed:false,setError(v){d.error=v},setPrimary(v){Object.assign(d.primary,v)},setBusy(v){d.busy=v},close(){if(!d.closed){d.closed=true;options.onClose?.()}},click(){return options.primary.onClick(d)}};options.build(body,d);dialogs.push(d);return d}
- runInNewContext(source.replace('return Object.freeze({attach,deactivate,locked,','return Object.freeze({_test: { open, load, chooseVendor, moreHistory, formCommand, formHtml, state: () => ({mode,caseId,overview,detail,vendors,vendor,loading,error,pending,busy}) },attach,deactivate,locked,').replace('A.maintenancePlans=Object.freeze({create})','window.planningTest={readDetail,readPolicy,readVendor,readHistory,readReceipt,dollars,sourceInstant,availability}; A.maintenancePlans=Object.freeze({create})'),context)
+ runInNewContext(source.replace('return Object.freeze({attach,deactivate,locked,','return Object.freeze({_test: { open, load, chooseVendor, moreHistory, formCommand, formHtml, state: () => ({mode,caseId,overview,detail,vendors,vendor,loading,error,pending,busy}) },attach,deactivate,locked,').replace('A.maintenancePlans=Object.freeze({create,inbox:', 'window.planningTest={readDetail,readPolicy,readVendor,readHistory,readReceipt,dollars,sourceInstant,availability,readInboxPage}; A.maintenancePlans=Object.freeze({create,inbox:'),context)
  const controller=A.maintenancePlans?.create({isActive:()=>active&&A.can('operate'),canOpen:()=>true,onChange(){}});controller?.setNotice(notice)
  const body=v=>({scope,...v}), receipt=(command,changes={})=>({requestId:command.requestId,action:command.action,resource:command.action==='publish_policy'?'policy':command.action==='save_vendor'?'vendor':'plan',id:command.action==='publish_policy'?scope.propertyId:command.action==='save_vendor'?command.id||'vendor-new':command.planId||'plan-one',version:command.action==='decide_plan'?command.expectedPlanVersion:(command.expectedVersion??command.expectedPlanVersion)+1,committedAt:at,replayed:false,outcome:'saved',...changes})
  function defaultHandler(path,init){const q=new URL(path,'https://example.test').searchParams;if(init?.method==='POST'){const c=JSON.parse(init.body);return result(body({receipt:receipt(c)}))}if(q.get('resource')==='overview')return result(body({policy:policy(),actorRole:role,canPublishPolicy:role==='owner',canManageVendors:permissions.includes('configure'),formToken:'planning-synthetic-token'}));if(q.get('resource')==='plan')return result(body({detail:detail({request:request({id:q.get('caseId')}),plan:plan({caseId:q.get('caseId')})}),safetyInstructions:[],safetyCallEmergencyServices:false}));if(q.get('resource')==='vendors')return result(body({vendors:[vendor()],nextCursor:null}));if(q.get('resource')==='vendor')return result(body({vendor:vendor({id:q.get('id')})}));if(q.get('resource')==='history')return result(body({history:[],nextCursor:null}))}
- return {A,controller,helpers:window.planningTest,host,notice,document,window,context,location,requests,dialogs,toasts,scope,body,receipt,node,defaultHandler,setHandler(fn){handler=fn},async mount(mode='case'){controller?.attach(host,mode==='case'?{mode,request:request()}:{mode});await settle()},async expire(){for(const [id,t]of timers)if(t.delay===15000){timers.delete(id);t.fn()}await settle()},closeView(clear=false){active=false;controller?.deactivate(clear)},activate(){active=true},reloads:()=>reloads,click(selector,inNotice=false){const h=inNotice?notice:host,b=h.querySelector(selector);assert.ok(b,selector);h.handlers.get('click')({target:b,preventDefault(){}});return b},markBooted(){window.planningAppTest.markBooted()},
-  mountService(){runInNewContext(serviceSource.replace("A.register('services', view)","window.planningServiceTest = {view,paint,openForm,state:()=>({tab,planning})}; A.register('services', view)"),context);service=window.planningServiceTest;return service},emitPage(name,event={}){for(const fn of listeners.get(name)||[])fn(event)}}
+ return {A,controller,helpers:window.planningTest,host,notice,document,window,context,location,requests,dialogs,toasts,scope,body,receipt,node,defaultHandler,setHandler(fn){handler=fn},async mount(mode='case'){controller?.attach(host,mode==='case'?{mode,request:request()}:{mode});await settle()},async expire(){for(const [id,t]of timers)if(t.delay===15000){timers.delete(id);t.fn()}await settle()},async advance(ms){clock+=ms;for(const [id,t]of [...timers])if(t.fireAt<=clock){timers.delete(id);t.fn()}await settle()},closeView(clear=false){active=false;controller?.deactivate(clear)},activate(){active=true},reloads:()=>reloads,click(selector,inNotice=false){const h=inNotice?notice:host,b=h.querySelector(selector);assert.ok(b,selector);h.handlers.get('click')({target:b,preventDefault(){}});return b},markBooted(){window.planningAppTest.markBooted()},
+  mountService(){runInNewContext(serviceSource.replace("A.register('services', view)","window.planningServiceTest = {view,paint,openForm,load,loadInbox,select,state:()=>({tab,planning,items,cursor,selected,detail,error,loading,inboxScan,inboxExpired})}; A.register('services', view)"),context);service=window.planningServiceTest;return service},emitPage(name,event={}){for(const fn of listeners.get(name)||[])fn(event)}}
 }
 const fill=(d,values)=>{for(const [key,value]of Object.entries(values)){const n=d.body.querySelector('#mp-'+key);assert.ok(n,key);if(typeof value==='boolean')n.checked=value;else n.value=value}}
 const prepareValues={scope:'Replace the worn tap washer',route:'internal',team:'Building maintenance',maximum:'250.00','all-charges':true,entry:'no_unit_entry',reason:'Reviewed routine repair'}
+const inboxItem=(overrides={})=>({id:'case-one',caseVersion:4,summary:'Repair common-area tap',location:{kind:'common_area',label:'Lobby'},category:'plumbing',priority:'routine',createdAt:prior,updatedAt:prior,planId:'plan-one',planVersion:2,planPreparedAt:prior,maximumCents:25000,includesAllCharges:true,currency:'USD',assessment:assessment(),canDecide:true,group:'attention',nextStep:{kind:'review_decision',label:'Review the exact plan for a decision',responsible:'manager_or_owner',availableInPortal:true},...overrides})
+const inboxPage=(items=[inboxItem()],overrides={})=>({items,nextCursor:null,evaluatedAt:at,scanStartedAt:at,scanExpiresAt:'2026-09-13T01:05:00.000Z',scannedCount:items.length,scanIncomplete:false,...overrides})
+async function inboxPortal(options={},pageHandler=null){
+ const ui=portal(options),service=ui.mountService()
+ const fullCase=id=>({...request({id}),requestOrigin:'staff_observation',description:'Drips after closing',reportedPriority:'routine',reporterName:null,reporterPhone:null,reporterEmail:null,accessNotes:'',createdAt:prior,updatedAt:prior,createdBy:'staff-one',residentId:null,intakeLocation:{kind:'common_area',label:'Lobby'},residentIdAtIntake:null,residentVersionAtIntake:null,residentNameAtIntake:null,callerIdentityVerified:false,entryAuthorized:false,dispatchStatus:'not_dispatched',notificationStatus:'not_sent'})
+ const baseline=(path,init)=>{const q=new URL(path,'https://example.test').searchParams
+  if(path.startsWith('/api/maintenance-plans'))return q.get('resource')==='inbox'?pageHandler?pageHandler(q,ui):result(ui.body(inboxPage())):ui.defaultHandler(path,init)
+  if(q.get('resource')==='overview')return result(ui.body({canManageResidents:true,timeZone:'America/Chicago',units:[{id:'13L',label:'13L'}],formToken:'service-token'}))
+  if(q.get('resource')==='request')return result(ui.body({detail:{request:fullCase(q.get('id')),resident:detail().resident,events:[],eventsTruncated:false,nextEventsCursor:null,related:[],relatedTruncated:false},safetyInstructions:[],safetyCallEmergencyServices:false}))
+  if(q.get('resource')==='requests')return result(ui.body({requests:[fullCase('case-one')],nextCursor:null}))
+  return result({},404)
+ }
+ ui.setHandler(baseline);ui.A.navigate=(name,params={})=>{ui.location.hash=ui.A.hashFor(name,params);service.view.render();ui.window.planningAppTest.emit('route',ui.A.route())}
+ ui.location.hash=ui.A.hashFor('services',{tab:'plans'});service.view.mount(ui.host);service.view.render();await settle()
+ return {...ui,service,baseline,clickService(selector){const b=ui.host.querySelector(selector);assert.ok(b,selector);ui.host.handlers.get('click')({target:b,preventDefault(){}});return b}}
+}
+test('inbox tab loads current case and plan detail before exposing existing decisions',async()=>{
+ const ui=await inboxPortal();assert.equal(ui.service.state().tab,'plans');assert.equal(ui.service.state().detail.request.id,'case-one');assert.equal(ui.host.querySelector('.sv-story').hidden,true)
+ assert.ok(ui.requests.some(r=>r.path.includes('resource=request&id=case-one')));assert.ok(ui.requests.some(r=>r.path.includes('resource=plan&caseId=case-one')))
+ assert.match(ui.host.querySelector('.sv-results').innerHTML,/Manager approval needed/);assert.doesNotMatch(ui.host.querySelector('.sv-results').innerHTML,/data-mp="approve"/)
+ assert.match(ui.host.querySelector('.sv-planning-case').innerHTML,/data-mp="approve"/);assert.equal(ui.host.querySelector('[data-command="add"]').hidden,true)
+ assert.match(ui.host.querySelector('.sv-loaded').textContent,/Pages are checked as loaded/)
+ ui.A.navigate('services',{state:'planning'});await settle();assert.equal(ui.service.state().detail.request.id,'case-one','existing Requests initial detail still loads');assert.equal(ui.host.querySelector('.sv-story').hidden,false)
+})
+test('sparse zero-match pages continue checking through the opaque cursor without claiming empty',async()=>{
+ const ui=await inboxPortal({},(q,u)=>result(u.body(q.has('cursor')?inboxPage([inboxItem()],{scannedCount:3}):inboxPage([],{nextCursor:'opaque-page-two',scannedCount:200,scanIncomplete:true}))))
+ assert.match(ui.host.querySelector('.sv-results').innerHTML,/More requests to check/);assert.equal(ui.host.querySelector('[data-command="more"]').textContent,'Continue checking');assert.equal(ui.service.state().detail,null)
+ const more=ui.host.querySelector('[data-command="more"]');more.focus();ui.clickService('[data-command="more"]');await settle()
+ assert.equal(ui.service.state().items.length,1);assert.equal(ui.service.state().inboxScan.totalScanned,203);assert.equal(ui.document.activeElement.dataset.select,'case-one')
+ assert.ok(ui.requests.some(r=>r.path.includes('cursor=opaque-page-two')));assert.equal(ui.host.querySelector('[data-command="more"]').hidden,true)
+})
+test('waiting and all filters preserve truthful authorization, unknown cost and zero ceilings',async()=>{
+ const waiting=inboxItem({group:'waiting',maximumCents:null,canDecide:false,assessment:assessment({readiness:'authorized_plan',spendingAuthorized:true}),nextStep:{kind:'arrange_work',label:'Arrange and verify the work appointment',responsible:'property_team',availableInPortal:false}})
+ const ui=await inboxPortal({},(q,u)=>result(u.body(inboxPage(q.get('filter')==='waiting'?[waiting]:[inboxItem({maximumCents:0})]))))
+ assert.match(ui.host.querySelector('.sv-results').innerHTML,/\$0\.00 ceiling/);ui.clickService('[data-filter="waiting"]');await settle()
+ assert.match(ui.host.querySelector('.sv-results').innerHTML,/Cost not established/);assert.match(ui.host.querySelector('.sv-results').innerHTML,/Authorized plan — not dispatched/)
+ ui.clickService('[data-filter="all"]');await settle();assert.equal(new URL(ui.requests.findLast(r=>r.path.includes('resource=inbox')).path,'https://example.test').searchParams.get('filter'),'all')
+})
+test('inbox refuses bad projection, invented authority, group mismatch and cross-page scan mixing',()=>{
+ const read=portal().helpers.readInboxPage
+ for(const mutate of [p=>{p.items[0].assessment.entryAuthorized=true},p=>{p.items[0].group='waiting'},p=>{p.items[0].maximumCents=-1},p=>{p.items[0].nextStep.responsible='anyone'},p=>{p.scannedCount=201},p=>{p.scanIncomplete=true}]){const p=inboxPage();mutate(p);assert.throws(()=>read(p,'attention'),/could not be verified/)}
+ assert.throws(()=>read(inboxPage(),'attention','13L'),/could not be verified/)
+ assert.throws(()=>read(inboxPage([], {scanStartedAt:'2026-09-13T01:00:01.000Z'}),'attention','',inboxPage()),/could not be verified/)
+ const e=inboxItem({canDecide:false,priority:'routine',assessment:assessment({tier:'emergency',readiness:'emergency_review'}),nextStep:{kind:'review_emergency',label:'Review emergency instructions',responsible:'property_team',availableInPortal:true}})
+ assert.equal(read(inboxPage([e]),'attention').items[0].assessment.readiness,'emergency_review')
+})
+test('selection updates preserve list DOM and scroll; mobile selection focuses detail and returns to row',async()=>{
+ const ui=await inboxPortal({mobile:true,reduced:true},(q,u)=>result(u.body(inboxPage([inboxItem(),inboxItem({id:'case-two',summary:'Second request'})]))))
+ const list=ui.host.querySelector('.sv-results');list.scrollTop=420;const writes=list.writes;ui.clickService('[data-select="case-two"]');await settle()
+ assert.equal(list.writes,writes);assert.equal(list.scrollTop,420);assert.equal(ui.service.state().detail.request.id,'case-two')
+ assert.equal(ui.document.activeElement.dataset.key,'service-detail-heading');assert.equal(ui.document.activeElement.scrolled.behavior,'auto')
+ ui.clickService('[data-command="back-list"]');assert.equal(ui.document.activeElement.dataset.select,'case-two')
+ await ui.service.loadInbox();assert.equal(ui.service.state().selected,'case-two');assert.equal(list.scrollTop,420)
+})
+test('late list responses cannot overwrite a new filter or repopulate a departed Service view',async()=>{
+ const ui=await inboxPortal();let resolve
+ ui.setHandler((path,init)=>path.includes('resource=inbox')?new Promise(r=>{resolve=r}):ui.baseline(path,init));const old=ui.service.loadInbox();await settle()
+ ui.setHandler(ui.baseline);ui.A.navigate('services',{tab:'plans',state:'all'});await settle();resolve(result(ui.body(inboxPage([inboxItem({id:'old-case'})]))));await old
+ assert.equal(ui.service.state().items[0].id,'case-one')
+ let after;ui.setHandler((path,init)=>path.includes('resource=inbox')?new Promise(r=>{after=r}):ui.baseline(path,init));const pending=ui.service.loadInbox();await settle();ui.emitPage('pagehide');after(result(ui.body(inboxPage())));await pending
+ assert.equal(ui.host.innerHTML,'');assert.equal(ui.service.state().items.length,0)
+})
+test('five-minute expiry removes loaded rows and current detail; refresh starts without old cursor',async()=>{
+ const ui=await inboxPortal();const planning=ui.service.state().planning;planning._test.open('prepare_plan');assert.equal(ui.dialogs.at(-1).closed,false)
+ await ui.advance(300001);assert.equal(ui.service.state().inboxExpired,true);assert.equal(ui.service.state().items.length,0);assert.equal(ui.service.state().detail,null);assert.equal(ui.dialogs.at(-1).closed,true);assert.match(ui.host.querySelector('.sv-errors').innerHTML,/scan expired/)
+ const newAt='2026-09-13T01:05:00.001Z';ui.setHandler((path,init)=>path.includes('resource=inbox')?result(ui.body(inboxPage([inboxItem()],{evaluatedAt:newAt,scanStartedAt:newAt,scanExpiresAt:'2026-09-13T01:10:00.001Z'}))):ui.baseline(path,init))
+ ui.clickService('[data-command="refresh"]');await settle();assert.equal(ui.service.state().inboxExpired,false);assert.equal(ui.service.state().detail.request.id,'case-one')
+ assert.equal(new URL(ui.requests.findLast(r=>r.path.includes('resource=inbox')).path,'https://example.test').searchParams.has('cursor'),false)
+})
+test('expired continuation requires a new scan, while read failures leave Refresh usable',async()=>{
+ const ui=await inboxPortal({},(q,u)=>q.has('cursor')?result({code:'planning_cursor_expired',error:'Refresh this scan'},409):result(u.body(inboxPage([inboxItem()],{nextCursor:'continue',scannedCount:200,scanIncomplete:true}))))
+ ui.clickService('[data-command="more"]');await settle();assert.equal(ui.service.state().items.length,0);assert.match(ui.host.querySelector('.sv-errors').innerHTML,/scan expired/)
+ ui.setHandler(()=>result({error:'Unavailable'},503));ui.clickService('[data-command="refresh"]');await settle();assert.equal(ui.host.querySelector('[data-command="refresh"]').disabled,false);assert.match(ui.host.querySelector('.sv-errors').innerHTML,/could not be checked/)
+ ui.setHandler(ui.baseline);ui.clickService('[data-command="refresh"]');await settle();assert.equal(ui.service.state().items.length,1)
+})
+test('a later page can shorten the evidence deadline, never extend it or continue without progress',async()=>{
+ const read=portal().helpers.readInboxPage,first=inboxPage([inboxItem()],{nextCursor:'next',scanIncomplete:true,scannedCount:200})
+ const shortened=inboxPage([inboxItem({id:'case-two'})],{scanExpiresAt:'2026-09-13T01:01:00.000Z'})
+ assert.equal(read(shortened,'attention','',first).scanExpiresAt,shortened.scanExpiresAt)
+ assert.throws(()=>read(inboxPage(),'attention','',shortened),/could not be verified/)
+ assert.throws(()=>read(inboxPage([],{nextCursor:'no-progress'}),'attention'),/could not be verified/)
+ assert.throws(()=>read(inboxPage([],{nextCursor:'x'.repeat(801),scannedCount:1}),'attention'),/could not be verified/)
+ const ui=await inboxPortal({},(q,u)=>result(u.body(q.has('cursor')?shortened:first)));ui.clickService('[data-command="more"]');await settle();await ui.advance(60001)
+ assert.equal(ui.service.state().inboxExpired,true);assert.equal(ui.service.state().items.length,0)
+})
+test('an unconfirmed write survives scan expiry with only exact-command recovery available',async()=>{
+ const ui=await inboxPortal();const own=ui.service.state().planning;let posts=0
+ ui.setHandler((path,init)=>init?.method==='POST'&&++posts===1?result(ui.body({}),200):ui.baseline(path,init));own._test.open('prepare_plan');const d=ui.dialogs.at(-1);fill(d,prepareValues);await d.click();await d.click();assert.equal(own.pending,true)
+ await ui.advance(300001);assert.equal(ui.service.state().items.length,0);assert.equal(own.pending,true)
+ const notice=ui.host.querySelector('.sv-planning-notice');assert.match(notice.innerHTML,/unconfirmed/);const retry=notice.querySelector('[data-mp="retry"]');notice.handlers.get('click')({target:retry,preventDefault(){}})
+ const recovery=ui.dialogs.at(-1);assert.notEqual(recovery,d);await recovery.click();await settle()
+ const writes=ui.requests.filter(r=>r.method==='POST');assert.equal(writes.length,2);assert.equal(writes[0].body,writes[1].body);assert.equal(writes[0].headers['x-atrium-planning-form'],writes[1].headers['x-atrium-planning-form']);assert.equal(own.pending,false)
+})
+test('a saved plan refreshes current inbox membership and explains a removed selection',async()=>{
+ const ui=await inboxPortal();let saved=false
+ ui.setHandler((path,init)=>{if(init?.method==='POST')saved=true;if(saved&&path.includes('resource=inbox'))return result(ui.body(inboxPage([inboxItem({id:'case-two',summary:'Next request requiring review'})])));return ui.baseline(path,init)})
+ const own=ui.service.state().planning;own._test.open('decide_plan','reject');const d=ui.dialogs.at(-1);fill(d,{reason:'Revise the scope and total before approval'});await d.click();await d.click();await settle()
+ assert.equal(ui.service.state().selected,'case-two');assert.equal(ui.service.state().detail.request.id,'case-two');assert.match(ui.host.querySelector('.sv-inbox-info').innerHTML,/previously selected request is not in these checked results/)
+ assert.equal(ui.requests.filter(r=>r.method==='POST').length,1);assert.equal(ui.requests.filter(r=>r.path.includes('resource=inbox')).length,2)
+})
+test('a matching list row cannot authorize a decision that fresh detail now refuses',async()=>{
+ const ui=await inboxPortal();ui.setHandler((path,init)=>path.includes('resource=plan&')?result(ui.body({detail:detail({canDecide:false,assessment:assessment({readiness:'awaiting_resident',spendingAuthorized:true})}),safetyInstructions:[],safetyCallEmergencyServices:false})):ui.baseline(path,init))
+ await ui.service.select('case-one',false);await settle();assert.equal(ui.host.querySelector('.sv-planning-case').querySelector('[data-mp="approve"]'),null)
+ assert.match(ui.host.querySelector('.sv-planning-case').innerHTML,/Resident approval not established/);ui.service.state().planning._test.open('decide_plan','approve');assert.equal(ui.dialogs.length,0)
+})
+test('wrong property echoes retire the inbox and unresolved reads cannot announce successful refresh',async()=>{
+ const ui=await inboxPortal();ui.markBooted();ui.setHandler((path,init)=>path.includes('resource=inbox')?result({...inboxPage(),scope:{...ui.scope,propertyId:'foreign'}}):ui.baseline(path,init));await ui.service.loadInbox();assert.equal(ui.host.hidden,true);assert.equal(ui.host.innerHTML,'')
+ const waiting=await inboxPortal();let finish;waiting.setHandler((path,init)=>path.includes('resource=inbox')?new Promise(r=>{finish=r}):waiting.baseline(path,init));const round=waiting.service.loadInbox();await settle();await waiting.expire();await round
+ assert.equal(waiting.service.state().loading,false);assert.equal(waiting.host.querySelector('[data-command="refresh"]').disabled,false);assert.match(waiting.host.querySelector('.sv-errors').innerHTML,/could not be checked/)
+ finish(result(waiting.body(inboxPage([inboxItem({id:'late'})]))));await settle();assert.notEqual(waiting.service.state().selected,'late');assert.equal(waiting.service.state().detail,null)
+})
 test('planning is managed operate-only and source includes precede Service',async()=>{for(const options of [{legacy:true},{permissions:['read']}]){const ui=portal(options);await ui.mount();assert.equal(ui.controller,undefined);assert.equal(ui.requests.length,0)}assert.ok(html.indexOf('include maintenance-plans.js')<html.indexOf('include services.js'));assert.match(css,/min-height:48px/);assert.match(css,/prefers-reduced-motion/)})
 test('actual API transport freezes property and planning action/form headers',async()=>{const ui=portal();ui.window.ATRIUM_PROPERTY.propertyId='tampered';await ui.mount();await ui.A.api.post('/api/maintenance-plans',{action:'prepare_plan'},{formToken:'exact-token'});const h=ui.requests.at(-1).headers;assert.equal(h['x-atrium-property-id'],'building-one');assert.equal(h['x-atrium-planning-form'],'exact-token');assert.equal(h['x-atrium-planning-action'],'prepare_plan')})
 test('authority reasons retain server text and plan is not dispatch or resident approval',async()=>{const ui=portal();ui.setHandler((path,init)=>path.includes('resource=plan&')?result(ui.body({detail:detail({assessment:assessment({readiness:'authorized_plan',spendingAuthorized:true,reasons:['This internal plan is authorized. No appointment, dispatch or notification has been made.']})}),safetyInstructions:[],safetyCallEmergencyServices:false})):ui.defaultHandler(path,init));await ui.mount();assert.match(ui.host.innerHTML,/Authorized plan — not dispatched/);assert.doesNotMatch(ui.host.innerHTML,/Review required: This internal/);assert.match(ui.host.innerHTML,/Entry permission and caller identity are not established/);assert.throws(()=>ui.helpers.readDetail({...detail(),assessment:assessment({entryAuthorized:true}),safetyInstructions:[],safetyCallEmergencyServices:false},'case-one'),/could not be verified/)})

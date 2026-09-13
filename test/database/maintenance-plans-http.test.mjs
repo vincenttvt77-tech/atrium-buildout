@@ -7,6 +7,7 @@ import dashboard from '../../api/dashboard.ts'
 import services from '../../api/resident-services.ts'
 import planning from '../../api/maintenance-plans.ts'
 import { createDatabaseRuntime } from '../../src/application/runtime.ts'
+import { PostgresMaintenancePlanningRepository } from '../../src/database/maintenance-planning.ts'
 import { defaultSettings } from '../../src/calendar/settings.ts'
 import { createFoundationTestDatabase, seedFoundationTestDatabase } from '../../scripts/lib/foundation-test.mjs'
 import { verifyOrganizationSession } from '../helpers/organization-session.mjs'
@@ -233,4 +234,106 @@ test('planning rejects malformed queries and oversized or invented commands', as
   }
   assert.equal((await request('', { body: 'x'.repeat(25 * 1024) })).status, 400)
   assert.equal((await request('', { body: { action: 'dispatch_vendor', requestId: randomUUID() } })).status, 400)
+})
+
+test('the real inbox endpoint paginates current readiness without exposing full request or plan prose', async () => {
+  const created = await save(intake({ requestOrigin: 'staff_observation', location: { kind: 'common_area', label: 'Lobby' },
+    summary: 'Synthetic inbox review', description: 'PRIVATE_INBOX_DESCRIPTION', reporterName: 'PRIVATE_INBOX_REPORTER',
+    reporterPhone: '+15555550202', reporterEmail: 'private-inbox@example.invalid', accessNotes: 'PRIVATE_INBOX_ACCESS' }),
+  { user: 'staff-a', endpoint: '/api/resident-services' })
+  const first = await request('resource=inbox&filter=attention&limit=1')
+  assert.equal(first.status, 200, JSON.stringify(first.body))
+  assert.equal(first.body.items.length, 1); assert.equal(first.body.items[0].id, created.id)
+  assert.equal(first.body.items[0].nextStep.kind, 'review_context')
+  assert.equal(first.body.items[0].group, 'attention'); assert.equal(first.body.items[0].canDecide, false)
+  assert.equal(typeof first.body.nextCursor, 'string'); assert.equal(first.body.scannedCount, 1)
+  assert.ok(Date.parse(first.body.evaluatedAt) > 0)
+  assert.ok(Date.parse(first.body.scanExpiresAt) > Date.parse(first.body.scanStartedAt))
+  const exposed = JSON.stringify(first.body.items)
+  for (const marker of ['PRIVATE_INBOX_', 'reporterName', 'accessNotes', 'scopeOfWork', 'residentName']) assert.equal(exposed.includes(marker), false)
+  const next = await request('resource=inbox&filter=attention&limit=1&cursor=' + encodeURIComponent(first.body.nextCursor))
+  assert.equal(next.status, 200, JSON.stringify(next.body))
+  assert.ok(next.body.items.every(item => item.id !== created.id))
+  assert.equal(next.body.scanStartedAt, first.body.scanStartedAt); assert.equal(next.body.scanExpiresAt, first.body.scanExpiresAt)
+  const waiting = await request('resource=inbox&filter=waiting&limit=50')
+  assert.equal(waiting.status, 200); assert.ok(waiting.body.items.length > 0)
+  assert.ok(waiting.body.items.every(item => item.group === 'waiting' && item.assessment.dispatchStatus === 'not_dispatched'))
+  assert.match(first.headers.get('cache-control'), /no-store/)
+})
+
+test('inbox HTTP continuation is scoped to its actual account, session, property and filters', async () => {
+  const first = await request('resource=inbox&filter=attention&limit=1'), cursor = encodeURIComponent(first.body.nextCursor)
+  assert.equal(first.status, 200); assert.ok(first.body.nextCursor)
+  const query = 'resource=inbox&filter=attention&limit=1&cursor=' + cursor
+  for (const options of [{ user: 'staff-a' }, { property: 'property-a2' }, { user: 'owner-b', org: 'organization-b', property: 'property-b1' }]) {
+    const refused = await request(query, options)
+    assert.equal(refused.status, 409); assert.equal(refused.body.code, 'planning_cursor_expired')
+    assert.equal(refused.body.items, undefined)
+  }
+  const second = await login('owner-a')
+  assert.equal((await request(query, { actor: second })).status, 409)
+  await runtime.sessions.revoke(second.principal, second.principal.sessionId)
+  assert.equal((await request(query, { actor: second })).status, 401)
+  assert.equal((await request(query.replace('attention', 'waiting'))).status, 409)
+  assert.equal((await request(query.replace('limit=1', 'limit=2'))).status, 409)
+  assert.equal((await request('resource=inbox', { user: 'viewer-a' })).status, 403)
+  assert.equal((await request('resource=inbox', { actor: null })).status, 401)
+  assert.equal((await request('resource=inbox', { user: 'staff-a', property: 'property-a2' })).status, 403)
+  for (const invalid of ['resource=inbox&filter=closed', 'resource=inbox&limit=51', 'resource=inbox&limit=1&limit=2',
+    'resource=inbox&beforeId=fake', 'resource=inbox&cursor=x&cursor=y', 'resource=inbox&actorRole=owner']) {
+    assert.equal((await request(invalid)).status, 400, invalid)
+  }
+})
+
+test('a changed owner policy invalidates continuation rather than mixing policy versions across pages', async () => {
+  const first = await request('resource=inbox&filter=all&limit=1')
+  assert.equal(first.status, 200); assert.ok(first.body.nextCursor)
+  await verifyOrganizationSession(runtime, actors['owner-a'].principal, password)
+  await save({ action: 'publish_policy', requestId: randomUUID(), expectedVersion: 1,
+    details: { ...policyDetails(), automaticLimitCents: 5_000 }, reason: 'Owner changed the property authority during a list scan' })
+  const continued = await request('resource=inbox&filter=all&limit=1&cursor=' + encodeURIComponent(first.body.nextCursor))
+  assert.equal(continued.status, 409); assert.equal(continued.body.code, 'planning_cursor_expired')
+  const refreshed = await request('resource=inbox&filter=all&limit=50')
+  assert.equal(refreshed.status, 200, JSON.stringify(refreshed.body))
+  assert.ok(refreshed.body.items.some(item => item.assessment.readiness === 'stale_plan'))
+})
+
+test('an evidence deadline crossed after repository evaluation is not renewed for another five minutes', async () => {
+  const original = PostgresMaintenancePlanningRepository.prototype.listInbox
+  PostgresMaintenancePlanningRepository.prototype.listInbox = async function (input) {
+    const result = await original.call(this, input)
+    // A deterministic boundary injection after a real scoped database evaluation.
+    result.policyValidUntil = new Date(Date.parse(result.evaluatedAt) + 5).toISOString()
+    await new Promise(resolve => setTimeout(resolve, 25))
+    return result
+  }
+  try {
+    const response = await request('resource=inbox&filter=all&limit=1')
+    assert.equal(response.status, 409); assert.equal(response.body.code, 'planning_cursor_expired')
+    assert.equal(response.body.items, undefined)
+  } finally { PostgresMaintenancePlanningRepository.prototype.listInbox = original }
+})
+
+test('the final response fence refuses inbox data whose evidence expired while revalidating access', async () => {
+  const originalList = PostgresMaintenancePlanningRepository.prototype.listInbox, originalTransaction = runtime.app.transaction
+  let waiting = false, delayed = false
+  PostgresMaintenancePlanningRepository.prototype.listInbox = async function (input) {
+    const result = await originalList.call(this, input)
+    result.refreshAt = new Date(Date.now() + 1000).toISOString(); waiting = true
+    return result
+  }
+  runtime.app.transaction = async function (...args) {
+    const value = await originalTransaction.apply(this, args)
+    if (waiting && !delayed) { delayed = true; await new Promise(resolve => setTimeout(resolve, 1100)) }
+    return value
+  }
+  try {
+    const response = await request('resource=inbox&filter=all&limit=1')
+    assert.equal(delayed, true)
+    assert.equal(response.status, 409); assert.equal(response.body.code, 'planning_cursor_expired')
+    assert.equal(response.body.items, undefined)
+  } finally {
+    PostgresMaintenancePlanningRepository.prototype.listInbox = originalList
+    runtime.app.transaction = originalTransaction
+  }
 })

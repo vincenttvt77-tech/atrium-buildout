@@ -10,7 +10,7 @@ const CONTEXT = { current: 'Source review current', expired: 'Source review expi
 const CATEGORIES = { plumbing: 'Plumbing', electrical: 'Electrical', heating_cooling: 'Heating & cooling', appliance: 'Appliance', pest: 'Pest', access: 'Access', other: 'Other' }
 const ORIGINS = { resident_report: 'Resident report', staff_observation: 'Staff observation', unknown: 'Not established' }
 const PRIORITIES = { routine: 'Routine', urgent: 'Urgent', emergency: 'Emergency' }
-const FILTERS = { vendors: [['approved', 'Approved vendors'], ['suspended', 'Suspended'], ['all', 'All vendors']], requests: [['attention', 'Needs review'], ['waiting', 'Waiting'], ['planning', 'Planning'], ['all', 'All requests']], residents: [['active', 'Active records'], ['revoked', 'Revoked'], ['all', 'All records']] }
+const FILTERS = { plans: [['attention', 'Action needed'], ['waiting', 'Waiting'], ['all', 'All']], vendors: [['approved', 'Approved vendors'], ['suspended', 'Suspended'], ['all', 'All vendors']], requests: [['attention', 'Needs review'], ['waiting', 'Waiting'], ['planning', 'Planning'], ['all', 'All requests']], residents: [['active', 'Active records'], ['revoked', 'Revoked'], ['all', 'All records']] }
 const FILTER_STATES = { attention: ['needs_triage', 'management_review', 'emergency_review'], waiting: ['waiting_information'], planning: ['ready_for_planning'], all: Object.keys(STATES) }
 const ERRORS = { service_version_conflict: 'This record changed. Refresh and review the latest version.', service_request_conflict: 'This request reference was used for a different change. Reload and review before continuing.', service_context_required: 'Current resident source context is required for that planning step. Review the resident record first.', service_emergency_hold: 'Emergency evidence holds this request for management review. It cannot be downgraded through ordinary triage.', service_not_found: 'This record is no longer available in this property.', service_invalid_input: 'Some details were refused. Review the form and its dates before trying again.' }
 const ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/
@@ -94,8 +94,22 @@ const emergencyHint = (value, priority) => priority === 'emergency' || /gas\s*(?
 const safetyNotice = '<strong>Act on immediate danger now</strong><p>Follow the building’s emergency procedure. If anyone is in immediate danger, contact emergency services from a safe place. Recording this request does not contact emergency services or building staff.</p>'
 let root = null, active = false, epoch = 0, detailEpoch = 0, tab = 'requests', filter = 'attention', unit = '', items = [], cursor = null, selected = null
 let savedToast = null
+let inboxScan = null, inboxTimer = null, inboxExpired = false, inboxMessage = ''
 let overview = null, loaded = false, loading = false, detail = null, detailLoading = false, error = '', detailError = '', checkedAt = null, panel = null, busy = false, pending = null
 const visible = () => Boolean(root && active && A.can('operate') && A.route().name === 'services')
+const caseTab = () => tab === 'requests' || tab === 'plans'
+function expireInbox() {
+  clearTimeout(inboxTimer); inboxTimer = null
+  if (!visible() || tab !== 'plans') return
+  epoch++; detailEpoch++; inboxExpired = true; items = []; selected = null; cursor = null; detail = null; detailError = ''; loaded = false; loading = false; detailLoading = false
+  panel?.close(); planning?.deactivate(); error = 'This planning scan expired. Refresh to check current work plans before selecting or making changes.'
+  paint(); A.announce('Planning scan expired. Refresh the list.')
+}
+function inboxCurrent() {
+  if (tab !== 'plans') return true
+  if (!inboxScan || inboxExpired || Date.now() >= Date.parse(inboxScan.scanExpiresAt)) { if (inboxScan && !inboxExpired) expireInbox(); return false }
+  return true
+}
 function bounded(promise) {
   let timer; return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(Object.assign(new Error('The response is unconfirmed.'), { status: 0 })), 15000) })]).finally(() => clearTimeout(timer))
 }
@@ -107,6 +121,10 @@ function replace(host, html) {
 }
 function listHtml() {
   if (!loaded) return empty(loading ? 'Loading saved records…' : 'Records not loaded', loading ? 'Checking this property’s service records.' : 'Refresh to try again.')
+  if (tab === 'plans') {
+    if (!items.length) return empty(cursor ? 'More requests to check' : 'No matching work plans in the records checked', cursor ? 'No matches returned yet. Continue checking to scan the next requests.' : 'Pages are checked as loaded. Refresh checks earlier records and new changes again.')
+    return '<ul class="sv-list">' + items.map(item => '<li>' + A.maintenancePlans.inbox.rowHtml(item, selected) + '</li>').join('') + '</ul>'
+  }
   if (!items.length) return empty(tab === 'requests' ? 'No requests in this result' : 'No resident records in this result', 'Change the filter or record a new entry. This view contains only saved records.')
   return '<ul class="sv-list">' + items.map(item => `<li><button type="button" class="sv-row" data-select="${esc(item.id)}" data-key="service:${esc(item.id)}" aria-current="${item.id === selected}" aria-controls="sv-detail"><span class="sv-row-top"><strong>${esc(tab === 'residents' ? item.displayName : item.summary)}</strong>${chip(tab === 'residents' ? CONTEXT[item.contextState] : item.contextNeedsReview ? 'Context needs review' : STATES[item.state], tab === 'residents' ? item.contextState !== 'current' : item.priority === 'emergency' || item.contextNeedsReview)}</span><span class="sv-row-context">${esc(tab === 'residents' ? `Apartment ${item.unitId} · ${item.relationship === 'leaseholder' ? 'Leaseholder' : 'Occupant'}` : `${locationLabel(item.location)} · ${PRIORITIES[item.priority]}`)}</span><span class="sv-row-date">Updated ${esc(A.fmt.dateTime(item.updatedAt))}</span></button></li>`).join('') + '</ul>'
 }
@@ -135,7 +153,7 @@ function detailHtml() {
   if (detailLoading) return empty('Loading record…', 'Waiting for current saved details.')
   if (detailError) return empty('Record could not be loaded', detailError)
   if (!detail) return empty('Select a record', 'See its context, saved history and next step.')
-  return (tab === 'residents' ? residentHtml(detail) : requestHtml(detail)) + `<p class="sv-zone">Times in ${esc(A.property.timeZoneLabel)}. Refresh before acting on a changed record.</p>`
+  return (tab === 'plans' ? '<button type="button" class="btn sv-back-list" data-command="back-list">Back to work plans</button>' : '') + (tab === 'residents' ? residentHtml(detail) : requestHtml(detail)) + `<p class="sv-zone">Times in ${esc(A.property.timeZoneLabel)}. Refresh before acting on a changed record.</p>`
 }
 let planning = null
 function syncPlanningControls() {
@@ -145,22 +163,26 @@ function syncPlanningControls() {
 }
 function paint({ list = true } = {}) {
   if (!visible()) return
+  const story = root.querySelector('.sv-story'); if (story) story.hidden = tab === 'plans'
   for (const button of root.querySelectorAll('[data-tab]')) button.setAttribute('aria-pressed', String(button.dataset.tab === tab))
   replace(root.querySelector('.sv-filters'), FILTERS[tab].map(([key, label]) => `<button type="button" class="btn" data-filter="${key}" aria-pressed="${filter === key}">${esc(label)}</button>`).join(''))
   const directory = tab === 'vendors' && planning
   for (const key of ['.sv-workspace', '.sv-filters', '.sv-loaded', '.sv-unit-filter']) { const node = root.querySelector(key); if (node) node.hidden = Boolean(directory) }
   const directoryHost = root.querySelector('.sv-planning-directory'); if (directoryHost) directoryHost.hidden = !directory
-  const add = root.querySelector('[data-command="add"]'); add.textContent = tab === 'requests' ? 'Record request' : 'Add reviewed record'; add.hidden = Boolean(directory) || tab === 'residents' && !(overview?.canManageResidents && A.can('configure')); add.disabled = loading || !overview || Boolean(error) || busy || Boolean(pending)
-  const refresh = root.querySelector('[data-command="refresh"]'); refresh.disabled = loading || busy; refresh.textContent = loading ? 'Refreshing…' : 'Refresh'
+  const add = root.querySelector('[data-command="add"]'); add.textContent = tab === 'requests' ? 'Record request' : 'Add reviewed record'; add.hidden = Boolean(directory) || tab === 'plans' || tab === 'residents' && !(overview?.canManageResidents && A.can('configure')); add.disabled = loading || !overview || Boolean(error) || busy || Boolean(pending)
+  const refresh = root.querySelector('[data-command="refresh"]'); refresh.disabled = loading || busy || tab === 'plans' && (Boolean(pending) || Boolean(planning?.locked())); refresh.textContent = loading ? 'Refreshing…' : 'Refresh'
   root.querySelector('.sv-loaded').textContent = loading ? 'Checking saved service records…' : checkedAt ? `${items.length} records shown · checked ${A.fmt.time(checkedAt)}` : 'No records received yet'
+  if (tab === 'plans') root.querySelector('.sv-loaded').textContent = loading ? 'Checking work plans and current authority…' : inboxExpired ? 'Refresh required before selecting work.' : inboxScan ? `${items.length} work plans shown · ${inboxScan.totalScanned} requests checked. Latest page checked ${A.fmt.time(inboxScan.evaluatedAt)}. Pages are checked as loaded; Refresh checks earlier records again.` : 'No work plans received yet.'
+  const inboxInfo = root.querySelector('.sv-inbox-info'); if (inboxInfo) { inboxInfo.hidden = tab !== 'plans'; replace(inboxInfo, '<strong>Planning attention</strong><p>Review the current scope, approval and next required step. No dispatch has been made.</p>' + (inboxMessage ? `<p role="status">${esc(inboxMessage)}</p>` : '')) }
   replace(root.querySelector('.sv-errors'), (error ? A.html.banner('warn', error) : '') + (pending ? A.html.banner('warn', 'The last save is unconfirmed. Check the same change before starting another.', { actionsHtml: '<button type="button" class="btn" data-command="retry">Check saved change</button><button type="button" class="btn" data-command="reload">Reload page</button>' }) : ''))
   if (directory) { planning.attach(directoryHost, { mode: 'directory' }); syncPlanningControls(); return }
   const listNode = root.querySelector('.sv-results'); listNode.setAttribute('aria-busy', String(loading))
   if (list) replace(listNode, listHtml()); else for (const button of listNode.querySelectorAll('[data-select]')) button.setAttribute('aria-current', String(button.dataset.select === selected))
   replace(root.querySelector('.sv-detail'), detailHtml())
-  if (planning && tab === 'requests' && detail?.request && !detailLoading && !detailError) planning.attach(root.querySelector('.sv-planning-case'), { mode: 'case', request: detail.request })
-  else planning?.deactivate()
+  if (planning && caseTab() && detail?.request && !detailLoading && !detailError && !error) planning.attach(root.querySelector('.sv-planning-case'), { mode: 'case', request: detail.request })
+  else if (!planning?.pending) planning?.deactivate()
   const more = root.querySelector('[data-command="more"]'); more.hidden = !cursor; more.disabled = loading || busy
+  more.textContent = tab === 'plans' ? inboxScan?.scanIncomplete || !items.length ? 'Continue checking' : 'Load more work plans' : 'Load more records'
   for (const node of root.querySelectorAll('[data-command="note"], [data-command="context"], [data-command="triage"], [data-command="review-resident"], [data-command="revoke-resident"]')) node.disabled = busy || Boolean(pending) || loading || Boolean(error)
   syncPlanningControls()
 }
@@ -170,8 +192,40 @@ async function getOverview() {
     || body.units.some(row => !object(row) || !text(row.id, 128) || !row.id || !text(row.label, 160)) || new Set(body.units.map(row => row.id)).size !== body.units.length) throw bad()
   return { formToken: body.formToken, canManageResidents: body.canManageResidents, units: body.units.map(row => ({ id: row.id, label: row.label })) }
 }
+async function loadInbox(more = false) {
+  if (!visible() || busy || pending || panel || planning?.locked() || more && (loading || !cursor || !inboxCurrent())) return
+  const turn = ++epoch, savedFilter = filter, savedUnit = unit, before = more ? cursor : null, previous = more ? inboxScan : null
+  const chosen = selected, focusMore = more && document.activeElement?.dataset?.command === 'more'
+  loading = true; error = ''; detail = null; detailEpoch++; planning?.deactivate(); paint({ list: !loaded })
+  try {
+    const nextOverview = await getOverview(), query = new URLSearchParams({resource:'inbox',filter:savedFilter,limit:'25'})
+    if (savedUnit) query.set('unitId', savedUnit)
+    if (before) query.set('cursor', before)
+    const body = await bounded(A.api.get('/api/maintenance-plans?' + query))
+    const page = A.maintenancePlans.inbox.readPage(body, savedFilter, savedUnit, previous)
+    if (!visible() || turn !== epoch || tab !== 'plans') return
+    if (Date.now() >= Date.parse(page.scanExpiresAt)) { expireInbox(); return }
+    if (more && page.items.some(row => items.some(old => old.id === row.id))) throw bad()
+    overview = nextOverview; items = more ? [...items, ...page.items] : page.items; cursor = page.nextCursor
+    inboxScan = {...page, totalScanned:(more ? previous.totalScanned : 0) + page.scannedCount}; inboxExpired = false
+    loaded = true; checkedAt = page.evaluatedAt; loading = false
+    clearTimeout(inboxTimer); inboxTimer = setTimeout(expireInbox, Math.max(1, Date.parse(page.scanExpiresAt) - Date.now()))
+    replace(root.querySelector('.sv-unit-filter'), '<label for="sv-unit">Location</label><select class="input" id="sv-unit" data-unit-filter><option value="">All units &amp; areas</option>' + overview.units.map(row => `<option value="${esc(row.id)}"${row.id === unit ? ' selected' : ''}>${esc(row.label)}</option>`).join('') + '</select>')
+    selected = items.some(row => row.id === chosen) ? chosen : items[0]?.id || null
+    inboxMessage = chosen && chosen !== selected ? 'The previously selected request is not in these checked results. It may have changed or be on a later page.' : ''
+    paint()
+    if (selected) await select(selected, false)
+    if (focusMore) (cursor ? root.querySelector('[data-command="more"]') : [...root.querySelectorAll('[data-select]')].at(-1) || root.querySelector('[data-command="refresh"]'))?.focus({preventScroll:true})
+  } catch (failure) {
+    if (visible() && turn === epoch && tab === 'plans' && !failure.propertyAccess && !failure.signedOut) {
+      if (failure.body?.code === 'planning_cursor_expired') { expireInbox(); return }
+      error = 'Work plans could not be checked. Refresh before selecting a request or making changes.'; detail = null; planning?.deactivate()
+    }
+  } finally { if (visible() && turn === epoch && tab === 'plans') { loading = false; paint({list:false}) } }
+}
 async function load(more = false) {
   if (tab === 'vendors' && planning) return planning.refresh()
+  if (tab === 'plans') return loadInbox(more)
   if (!visible() || busy || more && (loading || !cursor)) return
   const turn = ++epoch, savedTab = tab, savedFilter = filter, savedUnit = unit, before = more ? cursor : null
   const focusMore = more && document.activeElement?.dataset?.command === 'more'
@@ -198,8 +252,8 @@ async function load(more = false) {
   } finally { if (visible() && turn === epoch) { loading = false; paint() } }
 }
 async function select(id, focus = true) {
-  if (!visible() || busy || !validId(id)) return
-  const turn = ++detailEpoch, routeEpoch = epoch, resource = tab === 'requests' ? 'request' : 'resident'
+  if (!visible() || busy || planning?.locked() || panel || loading || !validId(id) || !inboxCurrent()) return
+  const turn = ++detailEpoch, routeEpoch = epoch, resource = caseTab() ? 'request' : 'resident'
   selected = id; detail = null; detailError = ''; detailLoading = true; paint({ list: false })
   try {
     const body = await bounded(A.api.get(ENDPOINT + '?' + new URLSearchParams({ resource, id })))
@@ -216,7 +270,7 @@ async function select(id, focus = true) {
   }
 }
 async function loadEvents() {
-  if (!visible() || busy || detailLoading || tab !== 'requests' || !detail?.nextEventsCursor) return
+  if (!visible() || busy || detailLoading || !caseTab() || !inboxCurrent() || !detail?.nextEventsCursor) return
   const turn = detailEpoch, id = detail.request.id, before = detail.nextEventsCursor
   detailLoading = true
   try {
@@ -331,7 +385,7 @@ function immediateSafety(body) {
   box.hidden = !urgent; if (urgent) box.innerHTML = safetyNotice
 }
 function openForm(kind, recovery = null) {
-  if (!visible() || panel || busy || planning?.locked() || !overview || !recovery && (pending || loading || error)) return
+  if (!visible() || panel || busy || planning?.locked() || !overview || !recovery && (pending || loading || error || !inboxCurrent())) return
   const residentAction = ['add_resident', 'review_resident', 'revoke_resident'].includes(kind)
   if (residentAction && !(overview.canManageResidents && A.can('configure'))) return
   const original = residentAction ? (kind === 'add_resident' ? null : detail) : (kind === 'create_request' ? null : detail?.request)
@@ -423,7 +477,7 @@ function openForm(kind, recovery = null) {
   } }, onClose() { closed = true; residentGeneration++; panel = null } }
   panel = A.dialog(options)
 }
-function deactivate() { active = false; epoch++; detailEpoch++; loading = false; detailLoading = false; if (panel) panel.close(); planning?.deactivate() }
+function deactivate() { active = false; epoch++; detailEpoch++; clearTimeout(inboxTimer); inboxTimer = null; loading = false; detailLoading = false; if (panel) panel.close(); planning?.deactivate() }
 const view = {
   title: 'Service', icon: 'home',
   mount(el) {
@@ -431,17 +485,17 @@ const view = {
     root.innerHTML = `<header class="page-hero sv-hero"><div><span class="page-eyebrow">RESIDENT OPERATIONS · ${esc(A.property.name)}</span><h1 tabindex="-1">Service</h1><p>Understand the issue, review the resident context, and give every request a clear next step.</p></div><div class="page-hero-actions"><button type="button" class="btn btn-primary" data-command="add">Record request</button><button type="button" class="btn" data-command="refresh">Refresh</button></div></header>` +
       '<div class="sv-story"><div><span>01</span><strong>Record the issue</strong><p>Keep the report and location together.</p></div><div><span>02</span><strong>Review the context</strong><p>Separate source evidence from caller identity.</p></div><div><span>03</span><strong>Plan the next step</strong><p>Saved triage, with dispatch still pending.</p></div></div>' +
       '<div class="sv-toolbar"><div class="sv-tabs" role="group" aria-label="Service workspace"><button type="button" class="btn" data-tab="requests">Requests</button><button type="button" class="btn" data-tab="residents">Resident records</button></div><div class="sv-unit-filter"></div></div><div class="sv-filters" role="group" aria-label="Filter service records"></div><p class="sv-loaded" role="status"></p><div class="sv-errors"></div>' +
-      '<div class="sv-planning-notice"></div><div class="sv-planning-directory" hidden></div><div class="sv-workspace"><section class="sv-browser" aria-label="Service records"><div class="sv-results" aria-busy="false"></div><div class="sv-pagination"><button type="button" class="btn" data-command="more" hidden>Load more records</button></div></section><section class="sv-detail" id="sv-detail" aria-label="Selected service record"></section></div>'
+      '<div class="sv-planning-notice"></div><div class="sv-inbox-info sv-boundary" hidden></div><div class="sv-planning-directory" hidden></div><div class="sv-workspace"><section class="sv-browser" aria-label="Service records"><div class="sv-results" aria-busy="false"></div><div class="sv-pagination"><button type="button" class="btn" data-command="more" hidden>Load more records</button></div></section><section class="sv-detail" id="sv-detail" aria-label="Selected service record"></section></div>'
     if (A.maintenancePlans) {
-      planning = A.maintenancePlans.create({ isActive: visible, canOpen: () => !busy && !pending && !panel, onChange: syncPlanningControls })
-      const tabs = root.querySelector('.sv-tabs'); if (tabs) tabs.insertAdjacentHTML('beforeend', '<button type="button" class="btn" data-tab="vendors">Vendors &amp; rules</button>')
+      planning = A.maintenancePlans.create({ isActive: visible, canOpen: () => !busy && !pending && !panel && !loading && !error && inboxCurrent(), onChange: syncPlanningControls, onSaved: () => { if (visible() && tab === 'plans') loadInbox() } })
+      const tabs = root.querySelector('.sv-tabs'); if (tabs) tabs.insertAdjacentHTML('beforeend', '<button type="button" class="btn" data-tab="plans">Work plans</button><button type="button" class="btn" data-tab="vendors">Vendors &amp; rules</button>')
       planning.setNotice(root.querySelector('.sv-planning-notice'))
     }
     root.addEventListener('click', event => {
       const button = event.target.closest('button'); if (!button || !root.contains(button) || button.disabled || busy || planning?.busy) return
       if (button.dataset.tab && FILTERS[button.dataset.tab]) A.navigate('services', { tab: button.dataset.tab })
       else if (button.dataset.filter && FILTERS[tab].some(([key]) => key === button.dataset.filter)) A.navigate('services', { tab, state: button.dataset.filter, unit })
-      else if (button.dataset.select) select(button.dataset.select)
+      else if (button.dataset.select) { if (!error) select(button.dataset.select) }
       else if (button.dataset.related) select(button.dataset.related)
       else if (button.dataset.resident) { selected = button.dataset.resident; A.navigate('services', { tab: 'residents', state: 'all', id: button.dataset.resident }) }
       else {
@@ -449,6 +503,7 @@ const view = {
         if (action === 'refresh') load()
         else if (action === 'more') load(true)
         else if (action === 'events') loadEvents()
+        else if (action === 'back-list') { const row = [...root.querySelectorAll('[data-select]')].find(node => node.dataset.select === selected) || root.querySelector('[data-command="refresh"]'); row?.focus({preventScroll:true}); row?.scrollIntoView({block:'nearest',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'}) }
         else if (action === 'reload') location.reload()
         else if (action === 'retry' && pending) openForm(pending.command.action, pending)
         else if (action === 'add') openForm(tab === 'requests' ? 'create_request' : 'add_resident')
@@ -460,9 +515,10 @@ const view = {
   },
   render() {
     if (!A.can('operate') || A.route().name !== 'services') return
-    const params = A.route().params, nextTab = params.tab === 'vendors' && planning ? 'vendors' : params.tab === 'residents' ? 'residents' : 'requests'
-    const nextFilter = FILTERS[nextTab].some(([key]) => key === params.state) ? params.state : nextTab === 'requests' ? 'attention' : nextTab === 'vendors' ? 'approved' : 'active', nextUnit = params.unit || ''
-    if (tab !== nextTab || filter !== nextFilter || unit !== nextUnit) { deactivate(); tab = nextTab; filter = nextFilter; unit = nextUnit; items = []; cursor = null; selected = validId(params.id || '') ? params.id : null; loaded = false; detail = null; error = ''; checkedAt = null }
+    const params = A.route().params, nextTab = ['vendors','plans'].includes(params.tab) && planning ? params.tab : params.tab === 'residents' ? 'residents' : 'requests'
+    const nextFilter = FILTERS[nextTab].some(([key]) => key === params.state) ? params.state : ['requests','plans'].includes(nextTab) ? 'attention' : nextTab === 'vendors' ? 'approved' : 'active', nextUnit = params.unit || ''
+    if (tab !== nextTab || filter !== nextFilter || unit !== nextUnit) { deactivate(); tab = nextTab; filter = nextFilter; unit = nextUnit; items = []; cursor = null; selected = validId(params.id || '') ? params.id : null; loaded = false; detail = null; error = ''; checkedAt = null; inboxScan = null; inboxExpired = false; inboxMessage = '' }
+    if (nextTab === 'plans' && inboxScan && Date.now() >= Date.parse(inboxScan.scanExpiresAt)) { items = []; selected = null; detail = null; loaded = false; cursor = null; inboxExpired = true }
     const entered = !active; active = true; paint(); if (entered && nextTab !== 'vendors') load()
   },
 }

@@ -46,6 +46,41 @@ function cursor(value, rows) {
   if (!obj(value) || !id(value.id) || !instant(value.createdAt) || rows.at(-1)?.id !== value.id || rows.at(-1)?.createdAt !== value.createdAt) throw bad()
   return Object.freeze({ id: value.id, createdAt: value.createdAt })
 }
+function readAssessment(a) {
+  if (!obj(a) || !own(READINESS,a.readiness) || !(a.tier === null || own(TIERS,a.tier)) || !Array.isArray(a.reasons) || a.reasons.length > 50 || !a.reasons.every(x => text(x,240))
+    || ![null,'owner','admin_or_owner'].includes(a.requiredApprover) || !bool(a.spendingAuthorized) || !bool(a.residentApprovalRequired) || a.residentApprovalVerified !== false || a.entryAuthorized !== false || a.dispatchStatus !== 'not_dispatched' || a.notificationStatus !== 'not_sent') throw bad()
+  return Object.freeze(copy(a))
+}
+const NEXT_STEPS = ['review_emergency','review_context','publish_policy','prepare_plan','revise_plan','review_decision','management_review','verify_resident','confirm_vendor_availability','arrange_work']
+const RESPONSIBLE = { property_team:'Property team', manager_or_owner:'Manager or owner', owner:'Owner', verified_resident:'Verified resident authority' }
+function readInboxPage(body, filter, unit = '', previous = null) {
+  if (!obj(body) || !Array.isArray(body.items) || body.items.length > 25 || ![body.evaluatedAt,body.scanStartedAt,body.scanExpiresAt].every(instant)
+    || !nullable(body.nextCursor,v=>text(v,800)&&v.length>0) || !Number.isSafeInteger(body.scannedCount) || body.scannedCount < body.items.length || body.scannedCount > 200 || body.nextCursor!==null&&body.scannedCount===0 || !bool(body.scanIncomplete)
+    || body.scanIncomplete && (!body.nextCursor || body.items.length >= 25)
+    || Date.parse(body.scanExpiresAt) <= Date.parse(body.scanStartedAt) || Date.parse(body.scanExpiresAt)-Date.parse(body.scanStartedAt)>300000
+    || Date.parse(body.evaluatedAt) < Date.parse(body.scanStartedAt)-5000 || Date.parse(body.evaluatedAt) >= Date.parse(body.scanExpiresAt)
+    || previous && (body.scanStartedAt!==previous.scanStartedAt || Date.parse(body.scanExpiresAt)>Date.parse(previous.scanExpiresAt) || body.nextCursor!==null&&body.nextCursor===previous.nextCursor)) throw bad()
+  const rows=body.items.map(v=>{
+    if (!obj(v)||!id(v.id)||!version(v.caseVersion)||!text(v.summary,160)||!v.summary||!obj(v.location)||!['unit','common_area','unknown'].includes(v.location.kind)
+      || (v.location.kind==='unit'?!text(v.location.unitId,128)||!v.location.unitId:!text(v.location.label,160))
+      || !own(CATEGORIES,v.category)||!['routine','urgent','emergency'].includes(v.priority)||![v.createdAt,v.updatedAt].every(instant)
+      || !nullable(v.planId,id)||!nullable(v.planVersion,version)||!nullable(v.planPreparedAt,instant)||!nullable(v.maximumCents,cents)||!nullable(v.includesAllCharges,bool)||v.currency!=='USD'
+      || (v.planId===null ? v.planVersion!==null||v.planPreparedAt!==null||v.includesAllCharges!==null||v.maximumCents!==null : !v.planVersion||!v.planPreparedAt||!bool(v.includesAllCharges))
+      || !bool(v.canDecide)||!['attention','waiting'].includes(v.group)||filter!=='all'&&v.group!==filter||unit&&(v.location.kind!=='unit'||v.location.unitId!==unit)
+      || !obj(v.nextStep)||!NEXT_STEPS.includes(v.nextStep.kind)||!text(v.nextStep.label,240)||!v.nextStep.label||!own(RESPONSIBLE,v.nextStep.responsible)||!bool(v.nextStep.availableInPortal)) throw bad()
+    const assessment=readAssessment(v.assessment)
+    if (assessment.readiness==='emergency_review' && (v.group!=='attention'||v.nextStep.kind!=='review_emergency')
+      || v.canDecide && (!['awaiting_owner','awaiting_manager'].includes(assessment.readiness)||v.nextStep.kind!=='review_decision'||!v.nextStep.availableInPortal)) throw bad()
+    return Object.freeze({id:v.id,caseVersion:v.caseVersion,summary:v.summary,location:copy(v.location),category:v.category,priority:v.priority,createdAt:v.createdAt,updatedAt:v.updatedAt,
+      planId:v.planId,planVersion:v.planVersion,planPreparedAt:v.planPreparedAt,maximumCents:v.maximumCents,includesAllCharges:v.includesAllCharges,currency:v.currency,assessment,canDecide:v.canDecide,group:v.group,nextStep:copy(v.nextStep)})
+  })
+  if(new Set(rows.map(v=>v.id)).size!==rows.length)throw bad()
+  return {items:rows,nextCursor:body.nextCursor,evaluatedAt:body.evaluatedAt,scanStartedAt:body.scanStartedAt,scanExpiresAt:body.scanExpiresAt,scannedCount:body.scannedCount,scanIncomplete:body.scanIncomplete}
+}
+function inboxRowHtml(row, selected) {
+  const location=row.location.kind==='unit'?'Apartment '+row.location.unitId:row.location.kind==='common_area'?'Common area · '+row.location.label:row.location.label||'Location not established'
+  return `<button type="button" class="sv-row mp-inbox-row" data-select="${esc(row.id)}" data-key="service:${esc(row.id)}" aria-current="${row.id===selected}" aria-controls="sv-detail"><span class="sv-row-top"><strong>${esc(row.summary)}</strong>${A.html.chip(row.assessment.readiness==='emergency_review'?'chip-warn':'chip-neutral',row.assessment.readiness==='emergency_review'?'warning':'clock',READINESS[row.assessment.readiness])}</span><span class="sv-row-context">${esc(location)} · ${esc(CATEGORIES[row.category])}</span><span class="mp-inbox-step">${esc(row.nextStep.label)}</span><span class="mp-inbox-meta">${esc(RESPONSIBLE[row.nextStep.responsible])} · ${esc(money(row.maximumCents))}${row.maximumCents!==null?' ceiling'+(row.includesAllCharges?' · all charges':' · charges incomplete'):''}</span><span class="sv-row-date">${row.planPreparedAt?'Plan prepared '+esc(A.fmt.dateTime(row.planPreparedAt)):'Request recorded '+esc(A.fmt.dateTime(row.createdAt))}</span></button>`
+}
 function readDetail(v, caseId) {
   if (!obj(v) || !obj(v.request) || v.request.id !== caseId || !scoped(v.request) || !version(v.request.version) || !text(v.request.summary, 160) || !own(CATEGORIES, v.request.category)
     || !bool(v.request.contextNeedsReview) || !Array.isArray(v.request.emergencyKinds) || !v.request.emergencyKinds.every(x => text(x, 80)) || !['routine','urgent','emergency'].includes(v.request.priority)
@@ -58,9 +93,7 @@ function readDetail(v, caseId) {
   if (p && (p.route === 'vendor' ? !p.vendorId || !version(p.vendorVersion) || p.internalTeam !== null || vendor && vendor.id !== p.vendorId : p.vendorId !== null || p.vendorVersion !== null || !p.internalTeam)) throw bad()
   const d = v.decision
   if (d !== null && (!obj(d) || !p || !id(d.id) || d.planId !== p.id || !version(d.planVersion) || !['approve','reject'].includes(d.decision) || !id(d.actorUserId) || !['owner','admin'].includes(d.actorRole) || !text(d.reason,1000) || !instant(d.decidedAt) || !bool(d.authorityCurrent) || ![null,'owner','admin'].includes(d.currentRole))) throw bad()
-  const a = v.assessment
-  if (!obj(a) || !own(READINESS,a.readiness) || !(a.tier === null || own(TIERS,a.tier)) || !Array.isArray(a.reasons) || a.reasons.length > 50 || !a.reasons.every(x => text(x,240))
-    || ![null,'owner','admin_or_owner'].includes(a.requiredApprover) || !bool(a.spendingAuthorized) || !bool(a.residentApprovalRequired) || a.residentApprovalVerified !== false || a.entryAuthorized !== false || a.dispatchStatus !== 'not_dispatched' || a.notificationStatus !== 'not_sent') throw bad()
+  readAssessment(v.assessment)
   if (!Array.isArray(v.safetyInstructions) || v.safetyInstructions.length > 30 || !v.safetyInstructions.every(x=>text(x,2000)) || !bool(v.safetyCallEmergencyServices)) throw bad()
   const history = readHistory(v.history), nextHistoryCursor = cursor(v.nextHistoryCursor,history)
   return Object.freeze({ ...copy(v), policy, vendor, history, nextHistoryCursor })
@@ -231,12 +264,12 @@ function create(options) {
     return '<div class="mp-review">'+warning+content+'<h4>Reason</h4><p class="mp-pre">'+esc(command.reason||d?.reason)+'</p>'+note('Recording this change does not dispatch, notify, pay anyone or grant entry permission.')+'</div>'
   }
   function open(kind,decision=null,recovery=null){
-    if(!active()||dialog||busy||!overview||!recovery&&(pending||loading||error||options.canOpen?.()===false))return
+    if(!(recovery?options.isActive()&&A.can('operate'):active())||dialog||busy||!overview||!recovery&&(pending||loading||error||options.canOpen?.()===false))return
     if(!recovery&&(kind==='publish_policy'&&!overview.canPublishPolicy||kind==='save_vendor'&&!overview.canManageVendors||kind==='decide_plan'&&!detail?.canDecide||kind==='prepare_plan'&&(!detail?.policy||detail.assessment.readiness==='emergency_review')||kind==='withdraw_plan'&&(!detail?.plan||detail.plan.withdrawnAt)))return
     toast?.close?.();toast=null
     const original=copy(kind==='publish_policy'?overview.policy:kind==='save_vendor'?decision==='new'?null:vendor:detail),epoch=generation
     let closed=false,command=recovery?.command||null,token=recovery?.token||overview.formToken,review=Boolean(recovery),uncertain=Boolean(recovery),retired=false,draftNodes=null,reviewedHtml=recovery?.html||'',expectedId=recovery?.expectedId||null,vendorChoices=original?.vendor?[original.vendor]:[],pickerCursor=null,pickerBusy=false,pickerGeneration=0
-    const current=()=>!closed&&active()&&epoch===generation
+    const current=()=>!closed&&(recovery?options.isActive()&&A.can('operate'):active())&&epoch===generation
     function safety(body){const box=body.querySelector('.mp-immediate-safety');if(box){box.hidden=!hazard(val(body,'scope')+' '+val(body,'reason'));box.innerHTML=box.hidden?'':SAFETY}}
     async function picker(body,more=false){
       const gen=++pickerGeneration,p=body.querySelector('#mp-vendor'),h=body.querySelector('.mp-vendor-hint'),m=body.querySelector('[data-mp="picker-more"]');if(!p)return
@@ -252,7 +285,7 @@ function create(options) {
       if(retired){d.close();return}
       if(!review){try{command=formCommand(kind,d.body,original,vendorChoices,decision);command.requestId=crypto.randomUUID();command=Object.freeze(copy(command));expectedId=kind==='publish_policy'?SCOPE.propertyId:kind==='save_vendor'?command.id:original.plan?.id||null;reviewedHtml=reviewHtml(command,original,vendorChoices);draftNodes=[...d.body.childNodes];d.body.innerHTML=reviewedHtml;review=true;pickerGeneration++;d.setError(null);d.setPrimary({label:kind==='decide_plan'?decision==='approve'?'Record approval':'Record rejection':'Save reviewed change'})}catch(failure){d.setError(failure.message)}return}
       busy=true;pending={command,token,html:reviewedHtml,expectedId,needsVerification:false};changed();d.setError(null);d.setBusy('Saving…')
-      try{const receipt=readReceipt(await bounded(A.api.post(ENDPOINT,command,{formToken:token,doing:'Saving a reviewed maintenance plan'})),command,expectedId);if(!current())return;pending=null;d.close();busy=false;toast=A.toast(receipt.outcome==='emergency_held'?'Safety concern recorded. Follow the emergency protocol; the plan was not approved.':'Change recorded. Loading current plan…',{kind:receipt.outcome==='emergency_held'?'warn':'info'});await load()}
+      try{const receipt=readReceipt(await bounded(A.api.post(ENDPOINT,command,{formToken:token,doing:'Saving a reviewed maintenance plan'})),command,expectedId);if(!current())return;pending=null;d.close();busy=false;toast=A.toast(receipt.outcome==='emergency_held'?'Safety concern recorded. Follow the emergency protocol; the plan was not approved.':'Change recorded. Loading current plan…',{kind:receipt.outcome==='emergency_held'?'warn':'info'});await load();options.onSaved?.(receipt)}
       catch(failure){if(!current()||failure.propertyAccess||failure.signedOut)return;const code=failure.body?.code
         if(code==='planning_mfa_required'){pending={command,token,html:reviewedHtml,expectedId,needsVerification:true};retired=true;d.setError((uncertain?'The earlier save is still unconfirmed. ':'')+'Verify administrator access, then reload and check the saved record. No change will be retried automatically.');d.body.innerHTML=reviewedHtml+'<a class="btn btn-primary" href="/api/mfa">Verify administrator access</a>';d.setPrimary({label:'Close'})}
         else if([400,404,409].includes(failure.status)&&!failure.badJson&&own(ERRORS,code)&&!uncertain){pending=null;retired=true;error=ERRORS[code];d.setError(error);d.setPrimary({label:'Close and refresh'})}
@@ -277,5 +310,5 @@ function create(options) {
   function deactivate(clear=false){generation++;detailGeneration++;dialog?.close();host=null;mode='';caseId=null;caseVersion=null;detail=null;vendor=null;loading=false;detailLoading=false;if(clear){pending=null;overview=null;vendors=[];noticeHost=null;toast?.close?.()}}
   return Object.freeze({attach,deactivate,locked,refresh:()=>load(),setNotice(node){if(noticeHost!==node){noticeHost=node;node?.addEventListener('click',handle)}renderNotice()},get pending(){return Boolean(pending)},get busy(){return busy},get open(){return Boolean(dialog)}})
 }
-A.maintenancePlans=Object.freeze({create})
+A.maintenancePlans=Object.freeze({create,inbox:Object.freeze({readPage:readInboxPage,rowHtml:inboxRowHtml})})
 })()

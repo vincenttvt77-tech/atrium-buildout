@@ -87,12 +87,11 @@ adapter must revalidate the exact domain authority before an external commitment
 and reconcile its actual result; the existing generic worker's actor/configuration
 check alone is insufficient.
 
-Planning readiness currently appears on individual case detail. The Service
-Needs review filter covers triage and resident/location context; it does not yet
-surface all later policy, vendor or approver changes. A property planning-review
-queue is required subsequent work: derive current planning attention before
-pagination, identify the responsible role and link to an achievable next action.
-Do not describe the current case workspace as a complete approval inbox.
+The subsequent [property planning inbox](0012-maintenance-planning-inbox.md)
+provides current attention and achievable next steps with bounded progressive
+navigation. The original Service request filter still covers triage and location
+context; Work plans evaluates policy, vendor and approver changes. Its live pages
+are not a frozen snapshot and require Refresh to catch changes to earlier rows.
 
 ## Acceptance and remaining lifecycle
 
@@ -107,7 +106,7 @@ review, conflict recovery and ambiguous saves. Synthetic WebAuthn does not prove
 physical-device acceptance. Passing local fixtures does not establish a live
 PMS, telephone, provider, resident or production account connection.
 
-Next complete the planning-review queue, verified resident/channel/household
+Next complete verified resident/channel/household
 authority, approved dispatch and messaging adapters, appointment readback,
 emergency acknowledgment and backup routing, updates, resolution evidence and
 verified closure/reopening. The connected PMS remains the external system of

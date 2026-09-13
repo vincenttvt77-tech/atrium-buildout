@@ -251,6 +251,11 @@ Each plan binds the current request, resident context, configuration, policy,
 vendor, exact work and all-in USD ceiling. Current role/grant loss or a material
 change invalidates the relevant approval; revision and new approval are required.
 History and emergency evidence remain. No record grants resident identity or entry
-permission, or confirms dispatch, payment or an appointment. Planning attention is
-currently visible in case detail, not a complete approval inbox. See
-[ADR 0011](docs/adr/0011-maintenance-authority.md).
+permission, or confirms dispatch, payment or an appointment. The Work plans inbox
+uses current scoped authority and a minimal list projection. Signed continuations
+bind the exact user/session, property and filters; every page reauthorizes. Sparse
+scans expose continuation rather than silently omitting later matches. Source and
+session deadlines retire stale rows, and detail reload remains mandatory before
+action. This is live navigation, not a frozen cross-page snapshot. See
+[ADR 0011](docs/adr/0011-maintenance-authority.md) and
+[ADR 0012](docs/adr/0012-maintenance-planning-inbox.md).

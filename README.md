@@ -55,8 +55,12 @@ Service also provides owner-published spending rules, reviewed property vendors
 and versioned work plans with manager/owner decisions. Approval binds the exact
 scope, cost and current context; later changes require review. These controls
 record internal authority, with entry, availability and dispatch shown separately.
-Planning readiness currently appears on case detail; a complete approval inbox and
-verified execution remain open. See [maintenance authority](docs/adr/0011-maintenance-authority.md).
+The Service Work plans tab adds current planning attention, role-aware next steps
+and bounded continuation through large properties. Rows are checked as pages load;
+Refresh catches changes to earlier pages. Opening a row reloads exact case/plan
+authority before any decision. Verified external execution remains open. See
+[maintenance authority](docs/adr/0011-maintenance-authority.md) and the
+[planning inbox contract](docs/adr/0012-maintenance-planning-inbox.md).
 
 ## The one idea worth understanding
 
