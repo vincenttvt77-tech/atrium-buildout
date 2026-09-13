@@ -111,7 +111,7 @@ test('actual restricted connections preserve authentication, required MFA and sc
   }
  }
  const roles=(await db.admin.query("SELECT rolname,rolsuper,rolbypassrls,rolcreaterole,rolcreatedb,rolreplication,rolcanlogin FROM pg_roles WHERE rolname LIKE 'atrium_%' ORDER BY rolname")).rows
- assert.equal(roles.length,7);assert.ok(roles.every(role=>!role.rolsuper&&!role.rolbypassrls&&!role.rolcreaterole&&!role.rolcreatedb&&!role.rolreplication))
+ assert.equal(roles.length,8);assert.ok(roles.every(role=>!role.rolsuper&&!role.rolbypassrls&&!role.rolcreaterole&&!role.rolcreatedb&&!role.rolreplication))
  assert.deepEqual(roles.filter(role=>role.rolcanlogin).map(role=>role.rolname),['atrium_app','atrium_authenticator'])
  for(const role of ['anon','authenticated','service_role']){
   assert.equal((await db.admin.query("SELECT has_schema_privilege($1,'atrium','USAGE') allowed",[role])).rows[0].allowed,false)

@@ -44,10 +44,12 @@ and the database connection budget when selecting hosting/pooling.
 Provision users, scrypt credential hashes, organizations, memberships and explicit
 property grants through a reviewed administrative workflow. Configure channel
 bindings and publish complete property bundles separately. The PostgreSQL portal includes personal password changes at `/api/account`.
-General customer onboarding, forgotten-password recovery and membership management
-remain open; a personal password change is not an administrator reset.
-The hosting project/provider, production backup policy and production restore proof
-remain open; native PostgreSQL test success does not resolve those choices.
+Existing members are managed at `/api/organizations` using fresh administrator
+passkey assurance. General customer onboarding, invitations and forgotten-password
+recovery remain open; a personal password change is not an administrator reset.
+The dedicated hosted demo database has been provisioned on Free Supabase.
+Production runtime activation, the production backup policy and restore proof
+remain separate open gates; native test success does not establish them.
 
 ## HTTP and portal contract
 
@@ -62,6 +64,7 @@ current membership, organization/property status and explicit grants per operati
 | `GET/POST /api/dashboard` | Sign-in/logout and protected HTML. A signed-in user with multiple properties sees a picker; an explicit page uses `?organizationId=...&propertyId=...`. |
 | `GET/POST /api/account` | Personal password change and active-session list/revocation. Requires a current registered user session; mutations require same-origin JSON and a signed user/session-bound form token. Independent of property access; absent in legacy mode. |
 | `GET/POST /api/mfa` | Own passkey setup, verification, factor management and recovery. Exact configured origin, registered-session binding and CSRF checks on POST. Finite commands only; absent in legacy mode. |
+| `GET/POST /api/organizations` | Scoped existing-member directory and full access replacement; fresh organization-administration MFA, org/action/session-bound form tokens and atomic versioned receipts. Independent of property publication; absent in legacy mode. |
 | `GET/POST /api/workflows` | Property-scoped action queue; read permission for bounded listing, configure permission and same-origin JSON for recovery. Required expected row revision is checked under lock; no action creation, connector execution or legacy fallback. |
 | `GET /api/properties` | Authenticated, unscoped catalogue of properties this user can read. It exposes safe labels, role/permissions and navigation links, not property inventories or credentials. |
 | `GET /api/leads`, `/api/calendar`, `/api/vapi` | Require the user session and all three explicit property headers below; permission is `read`. |
@@ -465,3 +468,23 @@ environment; do not derive it from HTTP forwarding headers. Apply all migrations
 and provision the executor before activating this runtime. Existing production
 legacy authentication is separate. See [ADR 0006](../docs/adr/0006-multi-factor-authentication.md)
 for proof lifetimes, recovery and deployment limitations.
+
+
+## Existing-team administration
+
+Apply the additive organization-administration migration after provisioning
+`atrium_organization_executor` as NOLOGIN/NOSUPERUSER/NOBYPASSRLS/NOCREATEROLE.
+Only `atrium_admin` inherits it; runtime role inheritance is rejected. Three finite
+functions expose a scoped directory and full member replacement to `atrium_app`;
+raw identity/grant writes remain denied. The two new command/audit tables have
+forced RLS and immutable evidence. Appending the receipt or audit must succeed in
+the same transaction as changing access. The command increments the aggregate
+membership version once; privileged maintenance must preserve that invariant too.
+
+The hosted bootstrap can extend a verified prior eight-migration installation with
+this one executor. It checks all prior role/ACL/RLS safety and the exact saved
+manifest first, refuses an already-applied migration with a missing role, and never
+rotates existing credentials or seeds over existing records. Its `root` option is
+a complete repository root containing both data and migrations. See
+[ADR 0003](../docs/adr/0003-organization-administration.md) for locking, recovery
+and the separate unimplemented invitation/onboarding contract.

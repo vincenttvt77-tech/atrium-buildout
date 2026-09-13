@@ -202,5 +202,19 @@ establish hosted verification. The legacy named-account adapter
 still gives its configured users staff access within their tenant and uses bundled
 property content. PostgreSQL supports published per-property data and role permissions;
 the local seed is specifically the fictional Larkin property. General customer
-onboarding, membership administration, hosted MFA rollout/SSO, resident identity, PMS integration and
+onboarding, verified invitations and new-member onboarding, hosted MFA rollout/SSO, resident identity, PMS integration and
 commercial rollout acceptance remain tracked in [ARCHITECTURE.md](ARCHITECTURE.md).
+
+
+### Existing organization members
+
+In PostgreSQL mode, `/api/organizations` is independent of published property
+configuration. A fresh session-bound administrator passkey proof is required for
+its directory and writes. Owners manage only their organization and grant scope;
+admins manage staff/viewers within their own grant scope. Full access replacement
+uses a current aggregate member version, organization/action-bound CSRF token,
+exact signed-in user/session headers, and an atomic audit/receipt. Concurrent owner
+removal is serialized and cannot leave an organization without an active owner.
+A global user may belong to several organizations; changing one membership does
+not change that user's identity or other memberships. This existing-member screen
+does not yet invite staff, establish a verified recipient, or create customers.

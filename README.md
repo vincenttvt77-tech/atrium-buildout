@@ -335,3 +335,14 @@ until the versioned configuration/webhook rollout is implemented. Tool schedulin
 uses the verified property's timezone; the simulator uses its injected clock.
 
 See [QUALITY_REVIEW.md](QUALITY_REVIEW.md) for the fixes, validation and remaining live-service checks.
+
+
+PostgreSQL workspaces include **Team** at `/api/organizations` (also linked from
+Account security and Status). Owners and eligible administrators can inspect
+existing members, review complete role/property changes, and revoke access within
+their authority. Administrator passkey verification is required. Changes survive
+restarts, detect stale versions, preserve another organization's access, and
+cannot remove the last active owner. A lost response offers explicit reconciliation
+of the same change. Invitations and new-account signup remain separate work; this
+screen never sets another person's password. Hosted runtime activation is a
+separate deployment step.
