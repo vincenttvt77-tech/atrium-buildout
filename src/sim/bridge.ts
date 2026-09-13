@@ -33,6 +33,7 @@ export class VapiBridge {
     const headers: Record<string, string> = { 'content-type': 'application/json' }
     if (this.secret) headers['x-vapi-secret'] = this.secret
     await this.handler({ method: 'POST', headers, body }, res)
+    if (out.status < 200 || out.status >= 300) throw new Error(`Simulation webhook failed (HTTP ${out.status || 'unset'})`)
     return out
   }
 
@@ -51,11 +52,11 @@ export class VapiBridge {
       },
     })
     const answers = new Map<string, string>()
-    const results: Array<{ toolCallId: string; result: string }> = r.body?.results ?? []
+    if (!Array.isArray(r.body?.results)) throw new Error('Simulation webhook returned no tool results')
+    const results: Array<{ toolCallId: string; result: string }> = r.body.results
     for (const x of results) answers.set(String(x.toolCallId), String(x.result))
     for (const c of calls) {
-      // The handler's failure path answers a single 'error' id for the whole batch.
-      if (!answers.has(c.id)) answers.set(c.id, answers.get('error') ?? 'The lookup did not answer.')
+      if (!answers.has(c.id)) throw new Error('Simulation webhook omitted a tool result')
     }
     return answers
   }

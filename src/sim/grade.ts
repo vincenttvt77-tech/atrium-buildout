@@ -1,5 +1,7 @@
 import type { RunResult } from './runner.ts'
 import type { Scenario } from './scenarios.ts'
+import { localDate, wallTime } from '../calendar/time.ts'
+import { addCalendarDays } from '../calendar/range.ts'
 
 /**
  * The checks that need no judgement.
@@ -87,6 +89,25 @@ export function grade(run: RunResult, scenario: Scenario, events: Array<Record<s
   if (e.booking) {
     const booked = events.some((ev) => ev.kind === 'tour_booked' && ev.status === 'confirmed')
     checks.push({ id: 'tour-booked', ok: booked, detail: booked ? 'a tour was confirmed' : 'no tour was confirmed' })
+  }
+  if (e.bookingSlot) {
+    let matched = false
+    try {
+      const wanted = e.bookingSlot
+      const startDay = localDate(new Date(run.startedAt ?? ''), wanted.timeZone)
+      const dayOfWeek = new Date(`${startDay}T12:00:00Z`).getUTCDay()
+      const monday = addCalendarDays(startDay, -((dayOfWeek + 6) % 7))
+      const requestedDay = addCalendarDays(monday, wanted.weekOffset * 7 + (wanted.weekday + 6) % 7)
+      matched = events.some(event => {
+        if (event.kind !== 'tour_booked' || event.status !== 'confirmed' || event.unitId !== wanted.unitId
+          || typeof event.startsAt !== 'string' || !Number.isFinite(Date.parse(event.startsAt))) return false
+        const instant = new Date(event.startsAt), time = wallTime(instant, wanted.timeZone)
+        return localDate(instant, wanted.timeZone) === requestedDay && time.hour === wanted.hour && time.minute === wanted.minute
+      })
+    } catch { /* Missing or invalid evidence cannot establish the requested booking. */ }
+    checks.push({ id: 'requested-tour-booked', ok: matched,
+      detail: matched ? 'the requested residence, local day and time were confirmed'
+        : 'no confirmed event matched the requested residence, local day and time' })
   }
   if (e.escalated) {
     const esc = events.some((ev) => ev.kind === 'escalated' || ev.kind === 'emergency')

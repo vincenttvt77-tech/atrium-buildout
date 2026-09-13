@@ -104,8 +104,15 @@ export type FetchResult =
  * trusts during the exact incident they opened it for.
  */
 export async function fetchCalls(
-  opts: { apiKey?: string | undefined; limit?: number; fetchImpl?: typeof fetch } = {},
+  opts: { apiKey?: string | undefined; limit?: number; assistantIds?: string[] | undefined; fetchImpl?: typeof fetch } = {},
 ): Promise<FetchResult> {
+  // An explicitly unbound workspace has no voice history. It must never fall back to
+  // the API key's organization-wide list, even when the key is missing.
+  const assistantIds = opts.assistantIds === undefined ? undefined : [...new Set(opts.assistantIds)]
+  if (assistantIds?.length === 0) return { ok: true, calls: [] }
+  if (assistantIds && (assistantIds.length > 100 || assistantIds.some((id) => !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(id)))) {
+    return { ok: false, reason: 'This workspace has an invalid assistant binding.', configured: false }
+  }
   // Either name. VAPI_API_KEY is what someone naturally types into the Vercel form, and
   // a dashboard that stays empty because of a variable name is a bad afternoon.
   const apiKey = opts.apiKey ?? process.env.VAPI_PRIVATE_KEY ?? process.env.VAPI_API_KEY
@@ -115,15 +122,48 @@ export async function fetchCalls(
 
   const doFetch = opts.fetchImpl ?? fetch
   try {
-    const res = await doFetch(`https://api.vapi.ai/call?limit=${opts.limit ?? 20}`, {
-      headers: { authorization: `Bearer ${apiKey}` },
-    })
-    if (!res.ok) {
-      return { ok: false, reason: `Vapi returned ${res.status}`, configured: true }
+    const limit = Number.isSafeInteger(opts.limit) ? Math.max(1, Math.min(100, opts.limit!)) : 20
+    // One deadline bounds the complete fan-out, rather than granting every assistant a
+    // fresh eight seconds. At most four upstream requests are active at once.
+    const signal = AbortSignal.timeout(8000)
+    const targets = assistantIds ?? [undefined]
+    const records: unknown[] = []
+    let next = 0
+    let failure: string | undefined
+    async function worker() {
+      while (next < targets.length && !failure) {
+        const assistantId = targets[next++]
+        const query = new URLSearchParams({ limit: String(limit) })
+        if (assistantId !== undefined) query.set('assistantId', assistantId)
+        try {
+          signal.throwIfAborted()
+          const res = await doFetch(`https://api.vapi.ai/call?${query}`, {
+            headers: { authorization: `Bearer ${apiKey}` }, signal,
+          })
+          if (!res.ok) throw new Error(`Vapi returned ${res.status}`)
+          const body = await res.json() as unknown
+          const list = Array.isArray(body) ? body : asRecord(body).results
+          if (!Array.isArray(list)) throw new Error('Vapi returned an invalid call list.')
+          for (const call of list) {
+            const record = asRecord(call)
+            // Filter the upstream response before normalization strips assistant identity.
+            // Missing IDs are excluded: the query parameter alone is not an access check.
+            if (assistantId !== undefined && record.assistantId !== assistantId) continue
+            if (typeof record.id !== 'string' || !record.id) continue
+            records.push(record)
+          }
+        } catch (err) {
+          failure = err instanceof Error ? err.message : String(err)
+        }
+      }
     }
-    const body = await res.json() as unknown
-    const list = Array.isArray(body) ? body : (asRecord(body).results as unknown[] ?? [])
-    return { ok: true, calls: list.map(normaliseCall) }
+    await Promise.all(Array.from({ length: Math.min(4, targets.length) }, () => worker()))
+    if (failure) return { ok: false, reason: failure, configured: true }
+    const date = (call: VapiCall) => Date.parse(call.startedAt ?? '') || 0
+    const sorted = records.map(normaliseCall).sort((a, b) => date(b) - date(a) || a.id.localeCompare(b.id))
+    const unique = new Map<string, VapiCall>()
+    for (const call of sorted) if (!unique.has(call.id)) unique.set(call.id, call)
+    return { ok: true, calls: [...unique.values()].slice(0, limit) }
   } catch (err) {
     return {
       ok: false,

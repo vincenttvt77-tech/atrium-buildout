@@ -27,10 +27,35 @@ describe('stage is derived from the facts, never typed', () => {
     assert.equal(deriveStage(p, NOW), 'tour_scheduled')
   })
 
-  test('a confirmed booking in the past is toured', () => {
+  test('a past confirmed booking remains tour_scheduled without attendance evidence', () => {
     const p = emptyProfile('+1', NOW)
     p.bookings.push({ slotId: 's', startsAt: '2026-09-06T21:00:00Z', unitId: null, status: 'confirmed', callId: 'c' })
-    assert.equal(deriveStage(p, NOW), 'toured')
+    assert.equal(deriveStage(p, NOW), 'tour_scheduled')
+    assert.equal(deriveStage(p, new Date('2027-01-01')), 'tour_scheduled', 'elapsed time alone never proves attendance')
+  })
+
+  test('an older appointment cannot mark a lead with a future booking as toured', () => {
+    const p = emptyProfile('+1', NOW)
+    p.bookings = [
+      { slotId: 'past', startsAt: '2026-09-06T21:00:00Z', unitId: null, status: 'confirmed', callId: 'a' },
+      { slotId: 'future', startsAt: '2026-09-08T21:00:00Z', unitId: null, status: 'confirmed', callId: 'b' },
+    ]
+    assert.equal(deriveStage(p, NOW), 'tour_scheduled')
+  })
+
+  test('failed and unverified past bookings prove neither a booking nor attendance', () => {
+    for (const status of ['failed', 'arranging'] as const) {
+      const p = emptyProfile('+1', NOW)
+      p.bookings.push({ slotId: 's', startsAt: '2026-09-06T21:00:00Z', unitId: null, status, callId: 'c' })
+      assert.equal(deriveStage(p, NOW), 'new', status)
+    }
+  })
+
+  test('a legacy toured stage is not itself evidence of attendance', () => {
+    const p = emptyProfile('+1', NOW)
+    p.stage = 'toured'
+    p.bookings.push({ slotId: 's', startsAt: '2026-09-06T21:00:00Z', unitId: null, status: 'confirmed', callId: 'c' })
+    assert.equal(deriveStage(p, NOW), 'tour_scheduled')
   })
 
   test('two core signals make a lead qualified', () => {
@@ -85,6 +110,26 @@ describe('follow-ups are the system showing it knows what to do next', () => {
 
   test('nothing is executable, and says so', () => {
     for (const f of deriveFollowUps(booked(), NOW, 'c1')) assert.equal(f.executable, false)
+  })
+
+  test('follow-up after a scheduled time asks whether they attended instead of claiming they toured', () => {
+    const p = booked()
+    p.bookings[0]!.startsAt = '2026-09-06T21:00:00Z'
+    const followUp = deriveFollowUps(p, NOW, 'c1').find(f => f.kind === 'post_tour')
+    assert.ok(followUp)
+    assert.match(followUp.reason, /was scheduled to tour residence 12A/)
+    assert.match(followUp.reason, /confirm whether they attended/)
+    assert.doesNotMatch(followUp.reason, /\btoured\b|find out how it went/)
+    assert.equal(followUp.executable, false)
+  })
+
+  test('failed or unverified bookings do not produce an attendance follow-up', () => {
+    for (const status of ['failed', 'arranging'] as const) {
+      const p = booked()
+      p.bookings[0]!.startsAt = '2026-09-06T21:00:00Z'
+      p.bookings[0]!.status = status
+      assert.ok(!deriveFollowUps(p, NOW, 'c1').some(f => f.kind === 'post_tour'), status)
+    }
   })
 
   test('re-deriving after a second call does not duplicate', () => {

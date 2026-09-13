@@ -26,7 +26,7 @@ The site, the tour-booking backend and the operations dashboard all deploy toget
 
 | Variable | Needed for | Notes |
 |---|---|---|
-| `VAPI_WEBHOOK_SECRET` | Verifying inbound webhooks are genuinely from Vapi | Invent any long random string. Put the same value in Vapi's server settings. **Set this before showing anyone the URL** — without it, the endpoint URL is the only thing protecting the agent. |
+| `VAPI_WEBHOOK_SECRET` | Verifying inbound webhooks are genuinely from Vapi | Invent any long random string. Put the same value in Vapi's server settings. **Required in production** — deployed webhooks refuse requests until verification is configured. Both X-Vapi-Secret and Authorization: Bearer are supported. |
 | `OPS_DASHBOARD_PASSCODE` | Opening the operations dashboard and its call log | **Required.** Invent a long random string; give it to whoever needs the dashboard. Until it is set, `/api/dashboard` and the log both refuse everyone — the log holds caller names, emails, budgets and verbatim excerpts, so it fails closed rather than open. `DASHBOARD_TOKEN` works as an alias. |
 | `RESEND_API_KEY` | Sending the branded confirmation email | Optional. Without it the email renders and queues but does not send, and the dashboard says so rather than claiming it went. |
 | `VAPI_PRIVATE_KEY` | Reading call recordings back from Vapi | Optional, not needed for the demo. |
@@ -69,8 +69,6 @@ no further than the people operating the building.
 
 - **SMS.** Needs 10DLC registration, which needs the EIN.
 - **Apple Messages for Business.** Needs the entity and Apple's review.
-- **The tour calendar** is an in-memory demo calendar, not Google Calendar or a PMS.
-- **The dashboard log** lives in the serverless function's memory and resets on a cold
-  start. A KV-backed store is the first upgrade; the interface is already in
-  `src/record/store.ts` waiting for it.
+- **The tour calendar** persists in Redis/KV when `KV_REST_API_URL` and `KV_REST_API_TOKEN` are configured. Without them, it is an in-memory demo. It is not Google Calendar or a PMS.
+- **Decision events** reset on cold start. Call history is read from Vapi. Leads, follow-ups, bookings and active call state persist in KV when configured.
 - **The building is fictional.** Every unit, price and policy is invented.

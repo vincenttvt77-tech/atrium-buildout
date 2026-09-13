@@ -10,7 +10,9 @@ export interface MoveInTiming {
 
 export interface BudgetSignal {
   /** Monthly rent ceiling as stated. Never inferred from what they were shown. */
-  maxMonthly: number
+  maxMonthly: number | null
+  /** A stated spending floor, distinct from a ceiling. Null ceiling means none stated. */
+  minMonthly?: number
   /** True when they volunteered a hard limit rather than reacting to a quote. */
   stated: boolean
 }

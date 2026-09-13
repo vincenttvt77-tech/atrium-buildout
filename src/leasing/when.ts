@@ -22,7 +22,11 @@ const addDays = (d: Date, n: number) => new Date(d.getTime() + n * DAY)
 
 function addMonths(d: Date, n: number): Date {
   const out = new Date(d)
+  const day = out.getUTCDate()
+  out.setUTCDate(1)
   out.setUTCMonth(out.getUTCMonth() + n)
+  const last = new Date(Date.UTC(out.getUTCFullYear(), out.getUTCMonth() + 1, 0)).getUTCDate()
+  out.setUTCDate(Math.min(day, last))
   return out
 }
 
@@ -74,6 +78,15 @@ export function parseMoveIn(text: string, now: Date): MoveInWindow | null {
     }
   }
 
+  // Explicit "within/from now to" windows outrank the word "now". Otherwise
+  // "within now to three months" incorrectly shrinks to the ASAP 30-day window.
+  const bounded = /\b(?:within(?:\s+(?:now|today)\s+(?:to|through))?|from\s+(?:now|today)\s+(?:to|through)|between\s+(?:now|today)\s+and)\s+(?:the\s+next\s+)?(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s*(day|week|month)s?\b/.exec(s)
+  if (bounded) {
+    const count = /^\d+$/.test(bounded[1]!) ? Number(bounded[1]) : NUMBER_WORDS[bounded[1]!]!
+    return { earliest: now, latest: bounded[2] === 'month' ? addMonths(now, count)
+      : addDays(now, count * (bounded[2] === 'week' ? 7 : 1)), said }
+  }
+
   // "asap", "right away", "immediately", "now", "yesterday"
   if (/\b(asap|as soon as possible|right away|immediately|now|yesterday|today)\b/.test(s)) {
     return { earliest: now, latest: addDays(now, 30), said }
@@ -119,11 +132,13 @@ export function parseMoveIn(text: string, now: Date): MoveInWindow | null {
   if (monthMatch >= 0) {
     const yearMatch = /\b(20\d{2})\b/.exec(s)
     const year = yearMatch ? Number(yearMatch[1]) : now.getUTCFullYear()
-    let earliest = new Date(Date.UTC(year, monthMatch, 1))
-    if (!yearMatch && earliest.getTime() < now.getTime()) {
-      earliest = new Date(Date.UTC(year + 1, monthMatch, 1))
-    }
-    return { earliest, latest: addMonths(earliest, 1), said }
+    const dayMatch = new RegExp(`\\b${MONTHS[monthMatch]}\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b`).exec(s)
+    const day = dayMatch ? Number(dayMatch[1]) : 1
+    let earliest = new Date(Date.UTC(year, monthMatch, day))
+    if (earliest.getUTCMonth() !== monthMatch) return null
+    const end = dayMatch ? addDays(earliest, 1) : addMonths(earliest, 1)
+    if (!yearMatch && end.getTime() <= now.getTime()) earliest = new Date(Date.UTC(year + 1, monthMatch, day))
+    return { earliest, latest: dayMatch ? null : addMonths(earliest, 1), said }
   }
 
   // Seasons, which people use freely and which are a genuine three-month window.
@@ -132,7 +147,7 @@ export function parseMoveIn(text: string, now: Date): MoveInWindow | null {
     if (new RegExp(`\\b${name}\\b`).test(s)) {
       const year = /\b(20\d{2})\b/.exec(s)?.[1]
       let earliest = new Date(Date.UTC(year ? Number(year) : now.getUTCFullYear(), startMonth, 1))
-      if (!year && earliest.getTime() < now.getTime()) earliest = addMonths(earliest, 12)
+      if (!year && addMonths(earliest, 3).getTime() <= now.getTime()) earliest = addMonths(earliest, 12)
       return { earliest, latest: addMonths(earliest, 3), said }
     }
   }

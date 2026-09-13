@@ -31,6 +31,14 @@ describe('move-in timing as people actually say it', () => {
 })
 
 describe('windows, not points', () => {
+  test('the failed-call within-now-to-three-months wording keeps its full stated window', () => {
+    const now = new Date('2026-09-09T19:12:00Z')
+    for (const text of ['within now to 3 months', 'within three months', 'from now to three months', 'between now and three months', 'within— 3 months. Within now to 3 months.']) {
+      const result = parseMoveIn(text, now)!
+      assert.equal(result.earliest.toISOString(), now.toISOString(), text)
+      assert.equal(result.latest?.toISOString(), '2026-12-09T19:12:00.000Z', text)
+    }
+  })
   test('a range keeps both ends', () => {
     const r = parseMoveIn('2-3 months', NOW)!
     assert.equal(iso(r.earliest), '2026-11-07')
@@ -76,5 +84,21 @@ describe('what the transcriber actually hands over', () => {
   test('"over the next couple of weeks" and "in a couple of months" both parse', () => {
     assert.equal(parseMoveIn('over the next couple of weeks', now)?.latest?.toISOString().slice(0, 10), '2026-09-21')
     assert.equal(parseMoveIn('in a couple of months', now)?.earliest.toISOString().slice(0, 10), '2026-11-07')
+  })
+})
+
+
+describe('calendar-date edge cases', () => {
+  test('a specific named day keeps the day instead of becoming the first', () => {
+    assert.equal(iso(parseMoveIn('October 15', NOW)!.earliest), '2026-10-15')
+    assert.equal(parseMoveIn('October 15', NOW)!.latest, null)
+    assert.equal(parseMoveIn('February 30', NOW), null)
+  })
+  test('the current month and current season do not jump to next year', () => {
+    assert.equal(iso(parseMoveIn('September', NOW)!.earliest), '2026-09-01')
+    assert.equal(iso(parseMoveIn('this fall', NOW)!.earliest), '2026-09-01')
+  })
+  test('one month after January 31 lands in February', () => {
+    assert.equal(iso(parseMoveIn('in one month', new Date('2026-01-31T12:00:00Z'))!.earliest), '2026-02-28')
   })
 })

@@ -2,7 +2,7 @@
 /**
  * Local preview server for the operations dashboard.
  *
- *   npm run dev:ops              → http://localhost:4300/   (passcode: demo)
+ *   npm run dev:ops              → http://localhost:4300/   (initial credentials shown once)
  *   node scripts/dev-ops.mjs --no-seed
  *   PORT=5000 node scripts/dev-ops.mjs
  *
@@ -11,28 +11,31 @@
  *   - Mounts the REAL handlers in `api/*.ts` (Node strips the types; no build step) behind a
  *     small Vercel-style req/res shim. Sign-in, cookies, the passcode gate, the calendar and
  *     the lead pipeline are the production code paths, not a mock of them.
- *   - Forces the in-memory stores: `OPS_DASHBOARD_PASSCODE=demo` unless one is already set,
- *     and no KV variables, so nothing here can touch a real database. State resets on restart.
+ *   - Imports the private Larkin account once into a persistent loopback PostgreSQL
+ *     database. External KV, Vapi and database credentials are ignored.
  *   - `GET /api/vapi` answers from `scripts/dev-fixtures/calls.json` when no Vapi key is set,
- *     so the Calls view has realistic transcripts and tool calls to render. With a key set the
- *     real Vapi history is used unchanged.
+ *     so the Calls view has realistic transcripts and tool calls to render. Only the explicit
+ *     Larkin demo tenant receives these fixtures.
  *   - `--seed` (default) replays the fixture's calls through the real webhook — Vapi-shaped
  *     `transcript`, `tool-calls` and `end-of-call-report` posts — so the leads, follow-ups,
  *     bookings and decision events exist exactly as production would have written them. Each
  *     call is replayed under a clock set to its own start time (see `withClock`), which is the
- *     only way the real code can produce a tour that is already in the past ("toured").
+ *     only way the real code can produce a tour scheduled in the past. Attendance remains unknown.
  *   - Serves `/` through `api/dashboard.ts` so the login form and cookie flow are real. On a
  *     200 the body is the page composed live from `ops/src/` (what `npm run build:ops` would
  *     write), so builders edit, refresh, and see it — `--built` serves the embedded build
  *     instead.
  *
- * No npm dependencies. Plain Node 22.
+ * Requires Node 22 and the repository's embedded-postgres dependency.
  */
 import { createServer } from 'node:http'
+import { createHash } from 'node:crypto'
 import { access, readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
+import { openLocalDatabase, localImportStep, LOCAL_ORGANIZATION, LOCAL_PROPERTY, LOCAL_ASSISTANT as DEMO_ASSISTANT } from './lib/local-database.mjs'
+import { localDemoOperations } from './lib/local-demo-operations.mjs'
 
 const RealDate = Date
 const DAY = 86_400_000
@@ -59,7 +62,7 @@ const { values: flags } = parseArgs({
 if (flags.help) {
   console.log(`Usage: node scripts/dev-ops.mjs [--no-seed] [--built] [--port N]
 
-  --no-seed   start with an empty store (fixture calls are still served on GET /api/vapi)
+  --no-seed   skip fixture import; existing saved data is preserved
   --built     serve ops/dashboard.page.json as embedded at startup instead of composing ops/src live
   --port N    listen on N (default 4300; the PORT environment variable also works)
   --fixture F replay F instead of scripts/dev-fixtures/calls.json (same format; reviewers use
@@ -68,19 +71,19 @@ if (flags.help) {
   process.exit(0)
 }
 
-const defaultPasscode = !(process.env.OPS_DASHBOARD_PASSCODE ?? '').trim()
-if (defaultPasscode) process.env.OPS_DASHBOARD_PASSCODE = 'demo'
-for (const name of ['KV_REST_API_URL', 'KV_REST_API_TOKEN']) {
-  if (process.env[name] !== undefined) {
-    console.warn(`[dev-ops] ignoring ${name}: the preview always uses the in-memory store`)
-    delete process.env[name]
-  }
-}
-const PASSCODE = process.env.OPS_DASHBOARD_PASSCODE
-const VAPI_KEY_SET = Boolean((process.env.VAPI_PRIVATE_KEY ?? process.env.VAPI_API_KEY ?? '').trim())
-const WEBHOOK_SECRET = (process.env.VAPI_WEBHOOK_SECRET ?? '').trim()
 const PORT = Number(flags.port ?? process.env.PORT ?? 4300)
+const localDatabase = await openLocalDatabase({ root, authOrigin: `http://localhost:${PORT}` })
+const runtime = localDatabase.runtime
+// Current operational HTTP integrations all use fetch. The local preview never
+// makes those calls, even if a future path accidentally forgets its credential gate.
+globalThis.fetch = async () => { throw new Error('External service calls are disabled in the local preview.') }
+const WEBHOOK_SECRET = (process.env.VAPI_WEBHOOK_SECRET ?? '').trim()
 const FIXTURE_PATH = flags.fixture ? resolve(process.cwd(), flags.fixture) : DEFAULT_FIXTURE_PATH
+const FIXTURE_IMPORT = 'synthetic-calls-progress-v1'
+const savedFixture = await localDatabase.readImport('synthetic-calls-v1')
+if (flags.fixture && savedFixture && savedFixture.path !== FIXTURE_PATH) throw new Error('This local database already imported a different fixture. Existing data was preserved.')
+const step = (id, work) => localImportStep(localDatabase, FIXTURE_IMPORT, id, work)
+const payloadId = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex')
 
 const load = (rel) => import(pathToFileURL(join(root, rel)).href)
 
@@ -93,9 +96,11 @@ try {
   await buildOps.buildOpsPage()
 }
 
-const [dashboard, calendar, leads, vapi, health, ny, vapiCalls, calendarStore] = await Promise.all([
+await (await load('scripts/build-auth.mjs')).buildAuthClient()
+const [dashboard, calendar, leads, vapi, health, properties, ny, vapiCalls, account, mfa, workflows, organizations, residentServices, maintenancePlans] = await Promise.all([
   load('api/dashboard.ts'), load('api/calendar.ts'), load('api/leads.ts'), load('api/vapi.ts'),
-  load('api/health.ts'), load('src/time/ny.ts'), load('src/ops/vapi-calls.ts'), load('src/calendar/store.ts'),
+  load('api/health.ts'), load('api/properties.ts'), load('src/time/ny.ts'), load('src/ops/vapi-calls.ts'),
+  load('api/account.ts'), load('api/mfa.ts'), load('api/workflows.ts'), load('api/organizations.ts'), load('api/resident-services.ts'), load('api/maintenance-plans.ts'),
 ])
 
 const ROUTES = {
@@ -104,6 +109,13 @@ const ROUTES = {
   '/api/leads': leads.default,
   '/api/vapi': vapi.default,
   '/api/health': health.default,
+  '/api/properties': properties.default,
+  '/api/account': account.default,
+  '/api/mfa': mfa.default,
+  '/api/workflows': workflows.default,
+  '/api/resident-services': residentServices.default,
+  '/api/maintenance-plans': maintenancePlans.default,
+  '/api/organizations': organizations.default,
 }
 
 // ---------------------------------------------------------------------------------------
@@ -163,6 +175,7 @@ function shimRequest({ method, url, headers = {}, body, socket }) {
   // way a local proxy would, so the session cookie also works on a non-localhost hostname.
   if (lower['x-forwarded-proto'] === undefined) lower['x-forwarded-proto'] = 'http'
   return {
+    atriumRuntime: runtime,
     method,
     url,
     headers: lower,
@@ -254,16 +267,20 @@ async function invoke(handler, request) {
   return out
 }
 
-const opsHeaders = (extra = {}) => ({ 'x-ops-passcode': PASSCODE, accept: 'application/json', ...extra })
+let fixtureOperation = null
+const opsHeaders = (extra = {}) => {
+  if (!fixtureOperation) throw new Error('Fixture authorization is available only during its local import.')
+  return {
+    'x-atrium-organization-id': LOCAL_ORGANIZATION, 'x-atrium-property-id': LOCAL_PROPERTY,
+    'x-atrium-config-version': '1', accept: 'application/json', ...extra }
+}
 
 async function api(handler, method, url, body) {
-  const headers = opsHeaders(body === undefined ? {} : { 'content-type': 'application/json' })
-  const out = await invoke(handler, { method, url, headers, body: body === undefined ? undefined : JSON.stringify(body) })
-  if (out.status >= 400) {
-    const message = out.json?.error ?? out.body.toString('utf8').slice(0, 200)
-    throw new Error(`${method} ${url} → ${out.status}: ${message}`)
+  if (!fixtureOperation) throw new Error('Template operations are available only during local import.')
+  const work = async () => {
+    return fixtureOperation(method, url, body)
   }
-  return out.json
+  return method === 'POST' ? step(`staff:${url}:${payloadId(body)}`, work) : work()
 }
 
 // ---------------------------------------------------------------------------------------
@@ -287,7 +304,7 @@ async function withClock(at, fn) {
 // Fixture: scripts/dev-fixtures/calls.json (format documented in scripts/dev-fixtures/README.md)
 // ---------------------------------------------------------------------------------------
 
-const STARTED = new RealDate()
+const STARTED = new RealDate(savedFixture?.startedAt ?? new RealDate())
 const nyDayOffset = (n) => ny.nyDate(new RealDate(STARTED.getTime() + n * DAY))
 const wallMinutes = (iso) => { const w = ny.nyWall(new RealDate(iso)); return w.hour * 60 + w.minute }
 
@@ -391,40 +408,34 @@ function applyTokens(call) {
   }
 }
 
-/** Without seeding, the slot list the agent "read out" is still built from the real calendar. */
-async function refreshSlotListings(call) {
-  for (const t of call.toolCalls) {
-    if (t.name !== 'list_tour_slots') continue
-    const next = (await readCalendarSlots()).filter((s) => s.status === 'open').slice(0, 6)
-    t.result = next.length === 0
-      ? 'No tour times are open. Offer to have someone call them back.'
-      : `Real open tour times — offer only these, and use the slotId when booking:\n${next.map((s) => `${s.slotId} — ${fmtSlot(new RealDate(s.startsAt))}`).join('\n')}`
-  }
-}
-
 // ---------------------------------------------------------------------------------------
 // Seeding: the fixture replayed through the real webhook, plus the calendar blocks and the
-// staff actions (notes, follow-ups marked done) through the real dashboard endpoints.
+// staff templates through finite, scoped import operations. Interactive endpoints
+// always require the user's own passkey; import never fabricates that assurance.
 // ---------------------------------------------------------------------------------------
 
 const callRef = (call) => ({
   id: call.id,
+  assistantId: DEMO_ASSISTANT,
   type: 'inboundPhoneCall',
   ...(call.customerNumber ? { customer: { number: call.customerNumber } } : {}),
 })
 
 async function postVapi(message) {
   const headers = opsHeaders({ 'content-type': 'application/json', ...(WEBHOOK_SECRET ? { 'x-vapi-secret': WEBHOOK_SECRET } : {}) })
-  const out = await invoke(vapi.default, { method: 'POST', url: '/api/vapi', headers, body: JSON.stringify({ message }) })
-  if (out.status !== 200) throw new Error(`POST /api/vapi (${message.type}) → ${out.status}: ${out.body.toString('utf8').slice(0, 200)}`)
-  return out.json
+  return step(`webhook:${message.call?.id}:${message.type}:${payloadId(message)}`, async () => {
+    const out = await invoke(vapi.default, { method: 'POST', url: '/api/vapi', headers, body: JSON.stringify({ message }) })
+    if (out.status !== 200) throw new Error(`Fixture webhook ${message.type} returned ${out.status}; import stopped without resetting data.`)
+    return out.json
+  })
 }
 
 /** One call, replayed at its own time: what the caller said, what the tools did, the report. */
 async function seedCall(call) {
   const results = []
   await withClock(new RealDate(call.startedAt), async () => {
-    await resolveCallSlots(call)
+    const resolved = await step(`resolve:${call.id}`, async () => { await resolveCallSlots(call); applyTokens(call); return call })
+    Object.assign(call, resolved)
     for (const line of String(call.transcript ?? '').split('\n')) {
       if (!line.startsWith('User: ')) continue
       await postVapi({ type: 'transcript', role: 'user', transcriptType: 'final', transcript: line.slice(6), call: callRef(call) })
@@ -457,30 +468,15 @@ async function seedCall(call) {
 async function seedBlocks(blocks) {
   let slots = null
   const outcomes = []
-  for (const b of blocks) {
-    let target
-    if (/^[+-]?\d+$/.test(String(b.target))) target = nyDayOffset(Number(b.target))
-    else {
+  for (const [index, b] of blocks.entries()) {
+    const target = await step(`resolve-block:${index}`, async () => {
+      if (/^[+-]?\d+$/.test(String(b.target))) return nyDayOffset(Number(b.target))
       slots ??= await readCalendarSlots()
-      const slot = pickSlot(slots, b.target, { open: false })
-      if (!slot) { console.warn(`[dev-ops] block "${b.target}": no slot found, skipped`); continue }
-      target = slot.slotId
-    }
-    try {
-      await api(calendar.default, 'POST', '/api/calendar', { action: 'block', target, reason: b.reason })
-      outcomes.push({ target, via: 'api' })
-    } catch (err) {
-      if (!/^slot-/.test(target)) throw err
-      // Known handler defect: api/calendar.ts validates block targets with a regex written for
-      // hour-precision ids and rejects the minute-precision ids the API itself emits. Until that
-      // is fixed, write the block straight into the same in-memory store so the calendar still
-      // shows what a slot-level block looks like. Loud, so nobody mistakes this for the API.
-      console.warn(`[dev-ops] POST /api/calendar rejected slot block ${target} (${String(err.message).split(': ').pop()}); writing it to the store directly`)
-      const store = calendarStore.calendarStoreFromEnv()
-      await store.mutate((s) => s.blocks.some((x) => x.target === target) ? s
-        : { ...s, blocks: [...s.blocks, { target, reason: String(b.reason ?? 'blocked').slice(0, 120), blockedAt: new RealDate().toISOString() }] })
-      outcomes.push({ target, via: 'store' })
-    }
+      return pickSlot(slots, b.target, { open: false })?.slotId ?? null
+    })
+    if (!target) { console.warn(`[dev-ops] block "${b.target}": no slot found, skipped`); continue }
+    await api(calendar.default, 'POST', '/api/calendar', { action: 'block', target, reason: b.reason })
+    outcomes.push({ target, via: 'api' })
   }
   return outcomes
 }
@@ -505,11 +501,6 @@ async function seedStaff(actions) {
 }
 
 async function seed(fixture) {
-  // The inventory snapshot is cached with the clock of the first tool call and judged stale
-  // after 15 minutes (src/inventory/match.ts). Warm it now, at the latest time any seeded
-  // call will see, so calls replayed in the past never trip the stale branch.
-  await postVapi({ type: 'transcript', role: 'user', transcriptType: 'final', transcript: 'hello', call: { id: 'dev-warmup' } })
-
   const blocks = await seedBlocks(fixture.blocks)
   for (const call of fixture.calls) await seedCall(call)
   const staff = await seedStaff(fixture.staff)
@@ -524,20 +515,24 @@ async function seed(fixture) {
 // Startup
 // ---------------------------------------------------------------------------------------
 
-const fixture = await loadFixture()
+let fixture = savedFixture?.fixture ?? { calls: [], blocks: [], staff: [] }
 let summary = null
-if (flags.seed) {
-  summary = await seed(fixture)
-} else {
-  for (const call of fixture.calls) {
-    await withClock(new RealDate(call.startedAt ?? STARTED), async () => {
-      await resolveCallSlots(call)
-      await refreshSlotListings(call)
-    })
+if (flags.seed && savedFixture?.status !== 'complete') {
+  fixture = savedFixture?.fixture ?? await loadFixture()
+  await localDatabase.writeImport('synthetic-calls-v1', { status: 'pending', startedAt: STARTED.toISOString(), path: FIXTURE_PATH, fixture, synthetic: true })
+  fixtureOperation = localDemoOperations(await runtime.loadChannel('vapi', DEMO_ASSISTANT), {
+    organizationId: LOCAL_ORGANIZATION, propertyId: LOCAL_PROPERTY })
+  try {
+    summary = await seed(fixture)
+    for (const call of fixture.calls) { applyTokens(call); delete call.tour }
+    await localDatabase.writeImport('synthetic-calls-v1', { status: 'complete', startedAt: STARTED.toISOString(), path: FIXTURE_PATH, fixture,
+      synthetic: true, note: 'Fictional call samples imported once. Source dates and staff changes survive restarts; no PMS connection.' })
+  } finally {
+    fixtureOperation = null
   }
 }
-for (const call of fixture.calls) { applyTokens(call); delete call.tour }
-const fixtureCalls = [...fixture.calls].sort((a, b) => (b.startedAt ?? '').localeCompare(a.startedAt ?? ''))
+const fixtureCalls = (summary || savedFixture?.status === 'complete' ? [...fixture.calls] : [])
+  .sort((a, b) => (b.startedAt ?? '').localeCompare(a.startedAt ?? ''))
 
 let composeWarned = false
 async function livePage(fallback) {
@@ -586,17 +581,26 @@ const server = createServer(async (req, res) => {
     })
     let body = out.body
 
-    if (path === '/api/vapi' && req.method === 'GET' && !VAPI_KEY_SET && out.status === 200 && out.json) {
+    if (path === '/api/vapi' && req.method === 'GET' && out.status === 200 && out.json?.scope?.organizationId === LOCAL_ORGANIZATION
+      && out.json.scope.propertyId === LOCAL_PROPERTY) {
       body = Buffer.from(JSON.stringify({
         ...out.json,
         calls: fixtureCalls,
         callsError: null,
         callsConfigured: true,
-        note: 'Calls from scripts/dev-fixtures/calls.json (local preview, no Vapi key). Decision events are in-process and reset when the server restarts.',
+        note: 'Fictional call samples saved locally at first import. No live Vapi or PMS connection. Call and source dates are preserved on restart.',
       }))
     } else if (path === '/api/dashboard' && !flags.built && req.method === 'GET' && out.status === 200
       && String(out.headers.get('content-type') ?? '').includes('text/html')) {
-      body = Buffer.from(await livePage(out.body.toString('utf8')))
+      const served = out.body.toString('utf8')
+      // Copy the complete authorized bootstrap, including session form bindings;
+      // new fields must not silently disable live composition or demo labeling.
+      const bootstrap = /<script>window\.ATRIUM_RUNTIME_MODE="postgres";[\s\S]*?<\/script>/.exec(served)?.[0]
+      // Picker/error pages remain exactly as the handler served them. Only a
+      // successfully authorized property page receives the live source bundle.
+      if (bootstrap) body = Buffer.from((await livePage(served)).replace('</head>', `${bootstrap}<script>window.ATRIUM_DEMO=true;window.ATRIUM_DEMO_PERSISTENT=true;</script></head>`))
+    } else if (path === '/api/dashboard' && flags.built && out.status === 200 && out.body.includes('window.ATRIUM_RUNTIME_MODE="postgres";')) {
+      body = Buffer.from(out.body.toString('utf8').replace('</head>', '<script>window.ATRIUM_DEMO=true;window.ATRIUM_DEMO_PERSISTENT=true;</script></head>'))
     }
 
     status = out.status
@@ -616,34 +620,35 @@ const server = createServer(async (req, res) => {
   }
 })
 
-server.on('error', (err) => {
+server.on('error', async (err) => {
   if (err.code === 'EADDRINUSE') console.error(`[dev-ops] port ${PORT} is already in use — pass --port N or set PORT`)
   else console.error('[dev-ops] server error', err)
-  process.exit(1)
+  await localDatabase.close(); process.exit(1)
 })
 
-server.listen(PORT, () => {
+server.listen(PORT, '127.0.0.1', () => {
   const stages = {}
   for (const p of summary?.profiles ?? []) stages[p.stage] = (stages[p.stage] ?? 0) + 1
   const lines = [
     '',
     'Atrium operations dashboard — local preview',
     `  Open      http://localhost:${PORT}/`,
-    `  Sign in   passcode: ${defaultPasscode ? 'demo' : '(OPS_DASHBOARD_PASSCODE from your environment)'}`,
-    `  Calls     ${fixtureCalls.length} from scripts/dev-fixtures/calls.json` + (VAPI_KEY_SET ? ' — NOT used: a Vapi key is set, GET /api/vapi reads real history' : ''),
+    '  Sign in   username: larkin (your existing local password)',
+    `  Calls     ${fixtureCalls.length} fictional samples saved once; no live Vapi connection`,
     summary
       ? `  Seeded    ${summary.profiles.length} leads (${Object.entries(stages).map(([k, v]) => `${v} ${k.replace('_', ' ')}`).join(', ')}), ` +
         `${summary.followUps.length} follow-ups, ${summary.bookings.length} bookings, ${summary.blocks.length} blocks` +
         (summary.blocks.some((b) => b.via === 'store') ? ' (slot blocks written to the store — see the warning above)' : '')
-      : '  Seeded    nothing (--no-seed): the store is empty until something calls the webhook',
+      : flags.seed ? '  Seeded    previously imported samples preserved; no reseeding' : '  Seeded    import skipped (--no-seed); existing saved data preserved',
     `  Page      ${flags.built ? 'ops/dashboard.page.json as embedded at startup (restart after build:ops)' : 'composed live from ops/src on every load (--built to serve the embedded build)'}`,
-    '  Store     in memory — restart to reset; nothing here reaches a real database',
-    `  curl      curl -H 'x-ops-passcode: ${defaultPasscode ? 'demo' : '…'}' http://localhost:${PORT}/api/leads`,
+    '  Store     private local PostgreSQL — accounts, staff changes and sample dates survive restarts',
+    '  Sources   bundled fictional inventory; no PMS connection and no refreshed source timestamp',
     '',
   ]
   console.log(lines.join('\n'))
+  if (localDatabase.initialPassword) console.log(`Created local demo account. Username: larkin. Password: ${localDatabase.initialPassword}\nSave this password; it is shown only once.`)
 })
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
-  process.on(signal, () => { server.close(); process.exit(0) })
+  process.on(signal, async () => { server.close(); server.closeAllConnections(); await localDatabase.close(); process.exit(0) })
 }

@@ -3,7 +3,7 @@
     "id": "art-pets-allowed",
     "topic": "pet_policy",
     "question": "Are you pet friendly?",
-    "answer": "Yes. Two pets per residence, dogs or cats, up to 50 pounds each. There is no pet fee, no pet deposit, and no monthly pet rent — New York does not permit them. Pets are registered at lease signing, and there is a restricted breed list from the building's insurer, so tell me the breed and I can check it.",
+    "answer": "Yes. Two pets per residence, dogs or cats, up to 50 pounds each. There is no pet fee, no pet deposit, and no monthly pet rent. Pets are registered at lease signing, and there is a restricted breed list from the building's insurer, so tell me the breed and I can check it.",
     "propertyScope": [
       "prop-demo"
     ],
@@ -16,7 +16,14 @@
     "ownerId": "person-manager-1",
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-03-01T00:00:00Z",
-    "reviewBy": "2027-03-01T00:00:00Z"
+    "reviewBy": "2027-03-01T00:00:00Z",
+    "keywords": [
+      "pets",
+      "pet friendly",
+      "pet fee",
+      "pet deposit",
+      "monthly pet rent"
+    ]
   },
   {
     "id": "art-pets-two-cats-and-a-dog",
@@ -60,7 +67,7 @@
     "id": "art-pets-breeds",
     "topic": "pet_policy",
     "question": "Are there any breeds you don't allow?",
-    "answer": "There is a restricted breed list on the pet addendum, and it is the standard insurance list rather than anything we wrote ourselves. Tell me your dog's breed and I will check it against the list, or I can email you the addendum.",
+    "answer": "The restricted pet breed list includes Pit Bull Terrier, American Staffordshire Terrier, Rottweiler, Doberman Pinscher, German Shepherd, Presa Canario, Akita, Alaskan Malamute, Chow Chow, Wolf hybrid, and mixes of those breeds. Ask about the specific pet rather than reading the whole list aloud.",
     "propertyScope": [
       "prop-demo"
     ],
@@ -69,11 +76,27 @@
     ],
     "status": "published",
     "version": 1,
-    "source": "Pet Addendum, rev. 2026-03",
+    "source": "House Rules: pets.restrictedBreeds",
     "ownerId": "person-manager-1",
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-03-01T00:00:00Z",
-    "reviewBy": "2027-03-01T00:00:00Z"
+    "reviewBy": "2027-03-01T00:00:00Z",
+    "keywords": [
+      "Pit Bull Terrier",
+      "American Staffordshire Terrier",
+      "Rottweiler",
+      "Doberman Pinscher",
+      "German Shepherd",
+      "Presa Canario",
+      "Akita",
+      "Alaskan Malamute",
+      "Chow Chow",
+      "Wolf hybrid",
+      "Any mix of the above",
+      "restricted breeds",
+      "breed list",
+      "breeds allowed"
+    ]
   },
   {
     "id": "art-pets-dog-run",
@@ -212,7 +235,7 @@
     "id": "art-amenity-pool-heated",
     "topic": "amenities",
     "question": "Is the pool heated?",
-    "answer": "It is not — the 62-foot pool on The Terrace is outdoors and runs on the season, open May 15 through September 30. It only opens when the lifeguard is on the chair, which is city code rather than house policy.",
+    "answer": "The 62-foot pool is not heated. The pool on The Terrace is outdoors and runs on the season, open May 15 through September 30. It only opens when the lifeguard is on the chair.",
     "propertyScope": [
       "prop-demo"
     ],
@@ -345,7 +368,7 @@
     "id": "art-amenity-fee",
     "topic": "amenities",
     "question": "Is there an amenity fee on top of the rent?",
-    "answer": "No. There is no amenity fee and no amenity deposit — amenity access and the bike room come with your lease. Parking at $425 a month and storage from $95 a month are billed separately, and so are a number of other one-time and situational charges. The fee schedule in the house rules lists every one of them, so tell me which charge you are asking about and I will read you the figure, or I can send you the schedule.",
+    "answer": "No. There is no amenity fee and no amenity deposit — amenity access and the bike room come with your lease. Parking at $425 a month and storage from $95 a month are billed separately, and so are a number of other one-time and situational charges. The fee schedule in the house rules lists every one of them, so tell me which charge you are asking about and I will read you the figure, or the leasing office can provide the schedule.",
     "propertyScope": [
       "prop-demo"
     ],
@@ -765,7 +788,7 @@
     "jurisdictionScope": [
       "NY"
     ],
-    "status": "published",
+    "status": "retired",
     "version": 1,
     "source": "Move-In and Move-Out Procedure, rev. 2026-02",
     "ownerId": "person-manager-1",
@@ -2254,7 +2277,7 @@
     "id": "art-derived-042",
     "topic": "pet_policy",
     "question": "What is your pet policy?",
-    "answer": "Two pets per residence, fifty pounds each, dogs and cats. There is no pet fee, no pet deposit, and no monthly pet rent — New York does not permit them, and damage a pet causes is billed at cost after the fact instead. Register the pet at signing with a rabies certificate, a vet record, and the NYC dog license, and check the restricted breed list before you fall in love with a puppy. Your fob opens the Pet Spa on three and The Green on four, and dogs stay leashed everywhere else in the building. Service animals and assistance animals are not pets under the law, so none of the pet rules, fees or breed limits apply to them — if that is your situation, the leasing office handles it directly and will walk you through it.",
+    "answer": "Two pets per residence, fifty pounds each, dogs and cats. There is no pet fee, no pet deposit, and no monthly pet rent. Damage a pet causes is billed at cost after the fact. Register the pet at signing with a rabies certificate, a vet record, and the NYC dog license, and check the restricted breed list before you fall in love with a puppy. Your fob opens the Pet Spa on three and The Green on four, and dogs stay leashed everywhere else in the building.",
     "propertyScope": [
       "prop-demo"
     ],
@@ -2348,7 +2371,15 @@
     "source": "House Rules: moving",
     "ownerId": "person-manager-1",
     "keywords": [
-      "moving"
+      "moving",
+      "move-in deposit",
+      "move-out deposit",
+      "move fee",
+      "moving fee",
+      "moving deposit",
+      "freight elevator",
+      "moving insurance",
+      "COI"
     ],
     "approvedBy": "person-manager-1",
     "approvedAt": "2026-09-01T00:00:00.000Z",
@@ -3192,7 +3223,7 @@
     "jurisdictionScope": [
       "NY"
     ],
-    "status": "published",
+    "status": "retired",
     "version": 1,
     "source": "Inventory concession terms",
     "ownerId": "person-manager-1",

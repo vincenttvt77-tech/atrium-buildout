@@ -116,27 +116,29 @@ export function primaryEmergency(signals: EmergencySignal[]): EmergencySignal | 
 }
 
 /**
- * The approved words the agent says. Fixed text, not model-generated — SOW 8.1 requires the
- * configured safety instruction, and a paraphrase of "get out and call 911" is not an
- * improvement worth the risk.
+ * Fixed safety guidance, independent of knowledge search and notification delivery.
+ * Gas: https://www.coned.com/en/safety/energy-safety/gas-safety
+ * Flood electrical hazards: https://www.cdc.gov/floods/safety/reentering-your-flooded-home-safety.html
+ * Recording an escalation is not proof that staff or emergency services were contacted.
  */
 export function safetyInstruction(signal: EmergencySignal): string {
+  const delivery = ' I have not contacted emergency services or building staff.'
   switch (signal.kind) {
     case 'gas':
-      return "Please stop what you're doing and leave the apartment right now. Don't use any light switches, appliances, or your phone inside. Once you're outside the building, call 911. I'm alerting the building's emergency contact immediately."
+      return "Please stop what you're doing and leave the apartment and building right now. Don't use any light switches, appliances, or your phone inside. Once you're outside and away from the building, call 911." + delivery
     case 'smoke_or_fire':
-      return "Please leave the building now using the stairs, not the elevator. Once you're outside, call 911. I'm alerting the building's emergency contact immediately."
+      return "Please leave the building now using the stairs, not the elevator. Once you're outside, call 911." + delivery
     case 'carbon_monoxide':
-      return "Please get everyone out into fresh air right now, then call 911 from outside. I'm alerting the building's emergency contact immediately."
+      return 'Please get everyone out into fresh air right now, then call 911 from outside.' + delivery
     case 'injury':
-      return "Please call 911 right now — they can get help to you faster than I can. I'm alerting the building's emergency contact at the same time."
+      return 'Please call 911 right now for emergency help.' + delivery
     case 'intruder':
-      return "Please get somewhere safe and call 911 immediately. I'm alerting building security and the emergency contact right now."
+      return 'Please get somewhere safe and call 911 immediately.' + delivery
     case 'flooding':
-      return "If you can do it safely, shut off the water at the valve and move anything electrical away from the water. I'm dispatching emergency maintenance right now and alerting the building's emergency contact."
+      return "Stay out of the water and away from electrical equipment. Don't touch switches, plugs, or appliances while wet or standing in water. Contact the building's emergency maintenance line directly. If anyone is in immediate danger, call 911." + delivery
     case 'no_heat':
-      return "I'm treating this as urgent and alerting the building's emergency contact now. If anyone in the apartment is elderly, very young, or unwell, please call 911."
+      return "Contact the building's emergency maintenance line directly about the loss of heat. If anyone needs urgent medical help, call 911." + delivery
     case 'structural':
-      return "Please move away from that area and don't go back in. I'm alerting the building's emergency contact right now."
+      return "Please move away from that area and don't go back in. Contact the building's emergency maintenance line directly. If anyone is in immediate danger, call 911." + delivery
   }
 }

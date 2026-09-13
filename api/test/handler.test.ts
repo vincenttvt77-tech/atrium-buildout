@@ -46,16 +46,33 @@ async function readLog(headers: Record<string, string> = { 'x-ops-passcode': OPS
   return res
 }
 
+let toolSequence = 0
 async function toolCall(name: string, args: Record<string, unknown>, callId: string, headers: Record<string, string> = {}) {
   const res = mockRes()
   await handler({
     method: 'POST', headers,
-    body: { message: { type: 'tool-calls', call: { id: callId }, toolCallList: [{ id: 'tc1', name, arguments: args }] } },
+    body: { message: { type: 'tool-calls', call: { id: callId }, toolCallList: [{ id: `tool-${++toolSequence}`, name, arguments: args }] } },
   }, res)
   return { res, result: res.body?.results?.[0]?.result as string | undefined }
 }
 
 describe('webhook verification', () => {
+  test('production refuses unsigned webhooks when verification is unconfigured', async () => {
+    const previous = process.env.NODE_ENV
+    process.env.NODE_ENV = 'production'
+    try {
+      const { res } = await toolCall('check_availability', {}, 'production-auth')
+      assert.equal(res.code, 503)
+    } finally { if (previous === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previous }
+  })
+
+  test('accepts Vapi custom credentials using a bearer header', async () => {
+    process.env.VAPI_WEBHOOK_SECRET = 'test-secret'
+    try {
+      const { res } = await toolCall('check_availability', {}, 'bearer-auth', { authorization: 'Bearer test-secret' })
+      assert.equal(res.code, 200)
+    } finally { delete process.env.VAPI_WEBHOOK_SECRET }
+  })
   test('rejects an unsigned request when a secret is configured', async () => {
     process.env.VAPI_WEBHOOK_SECRET = 'test-secret'
     const { res } = await toolCall('check_availability', {}, 'auth-1')
@@ -256,5 +273,54 @@ describe('which tour times the model is handed', () => {
     assert.equal(daysOpen, 4)
     const asked = pickSlotsToOffer(open, '2026-09-12')
     assert.deepEqual(asked.offered.map((s) => s.slotId), ['slot-2026-09-12T14:00'])
+  })
+})
+
+describe('operational regressions', () => {
+  test('one malformed tool does not discard the rest of the batch or its result id', async () => {
+    const res = mockRes()
+    await handler({ method: 'POST', headers: {}, body: { message: {
+      type: 'tool-calls', call: { id: 'malformed-batch' }, toolCallList: [
+        { id: 'bad-json', name: 'capture_signal', arguments: '{oops' },
+        { id: 'valid-tool', name: 'check_availability', arguments: { bedrooms: '1', budget: '5000' } },
+      ],
+    } } }, res)
+    assert.deepEqual(res.body.results.map((r: { toolCallId: string }) => r.toolCallId), ['bad-json', 'valid-tool'])
+    assert.match(res.body.results[0].result, /could not verify/)
+    assert.match(res.body.results[1].result, /Available|Residence|Nothing/)
+  })
+
+  test('unbooked callers keep the contact details they gave', async () => {
+    const callId = 'contact-without-tour'
+    await toolCall('capture_contact', { name: 'Test prospect', email: 'test@example.com', phone: '5165550109', excerpt: 'My name is Test prospect, test@example.com, call me at 5165550109' }, callId)
+    const res = mockRes()
+    await handler({ method: 'POST', headers: {}, body: { message: { type: 'end-of-call-report', call: { id: callId } } } }, res)
+    const { documentStoreFromEnv } = await import('../../src/store/documents.ts')
+    const profile = await documentStoreFromEnv().get<{ name: string; email: string }>('lead:+15165550109')
+    assert.equal(profile?.name, 'Test prospect')
+    assert.equal(profile?.email, 'test@example.com')
+  })
+
+  test('concurrent webhook requests keep both qualification signals', async () => {
+    const callId = 'concurrent-signals'
+    await Promise.all([
+      toolCall('capture_signal', { signal: 'budget', value: '5000', excerpt: 'five thousand' }, callId),
+      toolCall('capture_signal', { signal: 'bedrooms', value: '1', excerpt: 'one bedroom' }, callId),
+    ])
+    const { result } = await toolCall('check_availability', {}, callId)
+    assert.doesNotMatch(result!, /Before quoting|need.*two|ask about how many bedrooms/i)
+    const { documentStoreFromEnv } = await import('../../src/store/documents.ts')
+    const state = await documentStoreFromEnv().get<{ qualification: { budget: unknown; bedrooms: unknown } }>(`call:${callId}`)
+    assert.ok(state?.qualification.budget)
+    assert.ok(state?.qualification.bedrooms)
+  })
+
+  test('emergency transcripts persist an escalation for the staff follow-up queue', async () => {
+    const call = { id: 'persist-emergency', customer: { number: '+15165550108' } }
+    await handler({ method: 'POST', headers: {}, body: { message: { type: 'transcript', role: 'user', transcriptType: 'final', transcript: 'I smell gas', call } } }, mockRes())
+    await handler({ method: 'POST', headers: {}, body: { message: { type: 'end-of-call-report', call } } }, mockRes())
+    const { documentStoreFromEnv } = await import('../../src/store/documents.ts')
+    const profile = await documentStoreFromEnv().get<{ escalations: { trigger: string }[] }>('lead:+15165550108')
+    assert.equal(profile?.escalations[0]?.trigger, 'emergency')
   })
 })

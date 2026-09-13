@@ -5,8 +5,26 @@ export const TOOL_DEFINITIONS = [
   {
     type: 'function',
     function: {
+      name: 'capture_contact',
+      description: 'Save volunteered contact details or a staff request to change an existing tour. For a reschedule or cancellation, set requestType to tour_change and include the caller’s words even without contact details. Does not change a tour or send messages.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'The name the caller gave.' },
+          email: { type: 'string', description: 'The email address the caller gave.' },
+          phone: { type: 'string', description: 'Their preferred callback number, only if they gave one.' },
+          excerpt: { type: 'string', description: 'The caller’s exact words supporting these details.' },
+          requestType: { type: 'string', enum: ['tour_change'], description: 'Only for an actual request to reschedule, move or cancel an existing tour. Saves a staff review request; caller identity is not verified and the original tour is not changed.' },
+        },
+        required: ['excerpt'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'capture_signal',
-      description: 'Record something the caller told you about what they need. Call this every time they give you move-in timing, bedroom count, budget, pets or parking.',
+      description: 'Save a volunteered preference while gathering information, or pets/parking evidence. When checking residences now, pass timing, bedrooms and budget directly to check_availability instead of duplicating capture calls.',
       parameters: {
         type: 'object',
         properties: {
@@ -43,7 +61,10 @@ export const TOOL_DEFINITIONS = [
           },
           moveIn: { type: 'string', description: 'When they want to move, in their words — "within the next 2 months", "November", "asap". Pass it here instead of a separate capture_signal call.' },
           bedrooms: { type: 'string', description: 'How many bedrooms — a number or "studio".' },
-          budget: { type: 'string', description: 'The most they want to spend a month, as they said it — "4000", "$4k", "not over four thousand".' },
+          budget: { type: 'string', description: 'Their exact spending words, including minimum vs maximum — "over eight thousand", "not over four thousand", "between eight and twelve thousand". Never strip "over" into a ceiling.' },
+          sortBy: { type: 'string', enum: ['price_desc'], description: 'Use price_desc only when the caller asks for the highest-priced residences; ranks the requested search by net effective rent.' },
+          includeOutsideMoveIn: { type: 'boolean', description: 'True only when the caller asks to consider homes outside the previously stated move-in window. Does not erase their saved timing.' },
+          ignoreBudget: { type: 'boolean', description: 'True only when the caller explicitly asks to remove their prior spending constraint, such as asking for more expensive options. Does not erase their saved preference.' },
         },
       },
     },
@@ -78,10 +99,14 @@ export const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'list_tour_slots',
-      description: 'Get real available tour times. Offer only these.',
+      description: 'Get real tour times under the property’s current hours, capacity, apartment-sharing policy, duration, buffers and notice rules. Pass the selected residence to filter its conflicts. Ask for any future preferred date; do not assume a fixed two-week booking limit. Offer only returned times.',
       parameters: {
         type: 'object',
-        properties: { preferredDate: { type: 'string', description: 'ISO date the caller asked for, if any.' } },
+        properties: {
+          preferredDate: { type: 'string', description: 'Building-local date YYYY-MM-DD the caller asked for, if any.' },
+          preferredTime: { type: 'string', pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$', description: 'Requested building-local time in HH:mm, with preferredDate required. For 4 PM use 16:00. Ask once if morning/afternoon is unclear.' },
+          unitId: { type: 'string', description: 'Selected residence ID returned by check_availability, if known. Keep it the same when booking.' },
+        },
         required: [],
       },
     },
@@ -90,13 +115,13 @@ export const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'book_tour',
-      description: 'Book a tour. Only say it is confirmed if this comes back confirmed.',
+      description: 'Book a NEW tour only. Never use this to reschedule, replace or cancel an existing reservation; save a staff tour-change request instead. Only say confirmed after confirmed readback. An existing future tour may require staff review.',
       parameters: {
         type: 'object',
         properties: {
           slotId: { type: 'string', description: 'The slotId from list_tour_slots. Never invent one.' },
           prospectName: { type: 'string', description: 'The name to put on the booking.' },
-          prospectEmail: { type: 'string', description: 'Where the confirmation goes, if they gave one.' },
+          prospectEmail: { type: 'string', description: 'Optional email voluntarily provided for staff follow-up. No confirmation message is sent automatically.' },
           unitId: { type: 'string', description: 'The unit they want to see, if they picked one.' },
         },
         required: ['slotId', 'prospectName'],
@@ -148,7 +173,7 @@ export const TOOL_MESSAGES: Record<string, Array<Record<string, unknown>>> = {
     { type: 'request-response-delayed', content: 'One more second.', timingMilliseconds: 2500 },
   ],
   list_tour_slots: [{ type: 'request-start', content: 'Let me look at the calendar.' }],
-  book_tour: [{ type: 'request-start', content: 'Locking that in now.' }],
+  book_tour: [{ type: 'request-start', content: 'Checking that time now.', blocking: false }],
   answer_question: [{ type: 'request-response-delayed', content: 'Let me check that for you.', timingMilliseconds: 1500 }],
 }
 
@@ -205,46 +230,23 @@ export function assistantConfig(opts: AssistantConfigOptions) {
 
     server: { url: opts.serverUrl },
 
-    /*
-     * Endpointing, the part that decides when the caller has finished.
-     *
-     * waitSeconds alone does not fix truncation — it governs how long the agent waits
-     * before speaking, which is the wrong end of the pipeline. Truncation is decided by
-     * the endpointing plan below, and words spoken after the endpoint fires never reach
-     * the model.
-     *
-     * The waitFunction is the balanced preset rather than the conservative one: the
-     * conservative floor adds 700ms to every turn by design, and this caller's other
-     * complaint was that the agent is slow.
-     */
+    // Documented timing fields: docs.vapi.ai/customization/voice-pipeline-configuration.
+    // These are tuning defaults, not measured call latency. Keep longer contact-spelling
+    // windows without imposing that same pause after every ordinary leasing question.
     startSpeakingPlan: {
-      waitSeconds: 0.6,
-      /*
-       * Smart endpointing is deliberately NOT set. Setting it makes the three
-       * transcriptionEndpointing values below inert, and the wait function that replaces
-       * them is not exposed in the dashboard — so the one control that matches this
-       * failure would become untunable.
-       *
-       * The failure: a caller answers "I don't know, 2 months" and the agent talks over
-       * the number. onNumberSeconds is exactly that case, and its default is about half a
-       * second. Leasing answers are mostly bare numbers — bedroom counts, budgets, phone
-       * numbers, unit numbers — so this is the single most valuable value on the page.
-       */
+      waitSeconds: 0.4,
+      // Used only without a smart/built-in endpointing provider. An existing saved
+      // assistant's smart endpointing provider is preserved by synchronization.
       transcriptionEndpointingPlan: {
-        onPunctuationSeconds: 0.5,
-        onNoPunctuationSeconds: 1.8,
-        onNumberSeconds: 1.5,
+        onPunctuationSeconds: 0.3,
+        onNoPunctuationSeconds: 1.2,
+        onNumberSeconds: 1.0,
       },
-
-      /*
-       * Callers answer leasing questions with bare numbers — "two months", "one bedroom",
-       * "thirty-eight hundred", a phone number. Those are exactly where a short endpoint
-       * cuts them off, so the rules below buy time on the questions that invite one.
-       */
       customEndpointingRules: [
         {
           type: 'assistant',
-          regex: '(how many bedrooms|what.s your budget|when are you looking|move|phone number|email|spell)',
+          regex: '\\b(phone number|callback number|e-?mail|spell|spelling)\\b',
+          regexOptions: [{ type: 'ignore-case', enabled: true }],
           timeoutSeconds: 3,
         },
       ],

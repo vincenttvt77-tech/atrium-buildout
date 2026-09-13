@@ -7,7 +7,7 @@
     "node": "22.x"
   },
   "scripts": {
-    "test": "node --test \"src/**/*.test.ts\" \"api/**/*.test.ts\"",
+    "test": "node --test \"src/**/*.test.ts\" \"api/**/*.test.ts\" \"test/portal/*.test.mjs\"",
     "test:watch": "node --test --watch \"src/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "bundle": "node scripts/build-api.mjs",
@@ -15,12 +15,23 @@
     "build:ops": "node scripts/build-ops.mjs",
     "build:site": "node scripts/build-site.mjs",
     "dev:ops": "node scripts/dev-ops.mjs",
-    "simulate": "node scripts/simulate-calls.mjs"
+    "simulate": "node scripts/simulate-calls.mjs",
+    "build": "node scripts/build-site.mjs && node scripts/build-api.mjs",
+    "check": "npm run typecheck && npm run validate && npm test",
+    "test:database": "node --test \"test/database/*.test.mjs\""
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "0.124.0",
     "@types/node": "22.20.1",
+    "@types/pg": "8.23.1",
+    "embedded-postgres": "17.10.0-beta.17",
     "esbuild": "0.28.2",
+    "supabase": "2.117.0",
     "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "@simplewebauthn/browser": "14.0.0",
+    "@simplewebauthn/server": "14.0.1",
+    "pg": "8.23.0"
   }
 }

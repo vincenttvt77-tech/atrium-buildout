@@ -13,6 +13,7 @@ type PropertyRecord = Record<string, unknown> & {
   buildingFacts?: { height?: string; residenceNumbering?: string }
   team?: { leasing?: string }
   neighborhood?: string | { transit?: string[]; nearby?: string[] }
+  sourceNote?: string
 }
 
 /** The property record nests transit and nearby places; the prompt wants prose. */
@@ -27,8 +28,9 @@ function buildingFacts(p: PropertyRecord): string[] {
   if (p.buildingFacts?.height) f.push(`${p.floors} floors, ${p.buildingFacts.height} tall, completed ${p.yearBuilt}.`)
   if (p.totalUnits) f.push(`${p.totalUnits} residences.`)
   if (p.buildingFacts?.residenceNumbering) f.push(p.buildingFacts.residenceNumbering)
-  if (p.leasingOffice) f.push(p.leasingOffice)
-  if (p.team?.leasing) f.push(p.team.leasing)
+  // The office paragraph also advertises same-day/self-guided tours; those are calendar
+  // capabilities, not stable identity facts. Keep only the physical entrance sentence.
+  if (p.leasingOffice) f.push(p.leasingOffice.split(/(?<=\.)\s/)[0]!)
   // Only the two transit facts a caller asks about unprompted. The rest is in the
   // knowledge base, where it costs nothing until someone actually asks.
   const n = p.neighborhood
@@ -37,8 +39,9 @@ function buildingFacts(p: PropertyRecord): string[] {
   return f
 }
 
-export function demoAssistantConfig(property: PropertyRecord, deploymentUrl: string, now: Date = new Date()) {
+export function demoAssistantConfig(property: PropertyRecord, deploymentUrl: string, now: Date = new Date(), opts: { dynamicDate?: boolean } = {}) {
   const buildingName = property.buildingName ?? 'the building'
+  const demo = /DEMO PROPERTY\s*[—-]\s*FICTIONAL/i.test(property.sourceNote ?? '')
   return assistantConfig({
     buildingName,
     address: property.address ?? '',
@@ -47,8 +50,10 @@ export function demoAssistantConfig(property: PropertyRecord, deploymentUrl: str
     managementCompany: property.managementCompany ?? 'the management office',
     facts: buildingFacts(property),
     today: now,
+    dynamicDate: opts.dynamicDate ?? true,
+    demo,
     serverUrl: `${deploymentUrl.replace(/\/$/, '')}/api/vapi`,
-    firstMessage: `Thanks for calling ${buildingName}. I'm an AI assistant for the building and this call is recorded — how can I help?`,
+    firstMessage: `Thanks for calling ${buildingName}${demo ? ' demo' : ''}. I'm an AI assistant for the building and this call is recorded — how can I help?`,
   })
 }
 

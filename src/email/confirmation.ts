@@ -1,8 +1,11 @@
 import { render, type EmailTransport, type EmailMessage } from './render.ts'
 import { concessionTerms, leaseRent } from '../inventory/pricing.ts'
 import type { Booking } from '../booking/types.ts'
+import { DEFAULT_TIME_ZONE, validateTimeZone } from '../calendar/time.ts'
 
 export interface ConfirmationContext {
+  /** Supplied from trusted property configuration by the caller, never from booking input. */
+  timeZone?: string
   buildingName: string
   address: string
   leasingPhone: string
@@ -20,11 +23,11 @@ export interface ConfirmationOutcome {
   message: EmailMessage | null
 }
 
-const fmtDate = (d: Date) => d.toLocaleDateString('en-US', {
-  weekday: 'long', month: 'long', day: 'numeric', timeZone: 'America/New_York',
+const fmtDate = (d: Date, timeZone: string) => d.toLocaleDateString('en-US', {
+  weekday: 'long', month: 'long', day: 'numeric', timeZone,
 })
-const fmtTime = (d: Date) => d.toLocaleTimeString('en-US', {
-  hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York',
+const fmtTime = (d: Date, timeZone: string) => d.toLocaleTimeString('en-US', {
+  hour: 'numeric', minute: '2-digit', timeZone,
 })
 
 export interface ConcessionCopy {
@@ -108,6 +111,10 @@ export async function sendConfirmation(
     return { attempted: false, sent: false, reason: 'no email address captured', missing: [], message: null }
   }
 
+  // Invalid explicit configuration must fail before a transport is called. Older
+  // library callers without a timezone keep the original New York behavior.
+  const timeZone = validateTimeZone(Object.hasOwn(ctx, 'timeZone') ? ctx.timeZone : DEFAULT_TIME_ZONE)
+
   const slot = booking.state.slot
   const concession = concessionCopy(extras.concession, extras.monthlyRent)
   const { html, missing } = render(ctx.template, {
@@ -117,8 +124,8 @@ export async function sendConfirmation(
     leasingPhone: ctx.leasingPhone,
     leasingEmail: ctx.leasingEmail,
     managementCompany: ctx.managementCompany,
-    tourDate: fmtDate(slot.startsAt),
-    tourTime: fmtTime(slot.startsAt),
+    tourDate: fmtDate(slot.startsAt, timeZone),
+    tourTime: fmtTime(slot.startsAt, timeZone),
     unitId: req.unitId ?? '',
     floorPlanName: extras.floorPlanName ?? '',
     bedrooms: extras.bedrooms ?? '',
@@ -135,7 +142,7 @@ export async function sendConfirmation(
     to: req.prospectEmail,
     from: `${ctx.buildingName} <${ctx.leasingEmail}>`,
     replyTo: ctx.leasingEmail,
-    subject: `Your tour at ${ctx.buildingName} — ${fmtDate(slot.startsAt)} at ${fmtTime(slot.startsAt)}`,
+    subject: `Your tour at ${ctx.buildingName} — ${fmtDate(slot.startsAt, timeZone)} at ${fmtTime(slot.startsAt, timeZone)}`,
     html,
   }
 

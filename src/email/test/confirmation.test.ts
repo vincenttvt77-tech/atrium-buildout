@@ -68,6 +68,44 @@ describe('confirmation email follows the read-back discipline', () => {
   })
 })
 
+describe('confirmation email uses trusted building-local time', () => {
+  test('subject and body agree on the local calendar date on either side of midnight', async () => {
+    const b = booking('confirmed')
+    const slot = { ...SLOT, startsAt: new Date('2032-06-02T04:30:00Z'), endsAt: new Date('2032-06-02T05:00:00Z') }
+    b.state = { status: 'confirmed', slot, externalId: 'midnight', verifiedAt: new Date() }
+    const t = new NoopTransport()
+    await sendConfirmation(b, { ...ctx, timeZone: 'America/Chicago' }, t)
+    assert.match(t.outbox[0]!.subject, /Tuesday, June 1 at 11:30 PM/)
+    assert.match(t.outbox[0]!.html, /Tuesday, June 1 at 11:30 PM/)
+    const legacy = new NoopTransport()
+    await sendConfirmation(b, ctx, legacy)
+    assert.match(legacy.outbox[0]!.subject, /Wednesday, June 2 at 12:30 AM/)
+  })
+
+  test('Chicago confirmations use the correct offset before and after the DST gap', async () => {
+    for (const [startsAt, expected] of [
+      ['2032-03-14T07:30:00Z', '1:30 AM'],
+      ['2032-03-14T08:00:00Z', '3:00 AM'],
+    ] as const) {
+      const b = booking('confirmed')
+      const slot = { ...SLOT, startsAt: new Date(startsAt) }
+      b.state = { status: 'confirmed', slot, externalId: 'dst', verifiedAt: new Date() }
+      const t = new NoopTransport()
+      await sendConfirmation(b, { ...ctx, timeZone: 'America/Chicago' }, t)
+      assert.ok(t.outbox[0]!.subject.endsWith(`at ${expected}`))
+      assert.ok(t.outbox[0]!.html.includes(`at ${expected}`))
+    }
+  })
+
+  test('an invalid explicit timezone never reaches the email transport', async () => {
+    for (const timeZone of ['', 'America/Miami', null]) {
+      const t = new NoopTransport()
+      await assert.rejects(sendConfirmation(booking('confirmed'), { ...ctx, timeZone } as never, t), /valid IANA timezone/)
+      assert.deepEqual(t.outbox, [])
+    }
+  })
+})
+
 describe('the concession is never hardcoded into the confirmation', () => {
   /** The file that actually gets sent, not a stand-in. */
   const TEMPLATE = readFileSync(new URL('../../../emails/tour-confirmation.html', import.meta.url), 'utf8')

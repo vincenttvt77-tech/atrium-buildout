@@ -66,7 +66,7 @@ files.push({
 
 files.push({
   file: 'package.json',
-  data: JSON.stringify({ name: 'ghost-building', private: true, type: 'module', engines: { node: '>=22' } }, null, 2),
+  data: JSON.stringify({ name: 'atrium', private: true, type: 'module', engines: { node: '22.x' } }, null, 2),
 })
 
 await writeFile('.vercel-build/deploy-files.json', JSON.stringify(files))

@@ -9,6 +9,7 @@ const env = (o: Record<string, string>) => o as unknown as NodeJS.ProcessEnv
 const PASS = 'a-long-random-operations-passcode'
 const CONFIGURED = env({ OPS_DASHBOARD_PASSCODE: PASS })
 const NOW = new Date('2026-09-07T14:00:00Z')
+const LEGACY_IDENTITY = { username: 'legacy', tenantId: 'legacy', displayName: 'Operations', assistantIds: [] }
 
 describe('the gate fails closed', () => {
   test('an unconfigured passcode authorises nobody, not even with a cookie', () => {
@@ -38,7 +39,7 @@ describe('sessions', () => {
   test('a freshly minted session authorises', () => {
     const token = mintSession(NOW, PASS)
     const auth = authorizeOps({ cookie: `${OPS_COOKIE}=${token}` }, NOW, CONFIGURED)
-    assert.deepEqual(auth, { ok: true, via: 'session' })
+    assert.deepEqual(auth, { ok: true, via: 'session', ...LEGACY_IDENTITY })
   })
 
   test('expires on its own', () => {
@@ -69,7 +70,7 @@ describe('sessions', () => {
 describe('the passcode header, for a monitor or a curl', () => {
   test('the right passcode authorises', () => {
     const auth = authorizeOps({ 'x-ops-passcode': PASS }, NOW, CONFIGURED)
-    assert.deepEqual(auth, { ok: true, via: 'passcode-header' })
+    assert.deepEqual(auth, { ok: true, via: 'passcode-header', ...LEGACY_IDENTITY })
   })
 
   test('a near miss does not', () => {

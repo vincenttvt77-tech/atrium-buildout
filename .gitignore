@@ -5,5 +5,8 @@ dist/
 !.env.example
 *.log
 .DS_Store
+.atrium-local/
 .vercel-build/
 sim-reports/
+supabase/.temp/
+supabase/.branches/

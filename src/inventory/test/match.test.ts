@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { findMatches } from '../match.ts'
+import { findMatches, inventoryIsFresh } from '../match.ts'
 import { loadInventory } from '../load.ts'
 import type { Unit, FloorPlan, InventorySnapshot } from '../types.ts'
 import { emptyQualification, captureCore } from '../../leasing/qualification.ts'
@@ -31,6 +31,15 @@ const withBeds = (min: number, max: number) => (q: ReturnType<typeof emptyQualif
   captureCore(q, 'bedrooms', extracted({ min, max }, 0.95, CALL, 'one bedroom', NOW))
 
 describe('the agent only offers what it can verify', () => {
+  test('freshness expires at the same boundary and invalid or future stamps fail closed', () => {
+    const s = snap([unit({ unitId: '10A', floorPlanId: 'A1', monthlyRent: 3000 })], [plan('A1', 1, 700)])
+    assert.equal(inventoryIsFresh({ ...s, readAt: new Date(NOW.getTime() - 15 * 60000) }, NOW), true)
+    for (const readAt of [new Date(NOW.getTime() - 15 * 60000 - 1), new Date(NOW.getTime() + 1), new Date('invalid')]) {
+      assert.equal(inventoryIsFresh({ ...s, readAt }, NOW), false)
+      assert.equal(findMatches({ ...s, readAt }, emptyQualification(), { now: NOW }).kind, 'stale')
+    }
+  })
+
   test('a stale snapshot blocks quoting entirely', () => {
     const s = snap([unit({ unitId: '10A', floorPlanId: 'A1', monthlyRent: 3000 })], [plan('A1', 1, 700)],
       new Date('2026-09-07T11:00:00Z'))
@@ -148,7 +157,7 @@ describe('the loader refuses to invent data', () => {
 describe('a unit available after the move-in window is offered as later, not hidden', () => {
   // The real call: caller said "2 months" (November 7), asked about 19A, which frees up
   // December 1. The old 21-day filter dropped it and the agent said "not available" while
-  // the website showed it. Under the six-week window 19A is simply in time.
+  // the website showed it. It must be shown separately as later, never called in time.
   const s = snap([
     unit({ unitId: '12A', floorPlanId: 'C1', monthlyRent: 7150, bedrooms: 3, availableFrom: '2026-11-03' }),
     unit({ unitId: '19A', floorPlanId: 'C1', monthlyRent: 7615, bedrooms: 3, availableFrom: '2026-12-01' }),
@@ -159,12 +168,13 @@ describe('a unit available after the move-in window is offered as later, not hid
   const q = captureCore(withBeds(3, 3)(withBudget(9000)), 'moveInTiming',
     extracted({ earliest: new Date('2026-11-07'), latest: null }, 0.9, CALL, '2 months', NOW))
 
-  test('19A, free 24 days after the target, is in time — the old filter hid it', () => {
+  test('19A, free 24 days after the target, is explicitly later rather than in time', () => {
     const out = findMatches(s, q, { now: NOW })
     assert.equal(out.kind, 'matches')
     if (out.kind !== 'matches') return
     const shown = [...out.units.map((m) => m.unit.unitId), ...out.moreInTime]
-    assert.ok(shown.includes('19A'), '19A must be offered as available')
+    assert.ok(!shown.includes('19A'), 'A later date must not be described as inside the window')
+    assert.ok(out.later.some(match => match.unit.unitId === '19A'))
   })
 
   test('a January unit is offered as later, with its date, never dropped', () => {
@@ -193,7 +203,7 @@ describe('a unit available after the move-in window is offered as later, not hid
 
   test('in-time units cut by the limit are named so a caller is never contradicted', () => {
     const many = snap(
-      ['A', 'B', 'C', 'D', 'E'].map((l, i) => unit({ unitId: `1${i}${l}`, floorPlanId: 'C1', monthlyRent: 7000 + i * 100, bedrooms: 3, availableFrom: '2026-11-10' })),
+      ['A', 'B', 'C', 'D', 'E'].map((l, i) => unit({ unitId: `1${i}${l}`, floorPlanId: 'C1', monthlyRent: 7000 + i * 100, bedrooms: 3, availableFrom: '2026-11-05' })),
       [plan('C1', 3, 1332)])
     const out = findMatches(many, q, { now: NOW, limit: 3 })
     assert.equal(out.kind, 'matches')
@@ -240,4 +250,14 @@ describe('a window is measured from its far edge', () => {
     assert.equal(out.cheapestAvailable, 5875)
     assert.equal(out.gap, 1875)
   })
+})
+
+describe('invalid inventory never becomes a quote', () => {
+  for (const fields of [{ availableFrom: '2026-02-30' }, { status: 'withdrawn' }, { bedrooms: 9 }]) {
+    test(JSON.stringify(fields), () => {
+      const result = loadInventory([{ unitId: '9A', floorPlanId: 'A1', monthlyRent: 3000, availableFrom: '2026-10-01', ...fields }], [{ id: 'A1', bedrooms: 1, bathrooms: 1, sqft: 700 }], NOW, 'test')
+      assert.equal(result.snapshot.units.length, 0)
+      assert.ok(result.problems.length > 0)
+    })
+  }
 })

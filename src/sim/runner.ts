@@ -1,6 +1,7 @@
 import type { ContentBlock, Model, ModelMessage, ModelTool, Turn, Webhook } from './types.ts'
 import type { Scenario } from './scenarios.ts'
 import { VapiBridge } from './bridge.ts'
+import { randomUUID } from 'node:crypto'
 
 /**
  * Plays one scenario end to end.
@@ -8,8 +9,8 @@ import { VapiBridge } from './bridge.ts'
  * Two models take part. The assistant side is the same model the phone line runs on,
  * given the same system prompt and tool schemas the Vapi assistant carries, with every
  * tool call answered by the real webhook handler in-process. The caller side is a second
- * model playing the persona. Nothing about the assistant's behaviour is stubbed: if it
- * reads a price as digits or asks a question twice, that is what the phone would do.
+ * model playing the persona. This exercises text, tool and application behavior; it does
+ * not reproduce Vapi audio, turn detection, transcription, delivery or live latency.
  */
 export interface RunOptions {
   scenario: Scenario
@@ -38,6 +39,7 @@ export interface RunResult {
   callId: string
   assistantModel: string
   turns: Turn[]
+  startedAt?: string
   endedBy: 'caller' | 'assistant' | 'limit' | 'silence'
   callerTurns: number
   usage: { input: number; output: number }
@@ -61,7 +63,7 @@ function textOf(blocks: ContentBlock[]): string {
 
 export async function runScenario(o: RunOptions): Promise<RunResult> {
   const now = o.now ?? (() => new Date())
-  const callId = o.callId ?? `sim-${o.scenario.id}-${now().getTime().toString(36)}`
+  const callId = o.callId ?? `sim-${o.scenario.id}-${randomUUID()}`
   const bridge = new VapiBridge(o.webhook)
   const log = o.log ?? (() => {})
   const limit = o.maxCallerTurns ?? 14
@@ -140,5 +142,5 @@ export async function runScenario(o: RunOptions): Promise<RunResult> {
   }
 
   await bridge.endOfCall(callId, startedAt, now())
-  return { scenario: o.scenario, callId, assistantModel: o.assistantModel, turns, endedBy, callerTurns, usage }
+  return { scenario: o.scenario, callId, assistantModel: o.assistantModel, startedAt: startedAt.toISOString(), turns, endedBy, callerTurns, usage }
 }

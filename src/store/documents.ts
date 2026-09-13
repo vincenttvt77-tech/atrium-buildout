@@ -1,5 +1,11 @@
+import { KvClient } from './kv.ts'
+import { storageConfig } from './config.ts'
+import { currentTenantId, tenantNamespace } from '../tenancy/context.ts'
+import { isPostgresRuntime } from '../database/mode.ts'
+import { requirePropertyRuntime } from '../database/request.ts'
+
 /**
- * A JSON document store: KV when configured, one shared in-process map when not.
+ * A JSON document store: KV in hosted runtimes, tenant-scoped memory for local previews.
  *
  * Everything that used to live in a module-level variable — the event log, the tour
  * calendar, the per-call conversation state — has the same failure on serverless: each
@@ -8,7 +14,7 @@
  * possibly how a caller who said "studio" was told there were none: the instance that took
  * check_availability had never seen the instance that took capture_signal.
  *
- * One store, one pattern, one fallback that says out loud when it will not persist.
+ * Hosted runtimes fail closed until durable storage is configured.
  */
 
 export interface DocumentStore {
@@ -19,7 +25,7 @@ export interface DocumentStore {
   /** Keys under a prefix, for listing profiles and follow-ups. */
   list(prefix: string): Promise<string[]>
   delete(key: string): Promise<void>
-  describe(): { kind: 'memory' | 'kv'; durable: boolean; note: string }
+  describe(): { kind: 'memory' | 'kv' | 'postgres'; durable: boolean; note: string }
 }
 
 export class MemoryDocumentStore implements DocumentStore {
@@ -35,8 +41,9 @@ export class MemoryDocumentStore implements DocumentStore {
   }
 
   async update<T>(key: string, initial: T, fn: (current: T) => T): Promise<T> {
-    const next = fn((await this.get<T>(key)) ?? initial)
-    await this.set(key, next)
+    const raw = this.docs.get(key)
+    const next = fn(raw === undefined ? structuredClone(initial) : JSON.parse(raw) as T)
+    this.docs.set(key, JSON.stringify(next))
     return next
   }
 
@@ -59,88 +66,68 @@ export class MemoryDocumentStore implements DocumentStore {
 
 /** Vercel KV / Upstash over REST. No SDK to keep in step. */
 export class KvDocumentStore implements DocumentStore {
-  private readonly url: string
-  private readonly token: string
-  private readonly fetchImpl: typeof fetch
-  private readonly namespace: string
-
+  private client: KvClient
+  private namespace: string
   constructor(url: string, token: string, opts: { namespace?: string; fetchImpl?: typeof fetch } = {}) {
-    this.url = url.replace(/\/$/, '')
-    this.token = token
+    this.client = new KvClient(url, token, opts.fetchImpl)
     this.namespace = opts.namespace ?? 'atrium'
-    this.fetchImpl = opts.fetchImpl ?? fetch
   }
-
-  private k(key: string) { return `${this.namespace}:${key}` }
-
-  private async command(parts: string[]): Promise<unknown> {
-    const res = await this.fetchImpl(`${this.url}/${parts.map(encodeURIComponent).join('/')}`, {
-      headers: { authorization: `Bearer ${this.token}` },
-    })
-    if (!res.ok) { this.lastError = `HTTP ${res.status}`; throw new Error(`KV ${res.status}`) }
-    this.lastError = null
-    return ((await res.json()) as { result?: unknown }).result
+  private k(key: string) {
+    if (this.namespace === 'atrium' && key.startsWith('tenant:')) throw new Error('Reserved tenant namespace')
+    return `${this.namespace}:${key}`
   }
-
-  async get<T>(key: string): Promise<T | null> {
-    try {
-      const raw = await this.command(['get', this.k(key)])
-      return typeof raw === 'string' && raw.length > 0 ? JSON.parse(raw) as T : null
-    } catch (err) {
-      // Treat an unreachable store as empty rather than throwing: the phone line must not
-      // go down because the profile store had a bad second. But remember it, so the
-      // dashboard stops claiming state is persisting.
-      this.lastError = this.lastError ?? (err instanceof Error ? err.message : String(err))
-      return null
-    }
-  }
-
+  async get<T>(key: string): Promise<T | null> { return this.client.read<T>(this.k(key)) }
   async set<T>(key: string, value: T): Promise<void> {
-    await this.command(['set', this.k(key), JSON.stringify(value)])
+    await this.client.command(['SET', this.k(key), JSON.stringify(value)])
   }
-
   async update<T>(key: string, initial: T, fn: (current: T) => T): Promise<T> {
-    const next = fn((await this.get<T>(key)) ?? initial)
-    await this.set(key, next)
-    return next
+    return this.client.update(this.k(key), initial, fn)
   }
-
   async list(prefix: string): Promise<string[]> {
-    try {
-      const keys = await this.command(['keys', `${this.k(prefix)}*`])
-      const strip = `${this.namespace}:`
-      return (Array.isArray(keys) ? keys : [])
-        .map((k) => String(k))
-        .filter((k) => k.startsWith(strip))
-        .map((k) => k.slice(strip.length))
-        .sort()
-    } catch {
-      return []
-    }
+    const keys = new Set<string>()
+    let cursor = '0'
+    do {
+      const result = await this.client.command(['SCAN', cursor, 'MATCH', `${this.k(prefix)}*`, 'COUNT', '100'])
+      if (!Array.isArray(result) || !Array.isArray(result[1])) throw new Error('KV returned invalid key list')
+      cursor = String(result[0])
+      for (const key of result[1]) {
+        if (typeof key !== 'string' || !key.startsWith(this.k(prefix))) continue
+        const logicalKey = key.slice(this.namespace.length + 1)
+        if (this.namespace === 'atrium' && logicalKey.startsWith('tenant:')) continue
+        keys.add(logicalKey)
+      }
+    } while (cursor !== '0')
+    return [...keys].sort()
   }
-
-  async delete(key: string): Promise<void> {
-    await this.command(['del', this.k(key)])
-  }
-
-  /** Set when a read or write last failed, so describe() cannot claim durability it is
-   *  not delivering. */
-  private lastError: string | null = null
-
-  describe() {
-    return this.lastError
-      ? { kind: 'kv' as const, durable: false, note: `KV configured but unreachable: ${this.lastError}. State is not persisting until this clears.` }
-      : { kind: 'kv' as const, durable: true, note: 'Persisted in KV.' }
-  }
+  async delete(key: string): Promise<void> { await this.client.command(['DEL', this.k(key)]) }
+  describe() { return this.client.describe() }
 }
 
-let sharedMemory: MemoryDocumentStore | null = null
+const tenantMemory = new Map<string, MemoryDocumentStore>()
 
-/** One memory store per process, so two modules asking for it read the same state. */
+/** Resolve scope on each operation, so a module-level adapter cannot capture another tenant. */
 export function documentStoreFromEnv(env: NodeJS.ProcessEnv = process.env): DocumentStore {
-  const url = env.KV_REST_API_URL
-  const token = env.KV_REST_API_TOKEN
-  if (url && token && url.trim() && token.trim()) return new KvDocumentStore(url, token)
-  if (!sharedMemory) sharedMemory = new MemoryDocumentStore()
-  return sharedMemory
+  const kvStores = new Map<string, KvDocumentStore>()
+  const resolve = (): DocumentStore => {
+    if (isPostgresRuntime(env)) return requirePropertyRuntime().documents
+    const tenantId = currentTenantId()
+    const namespace = tenantNamespace(tenantId)
+    const config = storageConfig(env)
+    if (config.kind === 'kv') {
+      const { url, token } = config
+      const cacheKey = JSON.stringify([url, token, namespace])
+      if (!kvStores.has(cacheKey)) kvStores.set(cacheKey, new KvDocumentStore(url, token, { namespace }))
+      return kvStores.get(cacheKey)!
+    }
+    if (!tenantMemory.has(tenantId)) tenantMemory.set(tenantId, new MemoryDocumentStore())
+    return tenantMemory.get(tenantId)!
+  }
+  return {
+    get: <T>(key: string) => resolve().get<T>(key),
+    set: <T>(key: string, value: T) => resolve().set(key, value),
+    update: <T>(key: string, initial: T, fn: (current: T) => T) => resolve().update(key, initial, fn),
+    list: (prefix) => resolve().list(prefix),
+    delete: (key) => resolve().delete(key),
+    describe: () => resolve().describe(),
+  }
 }
