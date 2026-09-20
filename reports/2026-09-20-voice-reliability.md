@@ -30,15 +30,15 @@ The first application run found three older tests relying on callback-as-identit
 
 ## Release checkpoint
 
-Local implementation and acceptance are complete; GitHub publication is the next release step. At session start an authenticated Git fetch verified local and remote both at `9b935ab`; the previously reported GitHub publishing blocker was no longer present.
+Implementation commit `7e7397d374b8a70fd8f1231d333e2927f3edd409` is published on `codex/atrium-quality-pass`; a remote read verified the exact hash. GitHub quality run `35533565420` / job `106138459250` completed successfully with **1,499 application tests, 497 PostgreSQL tests and the 17-handler build**. Vercel preview `66qAdHBnhKAKYVyR3RPEqJG5WAm3` is Ready from this commit (42 seconds). Production deployment [`ArUo86trL8rixC6e9tF42rs8Ux8w`](https://vercel.com/vincenttvt77-9161s-projects/ghost-building/ArUo86trL8rixC6e9tF42rs8Ux8w) rebuilt the same commit with production settings and reached **Ready in 50 seconds**, with `ghost-building.vercel.app` assigned. Verified at 19:57 UTC: the existing demo login works, the refreshed [production dashboard](https://ghost-building.vercel.app/api/dashboard) loads, and Status reports callers, calendar and call history loaded. This remains the legacy shared-login/KV runtime; managed named-account/resident activation is separate. At session start an authenticated Git fetch verified local and remote both at `9b935ab`; the previously reported GitHub publishing blocker was no longer present.
 
-The public production health endpoint responded successfully with durable KV and configured call history. It reported backend schema fingerprint `fea94b5f3600f6764a1b803b05fc86757e91c85e9cf7a86b98abf0ca6f606c6d`. This does not prove the deployed revision, assistant synchronization or phone delivery. The connected Vercel account returned no teams, so deployment revision verification remains separate.
+The public production health endpoint responded successfully with durable KV and configured call history. It reported backend schema fingerprint `fea94b5f3600f6764a1b803b05fc86757e91c85e9cf7a86b98abf0ca6f606c6d`. The Vercel deployment page separately verified the deployed revision above. Health and dashboard checks do not prove assistant synchronization or phone delivery. The connector lacked access to the project team; the existing signed-in browser provided deployment status without changing credentials.
 
-No migrations, credentials, Vapi assistant edits, paid simulations, phone calls or outbound messages were performed by this slice. Tool schemas were not changed. The managed resident/maintenance features still require a separately verified hosted rollout; the repository currently contains 14 additive migrations.
+No hosted migrations, credential changes, Vapi assistant edits, paid simulations, phone calls or outbound messages were performed by this slice. Tool schemas were not changed. The managed resident/maintenance features still require a separately verified hosted rollout; the repository currently contains 14 additive migrations.
 
 ## Next work for Codex / Fable
 
-1. Verify publication, cloud checks and deployed revision separately. Keep the live assistant/backend fingerprint check in the release checklist; passing source tests does not establish voice quality or phone connectivity.
+1. Verify the saved live assistant/backend fingerprint and actual phone behavior before claiming voice acceptance. Source publication, cloud checks and the production revision are verified above; phone connectivity and audio quality remain untested in this slice.
 2. Add guarded reconciliation and resolution of uncertain booking reviews against actual reservation evidence. Do not close a review or repeat a write merely because someone clicked a button. Review lists also need bounded pagination before portfolio scale.
 3. Verify hosted database/migration/runtime state before activating managed resident/maintenance features. Finish verified fulfillment, notifications and recovery using the existing authorization/outbox boundaries.
 4. Build a provider-independent resident messaging workflow with consent, tenant routing, durable receipts, retry deduplication, attachments and human takeover before enabling Linq or Apple messaging.
@@ -47,9 +47,12 @@ No migrations, credentials, Vapi assistant edits, paid simulations, phone calls 
 ## Next work for Evan / Luke
 
 - Obtain Linq's written pricing, reseller terms, per-property number/account model and failure-recovery details; choose whether to pilot its phone-number API or Apple Messages for Business offering.
-- After the release is verified, test the real Larkin line for 19A facts, requested tour timing, callback details and a reschedule request. Record the call ID for review.
+- Test the real Larkin line for 19A facts, requested tour timing, callback details and a reschedule request. Record the call ID for review.
 - Select the first actual property/PMS when known and supply its approved operating rules. No PMS has been selected yet.
 
 ## Handoff rule
 
 Fable: read AGENTS.md, AI_WORKFLOW.md and docs/agent-tasks.md from GitHub before taking work. Coordinate ownership before overlapping edits. Review the published diff and tests, and leave a reciprocal handoff at the end of your session with commits, exact checks, live versus local state, remaining limitations, owner actions and next Codex tasks. Codex must do the same on return. Preserve existing untracked coordination history; never publish secrets or caller data.
+
+
+Release notes are committed separately after the implementation so this report can name the tested/deployed source commit. A later documentation-only HEAD does not mean production adopted different application code. Error-log aggregation, monitoring configuration and physical-device passkeys were not verified in this release; no claim of zero production errors is made.
