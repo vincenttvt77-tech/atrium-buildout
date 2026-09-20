@@ -121,9 +121,9 @@ function http(method, path, body, headers = {}) {
     req.end(body === undefined ? undefined : JSON.stringify(body))
   })
 }
-function post(assistantId, callId, tools, headers = {}) {
+function post(assistantId, callId, tools, headers = {}, providerPhone = '+15555550101') {
   return http('POST', '/api/vapi', { organizationId: 'organization-b', propertyId: 'property-b1',
-    message: { type: 'tool-calls', call: { id: callId, assistantId, customer: { number: '+15555550101' } }, toolCallList: tools } },
+    message: { type: 'tool-calls', call: { id: callId, assistantId, customer: { number: providerPhone } }, toolCallList: tools } },
   { 'x-vapi-secret': secret, ...headers })
 }
 const tool = (name, args) => ({ id: name, name, arguments: args })
@@ -460,7 +460,7 @@ test('finished-call projection failure rolls back receipt/profile/followups and 
   const captured = await post('synthetic-assistant-b', callId, [
     tool('capture_contact', { name: 'Atomic Fixture', phone, excerpt: 'My name is Atomic Fixture and that is my callback number.' }),
     tool('capture_loss_reason', { kind: 'priced_out', detail: 'The stated rent exceeds my budget', evidence: 'That rent is above my budget' }),
-  ])
+  ], {}, phone)
   assert.equal(captured.status,200)
   const transaction = db.app.transaction
   let failed = 0
@@ -512,11 +512,11 @@ test('finished-call projection failure rolls back receipt/profile/followups and 
 
 test('completed PostgreSQL calls retain exact tool result cache and reject contradictory report timestamps', async () => {
   const callId='atomic-finish-cache', args={name:'Cached Fixture',phone:'+15555550194',excerpt:'My name is Cached Fixture and this is my number.'}
-  const original=await post('synthetic-assistant-b',callId,[tool('capture_contact',args)])
+  const original=await post('synthetic-assistant-b',callId,[tool('capture_contact',args)],{},args.phone)
   assert.equal(original.status,200)
   const end={message:{type:'end-of-call-report',call:{id:callId,assistantId:'synthetic-assistant-b'},endedAt:NOW.toISOString()}}
   assert.equal((await http('POST','/api/vapi',end,{'x-vapi-secret':secret})).status,200)
-  const duplicate=await post('synthetic-assistant-b',callId,[tool('capture_contact',args)])
+  const duplicate=await post('synthetic-assistant-b',callId,[tool('capture_contact',args)],{},args.phone)
   assert.equal(duplicate.status,200)
   assert.deepEqual(duplicate.body.results,original.body.results)
   const changed=structuredClone(end)
@@ -525,4 +525,64 @@ test('completed PostgreSQL calls retain exact tool result cache and reject contr
   const profile=(await db.admin.query("SELECT value FROM atrium.operational_documents WHERE property_id='property-b1' AND key='lead:+15555550194'")).rows[0].value
   assert.equal(profile.calls.length,1)
   assert.equal(profile.calls[0].at,NOW.toISOString())
+})
+
+test('PostgreSQL callback evidence stays with the original caller and property rather than merging the requested number', async () => {
+  const caller = '+15555550401', callback = '+15555550402', callId = 'callback-property-identity'
+  for (const assistant of ['synthetic-assistant-a', 'synthetic-assistant-b']) {
+    const saved = await post(assistant, callId, [tool('capture_contact', { name: 'Callback Fixture', phone: callback,
+      excerpt: 'Please call my other number', email: 'callback@example.test' })], {}, caller)
+    assert.equal(saved.status, 200)
+    const finished = await http('POST', '/api/vapi', { message: { type: 'end-of-call-report', call: { id: callId, assistantId: assistant } } }, { 'x-vapi-secret': secret })
+    assert.equal(finished.status, 200)
+  }
+  const rows = (await db.admin.query('SELECT property_id,value FROM atrium.operational_documents WHERE key=$1 ORDER BY property_id', [`lead:${caller}`])).rows
+  assert.deepEqual(rows.map(r => r.property_id), ['property-a1', 'property-b1'])
+  for (const row of rows) {
+    assert.equal(row.value.phone, caller)
+    assert.equal(row.value.callbackPhone.value, callback)
+    assert.equal(row.value.callbackPhone.callId, callId)
+    assert.equal(row.value.calls.length, 1)
+  }
+  assert.equal((await db.admin.query('SELECT 1 FROM atrium.operational_documents WHERE key=$1', [`lead:${callback}`])).rowCount, 0)
+})
+
+test('uncertain PostgreSQL bookings retain callback details and expose durable review only to the correct property', async () => {
+  const callId = 'postgres-uncertain-booking', caller = '+15555550403'
+  const slots = await post('synthetic-assistant-b', callId, [tool('list_tour_slots', { preferredDate: day, unitId: '4A' })], {}, caller)
+  const slotId = slots.body.results[0].result.match(/slot-[0-9T:-]+/)[0]
+  const transaction = db.app.transaction
+  let written = false
+  db.app.transaction = function (context, work) {
+    return transaction.call(this, context, async client => {
+      const guarded = Object.create(client)
+      guarded.query = async (...args) => {
+        if (written && /SELECT state FROM atrium\.calendars/.test(String(args[0]))) throw new Error('Synthetic readback outage')
+        const result = await client.query(...args)
+        if (/INSERT INTO atrium\.calendars/.test(String(args[0]))) written = true
+        return result
+      }
+      return work(guarded)
+    })
+  }
+  let booked, captured
+  try {
+    booked = await post('synthetic-assistant-b', callId, [tool('book_tour', { slotId, unitId: '4A', prospectName: 'Recovery Fixture' })], {}, caller)
+    captured = await post('synthetic-assistant-b', callId, [tool('capture_contact', { name: 'Recovery Fixture',
+      phone: '+15555550404', email: 'recovery@example.test', excerpt: 'Please use this callback number' })], {}, caller)
+  } finally { db.app.transaction = transaction }
+  assert.equal(written, true)
+  assert.equal(booked.status, 503)
+  assert.equal(captured.status, 200)
+  const rows = (await db.admin.query('SELECT property_id,value FROM atrium.operational_documents WHERE key=$1', [`booking-review:${callId}`])).rows
+  assert.deepEqual(rows.map(row => row.property_id), ['property-b1'])
+  assert.equal(rows[0].value.phone, caller)
+  assert.equal(rows[0].value.callbackPhone.value, '+15555550404')
+  assert.equal(rows[0].value.booking.status, 'arranging')
+  assert.equal(rows[0].value.notificationStatus, 'not_sent')
+  const own = await http('GET', '/api/vapi', undefined, headers('owner-b', 'property-b1', 'organization-b'))
+  const foreign = await http('GET', '/api/vapi', undefined, headers('owner-a'))
+  assert.equal(own.status, 200); assert.equal(foreign.status, 200)
+  assert.ok(own.body.events.some(event => event.id === `booking-review:${callId}`))
+  assert.ok(!foreign.body.events.some(event => event.id === `booking-review:${callId}`))
 })

@@ -1,8 +1,8 @@
 import type { DocumentStore } from '../store/documents.ts'
 import type { QualificationState } from '../leasing/qualification.ts'
 import type { LossReason } from '../record/store.ts'
-import { emptyProfile, deriveStage, normalisePhone, pinnedName } from './profile.ts'
-import type { LeadProfile, CallSummary } from './profile.ts'
+import { emptyProfile, deriveStage, normalisePhone, normaliseCallbackPhone, pinnedName } from './profile.ts'
+import type { LeadProfile, CallSummary, Evidence } from './profile.ts'
 import { bookingIdentity, deriveFollowUps, legacyFollowUpId } from './followups.ts'
 import type { FollowUp } from './followups.ts'
 import { DEFAULT_TIME_ZONE, validateTimeZone } from '../calendar/time.ts'
@@ -21,6 +21,7 @@ import type { RescheduleProjectionInput } from './reschedule.ts'
 export interface CallOutcome {
   callId: string
   phone: string
+  callbackPhone?: Evidence<string>
   at: Date
   durationSeconds: number | null
   qualification: QualificationState
@@ -36,6 +37,19 @@ export interface CallOutcome {
 export const profileKey = (phone: string) => `lead:${normalisePhone(phone)}`
 export const followUpKey = (id: string) => `followup:${id}`
 
+/** Reject malformed contact claims without discarding the rest of the caller's lead. */
+function callbackEvidence(o: CallOutcome): Evidence<string> | null {
+  const e = o.callbackPhone
+  if (!e || e.callId !== o.callId
+    || typeof e.excerpt !== 'string' || !e.excerpt.trim() || e.excerpt.length > 1000
+    || typeof e.at !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(e.at)
+    || !Number.isFinite(Date.parse(e.at)) || new Date(e.at).toISOString() !== e.at
+    || !Number.isFinite(e.confidence) || e.confidence < 0 || e.confidence > 1) return null
+  const value = normaliseCallbackPhone(e.value)
+  if (!value) return null
+  return { value, excerpt: e.excerpt, callId: e.callId, at: e.at, confidence: e.confidence }
+}
+
 function outcomeLine(o: CallOutcome): string {
   if (o.escalation) return `Escalated: ${o.escalation.detail}`
   if (o.booking?.status === 'confirmed') return `Booked a tour${o.booking.unitId ? ` of ${o.booking.unitId}` : ''}`
@@ -49,6 +63,7 @@ export async function consolidateCall(
 ): Promise<{ profile: LeadProfile; followUps: FollowUp[] }> {
   const zone = validateTimeZone(timeZone)
   const phone = normalisePhone(o.phone)
+  const callback = callbackEvidence(o)
   const at = o.at.toISOString()
   let reschedule: RescheduleProjectionInput | null = null
   if (o.booking) {
@@ -68,6 +83,12 @@ export async function consolidateCall(
     if (pinned) next.name = pinned
     else if (newest && o.name) next.name = o.name
     if (newest && o.email) next.email = o.email
+    // An unrelated newer call without a callback does not erase the last request.
+    // Compare capture times so delayed reports cannot restore an older number.
+    if (callback && (!p.callbackPhone || !Number.isFinite(Date.parse(p.callbackPhone.at))
+      || Date.parse(callback.at) > Date.parse(p.callbackPhone.at))) {
+      next.callbackPhone = callback
+    }
 
     const q = o.qualification
     const ev = <T,>(value: T, excerpt: string, confidence: number) =>

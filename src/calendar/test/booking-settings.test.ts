@@ -110,13 +110,13 @@ test('a persisted staff buffer still reserves time when future buffer settings a
   assert.equal((await store.read()).bookings.length, 2)
 })
 
-test('same-key changed apartment or actual interval conflicts instead of confirming an unrelated booking', async () => {
+test('same-key changed apartment or actual interval requires a tour change instead of confirming an unrelated booking', async () => {
   const store = new MemoryCalendarStore()
   const cal = storeBackedCalendar(store, () => NOW, options)
   const slot = (await cal.listSlots(PROPERTY, START, END))[0]!
   await cal.createBooking(intent(slot, 'same-key', '12A'))
-  await assert.rejects(cal.createBooking(intent(slot, 'same-key', '12B')), /booking conflict/)
-  await assert.rejects(cal.createBooking(intent({ ...slot, endsAt: new Date(slot.endsAt.getTime() + 15 * 60000) }, 'same-key', '12A')), /booking conflict/)
+  await assert.rejects(cal.createBooking(intent(slot, 'same-key', '12B')), { message: 'TOUR_CHANGE_REQUIRED', reason: 'existing_future_tour' })
+  await assert.rejects(cal.createBooking(intent({ ...slot, endsAt: new Date(slot.endsAt.getTime() + 15 * 60000) }, 'same-key', '12A')), { message: 'TOUR_CHANGE_REQUIRED', reason: 'existing_future_tour' })
   assert.equal((await store.read()).bookings.length, 1)
 })
 
@@ -126,8 +126,8 @@ test('booking flow does not confirm a second apartment using the same prospect a
   const slot = (await cal.listSlots(PROPERTY, START, END))[0]!
   const first = await bookTour(request(slot, '12A'), cal, { now: NOW, makeIntentId: () => 'first' })
   assert.equal(first.state.status, 'confirmed')
-  const changed = await bookTour(request(slot, '12B'), cal, { now: NOW, makeIntentId: () => 'changed' })
-  assert.equal(changed.state.status, 'slot_taken')
+  await assert.rejects(bookTour(request(slot, '12B'), cal, { now: NOW, makeIntentId: () => 'changed' }),
+    { message: 'TOUR_CHANGE_REQUIRED', reason: 'existing_future_tour' })
   assert.equal((await store.read()).bookings.length, 1)
   assert.equal((await store.read()).bookings[0]?.unitId, '12A')
 })

@@ -30,6 +30,16 @@ This file contains technical architecture only. Customer agreements, the detaile
 
 `TENANCY.md` describes current environment-account isolation and tour settings. `db/README.md` documents the new SQL roles and constraints; [ADR 0001](docs/adr/0001-operational-postgres.md) records the engine decision and deployment gates. `QUALITY_REVIEW.md` records specific past verification runs and their limitations; its dated counts are historical evidence, not a live certification.
 
+September 20 voice recovery increment: the webhook saves attempted booking/contact state
+before calendar dispatch, distinguishes known pre-write failures from uncertain writes,
+and recovers only an exactly matching reservation. `src/calls/booking-review.ts` retains
+unresolved booking reviews independently of finished-call projection in the scoped document
+store. Replay can repair that projection, and contact capture stays available while a review
+is pending. Today and Calls expose these reviews without claiming a confirmed tour or sent
+notification. This is not a background reconciler, review-resolution command or bounded
+portfolio queue; those remain required. Requested callback evidence never replaces the
+provider caller identity, and anonymous dashboard links select the exact call.
+
 The PostgreSQL path is wired through protected portal/API requests and selected only by explicit
 `ATRIUM_RUNTIME_MODE=postgres` with valid deployment configuration. Connection settings alone
 are rejected rather than silently selecting an adapter. Local persistent preview and isolated

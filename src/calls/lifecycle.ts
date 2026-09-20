@@ -189,7 +189,11 @@ export function admitToolBatch(value: CallLifecycle, input: { token: string; too
   if (busy) fail('call_work_busy')
   // Finished duplicates remain replayable after closure; new work never does.
   if (!fresh.length) return { work, status: 'cached', admission: null, results }
-  if (work.phase !== 'open') fail('call_closed')
+  // An uncertain booking must not prevent saving the callback details staff need.
+  // No new booking or other tool is admitted, and an accepted end still closes admission.
+  const reviewContact = work.phase === 'needs_review' && work.end === null
+    && fresh.every(tool => tool.name === 'capture_contact')
+  if (work.phase !== 'open' && !reviewContact) fail('call_closed')
   if (work.intents.length + fresh.length > CALL_WORK_LIMITS.intents) fail('call_work_limit')
   if (work.intents.some(intent => intent.token === request.token)) fail('call_tool_identity_conflict')
   const at = timestamp(request.now)

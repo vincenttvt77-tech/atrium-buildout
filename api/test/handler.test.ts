@@ -296,9 +296,10 @@ describe('operational regressions', () => {
     const res = mockRes()
     await handler({ method: 'POST', headers: {}, body: { message: { type: 'end-of-call-report', call: { id: callId } } } }, res)
     const { documentStoreFromEnv } = await import('../../src/store/documents.ts')
-    const profile = await documentStoreFromEnv().get<{ name: string; email: string }>('lead:+15165550109')
+    const profile = await documentStoreFromEnv().get<{ name: string; email: string; callbackPhone: { value: string } }>(`lead:anonymous:${callId}`)
     assert.equal(profile?.name, 'Test prospect')
     assert.equal(profile?.email, 'test@example.com')
+    assert.equal(profile?.callbackPhone.value, '+15165550109')
   })
 
   test('concurrent webhook requests keep both qualification signals', async () => {

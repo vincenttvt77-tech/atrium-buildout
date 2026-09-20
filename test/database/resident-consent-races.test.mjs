@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import pg from 'pg'
 import { before, after, test } from 'node:test'
 import { randomUUID, randomBytes, createHash } from 'node:crypto'
 import { setTimeout as pause } from 'node:timers/promises'
@@ -46,9 +47,10 @@ async function waitBlocked() {
   assert.fail('The expected consent operation did not reach the real lock barrier')
 }
 async function lockedProperty(work) {
-  const blocker = await f.db.admin.connect()
+  const blocker = new pg.Client(f.db.admin.connectionParameters)
+  await blocker.connect()
   try { await blocker.query('BEGIN'); await blocker.query("SELECT id FROM atrium.properties WHERE id='property-a1' FOR UPDATE"); await work(blocker) }
-  finally { await blocker.query('ROLLBACK'); blocker.release() }
+  finally { await blocker.query('ROLLBACK'); await blocker.end() }
 }
 
 test('two real zero-counter assertions for the same expected decision produce only one decision and counter revision', async () => {
@@ -124,12 +126,13 @@ test('source expiry during the final receipt insert wait rolls back a real signe
     details: { bindingId: authority.bindingId, bindingVersion: authority.bindingVersion, residentId: authority.residentId, residentVersion: authority.residentVersion, purpose: 'work', protocolCompleted: true,
       source: { ...f.consent.source(), validUntil: new Date(until).toISOString() } }, reason: 'Synthetic short current evidence tests expiry after waiting' })
   const currentRequest = await f.consent.publishRequest(job.caseId, 'work'), prepared = await prepare(currentRequest.receipt.id), before = await snapshot(currentRequest.receipt.id)
-  const blocker = await f.db.admin.connect()
+  const blocker = new pg.Client(f.db.admin.connectionParameters)
+  await blocker.connect()
   try {
     await blocker.query('BEGIN'); await blocker.query('LOCK TABLE atrium.consent_commands IN ACCESS EXCLUSIVE MODE')
     const pending = repo.finishGrant(actor.principal, prepared.verified).then(value => ({ value }), error => ({ error }))
     await waitBlocked(); await pause(Math.max(0, until - Date.now()) + 40); await blocker.query('COMMIT')
     assert.equal((await pending).error.code, 'consent_changed')
-  } finally { await blocker.query('ROLLBACK'); blocker.release() }
+  } finally { await blocker.query('ROLLBACK'); await blocker.end() }
   assert.deepEqual(await snapshot(currentRequest.receipt.id), before)
 })

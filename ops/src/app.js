@@ -551,7 +551,7 @@ const ico = (name, cls = '') => `<span class="ico${cls ? ` ${cls}` : ''}">${icon
 
 const state = {
   calls: [], events: [], calendar: null, leads: null, health: null,
-  updatedAt: null, errors: {}, callsError: null, callsConfigured: null, safetyEventsError: null,
+  updatedAt: null, errors: {}, callsError: null, callsConfigured: null, safetyEventsError: null, bookingReviewsError: null,
   loaded: { calls: false, calendar: false, leads: false },
   lastGoodAt: {}, lastPollAt: null, failedRounds: 0, notConfigured: false, lastWriteError: null,
 }
@@ -584,7 +584,7 @@ function invalidateDocument(message, status = 409) {
   if (!documentAccessIssue) {
     documentAccessIssue = { message, status }; scopeEpoch += 1; stopPolling()
     for (const name of Object.keys(seq)) { seq[name] += 1; sig[name] = '' }
-    Object.assign(state, { calls: [], events: [], calendar: null, leads: null, callsError: null, callsConfigured: null, safetyEventsError: null,
+    Object.assign(state, { calls: [], events: [], calendar: null, leads: null, callsError: null, callsConfigured: null, safetyEventsError: null, bookingReviewsError: null,
       loaded: { calls: false, calendar: false, leads: false }, errors: {}, lastWriteError: null, lastGoodAt: {}, updatedAt: null })
     crCache = { key: null, value: [] }
     if (booted) {
@@ -737,10 +737,11 @@ function snapshot(name, d) {
   if (name === 'calls') {
     const events = arr(d.events).slice()
     // A partial safety-feed failure must not erase already displayed durable incidents.
-    if (d.safetyEventsError) for (const event of state.events) {
-      if (event && event.durable === true && event.kind === 'emergency' && !events.some(e => e && e.id === event.id)) events.push(event)
+    for (const event of state.events) {
+      if (event && event.durable === true && ((d.safetyEventsError && event.kind === 'emergency')
+        || (d.bookingReviewsError && event.kind === 'booking_review')) && !events.some(e => e && e.id === event.id)) events.push(event)
     }
-    return { calls: arr(d.calls), events, callsError: d.callsError ?? null, safetyEventsError: d.safetyEventsError ?? null,
+    return { calls: arr(d.calls), events, callsError: d.callsError ?? null, safetyEventsError: d.safetyEventsError ?? null, bookingReviewsError: d.bookingReviewsError ?? null,
       callsConfigured: typeof d.callsConfigured === 'boolean' ? d.callsConfigured : null }
   }
   if (name === 'calendar') return { slots: arr(d.slots), blocks: arr(d.blocks), bookings: arr(d.bookings), units: arr(d.units), unitBlocks: arr(d.unitBlocks), store: d.store ?? null,
@@ -753,7 +754,7 @@ function snapshot(name, d) {
     unitFeedbackTruncated: d.unitFeedbackTruncated === true }
 }
 function assign(name, snap) {
-  if (name === 'calls') { state.calls = snap.calls; state.events = snap.events; state.callsError = snap.callsError; state.callsConfigured = snap.callsConfigured; state.safetyEventsError = snap.safetyEventsError }
+  if (name === 'calls') { state.calls = snap.calls; state.events = snap.events; state.callsError = snap.callsError; state.callsConfigured = snap.callsConfigured; state.safetyEventsError = snap.safetyEventsError; state.bookingReviewsError = snap.bookingReviewsError }
   else if (name === 'calendar') state.calendar = snap
   else state.leads = snap
   state.loaded[name] = true
@@ -1011,7 +1012,7 @@ function statusRows() {
     reconnecting: state.failedRounds >= 2,
   }
   rows.ok = rows.leadsSaving !== 'off' && rows.leadsSaving !== 'temp' && rows.calendarSaving !== 'off' && rows.calendarSaving !== 'temp' &&
-    rows.recordings !== 'off' && rows.recordings !== 'down' && !rows.reconnecting && !state.notConfigured && !state.safetyEventsError
+    rows.recordings !== 'off' && rows.recordings !== 'down' && !rows.reconnecting && !state.notConfigured && !state.safetyEventsError && !state.bookingReviewsError
   return rows
 }
 function badgeFor(name) {
@@ -1501,7 +1502,7 @@ function displayStage(profile, s) {
   const stage = String((profile && profile.stage) ?? '')
   const out = { key: stage, label: label(labels.stage, stage), chipClass: label(labels.stageChip, stage, 'chip-neutral'), icon: label(labels.stageIcon, stage, '') }
   // The clock does not establish attendance; keep the evidence-derived server stage.
-  if (stage === 'escalated' && s && !openItemsFor(s, profile.phone).length) return { key: 'handled', label: 'Handled by a person', chipClass: 'chip-neutral', icon: 'check' }
+  if (stage === 'escalated' && s && !openItemsFor(s, profile.phone).filter(n => profile.phone !== 'unknown' || arr(profile.calls).some(c => c.callId === n.callId)).length) return { key: 'handled', label: 'Handled by a person', chipClass: 'chip-neutral', icon: 'check' }
   return out
 }
 const CALLBACK_RE = /could not handle: ([\s\S]*?)\. A person needs to call\.$/
@@ -1532,6 +1533,10 @@ function needsPerson(s) {
       phrase: label(labels.emergency, e.emergencyKind, 'an emergency'), matched: String(e.matched ?? ''), at: e.at, sortAt: toTime(e.at) ?? 0,
       action: emergencyAction(e.emergencyKind, rec && rec.call && rec.call.transcript, e) })
   }
+  const bookingReviews = arr(s.events).filter(e => e && e.kind === 'booking_review' && e.durable === true)
+    .filter(e => { if (seen.has(e.callId)) return false; seen.add(e.callId); return true })
+    .map(review => ({ type: 'bookingReview', review, callId: review.callId,
+      phone: review.phone || 'unknown', name: review.name, at: review.at, sortAt: toTime(review.at) ?? 0 }))
   const tourChanges = arr(s.leads && s.leads.tourChangeRequests).filter(r => r && r.status === 'pending')
     .sort((a, b) => (toTime(a.firstRequestedAt) ?? 0) - (toTime(b.firstRequestedAt) ?? 0))
     .map(request => ({ type: 'tourChange', request, callId: request.callId, phone: request.phone || 'unknown',
@@ -1539,7 +1544,7 @@ function needsPerson(s) {
   const callbacks = followUpsOf(s).filter((f) => f && f.kind === 'callback' && f.status === 'scheduled')
     .sort((a, b) => (toTime(a.dueAt) ?? 0) - (toTime(b.dueAt) ?? 0))
   for (const fu of callbacks) {
-    const profile = profileByPhone(s, fu.phone)
+    const profile = fu.phone === 'unknown' ? profileForCall(s, fu.createdFromCall) : profileByPhone(s, fu.phone)
     const q = callbackQuestion(fu, profile)
     const calledAt = callAt(profile, fu.createdFromCall) || fu.createdAt
     const callId = (q.escalation && q.escalation.callId) || fu.createdFromCall
@@ -1551,7 +1556,7 @@ function needsPerson(s) {
   const stuck = []
   for (const p of profilesOf(s)) {
     if (!p) continue
-    const hasCallback = callbacks.some((f) => f.phone === p.phone)
+    const hasCallback = callbacks.some((f) => f.phone === p.phone && (p.phone !== 'unknown' || arr(p.calls).some(c => c.callId === f.createdFromCall)))
     if (hasCallback) continue
     for (const b of arr(p.bookings)) {
       if (!b || (b.status !== 'failed' && b.status !== 'arranging')) continue
@@ -1564,7 +1569,7 @@ function needsPerson(s) {
     }
   }
   stuck.sort((a, b) => b.sortAt - a.sortAt)
-  const value = items.filter((i) => i.type === 'emergency').concat(tourChanges, items.filter((i) => i.type === 'callback'), stuck)
+  const value = items.filter((i) => i.type === 'emergency').concat(bookingReviews, tourChanges, items.filter((i) => i.type === 'callback'), stuck)
   npCache = { key, value }
   return value
 }
@@ -1642,7 +1647,7 @@ function callRecords(s) {
     const id = String(call.id)
     const phone = normalisePhone(call.customerNumber)
     const known = byCallId.get(id)
-    const profile = (known && known.profile) || profileByPhone(s, phone)
+    const profile = (known && known.profile) || (phone === 'unknown' ? null : profileByPhone(s, phone))
     records.set(id, { id, phone, profile, call, events: [], summary: (known && known.summary) || null, startedAt: call.startedAt || null, durationSeconds: call.durationSeconds ?? null })
   }
   for (const [id, { profile, summary }] of byCallId) {
@@ -1664,7 +1669,7 @@ function callRecords(s) {
     records.set(id, { id, phone: (profile && profile.phone) || 'unknown', profile, call: null, events: evs, summary: null, startedAt: evs[0].at || null, durationSeconds: null })
   }
   for (const r of records.values()) {
-    const safety = r.events.find(e => e && e.kind === 'emergency' && e.durable === true)
+    const safety = r.events.find(e => e && (e.kind === 'emergency' || e.kind === 'booking_review') && e.durable === true)
     if (r.phone === 'unknown' && safety) r.phone = normalisePhone(safety.phone)
     r.name = (r.profile && r.profile.name) || (safety && safety.name) || null
     r.displayName = r.name || fmt.phone(r.phone) || 'Hidden number'
@@ -1803,6 +1808,7 @@ function callStory(record, s) {
     else if (e.status === 'failed') f.bookFailed = true
     else if (e.status === 'slot_taken') f.slotTaken = true
   }
+  for (const e of ev('booking_review')) f.arranging = { unitId: e.booking && e.booking.unitId || null }
   for (const e of ev('loss_reason')) if (e.reason) f.loss = { kind: String(e.reason.kind ?? ''), detail: String(e.reason.detail ?? ''), evidence: String(e.reason.evidence ?? '') }
   for (const e of ev('slots_listed')) f.slots = Number(e.count) || 0
   const bookedAt = { index: -1 }
@@ -1928,7 +1934,7 @@ function callStory(record, s) {
   else if (fired === 3 && f.restricted) sentence += ` They also asked "${text.truncate(f.restricted.question || label(labels.trigger, f.restricted.trigger, 'something only a person can answer'), 90)}" — that's for a person to answer.`
   else if (fired === 1) { if (f.restricted) sentence += ` ${askedSentence()}`; else if (f.booked) sentence += ` ${bookedSentence()}` }
 
-  const needsPersonFlag = Boolean(f.restricted) || f.bookFailed
+  const needsPersonFlag = Boolean(f.restricted) || f.bookFailed || Boolean(f.arranging)
   const chips = []
   if (f.emergency) chips.push({ text: 'Emergency', cls: 'chip-danger', icon: 'siren' })
   if (needsPersonFlag) chips.push({ text: 'Needs a person', cls: 'chip-warn', icon: 'hand' })
@@ -2237,7 +2243,7 @@ const link = (name, params, txt, cls) => `<a class="${cls || 'btn btn-quiet'}" h
 const telBtn = (phone, txt, cls) => { const h = href.tel(phone); return h ? `<a class="${cls || 'btn btn-call'}" href="${esc(h)}">${esc(txt || 'Call')}</a>` : '' }
 const telLink = (phone) => { const h = href.tel(phone), shown = fmt.phone(phone); return h && shown ? `<a href="${esc(h)}">${esc(shown)}</a>` : esc(shown) }
 /** A person's name as the link to their lead (every person mention links onward, §2.6). */
-const personLink = (phone, name) => `<a class="name" href="${esc(hashFor('leads', { phone: phone || 'unknown' }))}">${esc(name)}</a>`
+const personLink = (phone, name, callId) => `<a class="name" href="${esc(hashFor('leads', { phone: phone || 'unknown', ...((!phone || phone === 'unknown') && callId ? { call: callId } : {}) }))}">${esc(name)}</a>`
 const mailLink = (email) => { const h = href.mailto(email); return h ? `<a href="${esc(h)}">${esc(email)}</a>` : esc(email || '') }
 const chipHtml = (c) => html_.chip(c.cls, c.icon, c.text)
 const isAfterHours = (t) => { const p = nyParts(t); if (!p || !Object.keys(property.hours).length) return false; const h = property.hours[p.dayOfWeek]; if (!h) return true; const x = p.hour + p.minute / 60; return x < h[0] || x >= h[1] }
@@ -2268,7 +2274,7 @@ function todayModel(s) {
     for (const p of profilesOf(s)) for (const b of arr(p.bookings)) if (b && b.status === 'confirmed' && (toTime(callAt(p, b.callId)) ?? 0) >= wsT) toursBooked++
   }
   const nextTour = tours.find((t) => !t.past)
-  const needValue = s.loaded.leads && (!s.safetyEventsError || needs.length) ? needs.length : null
+  const needValue = s.loaded.leads && ((!s.safetyEventsError && !s.bookingReviewsError) || needs.length) ? needs.length : null
   const oldest = needs.length ? Math.min(...needs.map((n) => toTime(n.at) ?? now)) : null
   const leadsStore = s.leads && s.leads.store, calStore = s.calendar && s.calendar.store
   const leadsOff = Boolean(leadsStore) && leadsStore.durable === false, calOff = Boolean(calStore) && calStore.durable === false
@@ -2284,7 +2290,7 @@ function todayModel(s) {
       if (callBacks.length) parts.push(`${callBacks.length} to call back`)
       const callsPart = text.plural(callsValue === '20+' ? 20 : Number(callsValue), 'call').replace(/^20 /, '20+ ')
       briefing = parts.length ? `Since 6 PM yesterday: ${callsPart}${toursPart}, ${parts.join(', ')}.`
-        : `Since 6 PM yesterday: ${callsPart}${toursPart}. ${s.safetyEventsError ? 'Safety reports could not be checked.' : 'Nothing needs you right now.'}`
+        : `Since 6 PM yesterday: ${callsPart}${toursPart}. ${s.safetyEventsError || s.bookingReviewsError ? 'Saved reports could not be checked.' : 'Nothing needs you right now.'}`
     }
   }
   return {
@@ -2328,6 +2334,15 @@ function pollBanner(s, resource, what) {
 }
 function personRowHtml(item, s) {
   if (item.type === 'tourChange') return tourChangeRequestHtml(item.request)
+  if (item.type === 'bookingReview') {
+    const review = item.review
+    return `<div class="row row-stack" data-key="np:${esc(item.callId)}"><span class="row-lead"><span class="row-lead-icon warn-text">${ico('hand')}</span></span><span class="row-body">` +
+      `<span class="row-title"><strong>Verify ${esc(review.name || 'the caller')}'s tour</strong></span>` +
+      `<span class="row-sub">The calendar response was uncertain. Check the existing reservation before creating another tour.</span>` +
+      `<span class="meta">${review.booking ? esc(fmt.dateTime(review.booking.startsAt)) : 'Time not recorded'}${review.booking && review.booking.unitId ? ` · Residence ${esc(review.booking.unitId)}` : ''}</span>` +
+      '<span class="reassure">Saved for staff review. No notification has been sent.</span></span>' +
+      `<span class="row-actions">${link('calls', { id: item.callId }, 'Review call', 'btn')}${link('calendar', {}, 'Open calendar', 'btn btn-quiet')}</span></div>`
+  }
   const phone = item.phone, shown = fmt.phone(phone)
   const rec = callRecords(s).find((r) => r.id === item.callId)
   const actions = []
@@ -2335,7 +2350,7 @@ function personRowHtml(item, s) {
     // The emergency is the first item of the list as well as the banner above, so the section's count,
     // the tile, the badge and the briefing sentence all count the same things.
     if (shown) actions.push(telBtn(phone, 'Call'))
-    if (item.profile) actions.push(link('leads', { phone }, 'Open lead', 'btn btn-quiet link-action'))
+    if (item.profile) actions.push(link('leads', { phone, ...(phone === 'unknown' ? { call: item.callId } : {}) }, 'Open lead', 'btn btn-quiet link-action'))
     if (rec) actions.push(link('calls', { id: item.callId }, 'See the call', 'btn btn-quiet link-action'))
     const by = item.name ? esc(item.name) : (shown ? telLink(phone) : 'a caller with a hidden number')
     return `<div class="row" data-key="np:${esc(item.callId)}">` +
@@ -2351,7 +2366,7 @@ function personRowHtml(item, s) {
     const overdue = (toTime(item.respondBy) ?? Infinity) <= Date.now()
     actions.push(telBtn(phone, 'Call'))
     actions.push(`<button type="button" class="btn" data-action="handled" data-fu="${esc(item.fu.id)}" data-key="fu:${esc(item.fu.id)}:done" data-write="leads">Mark handled</button>`)
-    actions.push(link('leads', { phone }, 'Open lead', 'btn btn-quiet link-action'))
+    actions.push(link('leads', { phone, ...(phone === 'unknown' ? { call: item.callId } : {}) }, 'Open lead', 'btn btn-quiet link-action'))
     if (rec) actions.push(link('calls', { id: item.callId }, 'See the call', 'btn btn-quiet link-action'))
     return `<div class="row" data-key="np:${esc(item.callId)}">` +
       `<span class="row-lead"><span class="row-lead-icon warn-text">${ico('hand')}</span></span><span class="row-body">` +
@@ -2366,7 +2381,7 @@ function personRowHtml(item, s) {
   const name = item.name || personName(item.profile)
   const failed = b.status === 'failed'
   actions.push(telBtn(phone, 'Call'))
-  actions.push(link('leads', { phone }, 'Open lead', 'btn btn-quiet link-action'))
+  actions.push(link('leads', { phone, ...(phone === 'unknown' ? { call: item.callId } : {}) }, 'Open lead', 'btn btn-quiet link-action'))
   actions.push(link('calendar', { date: nyDate(b.startsAt) || undefined }, 'Calendar', 'btn btn-quiet link-action'))
   return `<div class="row" data-key="np:${esc(item.callId)}">` +
     `<span class="row-lead"><span class="row-lead-icon warn-text">${ico('hand')}</span></span><span class="row-body">` +
@@ -2376,21 +2391,22 @@ function personRowHtml(item, s) {
     `</span><span class="row-actions">${actions.join('')}</span></div>`
 }
 function followUpRowHtml(fu, s) {
-  const profile = profileByPhone(s, fu.phone)
+  const profile = fu.phone === 'unknown' ? profileForCall(s, fu.createdFromCall) : profileByPhone(s, fu.phone)
   const sen = todoSentence(fu, profile, s)
   const overdue = (toTime(fu.dueAt) ?? Infinity) <= Date.now()
   const channel = String(fu.channel ?? 'call')
   const email = profile && profile.email
+  const requestedCallback = profile && profile.callbackPhone && /^\+[1-9]\d{6,14}$/.test(profile.callbackPhone.value) ? profile.callbackPhone.value : null
   const from = callAt(profile, fu.createdFromCall) || fu.createdAt
   let primary = ''
   if (channel === 'email' && href.mailto(email)) primary = `<a class="btn btn-call" href="${esc(href.mailto(email))}">Email</a>`
   else if (channel === 'sms' && href.sms(fu.phone)) primary = `<a class="btn btn-call" href="${esc(href.sms(fu.phone))}">Text</a>`
-  else primary = telBtn(fu.phone, 'Call')
+  else primary = telBtn(requestedCallback || fu.phone, requestedCallback ? 'Call requested number' : 'Call')
   return `<div class="row row-stack" data-key="fu:${esc(fu.id)}">` +
     `<span class="row-lead"><span class="${overdue ? 'overdue' : ''}">${overdue ? ico('clock') : ''} ${esc(fmt.duePhrase(fu.dueAt))}</span><span class="row-lead-icon">${ico(label(labels.channelIcon, channel, 'phone'))}</span></span>` +
-    `<span class="row-body"><span class="row-title">${esc(sen.before)}${personLink(fu.phone, sen.name)}${esc(sen.after)}</span>` +
+    `<span class="row-body"><span class="row-title">${esc(sen.before)}${personLink(fu.phone, sen.name, fu.createdFromCall)}${esc(sen.after)}</span>` +
     html_.followUpReview(fu) +
-    `<span class="row-sub">${fmt.phone(fu.phone) ? `${telLink(fu.phone)} · ` : ''}${channel === 'email' && email ? `${mailLink(email)} · ` : ''}from their call ${esc(fmt.dateTime(from, { inSentence: true }))}</span></span>` +
+    `<span class="row-sub">${fmt.phone(fu.phone) ? `${telLink(fu.phone)} · ` : ''}${requestedCallback ? `Requested callback: ${telLink(requestedCallback)} · ` : ''}${channel === 'email' && email ? `${mailLink(email)} · ` : ''}from their call ${esc(fmt.dateTime(from, { inSentence: true }))}</span></span>` +
     `<span class="row-actions">${primary}` +
     `<button type="button" class="btn" data-action="done" data-fu="${esc(fu.id)}" data-key="fu:${esc(fu.id)}:done" data-write="leads">Done</button>` +
     `<button type="button" class="btn" data-action="skip" data-fu="${esc(fu.id)}" data-key="fu:${esc(fu.id)}:skip" data-write="leads">Not needed</button></span></div>`
@@ -2405,7 +2421,7 @@ function tourRowHtml(t, s, today) {
   const chip = t.past ? html_.chip('chip-neutral', 'clock', 'Scheduled earlier') : html_.chip('chip-neutral', 'calendar', 'Tour booked')
   return `<div class="row row-stack${t.past ? ' row-muted' : ''}" data-key="tour:${esc(t.slotId)}:${esc(t.unitId || '')}:${esc(t.phone || t.name)}">` +
     `<span class="row-lead"><span class="num strong">${esc(fmt.time(t.startsAt))}</span></span>` +
-    `<span class="row-body"><span class="row-title">${t.profile ? personLink(t.phone, t.name) : esc(t.name)} · ${t.unitId ? `apartment ${esc(t.unitId)}` : 'no apartment picked yet'}</span>` +
+    `<span class="row-body"><span class="row-title">${t.profile ? personLink(t.phone, t.name, t.profile.calls && t.profile.calls[0] && t.profile.calls[0].callId) : esc(t.name)} · ${t.unitId ? `apartment ${esc(t.unitId)}` : 'no apartment picked yet'}</span>` +
     `<span class="row-sub">${fmt.phone(t.phone) ? telLink(t.phone) : 'No phone on file'}${t.past ? ' · attendance not recorded here' : ''}</span></span>` +
     `<span class="row-actions">${chip}${actions.join('')}</span></div>`
 }

@@ -35,10 +35,19 @@ const arr = (v) => (Array.isArray(v) ? v : [])
 const toTime = (v) => { if (v == null || v === '') return null; const t = Date.parse(String(v)); return isNaN(t) ? null : t }
 const profilesOf = (s) => arr(s.leads && s.leads.profiles).filter((p) => p && p.phone != null)
 const followUpsOf = (s) => arr(s.leads && s.leads.followUps).filter((f) => f && f.id != null)
+const anonymousCall = p => p && p.phone === 'unknown' && arr(p.calls).length === 1 ? String(p.calls[0].callId || '') : ''
+// This key selects a local drawer only. Server mutations keep their existing IDs.
+const profileRef = p => p && p.phone !== 'unknown' ? p.phone : anonymousCall(p) ? `call:${anonymousCall(p)}` : null
+const ownsWork = (p, item) => item && item.phone === p.phone && (p.phone !== 'unknown'
+  || arr(p.calls).some(c => c.callId === (item.createdFromCall || item.callId)))
+const profileForWork = (s, item) => {
+  const matches = profilesOf(s).filter(p => ownsWork(p, item))
+  return matches.length === 1 ? matches[0] : null
+}
 const callAt = (profile, callId) => { const c = profile && arr(profile.calls).find((x) => x && x.callId === callId); return c ? c.at : null }
 const byDue = (a, b) => (toTime(a.dueAt) ?? Infinity) - (toTime(b.dueAt) ?? Infinity)
 const byDueDesc = (a, b) => (toTime(b.dueAt) ?? 0) - (toTime(a.dueAt) ?? 0)
-const openItems = (s, phone) => derive.needsPerson(s).filter((n) => n && n.phone === phone)
+const openItems = (s, p) => derive.needsPerson(s).filter(n => ownsWork(p, n && n.fu || n))
 
 const TABS = [['todo', 'Work queue'], ['all', 'Prospects']]
 const STAGES = [['all', 'All'], ['new', 'New'], ['qualified', 'Interested'], ['tour_scheduled', 'Tour booked'], ['toured', 'Toured'], ['lost', "Didn't work out"], ['needs_person', 'Needs a person']]
@@ -51,6 +60,7 @@ const GROUPS = [['overdue', 'Overdue', 'clock'], ['today', 'Today', null], ['wee
 const telLink = (phone) => { const h = href.tel(phone), shown = fmt.phone(phone); return h && shown ? `<a href="${esc(h)}">${esc(shown)}</a>` : esc(shown) }
 const mailLink = (email) => { const h = href.mailto(email); return h ? `<a href="${esc(h)}">${esc(email)}</a>` : esc(email || '') }
 const telBtn = (phone, txt, cls) => { const h = href.tel(phone); return h ? `<a class="${cls || 'btn btn-call'}" href="${esc(h)}">${ico('phone')}${esc(txt || 'Call')}</a>` : '' }
+const callbackOf = p => p && p.callbackPhone && /^\+[1-9]\d{6,14}$/.test(p.callbackPhone.value) ? p.callbackPhone : null
 const link = (name, params, txt, cls) => `<a class="${cls || 'btn btn-quiet'}" href="${esc(A.hashFor(name, params))}">${esc(txt)}</a>`
 const chip = (cls, iconName, txt) => A.html.chip(cls, iconName, txt)
 const countHtml = (n) => `<span class="count">· ${Number(n) || 0}</span>`
@@ -80,7 +90,7 @@ function leadOverviewHtml(s) {
 }
 function leadBriefHtml(p, s) {
   const tour = nextTour(p)
-  const tasks = followUpsOf(s).filter(f => f.phone === p.phone && f.status === 'scheduled').length + pendingChanges(s).filter(r => r.phone === p.phone).length
+  const tasks = followUpsOf(s).filter(f => ownsWork(p, f) && f.status === 'scheduled').length + pendingChanges(s).filter(r => ownsWork(p, r)).length
   const sig = p.signals || {}, budget = sig.budgetRange || sig.budget
   const facts = [['Budget', budget ? derive.budgetText(budget.value) : 'Not captured'],
     ['Layout', sig.bedrooms ? bedroomsFact(sig.bedrooms.value) : 'Not captured'],
@@ -111,15 +121,15 @@ function groupOf(fu, now, today, weekEnd) {
 }
 /** One scheduled follow-up as a §6.3 row. o.nameLink: the name opens the person panel. */
 function fuRowHtml(fu, s, o) {
-  const profile = derive.profileByPhone(s, fu.phone)
-  const sen = derive.todoSentence(fu, profile, s)
+  const profile = profileForWork(s, fu)
+  const sen = derive.todoSentence(fu, profile || { phone: fu.phone, name: null }, s)
   const overdue = (toTime(fu.dueAt) ?? Infinity) <= Date.now()
   const channel = String(fu.channel ?? 'call')
   const email = profile && profile.email
   const from = callAt(profile, fu.createdFromCall) || fu.createdAt
   const shown = fmt.phone(fu.phone)
-  const nameHtml = o && o.nameLink
-    ? `<button type="button" class="btn-link name" data-action="open" data-phone="${esc(fu.phone)}" data-key="who:${esc(fu.id)}">${esc(sen.name)}</button>`
+  const nameHtml = o && o.nameLink && profileRef(profile)
+    ? `<button type="button" class="btn-link name" data-action="open" data-phone="${esc(fu.phone)}" data-call="${esc(anonymousCall(profile))}" data-key="who:${esc(fu.id)}">${esc(sen.name)}</button>`
     : `<span class="name">${esc(sen.name)}</span>`
   let primary = ''
   if (channel === 'email' && href.mailto(email)) primary = `<a class="btn btn-quiet btn-call" href="${esc(href.mailto(email))}">${ico('mail')}Email</a>`
@@ -139,7 +149,7 @@ function fuRowHtml(fu, s, o) {
 }
 /** A done / not-needed follow-up with its Put back button (the recovery list). */
 function doneRowHtml(fu, s) {
-  const sen = derive.todoSentence(fu, derive.profileByPhone(s, fu.phone), s)
+  const sen = derive.todoSentence(fu, profileForWork(s, fu) || { phone: fu.phone, name: null }, s)
   const done = String(fu.status) === 'done'
   return `<div class="row done-row" data-key="fu:${esc(fu.id)}"><span class="row-body">` +
     `<span class="row-title">${esc(sen.before)}<span class="name">${esc(sen.name)}</span>${esc(sen.after)}</span>` +
@@ -189,19 +199,19 @@ function leadMatches(p, q) {
   if (!q) return true
   const numeric = /^[\d\s()+.-]+$/.test(q)
   const digits = q.replace(/\D/g, '')
-  if (numeric && digits.length >= 2) return String(p.phone ?? '').replace(/\D/g, '').includes(digits)
+  if (numeric && digits.length >= 2) return [p.phone, callbackOf(p)?.value].some(value => String(value ?? '').replace(/\D/g, '').includes(digits))
   const hay = [derive.displayName(p), p.name, p.email, ...arr(p.unitsDiscussed), ...arr(p.bookings).map((b) => b && b.unitId),
     ...arr(p.notes).map((n) => parseNote(n).body)].filter(Boolean).join('\n').toLowerCase()
   return hay.includes(q.toLowerCase())
 }
 function passesStage(p, s, key) {
   if (key === 'all') return true
-  if (key === 'needs_person') return openItems(s, p.phone).length > 0
+  if (key === 'needs_person') return openItems(s, p).length > 0
   return derive.displayStage(p, s).key === key
 }
 /** Open needs-a-person item first (soonest respond-by first), then last call, newest first. */
 function sortLeads(list, s) {
-  const urgency = (p) => { const items = openItems(s, p.phone); return items.length ? Math.min(...items.map((i) => toTime(i.respondBy) ?? i.sortAt ?? 0)) : null }
+  const urgency = (p) => { const items = openItems(s, p); return items.length ? Math.min(...items.map((i) => toTime(i.respondBy) ?? i.sortAt ?? 0)) : null }
   return list.map((p) => ({ p, u: urgency(p), t: toTime(p.lastSeenAt) ?? 0 })).sort((a, b) => {
     if (a.u != null && b.u != null) return a.u - b.u
     if (a.u != null) return -1
@@ -221,7 +231,7 @@ function leadRowHtml(p, s, open, tab) {
   const hidden = p.phone === 'unknown'
   const name = derive.displayName(p)
   const stage = derive.displayStage(p, s)
-  const items = openItems(s, p.phone)
+  const items = openItems(s, p)
   const flag = items.length > 0
   const sig = p.signals || {}
   const contact = hidden ? `${text.plural(arr(p.calls).length, 'call')} from numbers that weren't shared` : p.name ? fmt.phone(p.phone) : p.email || 'Name not captured'
@@ -230,9 +240,9 @@ function leadRowHtml(p, s, open, tab) {
   const tour = nextTour(p)
   const cb = items.find((i) => i.type === 'callback' && i.question)
   const loss = arr(p.lossReasons).filter(Boolean).slice(-1)[0]
-  const change = pendingChanges(s).find(r => r.phone === p.phone)
+  const change = pendingChanges(s).find(r => ownsWork(p, r))
   const next = change ? 'Tour change awaiting staff review' : cb ? `Staff follow-up: ${text.truncate(cb.question, 70)}` : tour ? `Tour recorded · ${fmt.dayPhrase(tour.startsAt)} ${fmt.time(tour.startsAt)}${tour.unitId ? ` · ${tour.unitId}` : ''}` : stage.key === 'lost' && loss ? derive.lossText(loss) : 'Open the profile to review the next step'
-  return `<button type="button" class="row row-click lead-row${flag ? ' row-flag' : ''}" data-key="lead:${esc(p.phone)}" data-phone="${esc(p.phone)}" aria-current="${open ? 'true' : 'false'}" tabindex="${tab ? '0' : '-1'}">` +
+  return `<button type="button" class="row row-click lead-row${flag ? ' row-flag' : ''}" data-key="lead:${esc(profileRef(p) || p.phone)}" data-phone="${esc(p.phone)}" data-call="${esc(anonymousCall(p))}" aria-current="${open ? 'true' : 'false'}" tabindex="${tab ? '0' : '-1'}">` +
     `<span class="row-lead"><span class="row-lead-icon">${ico(flag ? 'hand' : 'person')}</span></span>` +
     `<span class="row-body"><span class="row-title"><span class="who">${esc(name)}</span>${chip(stage.chipClass, stage.icon, stage.label)}` +
     (flag && stage.key !== 'escalated' ? chip('chip-warn', 'hand', 'Needs a person') : '') +
@@ -248,8 +258,8 @@ function everyoneListHtml(ev, s, q, stage, openPhone) {
     const lbl = (STAGES.find(([k]) => k === stage) || ['', 'that stage'])[1]
     return A.html.empty({ icon: 'leads', title: `No one is at "${lbl}" right now.` })
   }
-  const first = (openPhone && ev.shown.some((p) => p.phone === openPhone)) ? openPhone : ev.shown[0].phone
-  return `<div class="card rows">${ev.shown.map((p) => leadRowHtml(p, s, p.phone === openPhone, p.phone === first)).join('')}</div>`
+  const first = (openPhone && ev.shown.some((p) => profileRef(p) === openPhone)) ? openPhone : profileRef(ev.shown[0])
+  return `<div class="card rows">${ev.shown.map((p) => leadRowHtml(p, s, profileRef(p) === openPhone, profileRef(p) === first)).join('')}</div>`
 }
 
 // ---------------------------------------------------------------------------------------
@@ -324,22 +334,25 @@ function leadPanelHtml(p, s) {
   const name = derive.displayName(p)
   const first = text.firstName(p.name) || 'this caller'
   const stage = derive.displayStage(p, s)
-  const items = openItems(s, p.phone)
+  const items = openItems(s, p)
   const records = derive.callRecords(s), recById = new Map(records.map((r) => [String(r.id), r]))
   const shown = fmt.phone(p.phone)
+  const callback = callbackOf(p)
   const setName = hidden ? '' : `<button type="button" class="btn btn-quiet setname" data-action="setname" data-key="setname" data-write="leads">${ico('note')}${p.name ? 'Edit name' : 'Set name'}</button>`
   let out = panelHeadHtml(esc(name), setName) + '<div class="panel-body"><div class="lead-head">'
   // 1. header
   out += `<div class="lead-chips">${chip(stage.chipClass, stage.icon, stage.label)}${items.length && stage.key !== 'escalated' ? chip('chip-warn', 'hand', 'Needs a person') : ''}</div>`
   if (hidden) out += `<div class="lead-meta">${esc(text.plural(arr(p.calls).length, 'call'))} from numbers that weren't shared</div>`
-  else out += `<div class="lead-meta">${shown ? `${telLink(p.phone)} · ` : ''}${p.email ? mailLink(p.email) : 'No email yet'}</div>`
+  else out += `<div class="lead-meta">${shown ? `Caller number: ${telLink(p.phone)} · ` : ''}${p.email ? mailLink(p.email) : 'No email yet'}</div>`
   out += `<div class="lead-meta">First called ${esc(fmt.monthDay(p.firstSeenAt))} · Last call ${esc(fmt.dateTime(p.lastSeenAt, { inSentence: true }))}</div>`
-  if (shown && href.tel(p.phone)) out += `<a class="btn btn-primary lead-call" href="${esc(href.tel(p.phone))}">${ico('phone')}Call ${esc(shown)}</a><p class="lead-call-hint">Opens your device’s calling app. This action does not place or log a call in Atrium.</p>`
+  const callPhone = callback ? callback.value : p.phone
+  if (href.tel(callPhone)) out += `<a class="btn btn-primary lead-call" href="${esc(href.tel(callPhone))}">${ico('phone')}${callback ? 'Call requested number' : `Call ${esc(shown)}`}</a><p class="lead-call-hint">Opens your device’s calling app. This action does not place or log a call in Atrium.</p>`
   if (!hidden && !p.name) {
     const sug = calendarName(p, s)
     if (sug) out += `<div class="suggest"><span>The tour was booked under "${esc(sug)}" —</span><button type="button" class="btn-link" data-action="usename" data-name="${esc(sug)}" data-key="usename" data-write="leads">Use this name</button></div>`
   }
   out += '</div>'
+  if (callback) out += `<section class="panel-section"><h3>Requested callback</h3><dl class="facts"><dt>Number</dt><dd>${telLink(callback.value)}</dd><dt>Caller said</dt><dd><span class="quote">"${esc(callback.excerpt || '')}"</span></dd><dt>Recorded</dt><dd>${esc(fmt.dateTime(callback.at))}${callback.callId && recById.has(String(callback.callId)) ? ` · ${link('calls', { id: String(callback.callId) }, 'See the call', 'btn-link')}` : ''}</dd></dl><p class="muted small">Caller-provided contact. This does not verify who owns the number.</p></section>`
   out += leadBriefHtml(p, s)
   // 2. needs a person (open items, then history)
   const openCallIds = new Set(items.map((i) => String(i.callId)))
@@ -350,7 +363,7 @@ function leadPanelHtml(p, s) {
     out += '</section>'
   }
   // 3. to do
-  const mine = followUpsOf(s).filter((f) => f.phone === p.phone)
+  const mine = followUpsOf(s).filter((f) => ownsWork(p, f))
   const scheduled = mine.filter((f) => f.status === 'scheduled').sort(byDue)
   const finished = mine.filter((f) => f.status === 'done' || f.status === 'skipped').sort(byDueDesc)
   if (mine.length) {
@@ -425,6 +438,7 @@ function leadPanelHtml(p, s) {
   out += '</section>'
   // 10. for support
   const pairs = [['Stage', String(p.stage ?? '')], ['Phone as stored', String(p.phone ?? '')], ['Email', String(p.email ?? '—')], ['First call', String(p.firstSeenAt ?? '')], ['Last call', String(p.lastSeenAt ?? '')]]
+  if (callback) pairs.push(['Requested callback source', `${String(callback.callId ?? '')} · ${String(callback.at ?? '')}`])
   for (const [k, e] of Object.entries(p.signals || {})) if (e && typeof e === 'object') pairs.push([`${text.humanise(k)} confidence`, `${Math.round(Number(e.confidence) * 100)}%`])
   for (const e of arr(p.escalations)) if (e) pairs.push(['Escalation', `${String(e.trigger ?? '')} · ${String(e.callId ?? '')} · ${String(e.at ?? '')}`])
   for (const b of bookings) pairs.push(['Booking', `${String(b.slotId)} · ${String(b.status ?? '')} · ${String(b.callId ?? '')}`])
@@ -557,15 +571,17 @@ const view = {
     try { localStorage.setItem(A.preferenceKey('leads.tab'), tab) } catch (e) { /* a convenience only */ }
     this.setParams({ tab }, true)
   },
-  current() { return this.openPhone ? profilesOf(A.state).find((p) => p.phone === this.openPhone) || null : null },
+  current() { const matches = profilesOf(A.state).filter(p => profileRef(p) === this.openPhone); return this.openPhone && matches.length === 1 ? matches[0] : null },
   open(phone, el) {
     if (!phone) return
+    const call = phone === 'unknown' ? String(el && el.dataset && el.dataset.call || '') : ''
+    if (phone === 'unknown' && !call) { A.toast('Choose the individual call from Calls to review this hidden number.', { kind: 'info' }); return }
     this.savedScroll = { list: this.list.scrollTop, page: window.scrollY }
-    this.returnKey = el && el.dataset && el.dataset.key ? el.dataset.key : `lead:${phone}`
+    this.returnKey = el && el.dataset && el.dataset.key ? el.dataset.key : `lead:${call ? `call:${call}` : phone}`
     this.focusPanel = true
-    this.setParams({ phone }, false)
+    this.setParams({ phone, call: call || undefined }, false)
   },
-  close() { this.closing = true; this.setParams({ phone: undefined }, true) },
+  close() { this.closing = true; this.setParams({ phone: undefined, call: undefined }, true) },
   noteInput(phone) { return this.panel.querySelector(`input[data-key="${cssq(`note:${phone}`)}"]`) },
   noteBtn(phone) { return this.panel.querySelector(`[data-key="${cssq(`notebtn:${phone}`)}"]`) },
   /** Save note is disabled until a non-space character is typed; the busy state is the shell's. */
@@ -599,7 +615,7 @@ const view = {
   async saveNote(phone, btn) {
     const input = this.noteInput(phone)
     const body = String(this.drafts[phone] || (input && input.value) || '').trim()
-    if (!phone || !body || A.busyNow('leads') || this.saving) return
+    if (!phone || phone === 'unknown' || !body || A.busyNow('leads') || this.saving) return
     this.saving = phone
     if (btn && btn.isConnected) { btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true') }
     if (input) input.readOnly = true
@@ -625,13 +641,14 @@ const view = {
     }
   },
   async setName(p, btn) {
+    if (p.phone === 'unknown') return
     const has = Boolean(p.name)
     const v = await A.prompt("What's their name?", { title: has ? 'Edit name' : 'Set name', placeholder: 'e.g. Dana W.', value: p.name || '', confirmLabel: 'Save name', required: true, maxLength: 120 })
     if (v == null || !String(v).trim()) return
     await this.postName(p.phone, String(v).trim(), btn)
   },
   async postName(phone, name, btn) {
-    if (!phone || !name || A.busyNow('leads')) return
+    if (!phone || phone === 'unknown' || !name || A.busyNow('leads')) return
     if (btn && btn.isConnected) { btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true') }
     try {
       const res = await A.busy('leads', A.api.post('/api/leads', { action: 'note', phone, text: `name: ${name}` }, { doing: 'saving a name' }))
@@ -654,7 +671,7 @@ const view = {
     this.q = String(p.q || '').trim()
     this.stage = STAGES.some(([k]) => k === p.stage) ? p.stage : 'all'
     this.wrap.dataset.tab = this.tab
-    const wantPhone = p.phone ? String(p.phone) : null
+    const wantPhone = p.phone === 'unknown' && p.call ? `call:${String(p.call)}` : p.phone ? String(p.phone) : null
     const loaded = Boolean(s.loaded.leads)
     const profiles = profilesOf(s), fus = followUpsOf(s)
     const overviewHtml = leadOverviewHtml(s)
@@ -662,11 +679,12 @@ const view = {
     if (document.activeElement !== this.search && this.search.value !== this.q) this.search.value = this.q
     // a phone that is not on the list: a stale link gets a toast; a panel that was open says so in place
     let gone = false
-    if (wantPhone && loaded && !profiles.some((x) => x.phone === wantPhone)) {
+    const matchingProfiles = wantPhone ? profiles.filter(x => profileRef(x) === wantPhone) : []
+    if (wantPhone && loaded && matchingProfiles.length !== 1) {
       if (this.openPhone === wantPhone) gone = true
       else {
-        if (!this.warnedStale.has(wantPhone)) { this.warnedStale.add(wantPhone); A.toast("That item isn't on the list any more.", { kind: 'info' }) }
-        this.setParams({ phone: undefined }, true)
+        if (!this.warnedStale.has(wantPhone)) { this.warnedStale.add(wantPhone); A.toast(p.phone === 'unknown' ? 'Choose an individual prospect or call to review this hidden number.' : "That item isn't on the list any more.", { kind: 'info' }) }
+        this.setParams({ phone: undefined, call: undefined }, true)
         return
       }
     }
@@ -717,7 +735,7 @@ const view = {
       if (focusKey) { const el = this.list.querySelector(`[data-key="${cssq(focusKey)}"]`); if (el) { try { el.focus({ preventScroll: true }) } catch (e) { /* ignore */ } } }
     }
     // the panel
-    const openRec = wantPhone && !gone ? profiles.find((x) => x.phone === wantPhone) || null : null
+    const openRec = wantPhone && !gone && matchingProfiles.length === 1 ? matchingProfiles[0] : null
     const hasPanel = Boolean(openRec || gone)
     let panelHtml_
     if (gone) panelHtml_ = gonePanelHtml()

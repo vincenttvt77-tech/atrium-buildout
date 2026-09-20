@@ -131,6 +131,28 @@ leasing line takes far more amenity questions than emergencies, and a detector t
 wolf trains staff to ignore it. All 20 benign probes and 21 emergency phrasings are now
 locked in as tests.
 
+### Booking recovery and callback identity
+
+The calendar distinguishes a failure before a write from a possible committed write,
+and recovers lost acknowledgements by reading the exact reservation back. An unknown
+provider failure never triggers another blind booking attempt. Definitive failures
+retain the lead and derive staff callback work.
+
+Uncertain bookings retain an independent, property-scoped review in **Today** and
+**Calls**, including the attempted tour and contact details. A caller can still leave
+callback details while the booking needs review. The review survives finished-call
+projection failure and is retried on webhook replay. Staff must verify the existing
+reservation before arranging another tour; this increment does not automatically
+reconcile unresolved bookings, close those reviews, or notify staff.
+
+Requested callback numbers are separate evidence on the original caller's record,
+not an identity change. Hidden-number callers remain separate by call, including in
+dashboard navigation. A callback number does not verify its owner's identity.
+
+Heating questions distinguish hypothetical or resolved situations from a current
+or recurring loss of heat. An unresolved report still pauses leasing for that call;
+a later denial does not clear an already recorded safety hold.
+
 ## Evidence, everywhere
 
 Every captured value carries its provenance, confidence, source interaction, and **the words

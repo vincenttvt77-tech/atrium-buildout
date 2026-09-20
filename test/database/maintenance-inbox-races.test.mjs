@@ -131,7 +131,7 @@ test('resident source expiry between projections refuses a page and refresh deri
  assert.deepEqual(page.items[0].assessment,detail.assessment);assert.equal(page.items[0].nextStep.kind,'review_context')
  assert.equal(page.items[0].caseVersion,2)
 })
-for(const boundary of ['policy','vendor_review','availability'])test(`all inbox items use final database time after ${boundary} expiry`,async()=>{
+for(const boundary of ['policy','vendor_review','availability'])test(`inbox refuses ${boundary} expiry across projections and a fresh read uses current database time`,async()=>{
  const until=new Date(Date.now()+1500).toISOString()
  await publish(policy(boundary==='policy'?{validUntil:until}:{}))
  let v
@@ -142,7 +142,10 @@ for(const boundary of ['policy','vendor_review','availability'])test(`all inbox 
   await prepare(caseId,{details:details({maximumCents:10000,...(v?{route:'vendor',vendorId:v.id,vendorVersion:1,internalTeam:null}:{})})})
  }
  const connection=afterFirstInboxRead(async()=>{await delay(Math.max(0,Date.parse(until)-Date.now())+40)})
- const page=await repo('owner-a',connection).listInbox({limit:25,filter:'all'})
+ // The combined maintenance/consent graph may not span an authority deadline.
+ // Refuse that stale attempt, then require a fresh, fully current evaluation.
+ await assert.rejects(repo('owner-a',connection).listInbox({limit:25,filter:'all'}),{code:'planning_version_conflict'})
+ const page=await repo().listInbox({limit:25,filter:'all'})
  assert.equal(page.items.length,2);assert.ok(Date.parse(page.evaluatedAt)>=Date.parse(until))
  const expected=boundary==='policy'?'needs_policy':boundary==='vendor_review'?'management_review':'awaiting_vendor'
  for(const item of page.items){assert.equal(item.assessment.readiness,expected);assert.deepEqual(item.assessment,(await repo().getPlan(item.id)).assessment)}

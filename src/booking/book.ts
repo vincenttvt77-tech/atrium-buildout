@@ -1,6 +1,7 @@
 import type {
   BookingRequest, BookingIntent, Booking, BookingState, CalendarPort, TourSlot,
 } from './types.ts'
+import { BookingConflictError, BookingWriteFailure } from './types.ts'
 import { DEFAULT_TIME_ZONE, validateTimeZone } from '../calendar/time.ts'
 import { TourChangeRequiredError } from '../leads/tour-change.ts'
 
@@ -64,14 +65,18 @@ export async function bookTour(
   let attempts = 0
   let lastError: string | null = null
   let externalId: string | null = null
+  let uncertainWrite = false
 
   while (attempts < maxAttempts) {
     attempts++
+    let creating = externalId === null
     try {
       if (externalId === null) {
         const created = await calendar.createBooking(intent)
         externalId = created.externalId
       }
+
+      creating = false
 
       const readBack = await calendar.readBooking(externalId)
 
@@ -81,12 +86,12 @@ export async function bookTour(
       }
 
       if (readBack.externalId !== externalId || !sameSlot(readBack.slot, req.slot)
-        || (readBack.unitId !== undefined && normalizedUnit(readBack.unitId) !== normalizedUnit(req.unitId))) {
-        // The calendar gave us a different time than we asked for. Never paper over this.
-        const alternatives = await alternativesFor(req, calendar)
+        || normalizedUnit(readBack.unitId) !== normalizedUnit(req.unitId)) {
+        // A booking exists but differs from the request. Offering another time
+        // could create two tours; preserve the original for staff reconciliation.
         return {
           intent,
-          state: { status: 'slot_taken', alternatives },
+          state: { status: 'arranging', externalId, attempts, lastError: 'read-back did not match the requested booking' },
           updatedAt: opts.now,
         }
       }
@@ -107,16 +112,29 @@ export async function bookTour(
       // This is a safety pause, not calendar unavailability. Preserve it for the
       // caller-facing handler instead of retrying or offering another tour time.
       if (lastError === 'CALENDAR_INTERACTION_PAUSED') throw err
-      if (/taken|conflict|unavailable|already booked/i.test(lastError)) {
+      if (creating && err instanceof BookingWriteFailure) {
+        if (err.certainty === 'not_created') continue
+        uncertainWrite = true
+        externalId = err.externalId
+        if (externalId === null) break
+        continue
+      }
+      if (creating && err instanceof BookingConflictError) {
         const alternatives = await alternativesFor(req, calendar)
         return { intent, state: { status: 'slot_taken', alternatives }, updatedAt: opts.now }
+      }
+      if (creating) {
+        // The provider may have committed before its response was lost. Without
+        // an authoritative identifier there is nothing safe to read or repeat.
+        uncertainWrite = true
+        break
       }
     }
   }
 
-  const state: BookingState = externalId !== null
+  const state: BookingState = externalId !== null || uncertainWrite
     ? { status: 'arranging', externalId, attempts, lastError }
-    : { status: 'failed', attempts, lastError: lastError ?? 'unknown', queuedForHuman: true }
+    : { status: 'failed', attempts, lastError: lastError ?? 'unknown' }
 
   return { intent, state, updatedAt: opts.now }
 }

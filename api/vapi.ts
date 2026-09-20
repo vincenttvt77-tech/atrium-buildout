@@ -22,7 +22,7 @@ import { DEFAULT_TIME_ZONE, localDate, validateTimeZone, wallTime } from '../src
 import { propertyTimeZone } from '../src/config/property.ts'
 import { storeBackedCalendar } from '../src/calendar/port.ts'
 import { documentStoreFromEnv, type DocumentStore } from '../src/store/documents.ts'
-import { normalisePhone } from '../src/leads/profile.ts'
+import { normalisePhone, normaliseCallbackPhone, type Evidence } from '../src/leads/profile.ts'
 import { reconcile } from '../src/leasing/captured.ts'
 import { receiveFinishedCall, type CallReceiptScope } from '../src/leads/inbox.ts'
 import { randomUUID } from 'node:crypto'
@@ -41,6 +41,7 @@ import { initializeCallLifecycle, admitToolBatch, markToolDispatch, completeTool
   requestCallEnd, freezeCall, completeCall, hashCallToolArgs, CallLifecycleError,
   type CallLifecycle, type CallProvenance, type CallToolResult } from '../src/calls/lifecycle.ts'
 import { recordCallSafetyEvent, listCallSafetyEvents, safetyEventForOps } from '../src/calls/safety-events.ts'
+import { recordBookingReview, listBookingReviews } from '../src/calls/booking-review.ts'
 import { holdTourChange, recordTourChangeRequest, tourChangeExcerpt, TourChangeRequiredError,
   TOUR_CHANGE_SAVED, TOUR_CHANGE_UNSAVED, type TourChangeRequest } from '../src/leads/tour-change.ts'
 
@@ -101,6 +102,7 @@ interface CallState {
   routing?: { organizationId: string; propertyId: string; channelBindingId: string }
   qualification: QualificationState
   phone?: string
+  callbackPhone?: Evidence<string>
   /** A compact receipt prevents repeated finished-call reports from recreating a caller. */
   completedAt?: string
   work?: CallLifecycle
@@ -227,6 +229,9 @@ async function saveCall(callId: string, state: CallState, before: CallState,
     for (const key of ['name', 'email', 'phone', 'booking', 'lossReason'] as const) {
       if (JSON.stringify(state[key]) !== JSON.stringify(before[key])) Object.assign(next, { [key]: state[key] })
     }
+    if (state.callbackPhone && (!current.callbackPhone || state.callbackPhone.at >= current.callbackPhone.at)) {
+      next.callbackPhone = state.callbackPhone
+    }
     // A stale tool request must not replace a concurrently recorded emergency with
     // an ordinary policy escalation or silently clear the pause on leasing actions.
     next.emergency = primaryEmergency([current.emergency, state.emergency].filter((e): e is EmergencySignal => Boolean(e)))
@@ -255,6 +260,18 @@ async function finishEndedCall(callId: string, state: CallState, now: Date, runt
   else await projectFrozenCall(documents, callId, now)
 }
 
+async function exposeBookingReview(callId: string, state: CallState, now: Date, res: any, toolIds: unknown[]): Promise<boolean> {
+  if (state.work?.phase !== 'needs_review') return true
+  try { await recordBookingReview(documents, { ...state, callId, now }); return true }
+  catch {
+    res.setHeader('retry-after', '2')
+    res.status(503).json({ code: 'booking_review_persistence_unavailable', retryable: true,
+      results: toolIds.map(toolCallId => ({ toolCallId,
+        result: 'The booking is still unverified and staff review could not be saved. Do not confirm or create another booking.' })) })
+    return false
+  }
+}
+
 /** Only document operations run here; the PostgreSQL caller owns one atomic unit. */
 async function projectFrozenCall(store: DocumentStore, callId: string, now: Date, runtime?: ResolvedPropertyRuntime): Promise<CallState> {
   const frozen = reviveCall(await store.update<CallState>(callKey(callId), freshCall(), raw => {
@@ -269,6 +286,7 @@ async function projectFrozenCall(store: DocumentStore, callId: string, now: Date
   await receiveFinishedCall(store, {
     callId, phone, at: new Date(end.endedAt), durationSeconds: end.durationSeconds,
     qualification: frozen.qualification, name: frozen.name, email: frozen.email,
+    ...(frozen.callbackPhone ? { callbackPhone: frozen.callbackPhone } : {}),
     unitsDiscussed: frozen.unitsDiscussed, booking: frozen.booking, lossReason: frozen.lossReason,
     escalation: frozen.escalation, toolsCalled: frozen.toolsCalled,
   }, now, receiptScope(runtime))
@@ -558,13 +576,15 @@ async function runTool(
 
   switch (name) {
     case 'capture_contact': {
+      const callbackPhone = normaliseCallbackPhone(args.phone)
       if (args.requestType !== undefined && args.requestType !== 'tour_change') return 'Invalid request type. Use tour_change only for an actual request to change an existing tour.'
       if (typeof args.excerpt !== 'string' || !args.excerpt.trim()) return 'Ask for the caller’s contact details before recording them.'
       if (args.email !== undefined && (typeof args.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(args.email))) return 'That email address is incomplete. Ask them to spell it once.'
-      if (args.phone !== undefined && (typeof args.phone !== 'string' || !/^\+?[\d ()+.-]{7,25}$/.test(args.phone))) return 'That callback number is incomplete. Ask them to repeat it once.'
+      if (args.phone !== undefined && !callbackPhone) return 'That callback number is incomplete. Ask them to repeat it once.'
       if (typeof args.name === 'string' && args.name.trim()) state.name = args.name.trim().slice(0, 120)
       if (typeof args.email === 'string') state.email = args.email.trim().slice(0, 254)
-      if (typeof args.phone === 'string') state.phone = normalisePhone(args.phone)
+      if (typeof args.phone === 'string') state.callbackPhone = { value: callbackPhone!,
+        excerpt: args.excerpt.trim().slice(0, 1000), callId, at: now.toISOString(), confidence: 1 }
       logEvent(callId, { kind: 'contact_captured', name: state.name, email: state.email, excerpt: args.excerpt.slice(0, 1000) })
       if (state.tourChangeRequested || args.requestType === 'tour_change') {
         const saved = await rememberTourChange(callId, 'caller_requested', args.excerpt, state)
@@ -675,6 +695,7 @@ async function runTool(
       state.name = String(args.prospectName ?? state.name ?? '')
       state.email = args.prospectEmail ? String(args.prospectEmail) : state.email
 
+      state.booking = { slotId: slot.slotId, startsAt: slot.startsAt.toISOString(), unitId, status: 'arranging' }
       await execution?.beforeBooking()
       const booking = await bookTour({
         propertyId: ctx.propertyId,
@@ -687,7 +708,9 @@ async function runTool(
         unitId,
         floorPlanId: null,
       }, callCalendar(now, timeZone, runtime), { now, makeIntentId: () => `intent-${callId}-${slot.slotId}` })
-      if (execution) execution.bookingUncertain = booking.state.status === 'arranging' || booking.state.status === 'failed'
+      if (execution) execution.bookingUncertain = booking.state.status === 'arranging'
+      if (booking.state.status === 'failed') state.escalation = { trigger: 'booking_failed',
+        detail: 'The tour could not be booked. Staff must contact the prospect to arrange a time; no notification has been sent.' }
 
       logEvent(callId, {
         kind: 'tour_booked', status: booking.state.status,
@@ -744,6 +767,9 @@ export default async function handler(req: any, res: any) {
     return withTenant(auth.tenantId, () => scopedHandler(req, res, undefined, auth))
   }
   if (req.method === 'POST') {
+    // Authenticate before parsing routing claims, including missing-secret hosted requests.
+    if ((process.env.VAPI_WEBHOOK_SECRET?.trim() || process.env.VERCEL || process.env.NODE_ENV === 'production'
+      || process.env.OPS_ACCOUNTS_JSON !== undefined) && !verifyDatabaseWebhook(req, res)) return
     let body: unknown
     try { body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body }
     catch { return scopedHandler(req, res) }
@@ -751,7 +777,6 @@ export default async function handler(req: any, res: any) {
     // assistant/tenant routing claim. Otherwise an untrusted body can select the
     // workspace context before authentication has been established. The scoped handler
     // repeats this check as defense in depth.
-    if (process.env.VAPI_WEBHOOK_SECRET?.trim() && !verifyDatabaseWebhook(req, res)) return
     const tenantId = webhookTenant(body)
     if (!tenantId) {
       res.setHeader('cache-control', 'no-store')
@@ -907,6 +932,10 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
     let safetyEventsError: string | null = null
     try { safetyEvents = (await listCallSafetyEvents(documents)).map(safetyEventForOps) }
     catch { safetyEventsError = 'Saved emergency reports are temporarily unavailable. Retry before assuming there are none.' }
+    let bookingReviews: Awaited<ReturnType<typeof listBookingReviews>> = []
+    let bookingReviewsError: string | null = null
+    try { bookingReviews = await listBookingReviews(documents) }
+    catch { bookingReviewsError = 'Saved booking reviews are temporarily unavailable. Retry before assuming there are none.' }
     // An upstream fetch can outlast a membership or assistant-binding change.
     // Recheck the existing scope before releasing calls or in-process events.
     if (runtime) await runtime.revalidate()
@@ -916,8 +945,9 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
       callsError: history.error,
       callsConfigured: history.configured,
       callsStale: history.stale,
-      events: [...scopedEvents().filter(event => event.kind !== 'emergency' || !safetyEvents.some(saved => saved.callId === event.callId)), ...safetyEvents],
+      events: [...scopedEvents().filter(event => event.kind !== 'emergency' || !safetyEvents.some(saved => saved.callId === event.callId)), ...safetyEvents, ...bookingReviews],
       safetyEventsError,
+      bookingReviewsError,
       generatedAt: new Date().toISOString(),
       note: history.error
         ? (history.stale ? 'Call history is the last good read; Vapi did not answer this time.' : 'Call history unavailable — see callsError.')
@@ -1080,7 +1110,13 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
         })) })
         return
       }
-      if (holdRead.status === 'rejected' || callRead.status === 'rejected') throw new Error('Call safety state could not be verified')
+      const reviewContactOnly = callRead.status === 'fulfilled' && state.work?.phase === 'needs_review'
+        && prepared.length > 0 && prepared.every(tc => tc.name === 'capture_contact')
+      if (callRead.status === 'rejected' || (holdRead.status === 'rejected' && !reviewContactOnly)) throw new Error('Call safety state could not be verified')
+      // Recover the independent staff projection even if replay admission remains busy.
+      // No booking is retried or marked resolved by this idempotent write.
+      if (!prepared.every(tc => tc.name === 'capture_contact')
+        && !await exposeBookingReview(callId, state, now, res, pendingToolIds)) return
       const provenance = callProvenance(runtime)
       const identities = prepared.map(tc => {
         if (typeof tc.toolCallId !== 'string') throw new CallLifecycleError('call_work_invalid')
@@ -1125,6 +1161,7 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
         } catch { tourChangeSaveFailed = true }
       }
       if (!accepted.admission) {
+        if (!await exposeBookingReview(callId, state, now, res, pendingToolIds)) return
         const results = prepared.map(tc => ({ toolCallId: tc.toolCallId,
           result: tourChangeSaveFailed ? TOUR_CHANGE_UNSAVED
             : cached.get(tc.toolCallId) === TOUR_CHANGE_UNSAVED ? TOUR_CHANGE_SAVED : cached.get(tc.toolCallId)! }))
@@ -1156,18 +1193,26 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
           continue
         }
         const name = tc.name
+        const beforeToolBooking = state.booking
         const toolStartedAt = performance.now()
         let result: string
         let errorCode: string | null = null
         let outcome: CallToolResult['outcome'] = 'complete'
         const execution = {
           bookingUncertain: false,
+          dispatchStarted: false,
           beforeBooking: async () => {
             await documents.update<CallState>(callKey(callId), freshCall(), raw => {
               const current = reviveCall(raw)
               if (!current.work) throw new CallLifecycleError('call_admission_stale')
-              return { ...current, work: markToolDispatch(current.work, { token, toolId: tc.toolCallId, now: new Date().toISOString() }) }
+              return { ...current, name: state.name !== before.name ? state.name : current.name,
+                email: state.email !== before.email ? state.email : current.email, booking: state.booking,
+                ...(state.phone ? { phone: state.phone } : {}),
+                ...(state.callbackPhone && (!current.callbackPhone || state.callbackPhone.at >= current.callbackPhone.at)
+                  ? { callbackPhone: state.callbackPhone } : {}),
+                work: markToolDispatch(current.work, { token, toolId: tc.toolCallId, now: new Date().toISOString() }) }
             })
+            execution.dispatchStarted = true
           },
         }
         try {
@@ -1177,7 +1222,7 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
           } else if (tourChangeSaveFailed) {
             result = TOUR_CHANGE_UNSAVED
             outcome = 'blocked'
-          } else if (unresolved) {
+          } else if (unresolved && name !== 'capture_contact') {
             result = 'An earlier action needs staff review. This additional action was not taken.'
             outcome = 'blocked'
           } else {
@@ -1192,6 +1237,7 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
         } catch (error) {
           errorCode = 'tool_failed'
           if (error instanceof TourChangeRequiredError) {
+            state.booking = beforeToolBooking
             // Calendar CAS has authoritatively refused the write. Dispatch was
             // marked before that check, so complete its known negative result.
             outcome = 'complete'
@@ -1205,12 +1251,17 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
           } else if (error instanceof TourChangePersistenceError) {
             result = TOUR_CHANGE_UNSAVED; tourChangeSaveFailed = true; outcome = 'blocked'
           } else if (error instanceof Error && error.message === 'CALENDAR_INTERACTION_PAUSED') {
+            state.booking = beforeToolBooking
             state.emergency = error instanceof CalendarInteractionPausedError ? error.signal : callEmergency(state)
             state.escalation = { trigger: 'emergency', detail: 'Leasing paused by the calendar safety guard.' }
             result = emergencyToolResponse(state.emergency, name)
           } else {
             result = 'I could not verify that action. Ask for clarification or offer a callback; do not claim it succeeded.'
-            outcome = name === 'book_tour' ? 'needs_review' : 'blocked'
+            outcome = name === 'book_tour' ? execution.dispatchStarted ? 'needs_review' : 'complete' : 'blocked'
+            if (name === 'book_tour' && !execution.dispatchStarted) {
+              if (state.booking && state.booking !== beforeToolBooking) state.booking = { ...state.booking, status: 'failed' }
+              state.escalation = { trigger: 'booking_failed', detail: 'Booking did not start. Staff must help arrange the tour; no notification has been sent.' }
+            }
             unresolved ||= outcome === 'needs_review'
           }
         }
@@ -1239,6 +1290,11 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
         logEvent(callId, { kind: 'emergency_record_failed', notificationStatus: 'not_sent' })
       }
       let projectionFailed = false
+      let bookingReviewFailed = false
+      if (saved?.work?.phase === 'needs_review') {
+        try { await recordBookingReview(documents, { ...saved, callId, now: new Date() }) }
+        catch { bookingReviewFailed = true }
+      }
       if (saved && !unresolved && !pauseUnpersisted) {
         try { await finishEndedCall(callId, saved, new Date(), runtime) }
         catch {
@@ -1246,10 +1302,11 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
           logEvent(callId, { kind: 'error', message: 'Finished-call projection remains pending after admitted work completed.' })
         }
       }
-      if (unresolved || projectionFailed || tourChangeSaveFailed) res.setHeader('retry-after', '2')
-      res.status(pauseUnpersisted || unresolved || projectionFailed || tourChangeSaveFailed ? 503 : 200).json({ results,
+      if (unresolved || projectionFailed || tourChangeSaveFailed || bookingReviewFailed) res.setHeader('retry-after', '2')
+      res.status(pauseUnpersisted || unresolved || projectionFailed || tourChangeSaveFailed || bookingReviewFailed ? 503 : 200).json({ results,
         ...(pauseUnpersisted ? { code: 'emergency_persistence_unavailable' }
           : tourChangeSaveFailed ? { code: 'tour_change_persistence_unavailable', retryable: true }
+          : bookingReviewFailed ? { code: 'booking_review_persistence_unavailable', retryable: true }
           : unresolved ? { code: 'call_work_unresolved', retryable: true }
             : projectionFailed ? { code: 'call_projection_pending', retryable: true } : {}),
       })
@@ -1293,6 +1350,8 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
           } }) }
         }))
         if (state.completedAt) { res.status(200).json({}); return }
+        if (state.work?.phase === 'needs_review') await recordBookingReview(documents, { ...state,
+          ...(state.phone ? {} : state.work.end?.reportedPhone ? { phone: state.work.end.reportedPhone } : {}), callId, now })
         // PostgreSQL freezes, projects receipt/profile/follow-ups, and completes the
         // same call revision atomically. KV retains the frozen snapshot for replay.
         const completed = runtime

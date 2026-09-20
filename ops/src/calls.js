@@ -27,7 +27,7 @@ function callWork(rec, s) {
 }
 function callOverviewHtml(s, records, stories) {
   const known = s.loaded.calls || s.loaded.leads
-  const stale = s.errors.calls || s.errors.leads || s.callsError || s.safetyEventsError
+  const stale = s.errors.calls || s.errors.leads || s.callsError || s.safetyEventsError || s.bookingReviewsError
   const booked = records.filter(r => hasChip(stories.get(r.id), 'Tour booked')).length
   const review = records.filter(r => {
     const story = stories.get(r.id)
@@ -40,11 +40,12 @@ function callOverviewHtml(s, records, stories) {
 }
 function callContextHtml(rec, story, s) {
   const work = callWork(rec, s)
-  const leadLink = rec.profile ? `<a class="btn btn-quiet" href="${esc(A.hashFor('leads', { phone: rec.profile.phone, tab: work.count ? 'todo' : 'all' }))}">View prospect ${ico('chevron-right')}</a>` : ''
-  const queueLink = work.count ? `<a class="btn" href="${esc(A.hashFor('leads', { tab: 'todo', ...(rec.profile ? { phone: rec.profile.phone } : {}) }))}">Review staff work ${ico('chevron-right')}</a>` : ''
-  const title = work.requests.length ? 'Tour change awaiting staff review' : work.followUps.length ? `${text.plural(work.followUps.length, 'follow-up')} to complete` : story.emergency ? 'Safety report needs review' : story.needsPerson ? 'A staff decision is needed' : rec.profile ? 'Conversation saved to this prospect' : 'Call record available'
-  const detail = work.requests.length ? 'The request is saved. This does not confirm a changed tour or a notification to staff.' : work.followUps.length ? 'Open the work queue for the saved task, contact details, and due time.' : rec.profile ? 'Review requirements, tours, and conversation history together.' : 'A linked prospect profile is not available in the loaded records.'
-  return `<section class="call-context${work.count || story.needsPerson || story.emergency ? ' call-context-attention' : ''}"><span class="section-kicker">Next step</span><h3>${esc(title)}</h3><p>${esc(detail)}</p>${work.requests.map(r => `<p class="call-request-quote">“${esc(text.truncate((r.excerpts || []).slice(-1)[0] || 'Tour-change request', 220))}”</p>`).join('')}<div class="panel-actions">${queueLink}${leadLink}</div></section>`
+  const review = (rec.events || []).find(e => e && e.kind === 'booking_review' && e.durable === true)
+  const leadLink = rec.profile ? `<a class="btn btn-quiet" href="${esc(A.hashFor('leads', { phone: rec.profile.phone, ...(rec.profile.phone === 'unknown' ? { call: rec.id } : {}), tab: work.count ? 'todo' : 'all' }))}">View prospect ${ico('chevron-right')}</a>` : ''
+  const queueLink = work.count ? `<a class="btn" href="${esc(A.hashFor('leads', { tab: 'todo', ...(rec.profile ? { phone: rec.profile.phone, ...(rec.profile.phone === 'unknown' ? { call: rec.id } : {}) } : {}) }))}">Review staff work ${ico('chevron-right')}</a>` : ''
+  const title = review ? 'Tour booking needs verification' : work.requests.length ? 'Tour change awaiting staff review' : work.followUps.length ? `${text.plural(work.followUps.length, 'follow-up')} to complete` : story.emergency ? 'Safety report needs review' : story.needsPerson ? 'A staff decision is needed' : rec.profile ? 'Conversation saved to this prospect' : 'Call record available'
+  const detail = review ? 'The calendar response was uncertain. Check the existing reservation before arranging another tour. Caller details are saved here; no notification has been sent.' : work.requests.length ? 'The request is saved. This does not confirm a changed tour or a notification to staff.' : work.followUps.length ? 'Open the work queue for the saved task, contact details, and due time.' : rec.profile ? 'Review requirements, tours, and conversation history together.' : 'A linked prospect profile is not available in the loaded records.'
+  return `<section class="call-context${work.count || story.needsPerson || story.emergency ? ' call-context-attention' : ''}"><span class="section-kicker">Next step</span><h3>${esc(title)}</h3><p>${esc(detail)}</p>${review ? `<p>Requested tour: ${esc(review.booking ? fmt.dateTime(review.booking.startsAt) : 'Time not recorded')}${review.booking && review.booking.unitId ? ` · Residence ${esc(review.booking.unitId)}` : ''}</p>${review.callbackPhone ? `<p>Requested callback: ${esc(fmt.phone(review.callbackPhone.value))}</p>` : ''}${review.email ? `<p>Email: ${esc(review.email)}</p>` : ''}<a class="btn" href="#/calendar">Review calendar</a>` : ''}${work.requests.map(r => `<p class="call-request-quote">“${esc(text.truncate((r.excerpts || []).slice(-1)[0] || 'Tour-change request', 220))}”</p>`).join('')}<div class="panel-actions">${queueLink}${leadLink}</div></section>`
 }
 
 function matches(rec, story, q) {
@@ -119,7 +120,7 @@ function panelHtml(rec, story, s) {
   const meta = [phone ? (href.tel(rec.phone) ? `<a href="${esc(href.tel(rec.phone))}">${esc(phone)}</a>` : esc(phone)) : '', rec.startedAt ? esc(fmt.dateTime(rec.startedAt, { inSentence: true })) : '', dur !== '—' ? esc(dur) : '', story.ended ? esc(story.ended) : ''].filter(Boolean).join(' · ')
   let out = `<div class="panel-head"><button type="button" class="btn btn-quiet panel-back" data-action="close">${ico('chevron-left')}Calls</button>` +
     `<h2 tabindex="-1" data-key="panel-title">${esc(rec.displayName)}</h2>` +
-    (rec.profile ? `<a class="btn btn-quiet" href="${esc(A.hashFor('leads', { phone: rec.profile.phone }))}">Open lead</a>` : '') +
+    (rec.profile ? `<a class="btn btn-quiet" href="${esc(A.hashFor('leads', { phone: rec.profile.phone, ...(rec.profile.phone === 'unknown' ? { call: rec.id } : {}) }))}">Open lead</a>` : '') +
     `<button type="button" class="btn-icon btn-quiet panel-close" aria-label="Close" data-action="close">${A.icon('x')}</button></div><div class="panel-body">`
   if (story.emergency) {
     const em = story.findings.emergency
@@ -141,14 +142,14 @@ function panelHtml(rec, story, s) {
     const r = story.restricted
     const t = r ? derive.escalationText({ trigger: r.trigger, detail: r.question }) : null
     const fus = (s.leads && s.leads.followUps) || []
-    const fu = fus.find((f) => f && f.kind === 'callback' && f.createdFromCall === rec.id) || (rec.profile ? fus.find((f) => f && f.kind === 'callback' && f.phone === rec.profile.phone && f.status === 'scheduled') : null)
+    const fu = fus.find((f) => f && f.kind === 'callback' && f.createdFromCall === rec.id) || (rec.profile && rec.profile.phone !== 'unknown' ? fus.find((f) => f && f.kind === 'callback' && f.phone === rec.profile.phone && f.status === 'scheduled') : null)
     let handling
     if (!fu) handling = '<span>No call-back was created for this.</span>'
     else if (fu.status === 'scheduled') handling = `<span>Still waiting — ${esc(fmt.respondPhrase(fu.dueAt))}</span><button type="button" class="btn" data-action="handled" data-fu="${esc(fu.id)}" data-key="fu:${esc(fu.id)}:done" data-write="leads">Mark handled</button>`
     else handling = fu.status === 'done' ? '<span>Handled — a person marked this done.</span>' : '<span>Marked not needed. No completed callback is recorded here.</span>'
     out += `<section class="panel-section"><h3 data-key="panel-np" tabindex="-1">Needs a person</h3><div class="card card-warn needs-card">` +
       (t ? `<div class="${t.quote === null ? 'quote' : ''}">${t.quote === null ? esc(t.headline.replace(/^asked /, '')) : esc(text.capitalise(t.headline))}</div>${t.quote ? `<div class="quote">"${esc(t.quote)}"</div>` : ''}<div class="reassure">${esc(t.reassurance)}</div>`
-        : `<div>They wanted a tour but it couldn't be booked.</div><div class="reassure">The assistant said someone would call back with times.</div>`) +
+        : story.findings.arranging ? '<div>This booking has not been verified.</div><div class="reassure">Check the existing reservation before arranging another tour. No staff contact has been confirmed.</div>' : `<div>They wanted a tour but it couldn't be booked.</div><div class="reassure">Staff must help arrange a time. No completed callback is recorded.</div>`) +
       A.html.followUpReview(fu) + `<div class="handling">${handling}</div></div></section>`
   }
   out += `<section class="panel-section"><h3>What the assistant learned</h3>`
@@ -275,6 +276,7 @@ const view = {
     else if (s.errors.calls) banners += A.html.banner('warn', "We can't load calls right now.")
     if (s.callsConfigured === false) banners += A.html.banner('info', '', { raw: `<strong>Call history isn't connected yet.</strong> Calls the assistant handled still show here from the leads' records. Recordings and transcripts need a connection — <a href="#/status">see Status</a>.` })
     else if (s.callsError && s.callsConfigured) banners += A.html.banner('warn', '', { raw: `<strong>Call history is temporarily unavailable — trying again.</strong>${s.lastGoodAt.calls ? ` Showing what we had at ${esc(fmt.time(s.lastGoodAt.calls))}.` : ''}` })
+    if (s.bookingReviewsError) banners += A.html.banner('warn', 'Saved booking reviews are temporarily unavailable. The list may be incomplete. Trying again.')
     if (s.safetyEventsError) banners += A.html.banner('warn', 'Safety reports are temporarily unavailable. The list may be incomplete. Trying again.')
     if (banners !== this.bannerHtml) { this.bannerHtml = banners; this.banners.innerHTML = banners; this.banners.style.marginBottom = banners ? '16px' : '0' }
     // chips

@@ -115,3 +115,17 @@ for (const mode of ['kv', 'postgres']) {
     assert.equal(commands.length, 0)
   })
 }
+
+test('hosted and named-account requests refuse missing verification before inspecting any assistant claim', async () => {
+  delete process.env.VAPI_WEBHOOK_SECRET
+  for (const mode of ['production', 'named']) {
+    if (mode === 'named') { delete process.env.NODE_ENV; process.env.OPS_ACCOUNTS_JSON = 'invalid configuration must not be read' }
+    let inspected = false
+    const body = { get message() { inspected = true; throw new Error('Unverified routing claim was read') } }
+    const res: any = { code: 0, body: null, setHeader() {}, status(code: number) { this.code = code; return this }, json(value: unknown) { this.body = value; return this } }
+    await handler({ method: 'POST', headers: {}, body }, res)
+    assert.equal(res.code, 503)
+    assert.equal(inspected, false)
+    assert.equal(commands.length, 0)
+  }
+})

@@ -48,7 +48,7 @@ async function invoke(handler: (req: any, res: any) => unknown, req: any) {
 }
 async function webhook(index: number, message: any, authenticated = true, callId = 'same-call-id') {
   return invoke(vapi, { method: 'POST', headers: authenticated ? { 'x-vapi-secret': secret } : {},
-    body: { message: { ...message, call: { id: callId, assistantId: accounts[index]!.assistantIds[0] } } } })
+    body: { message: { ...message, call: { id: callId, assistantId: accounts[index]!.assistantIds[0], customer: { number: phone } } } } })
 }
 
 test('identical caller/call IDs stay separate through webhook, leads, notes, events and reset', async () => {

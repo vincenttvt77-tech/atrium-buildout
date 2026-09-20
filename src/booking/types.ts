@@ -40,14 +40,42 @@ export type BookingState =
   /** Written and read back. Only now may the agent say "confirmed". */
   | { status: 'confirmed'; externalId: string; verifiedAt: Date; slot: TourSlot }
   /**
-   * Written, but read-back has not yet succeeded. The agent must say it is being
-   * arranged — never "confirmed" — per SOW 13.3 truthful resident messaging.
+   * A write may have landed, but matching read-back has not succeeded. A lost
+   * create response may leave externalId unknown. Never retry another write or
+   * offer a replacement booking until the uncertain outcome is reconciled.
    */
   | { status: 'arranging'; externalId: string | null; attempts: number; lastError: string | null }
   /** The slot went while we were writing. The agent must offer alternatives. */
   | { status: 'slot_taken'; alternatives: TourSlot[] }
-  /** Repeated failure. Queue for a human, tell the prospect a person will call. */
-  | { status: 'failed'; attempts: number; lastError: string; queuedForHuman: true }
+  /** Every attempted write definitively failed before a booking could be created. */
+  | { status: 'failed'; attempts: number; lastError: string }
+
+/**
+ * Adapter evidence about a rejected create operation. A network error alone is
+ * unknown: it does not prove the provider rejected or rolled back the booking.
+ * An optional authoritative identifier permits read-only recovery after a lost
+ * response. Only adapters that can prove no booking write was attempted may use
+ * not_created; an absent read after an uncertain write is insufficient evidence.
+ */
+export class BookingWriteFailure extends Error {
+  readonly certainty: 'not_created' | 'unknown'
+  readonly externalId: string | null
+
+  constructor(message: string, certainty: 'not_created' | 'unknown', externalId: string | null = null) {
+    super(message)
+    this.name = 'BookingWriteFailure'
+    this.certainty = certainty
+    this.externalId = externalId
+  }
+}
+
+/** An authoritative admission rejection; no replacement booking was written. */
+export class BookingConflictError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'BookingConflictError'
+  }
+}
 
 export interface Booking {
   intent: BookingIntent
@@ -62,7 +90,11 @@ export interface Booking {
  */
 export interface CalendarPort {
   listSlots(propertyId: PropertyId, from: Date, to: Date, unitId?: string | null): Promise<TourSlot[]>
-  /** Same-key retries must match the original apartment and actual tour interval. */
+  /**
+   * Same-key retries must match the original apartment and actual tour interval.
+   * Throws BookingWriteFailure only when the adapter can attest its certainty;
+   * ordinary errors are ambiguous and must not trigger blind write retries.
+   */
   createBooking(intent: BookingIntent): Promise<{ externalId: string }>
   /** Reads the booking back from the system of record. Null means it is not there. */
   readBooking(externalId: string): Promise<{ externalId: string; slot: TourSlot; unitId?: string | null } | null>

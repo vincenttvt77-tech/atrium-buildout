@@ -149,7 +149,18 @@ export class PostgresMaintenancePlanningRepository implements MaintenancePlannin
     }
     const row = (await client.query(`WITH graph AS MATERIALIZED
       (SELECT atrium.consent_planning($1::uuid[],$2::bigint) AS value)
-      SELECT value,atrium.service_iso(clock_timestamp()) AS now FROM graph`, [caseIds, this.configurationVersion])).rows[0]
+      SELECT value,atrium.service_iso(clock_timestamp()) AS now FROM graph`, [caseIds, this.configurationVersion]).catch((error: unknown) => {
+        // This read RPC rechecks current authority between the surrounding graph
+        // reads. Preserve those refusals instead of reporting a storage outage.
+        const raw = error as { code?: unknown; message?: unknown }
+        if (raw?.code === 'P0001' && raw.message === 'consent_forbidden') throw new AuthorizationError('forbidden')
+        // In consent_planning, consent_changed means the published property
+        // configuration differs from the version supplied to this exact RPC.
+        if (raw?.code === 'P0001' && raw.message === 'consent_changed') {
+          throw Object.assign(new Error('Property configuration changed. Reload this workspace.'), { code: 'property_configuration_changed' })
+        }
+        throw error
+      })).rows[0]
     return { items: readMaintenanceConsentGraph(row?.value, caseIds, this.configurationVersion), evaluatedAt: date(row?.now) }
   }
   private policy(value: unknown): MaintenancePolicy | null {

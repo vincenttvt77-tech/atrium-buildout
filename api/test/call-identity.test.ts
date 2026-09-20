@@ -20,7 +20,7 @@ async function send(message: Record<string, unknown>) {
   return res
 }
 
-test('repeated end reports keep the callback identity captured by a caller with no caller ID', async () => {
+test('repeated end reports preserve anonymous identity and its separately captured callback', async () => {
   const call = { id: 'hidden-callback-repeated', startedAt: '2026-09-09T14:00:00Z', endedAt: '2026-09-09T14:01:00Z' }
   await send({ type: 'tool-calls', call, toolCallList: [{ id: 'contact', name: 'capture_contact', arguments: {
     name: 'Hidden caller', phone: '5165550147', email: 'hidden@example.com', excerpt: 'Call me back at 5165550147',
@@ -29,7 +29,9 @@ test('repeated end reports keep the callback identity captured by a caller with 
   await send({ type: 'end-of-call-report', call })
   const profiles = (await listProfiles(documentStoreFromEnv())).filter((p) => p.calls.some((c) => c.callId === call.id))
   assert.equal(profiles.length, 1, 'a retry must not create an empty anonymous copy of the caller')
-  assert.equal(profiles[0]!.phone, '+15165550147')
+  assert.equal(profiles[0]!.phone, 'unknown')
+  assert.equal(profiles[0]!.callbackPhone?.value, '+15165550147')
+  assert.equal(await documentStoreFromEnv().get('lead:+15165550147'), null)
   assert.equal(profiles[0]!.name, 'Hidden caller')
   assert.equal(profiles[0]!.email, 'hidden@example.com')
 })
