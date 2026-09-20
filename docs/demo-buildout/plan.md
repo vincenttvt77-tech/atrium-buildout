@@ -49,26 +49,60 @@ So the rule for this layer: check for an existing contract before writing a mech
 implement the contract. Before building anything here, search `src/` for the interface that
 already expects it.
 
-## Build order
+## Where this stands, 2026-09-20
 
-1. **The first connector, and something to turn the queue.** Done. A stand-in
-   property-management system implemented as a `WorkflowConnector`, and a bounded runner
-   that calls `runWorkflowOnce`. The stand-in can be armed to fail in the ways that break
-   naive integrations, so the demonstration can show a write leaving Atrium, a lost
-   response, the queue holding the work, and recovery without a duplicate booking.
-   *(Scope of Work 13.1, 13.2, 13.3.)*
-2. **The demo surface for it.** An operator view that arms a fault, turns the crank, and
-   shows what the queue did, so the recovery story can be told without a terminal.
-3. **Resident lane.** One persistent thread with a pluggable transport that a real SMS
-   provider drops into later, identity verification before account-specific answers, a
-   maintenance request carried through to a scheduled visit, and emergency dispatch that
-   turns the existing detected-but-unsent safety record into attempts, acknowledgement and
-   backup contact. *(5.4, 7.1, 7.2, 8.1, 8.2.)*
-4. **Amenity reservations.** Eligibility and building rules enforced, external write
-   verified, confirmation returned in the same thread. *(9.)*
-5. **Owner intelligence.** Weekly review, evidence-backed vacancy diagnosis, ranked
-   recommendation, owner decision, intervention record, and measured against modelled
-   savings with the method shown. *(11, 12.)*
+Done on this branch:
+
+1. **The first connector, and something to turn the queue.** A stand-in property-management
+   system implemented as a `WorkflowConnector`, and a bounded runner that calls
+   `runWorkflowOnce`. The stand-in can be armed to fail in the ways that break naive
+   integrations, so a demonstration can show a write leaving Atrium, a lost response, the
+   queue holding the work, and recovery without a duplicate booking. 17 tests, 8 of them
+   against the live engine and PostgreSQL repository. *(Scope of Work 13.1, 13.2, 13.3.)*
+2. **Emergency alerts that reach a person.** Detection and the record already existed;
+   nothing delivered them. First contact immediately with no queue and no approval step,
+   then the chain, with a failed send skipping on rather than consuming the window, and
+   running out of contacts stored as its own state. The stand-in transport reports
+   `recorded` and never `delivered`. 28 tests. *(8.1.)*
+
+Not yet: persistence and a live call hook for the emergency path, and an operator view for
+either piece.
+
+## Everything the Scope of Work still needs
+
+Nothing below is built by anyone, on either branch, unless noted. Sizes are rough.
+
+| # | What | Scope | Size | Blocked on |
+| --- | --- | --- | --- | --- |
+| 1 | Emergency: persistence, live call hook | 8.1 | small | nothing, in progress |
+| 2 | Resident texting, one thread across channels | 5.4, 7.1, 7.2 | large | nothing |
+| 3 | Apple Messages for Business | 5.3 | large | Apple approval |
+| 4 | Amenity booking | 9 | medium | item 2 |
+| 5 | Owner dashboard, ROI, weekly review | 11, 12 | large | nothing |
+| 6 | A connector to a live property system | 13.1, 13.2 | medium | client credentials |
+| 7 | Callback on a web lead within ~15 seconds | 6.2 | medium | outbound calling |
+| 8 | Follow-up sequences and application chasing | 6.2 | medium | item 2 |
+| 9 | Launch a building without a developer | 14 | medium | nothing |
+| 10 | Automated safety scenarios before each release | 16.1 | medium | nothing |
+| 11 | 24 months of history imported per building | 11.5, 14.2 | medium | client data |
+
+Outside the code, and on the critical path because of lead times:
+
+| # | What | Owner |
+| --- | --- | --- |
+| 12 | Apple business verification, brand and per-building location approval | the owner, start immediately |
+| 13 | Phone numbers and messaging sender registration with the carriers | the owner, start immediately |
+| 14 | Security review before any live activation | an outside firm |
+| 15 | Manuals and recorded training for handover | whoever hands over |
+| 16 | The seven failing database tests | the author of that code |
+
+**Order.** Finish 1. Then 2, because it unlocks 4 and half of 5. Then 5, because that is
+what an owner is actually buying. Then 4, 7, 8.
+
+Items 3 and 6 wait on other people, so 12 and 13 should start before any of the above or
+they become the critical path.
+
+**Largest single risk:** item 5 is entirely unbuilt and it is the part being sold.
 
 ## Assumptions
 
