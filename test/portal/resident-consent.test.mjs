@@ -46,7 +46,14 @@ const ids={case:randomUUID(),plan:randomUUID(),request:randomUUID(),entry:random
 const source=()=>({reference:'Approved synthetic review evidence',version:'source-1',observedAt:instant(-3600000),validUntil:instant(86400000*10)})
 const policy=()=>({organizationId:scope.organizationId,propertyId:scope.propertyId,version:1,publishedBy:'owner-one',publishedAt:instant(-3600000),current:true,enabled:true,funding:'property_no_resident_charge',recipientRule:'reviewed_complete_roster',requireWorkConsent:true,noChargeStatement:'This exact work is funded by the property with no charge to the resident.',recipientProtocol:'Review the complete household and each person’s approved decision authority.',entryProtocol:'Review the exact unit, proposed party, purpose and permitted time window.',maximumResponseMinutes:10080,maximumConsentMinutes:43200,maximumEntryMinutes:1440,helpLabel:'Property management',helpPhone:'+12125550100',helpUrl:'https://help.example/',emergencyInstructions:'For immediate danger, call emergency services and follow the property protocol.',source:source()})
 const help=()=>({label:'Property management',phone:'+12125550100',url:'https://help.example/',emergencyInstructions:'For immediate danger, call emergency services and follow the property protocol.'})
-const terms=(purpose='work')=>({schemaVersion:1,purpose,propertyName:'Sample <House>',unitId:'12A',publicSummary:'Repair the leaking kitchen fixture',scopeOfWork:'Replace the kitchen fixture and test the repair.',party:{kind:'internal',name:'Property maintenance team'},funding:'property_no_resident_charge',currency:'USD',propertyMaximumCents:25000,residentChargeCents:0,noChargeStatement:policy().noChargeStatement,accessRequirement:'unit_entry',entryWindow:purpose==='entry'?{startsAt:instant(3600000),endsAt:instant(7200000),startsLocal:instant(3600000).replace('Z','+00:00'),endsLocal:instant(7200000).replace('Z','+00:00'),timeZone:'UTC'}:null,conditions:'Keep the kitchen area clear.'})
+const terms=(purpose='work')=>{
+ let entryWindow=null
+ if(purpose==='entry'){
+  const startsAt=instant(3600000),endsAt=instant(7200000)
+  entryWindow={startsAt,endsAt,startsLocal:startsAt.replace('Z','+00:00'),endsLocal:endsAt.replace('Z','+00:00'),timeZone:'UTC'}
+ }
+ return{schemaVersion:1,purpose,propertyName:'Sample <House>',unitId:'12A',publicSummary:'Repair the leaking kitchen fixture',scopeOfWork:'Replace the kitchen fixture and test the repair.',party:{kind:'internal',name:'Property maintenance team'},funding:'property_no_resident_charge',currency:'USD',propertyMaximumCents:25000,residentChargeCents:0,noChargeStatement:policy().noChargeStatement,accessRequirement:'unit_entry',entryWindow,conditions:'Keep the kitchen area clear.'}
+}
 const effectiveness=(extra={})=>({required:true,effective:false,holds:['awaiting_decisions'],evaluatedAt:instant(0),refreshAt:instant(300000),dispatchStatus:'not_dispatched',notificationStatus:'not_sent',...extra})
 const request=(purpose='work')=>({id:purpose==='work'?ids.request:ids.entry,organizationId:scope.organizationId,propertyId:scope.propertyId,caseId:ids.case,purpose,version:1,caseVersion:2,planId:ids.plan,planVersion:3,configurationVersion:scope.configurationVersion,maintenancePolicyVersion:1,consentPolicyVersion:1,rosterId:ids.roster,rosterVersion:1,materialDigest:'a'.repeat(64),termsDigest:(purpose==='work'?'b':'c').repeat(64),terms:terms(purpose),responseDeadline:instant(1800000),consentValidUntil:instant(86400000),publishedBy:'owner-one',publishedAt:instant(-5000),createdAt:instant(-5000),withdrawnAt:null})
 const ownDetail=(p='work',extra={})=>({requestId:p==='work'?ids.request:ids.entry,requestVersion:1,purpose:p,termsDigest:(p==='work'?'b':'c').repeat(64),materialDigest:'a'.repeat(64),terms:terms(p),responseDeadline:instant(1800000),consentValidUntil:instant(86400000),publishedAt:instant(-5000),withdrawnAt:null,ownDecision:null,ownDecisionVersion:0,effectiveness:effectiveness(),canGrant:true,canDecline:true,canRevoke:false,requiresPasskey:true,currentTerms:true,help:help(),...extra})
@@ -173,6 +180,23 @@ test('staff wrong-property receipt never clears recovery or advertises a saved c
 
 test('entry-only selection preserves list scroll and purpose, and no automatic grant occurs on refresh',async()=>{
  const f=client();await flush();f.node('consent-list').querySelector('.consent-list').scrollTop=247;await f.click('select',{id:ids.entry});assert.equal(f.helpers.state().detail.purpose,'entry');assert.equal(f.node('consent-list').querySelector('.consent-list').scrollTop,247);assert.equal(f.document.activeElement.tag,'h2');await f.helpers.load();assert.equal(f.helpers.state().detail.purpose,'entry');assert.equal(f.requests.filter(r=>r.payload).length,0)
+})
+
+test('entry selection and refresh survive clock ticks while millisecond-mismatched terms remain invalid',async t=>{
+ let now=Date.now()
+ t.mock.method(Date,'now',()=>now++)
+ const f=client();await flush();await f.click('select',{id:ids.entry})
+ assert.ok(f.helpers.state().detail,'entry detail remains readable as the clock advances')
+ assert.equal(f.helpers.state().detail.purpose,'entry')
+ await f.helpers.load()
+ assert.equal(f.helpers.state().detail?.purpose,'entry')
+ assert.equal(f.requests.filter(r=>r.payload).length,0)
+ const valid=terms('entry')
+ assert.doesNotThrow(()=>f.helpers.readTerms(valid))
+ for(const [local,utc]of [['startsLocal','startsAt'],['endsLocal','endsAt']]){
+  const mismatched={...valid,entryWindow:{...valid.entryWindow,[local]:new Date(Date.parse(valid.entryWindow[utc])+1).toISOString().replace('Z','+00:00')}}
+  assert.throws(()=>f.helpers.readTerms(mismatched),local+' must match its exact instant')
+ }
 })
 
 test('new approval retires at a known deadline while expiry never hides the resident help route',async()=>{
