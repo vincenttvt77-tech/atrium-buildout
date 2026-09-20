@@ -62,6 +62,8 @@ test('an all-unauthorized apartment enquiry is shown as failed instead of answer
   assert.doesNotMatch(narrative(story), unsupportedSuccess)
   assert.match(html, /System step failed|system error/)
   assert.doesNotMatch(html, /answered from the approved information|Offered 0 tour times/)
+  assert.match(html, /A system step needs review/)
+  assert.doesNotMatch(html, /tour but it couldn't be booked|Staff must help arrange a time/)
   assert.doesNotMatch(narrative(story), /staff notified|took their details|offered a call back|apologised/i)
 })
 
@@ -94,7 +96,7 @@ test('failed capture and booking attempts never create saved requirements, loss 
 })
 
 test('a genuine booking survives an unrelated tool failure while the failed step still needs review', () => {
-  const { story } = workspace().story([
+  const { story, html } = workspace().story([
     tool('book_tour', "You're all set. I've got you down for June 2 at 10 AM.", { unitId: '4A', slotId: 'slot-synthetic' }),
     answer('unauthorized'),
   ], [{ kind: 'tour_booked', status: 'confirmed', unitId: '4A', slot: 'June 2 at 10 AM', at }])
@@ -105,6 +107,8 @@ test('a genuine booking survives an unrelated tool failure while the failed step
   assert.ok(story.chips.some(chip => chip.text === 'Tour booked'))
   assert.ok(story.chips.some(chip => /System step failed/i.test(chip.text)))
   assert.match(story.steps[1].text, /error|not confirmed/i)
+  assert.match(html, /A system step needs review/)
+  assert.doesNotMatch(html, /tour but it couldn't be booked|Staff must help arrange a time/)
 })
 
 test('a matching structured approved answer keeps its successful explanation', () => {

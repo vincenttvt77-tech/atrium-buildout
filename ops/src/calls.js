@@ -149,7 +149,9 @@ function panelHtml(rec, story, s) {
     else handling = fu.status === 'done' ? '<span>Handled — a person marked this done.</span>' : '<span>Marked not needed. No completed callback is recorded here.</span>'
     out += `<section class="panel-section"><h3 data-key="panel-np" tabindex="-1">Needs a person</h3><div class="card card-warn needs-card">` +
       (t ? `<div class="${t.quote === null ? 'quote' : ''}">${t.quote === null ? esc(t.headline.replace(/^asked /, '')) : esc(text.capitalise(t.headline))}</div>${t.quote ? `<div class="quote">"${esc(t.quote)}"</div>` : ''}<div class="reassure">${esc(t.reassurance)}</div>`
-        : story.findings.arranging ? '<div>This booking has not been verified.</div><div class="reassure">Check the existing reservation before arranging another tour. No staff contact has been confirmed.</div>' : `<div>They wanted a tour but it couldn't be booked.</div><div class="reassure">Staff must help arrange a time. No completed callback is recorded.</div>`) +
+        : story.findings.arranging ? '<div>This booking has not been verified.</div><div class="reassure">Check the existing reservation before arranging another tour. No staff contact has been confirmed.</div>'
+        : story.findings.bookFailed ? `<div>They wanted a tour but it couldn't be booked.</div><div class="reassure">Staff must help arrange a time. No completed callback is recorded.</div>`
+        : '<div>A system step needs review.</div><div class="reassure">Check the failed request and any saved reservation before taking another action. No staff contact has been confirmed.</div>') +
       A.html.followUpReview(fu) + `<div class="handling">${handling}</div></div></section>`
   }
   out += `<section class="panel-section"><h3>What the assistant learned</h3>`
