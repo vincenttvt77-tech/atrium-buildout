@@ -136,7 +136,7 @@ function panelHtml(rec, story, s) {
   if (!call) out += `<div style="margin-top:12px">${A.html.banner('info', 'This is a retained call summary. A transcript and recording are not in the loaded history.')}</div>`
   out += callContextHtml(rec, story, s)
   out += `<section class="panel-section call-story"><span class="section-kicker">Conversation brief</span><h3>What happened</h3><p class="story prose">${esc([story.who, story.wants, story.sentence].filter(Boolean).join(' '))}</p>` +
-    (story.dropped ? `<p class="muted small" style="margin-top:6px">The call seems to have dropped partway through — the last step never finished.</p>` : '') +
+    (story.dropped ? `<p class="muted small" style="margin-top:6px">One or more tool results were not saved. Review the transcript before deciding the outcome.</p>` : '') +
     (story.chips.length ? `<div class="chips">${story.chips.map((c) => A.html.chip(c.cls, c.icon, c.text)).join('')}</div>` : '') + '</section>'
   if (story.needsPerson) {
     const r = story.restricted

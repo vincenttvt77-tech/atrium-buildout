@@ -56,3 +56,8 @@ Fable: read AGENTS.md, AI_WORKFLOW.md and docs/agent-tasks.md from GitHub before
 
 
 Release notes are committed separately after the implementation so this report can name the tested/deployed source commit. A later documentation-only HEAD does not mean production adopted different application code. Error-log aggregation, monitoring configuration and physical-device passkeys were not verified in this release; no claim of zero production errors is made.
+
+
+## Post-release finding: truthful historical call summaries
+
+A read-only live dashboard check exposed another confirmed defect: historical `unauthorized` results could be described as approved answers, successful lookups or zero offered slots. AT119 adds common failure classification before summary/step inference, explicit failed-step review, neutral missing-result/no-tool wording, and approved-source claims only when matching structured approval evidence exists. A real confirmed booking remains visible alongside a failed unrelated step. No caller records are altered. Nine new independent synthetic regressions cover these cases. Final local follow-up: **1,508 application tests passed**, clean types/data, successful 17-handler build and **9 real Chromium checks** at 320/390/1280. Backend and SQL are unchanged from the 497-test PostgreSQL acceptance. The follow-up publication/deployment checkpoint will identify this source separately from the first release above.

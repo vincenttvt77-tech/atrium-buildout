@@ -3978,6 +3978,17 @@ function gateMissing(result) {
   return { moveInTiming: 'their move-in date', bedrooms: 'how many bedrooms', budget: 'their budget' }[m ? m[1] : ''] || 'more'
 }
 
+function failedToolResult(result) {
+  if (typeof result !== 'string') return false
+  const value = result.trim()
+  if (/^(?:Error:\s*)?(?:(?:401|403|408|429|5\d\d)\s*[: -]?\s*)?(?:unauthorized|forbidden|request timeout|too many requests|internal server error|bad gateway|service unavailable|gateway timeout)[.!]?$/i.test(value)) return true
+  if (/^(?:Error:\s*)?(?:Request failed with status code|HTTP)\s+(?:401|403|408|429|5\d\d)\b/i.test(value)) return true
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) && Boolean(parsed.error)
+  } catch { return false }
+}
+
 function callStory(record, s) {
   const r = record || {}
   const call = r.call || null
@@ -3994,7 +4005,7 @@ function callStory(record, s) {
   const f = {
     emergency: null, restricted: null, booked: null, arranging: null, bookFailed: false, slotTaken: false, bookInvalid: false,
     pricedOut: null, loss: null, units: [], stretch: [], later: [], refused: null, bedroomMismatch: false, noMatch: false, stale: false,
-    answered: [], captured: {}, unreadable: [], slots: null, noSlots: false, dropped: false, crash: false,
+    answered: [], responded: [], captured: {}, unreadable: [], slots: null, noSlots: false, dropped: false, crash: false,
   }
   // events first (structured numbers), then tool calls (authoritative wording) overwrite or fill
   for (const e of ev('emergency')) {
@@ -4028,8 +4039,8 @@ function callStory(record, s) {
   const bookedAt = { index: -1 }
   tools.forEach((t, i) => {
     const res = t.result
-    if (res === null) { f.dropped = true; return }
-    if (/^Something went wrong on my end/.test(res)) { f.crash = true; return }
+    if (res === null || !res.trim()) { f.dropped = true; return }
+    if (failedToolResult(res) || /^Something went wrong on my end/.test(res.trim())) { f.crash = true; return }
     if (t.name === 'capture_signal') {
       const signal = String(t.args.signal ?? '')
       if (/^Got it/.test(res)) f.captured[signal] = { signal, value: t.args.value, excerpt: String(t.args.excerpt ?? '') }
@@ -4049,10 +4060,10 @@ function callStory(record, s) {
       const question = String(t.args.question ?? '')
       if (/^That is something a member of the team/.test(res)) f.restricted = { question: question || (f.restricted && f.restricted.question) || '', trigger: (f.restricted && f.restricted.trigger) || `restricted:${String(t.args.topic ?? '')}` }
       else if (/^You do not have an approved answer/.test(res)) f.refused = { question, timesAsked: (f.refused && f.refused.timesAsked) || 1 }
-      else if (!/^That is live information/.test(res)) { if (!f.answered.some((a) => a.question === question)) f.answered.push({ question, topic: String(t.args.topic ?? '') }) }
+      else if (!/^That is live information/.test(res) && !f.answered.some((a) => a.question === question)) f.responded.push({ question })
     } else if (t.name === 'list_tour_slots') {
       if (/^No tour times are open/.test(res)) { f.noSlots = true; f.slots = 0 }
-      else if (f.slots == null) f.slots = (res.match(/^slot-/gm) || []).length
+      else if (f.slots == null && /^slot-/m.test(res)) f.slots = (res.match(/^slot-/gm) || []).length
     } else if (t.name === 'book_tour') {
       if (/^You're all set/.test(res)) { f.booked = { unitId: t.args.unitId || (f.booked && f.booked.unitId) || null, when: (f.booked && f.booked.when) || parseWhen(res), email: t.args.prospectEmail || (f.booked && f.booked.email) || null }; bookedAt.index = i; f.slotTaken = false }
       else if (/^I'm getting that booked/.test(res)) f.arranging = { unitId: t.args.unitId || null }
@@ -4123,7 +4134,8 @@ function callStory(record, s) {
     { id: 2, hit: () => Boolean(f.restricted), say: askedSentence },
     { id: 3, hit: () => Boolean(f.booked), say: bookedSentence },
     { id: 4, hit: () => Boolean(f.arranging), say: () => `The assistant is arranging a tour${f.arranging.unitId ? ` of apartment ${f.arranging.unitId}` : ''} — it isn't confirmed yet.` },
-    { id: 5, hit: () => f.bookFailed, say: () => "They wanted a tour but it couldn't be booked — the assistant said someone would call back with times." },
+    { id: 19, hit: () => f.crash, say: () => 'A system step failed, so one or more requests could not be verified. Review the call.' },
+    { id: 5, hit: () => f.bookFailed, say: () => 'They wanted a tour, but the booking could not be completed. Staff review is needed.' },
     { id: 6, hit: () => f.slotTaken, say: () => 'The time they wanted was taken; the assistant offered other times.' },
     { id: 7, hit: () => Boolean(f.pricedOut), say: () => (f.pricedOut.budget != null ? `Nothing was under ${fmt.money(f.pricedOut.budget)} — our lowest is ${fmt.money(f.pricedOut.cheapest)}, so they're ${fmt.money(f.pricedOut.gap)} short.` : 'Nothing was under their budget — the assistant said so plainly.') },
     { id: 8, hit: () => Boolean(f.loss), say: () => `It may not work out: ${lossText(f.loss)}.` },
@@ -4133,29 +4145,31 @@ function callStory(record, s) {
     { id: 12, hit: () => f.noMatch, say: () => 'Nothing was available for what they wanted; the assistant offered the waitlist.' },
     { id: 13, hit: () => f.stale, say: () => "The assistant looked for apartments, but the list was out of date, so it didn't quote anything." },
     { id: 14, hit: () => f.answered.length > 0, say: () => `They asked about ${text.list([...new Set(f.answered.map((a) => label(labels.topic, a.topic)))])} and the assistant answered from the approved information.` },
+    { id: 20, hit: () => f.responded.length > 0, say: () => 'A response was recorded for their question. Review the call for the answer and its source.' },
     { id: 15, hit: () => Object.keys(f.captured).length > 0, say: () => "They told the assistant what they're looking for; nothing was booked yet." },
-    { id: 16, hit: () => Boolean(call) && tools.length === 0 && r.durationSeconds != null && r.durationSeconds < 20, say: () => 'A very short call — they hung up before saying what they needed.' },
-    { id: 17, hit: () => Boolean(call) && tools.length === 0, say: () => 'The assistant answered without needing to look anything up.' },
+    { id: 16, hit: () => Boolean(call) && tools.length === 0 && r.durationSeconds != null && r.durationSeconds < 20, say: () => 'A short call with no recorded tool activity.' },
+    { id: 17, hit: () => Boolean(call) && tools.length === 0, say: () => 'No tool activity was recorded for this call.' },
   ]
   let fired = null, sentence = ''
   for (const rule of rules) { if (rule.hit()) { fired = rule.id; sentence = rule.say(); break } }
   if (!fired) {
     if (!call && r.summary) sentence = summarySentence(r.summary.outcome)
-    if (!sentence) sentence = call ? 'The assistant answered without needing to look anything up.' : "Details weren't kept for this call."
+    if (!sentence) sentence = call ? 'The saved call does not include a verified outcome.' : "Details weren't kept for this call."
     fired = 18
   }
   if (fired === 2 && f.booked) sentence += ` The assistant also booked a tour${f.booked.unitId ? ` of apartment ${f.booked.unitId}` : ''} for ${f.booked.when || 'a time on the calendar'}.`
   else if (fired === 3 && f.restricted) sentence += ` They also asked "${text.truncate(f.restricted.question || label(labels.trigger, f.restricted.trigger, 'something only a person can answer'), 90)}" — that's for a person to answer.`
   else if (fired === 1) { if (f.restricted) sentence += ` ${askedSentence()}`; else if (f.booked) sentence += ` ${bookedSentence()}` }
 
-  const needsPersonFlag = Boolean(f.restricted) || f.bookFailed || Boolean(f.arranging)
+  const needsPersonFlag = Boolean(f.restricted) || f.bookFailed || Boolean(f.arranging) || f.crash
   const chips = []
   if (f.emergency) chips.push({ text: 'Emergency', cls: 'chip-danger', icon: 'siren' })
   if (needsPersonFlag) chips.push({ text: 'Needs a person', cls: 'chip-warn', icon: 'hand' })
   if (f.booked) chips.push({ text: 'Tour booked', cls: 'chip-ok', icon: 'calendar' })
   if (f.pricedOut || (f.loss && f.loss.kind === 'priced_out')) chips.push({ text: 'Priced out', cls: 'chip-lost', icon: 'x' })
   if (f.loss && f.loss.kind !== 'priced_out') chips.push({ text: "Didn't work out", cls: 'chip-lost', icon: 'x' })
-  if (f.dropped) chips.push({ text: 'Call dropped', cls: 'chip-info', icon: 'info' })
+  if (f.dropped) chips.push({ text: 'Result unavailable', cls: 'chip-info', icon: 'info' })
+  if (f.crash) chips.push({ text: 'System step failed', cls: 'chip-warn', icon: 'info' })
 
   // facts
   const facts = []
@@ -4182,8 +4196,8 @@ function callStory(record, s) {
     const res = t.result
     if (t.name === 'capture_signal' && res !== null && /^Got it/.test(res)) { run.push({ signal: String(t.args.signal ?? ''), value: t.args.value, excerpt: String(t.args.excerpt ?? '') }); continue }
     flushRun()
-    if (res === null) { steps.push({ icon: 'x', text: 'This step never finished — the call may have dropped here.' }); continue }
-    if (/^Something went wrong on my end/.test(res)) { steps.push({ icon: 'x', text: 'Something went wrong on our side; the assistant apologised and offered a call back.' }); continue }
+    if (res === null || !res.trim()) { steps.push({ icon: 'x', text: 'No result was saved for this step; its outcome is unverified.' }); continue }
+    if (failedToolResult(res) || /^Something went wrong on my end/.test(res.trim())) { steps.push({ icon: 'x', text: 'This step returned a system error; its outcome was not confirmed.' }); continue }
     if (t.name === 'capture_signal') {
       const signal = String(t.args.signal ?? '')
       if (/^Could not read/.test(res)) steps.push({ icon: 'note', text: `Couldn't make out their ${label(labels.signalShort, signal, 'answer')} from "${String(t.args.value ?? '')}"; asked again differently.` })
@@ -4219,15 +4233,16 @@ function callStory(record, s) {
       if (/^That is something a member of the team/.test(res)) steps.push({ icon: 'hand', text: `Asked "${q}" — passed to a person; took their details.` })
       else if (/^That is live information/.test(res)) steps.push({ icon: 'message', text: `Asked "${q}" — checked the live list instead of answering from memory.` })
       else if (/^You do not have an approved answer/.test(res)) steps.push({ icon: 'message', text: `Asked "${q}" — no approved answer, so the assistant offered a call back rather than guess.${f.refused && f.refused.timesAsked >= 2 ? ' Asked twice.' : ''}` })
-      else steps.push({ icon: 'message', text: `Answered "${q}" from ${label(labels.topic, t.args.topic, 'the approved information')}: "${text.truncate(text.staff(res.replace(/\s+/g, ' ').trim()), 140)}"` })
+      else steps.push({ icon: 'message', text: `${f.answered.some(a => a.question === q) ? `Answered "${q}" from ${label(labels.topic, t.args.topic, 'the approved information')}` : `A response was recorded for "${q}"`}: "${text.truncate(text.staff(res.replace(/\s+/g, ' ').trim()), 140)}"` })
     } else if (t.name === 'list_tour_slots') {
       if (/^No tour times are open/.test(res)) steps.push({ icon: 'calendar', text: 'No tour times were open, so offered a call back.' })
-      else steps.push({ icon: 'calendar', text: `Offered ${text.plural((res.match(/^slot-/gm) || []).length, 'tour time')}.` })
+      else if (/^slot-/m.test(res)) steps.push({ icon: 'calendar', text: `Offered ${text.plural((res.match(/^slot-/gm) || []).length, 'tour time')}.` })
+      else steps.push({ icon: 'calendar', text: 'The tour-time request has no verified slot list.' })
     } else if (t.name === 'book_tour') {
       if (/^You're all set/.test(res)) steps.push({ icon: 'calendar', text: `Booked a tour${t.args.unitId ? ` of apartment ${t.args.unitId}` : ''} for ${(f.booked && f.booked.when) || parseWhen(res) || 'a time on the calendar'}${t.args.prospectEmail ? `; email recorded: ${t.args.prospectEmail}` : ''}.` })
       else if (/^I'm getting that booked/.test(res)) steps.push({ icon: 'calendar', text: 'Started arranging a tour; not confirmed yet.' })
       else if (/^That time just went/.test(res)) steps.push({ icon: 'calendar', text: 'The time was taken while booking; offered other times.' })
-      else if (/^I'm having trouble reaching the calendar/.test(res)) steps.push({ icon: 'hand', text: "Couldn't reach the calendar; flagged this for a call back." })
+      else if (/^I'm having trouble reaching the calendar/.test(res)) steps.push({ icon: 'hand', text: 'The calendar request failed. Staff review is needed.' })
       else if (/^That slot is not on the calendar/.test(res)) steps.push({ icon: 'calendar', text: "Tried a time that wasn't on the calendar and was told to list real times." })
       else steps.push({ icon: 'calendar', text: 'Tried to book a tour.' })
     } else if (t.name === 'capture_loss_reason') {
@@ -5250,7 +5265,7 @@ function panelHtml(rec, story, s) {
   if (!call) out += `<div style="margin-top:12px">${A.html.banner('info', 'This is a retained call summary. A transcript and recording are not in the loaded history.')}</div>`
   out += callContextHtml(rec, story, s)
   out += `<section class="panel-section call-story"><span class="section-kicker">Conversation brief</span><h3>What happened</h3><p class="story prose">${esc([story.who, story.wants, story.sentence].filter(Boolean).join(' '))}</p>` +
-    (story.dropped ? `<p class="muted small" style="margin-top:6px">The call seems to have dropped partway through — the last step never finished.</p>` : '') +
+    (story.dropped ? `<p class="muted small" style="margin-top:6px">One or more tool results were not saved. Review the transcript before deciding the outcome.</p>` : '') +
     (story.chips.length ? `<div class="chips">${story.chips.map((c) => A.html.chip(c.cls, c.icon, c.text)).join('')}</div>` : '') + '</section>'
   if (story.needsPerson) {
     const r = story.restricted
