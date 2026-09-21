@@ -64,13 +64,16 @@ function restore(outcome: StoredOutcome): CallOutcome {
  * Transport must not acknowledge success when this rejects. A queue worker can call the
  * same replay function; this module does not claim to schedule one.
  */
-export async function receiveFinishedCall(store: DocumentStore, outcome: CallOutcome, now = new Date(), scope?: CallReceiptScope): Promise<CallReceipt> {
+export async function receiveFinishedCall(store: DocumentStore, outcome: CallOutcome, now = new Date(), scope?: CallReceiptScope, legacyTimeZone?: string): Promise<CallReceipt> {
   validateScope(scope, store)
+  const acceptedLegacyZone = legacyTimeZone === undefined ? undefined : validateTimeZone(legacyTimeZone)
+  if (scope && acceptedLegacyZone !== undefined) throw new Error('Scoped call receipts already define their timezone')
   const at = now.toISOString()
   const initial: CallReceipt = {
     version: 1, callId: outcome.callId, status: 'pending', attempts: 0,
     receivedAt: at, updatedAt: at, completedAt: null, lastErrorCode: null,
     outcome: { ...outcome, at: outcome.at.toISOString() },
+    ...(acceptedLegacyZone !== undefined ? { timeZone: acceptedLegacyZone } : {}),
     ...(scope ? { timeZone: scope.timeZone, scope: { organizationId: scope.organizationId, propertyId: scope.propertyId,
       channelBindingId: scope.channelBindingId, configurationVersion: scope.configurationVersion } } : {}),
   }

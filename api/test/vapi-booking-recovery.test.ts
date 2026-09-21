@@ -140,3 +140,27 @@ test('replaying an uncertain booking retries failed staff projection without cre
   assert.ok(await documents.get(`booking-review:${id}`), 'retry restores missing independent review')
   assert.equal((await calendar.read()).bookings.length, 1)
 })
+
+test('exact recovery evidence is durable before the calendar write begins', async () => {
+  const id = 'recovery-exact-dispatch-evidence', request = booking(), original = MemoryCalendarStore.prototype.mutate
+  let observed = false
+  const mutation = mock.method(MemoryCalendarStore.prototype, 'mutate', async function(this: MemoryCalendarStore, fn: (s: CalendarState) => CalendarState) {
+    const state = await documents.get<any>(`call:${id}`)
+    const attempt = state.bookingAttempt
+    assert.equal(attempt.toolId, request.id)
+    assert.equal(attempt.slotId, request.arguments.slotId)
+    assert.equal(attempt.startsAt, `${request.arguments.slotId.slice(5)}:00.000Z`)
+    assert.ok(Date.parse(attempt.endsAt) > Date.parse(attempt.startsAt))
+    assert.equal(attempt.externalId, `prop-demo|${phone}|${request.arguments.slotId}`)
+    assert.equal(state.booking.endsAt, attempt.endsAt)
+    assert.equal(state.booking.externalId, attempt.externalId)
+    assert.equal(state.work.intents.find((row: any) => row.id === request.id).status, 'dispatch_started')
+    observed = true
+    return original.call(this, fn)
+  })
+  let response: any
+  try { response = await tools(id, [request]) } finally { mutation.mock.restore() }
+  assert.equal(response.code, 200)
+  assert.equal(observed, true)
+  assert.equal((await calendar.read()).bookings.length, 1)
+})

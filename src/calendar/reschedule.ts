@@ -3,6 +3,7 @@ import type { SlotOptions } from './slots.ts'
 import { bookingSlot, canBook, generateSlots, openSlots } from './slots.ts'
 import { effectiveOptions } from './settings.ts'
 import { CalendarActionError, knownUnit, requestIdentity } from './unit-blocks.ts'
+import { bookingReviewProjectionPending } from './booking-review.ts'
 import { heldEmergency } from './safety.ts'
 import { DEFAULT_TIME_ZONE, validateTimeZone } from './time.ts'
 
@@ -40,6 +41,7 @@ export function rescheduleBooking(state: CalendarState, input: Record<string, un
   defaults: SlotOptions, actorId: string): CalendarState {
   const requestId = requestIdentity(input.requestId)
   const booking = findBooking(state, input.externalId)
+  if (bookingReviewProjectionPending(state, booking.externalId)) throw new CalendarActionError('booking_review_projection_pending', 'This tour has a booking review still being reconciled. Finish that review before moving it.', 409)
   if (!Number.isSafeInteger(input.expectedRevision) || Number(input.expectedRevision) < 0) throw new CalendarActionError('invalid_booking_revision', 'The saved booking revision is required.')
   if (typeof input.slotId !== 'string' || !/^slot-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(input.slotId)) {
     throw new CalendarActionError('invalid_slot', 'Choose an available tour time from the calendar.')

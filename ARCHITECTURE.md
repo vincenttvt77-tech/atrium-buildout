@@ -36,9 +36,27 @@ and recovers only an exactly matching reservation. `src/calls/booking-review.ts`
 unresolved booking reviews independently of finished-call projection in the scoped document
 store. Replay can repair that projection, and contact capture stays available while a review
 is pending. Today and Calls expose these reviews without claiming a confirmed tour or sent
-notification. This is not a background reconciler, review-resolution command or bounded
-portfolio queue; those remain required. Requested callback evidence never replaces the
-provider caller identity, and anonymous dashboard links select the exact call.
+notification. Requested callback evidence never replaces the provider caller identity,
+and anonymous dashboard links select the exact call.
+
+Staff booking recovery uses `src/calls/reconcile-booking.ts` through the authenticated
+`booking_review` calendar command. The webhook saves the exact original slot interval,
+unit, booking key and tool identity before dispatch. Only an ended call with one matching
+uncertain/dispatched booking intent and no other unsettled work is eligible. A durable
+call claim wins before the calendar observation, so an original webhook cannot finish
+the same call while staff repair it. Current property permission controls admission;
+stored original binding, configuration and timezone remain projection provenance.
+
+The calendar CAS records either an exact unchanged booking or current absence and fences
+late creates by the original call. Pending projection also fences that external key and
+manual rescheduling. PostgreSQL wraps the claim, calendar, call, lead/follow-up and review
+updates in one authorized transaction. Legacy KV retains the claim and projection receipt
+for explicit retry across partial saves; another authorized operator can resume it. Only
+after all records are projected is the calendar receipt completed. Completed receipt
+replay repairs review metadata only and cannot overwrite later bookings or reschedules.
+Missing/mismatched original evidence requires manual inspection. No provider call, new
+booking or notification is issued by this command; background reconciliation and bounded
+portfolio queues remain open.
 
 The PostgreSQL path is wired through protected portal/API requests and selected only by explicit
 `ATRIUM_RUNTIME_MODE=postgres` with valid deployment configuration. Connection settings alone

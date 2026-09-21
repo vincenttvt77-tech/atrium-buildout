@@ -146,9 +146,18 @@ retain the lead and derive staff callback work.
 Uncertain bookings retain an independent, property-scoped review in **Today** and
 **Calls**, including the attempted tour and contact details. A caller can still leave
 callback details while the booking needs review. The review survives finished-call
-projection failure and is retried on webhook replay. Staff must verify the existing
-reservation before arranging another tour; this increment does not automatically
-reconcile unresolved bookings, close those reviews, or notify staff.
+projection failure and is retried on webhook replay. Authorized staff can use **Check
+reservation** after the call ends. It checks the exact saved attempt against Atrium's
+calendar, records a dated confirmation or absence, and finishes the call, prospect and
+follow-up records without creating a reservation or sending a notification. A partial
+save offers **Finish review** and safely resumes the same attempt. An older call without
+exact dispatch evidence stays unresolved for manual inspection.
+
+This check permanently blocks delayed booking retries from the original call. While
+related records are still updating, it also prevents moving that reservation. Completed
+results are historical evidence: later authorized reschedules and new calls are allowed.
+This is staff-triggered recovery for Atrium's own calendar, not a background reconciler
+or a check of an external PMS.
 
 Requested callback numbers are separate evidence on the original caller's record,
 not an identity change. Hidden-number callers remain separate by call, including in

@@ -6,7 +6,7 @@ import rawArticles from '../data/knowledge.json' with { type: 'json' }
 import { loadInventory } from '../src/inventory/load.ts'
 import type { InventorySnapshot } from '../src/inventory/types.ts'
 import type { KnowledgeArticle } from '../src/knowledge/article.ts'
-import { emptyQualification, type QualificationState } from '../src/leasing/qualification.ts'
+import { emptyQualification } from '../src/leasing/qualification.ts'
 import {
   checkEmergency, checkAvailability, answerQuestion, captureSignal, captureLossReason,
   type ToolContext,
@@ -21,13 +21,15 @@ import { parseCalendarDate, addCalendarDays } from '../src/calendar/range.ts'
 import { DEFAULT_TIME_ZONE, localDate, validateTimeZone, wallTime } from '../src/calendar/time.ts'
 import { propertyTimeZone } from '../src/config/property.ts'
 import { storeBackedCalendar } from '../src/calendar/port.ts'
-import { documentStoreFromEnv, type DocumentStore } from '../src/store/documents.ts'
-import { normalisePhone, normaliseCallbackPhone, type Evidence } from '../src/leads/profile.ts'
+import { documentStoreFromEnv } from '../src/store/documents.ts'
+import { normalisePhone, normaliseCallbackPhone } from '../src/leads/profile.ts'
 import { reconcile } from '../src/leasing/captured.ts'
-import { receiveFinishedCall, type CallReceiptScope } from '../src/leads/inbox.ts'
+import type { CallReceiptScope } from '../src/leads/inbox.ts'
 import { randomUUID } from 'node:crypto'
 import type { LossReason } from '../src/record/store.ts'
-import { bookTour } from '../src/booking/book.ts'
+import { bookTour, idempotencyKey } from '../src/booking/book.ts'
+import type { BookingReviewAttempt } from '../src/calendar/types.ts'
+import type { BookingRequest } from '../src/booking/types.ts'
 import type { CalendarPort, TourSlot } from '../src/booking/types.ts'
 import { sayableStatus } from '../src/booking/book.ts'
 import { propertyId, interactionId } from '../src/domain/ids.ts'
@@ -38,9 +40,10 @@ import { isPostgresRuntime, resolveOpsRuntime, resolveVerifiedChannelRuntime, ru
   currentPropertyRuntime, runtimeForRequest, readRuntimeError, RuntimeRequestError, type ResolvedPropertyRuntime } from '../src/application/runtime.ts'
 import { webhookAssistantId } from '../src/tenancy/webhook.ts'
 import { initializeCallLifecycle, admitToolBatch, markToolDispatch, completeToolBatch,
-  requestCallEnd, freezeCall, completeCall, hashCallToolArgs, CallLifecycleError,
-  type CallLifecycle, type CallProvenance, type CallToolResult } from '../src/calls/lifecycle.ts'
+  requestCallEnd, hashCallToolArgs, CallLifecycleError,
+  type CallProvenance, type CallToolResult } from '../src/calls/lifecycle.ts'
 import { recordCallSafetyEvent, listCallSafetyEvents, safetyEventForOps } from '../src/calls/safety-events.ts'
+import { projectFrozenCall, reviveStoredCall, type CallState } from '../src/calls/completion.ts'
 import { recordBookingReview, listBookingReviews } from '../src/calls/booking-review.ts'
 import { holdTourChange, recordTourChangeRequest, tourChangeExcerpt, TourChangeRequiredError,
   TOUR_CHANGE_SAVED, TOUR_CHANGE_UNSAVED, type TourChangeRequest } from '../src/leads/tour-change.ts'
@@ -98,24 +101,6 @@ function load(now: Date, runtime?: ResolvedPropertyRuntime) {
  * check_availability on another that had never seen it — the second call found an empty
  * qualification. Keyed by call id; consolidated into the caller's profile at end of call.
  */
-interface CallState {
-  routing?: { organizationId: string; propertyId: string; channelBindingId: string }
-  qualification: QualificationState
-  phone?: string
-  callbackPhone?: Evidence<string>
-  /** A compact receipt prevents repeated finished-call reports from recreating a caller. */
-  completedAt?: string
-  work?: CallLifecycle
-  name: string | null
-  email: string | null
-  unitsDiscussed: string[]
-  booking: { slotId: string; startsAt: string; unitId: string | null; status: 'confirmed' | 'arranging' | 'failed'; externalId?: string } | null
-  lossReason: LossReason | null
-  escalation: { trigger: string; detail: string } | null
-  emergency: EmergencySignal | null
-  tourChangeRequested?: boolean
-  toolsCalled: string[]
-}
 
 const documents = documentStoreFromEnv()
 const callKey = (id: string) => `call:${id}`
@@ -192,16 +177,7 @@ function reviveCall(raw: CallState | null): CallState {
   if (expected && (!raw.routing || Object.entries(expected).some(([key, value]) => raw.routing?.[key as keyof typeof expected] !== value))) {
     throw new RuntimeRequestError(409, 'call_routing_conflict', 'This call is already assigned to another connection and cannot be reassigned.')
   }
-  const q = raw.qualification as unknown as Record<string, unknown>
-  for (const k of ['moveInTiming', 'budget', 'bedrooms', 'pets', 'parking', 'source'] as const) {
-    const v = q[k] as { at?: string | Date; value?: Record<string, unknown> } | undefined
-    if (v?.at) v.at = new Date(v.at)
-    if (k === 'moveInTiming' && v?.value) {
-      if (v.value.earliest) v.value.earliest = new Date(v.value.earliest as string)
-      if (v.value.latest) v.value.latest = new Date(v.value.latest as string)
-    }
-  }
-  return { ...freshCall(), ...raw, qualification: raw.qualification }
+  return reviveStoredCall(raw)
 }
 
 async function getCall(callId: string): Promise<CallState> {
@@ -212,7 +188,7 @@ async function saveCall(callId: string, state: CallState, before: CallState,
   completion?: { token: string; results: CallToolResult[] }): Promise<CallState> {
   return documents.update<CallState>(callKey(callId), freshCall(), (raw) => {
     const current = reviveCall(raw)
-    if (current.completedAt || current.work?.phase === 'frozen') {
+    if (current.completedAt || current.work?.phase === 'frozen' || current.bookingReviewWork) {
       if (completion) throw new CallLifecycleError('call_admission_stale')
       return current
     }
@@ -254,9 +230,9 @@ async function saveCall(callId: string, state: CallState, before: CallState,
 
 async function finishEndedCall(callId: string, state: CallState, now: Date, runtime?: ResolvedPropertyRuntime): Promise<void> {
   const work = state.work
-  if (!work || (work.phase !== 'ending' && work.phase !== 'frozen')
+  if (state.bookingReviewWork || !work || (work.phase !== 'ending' && work.phase !== 'frozen')
     || work.intents.some(intent => intent.status !== 'complete' && intent.status !== 'blocked')) return
-  if (runtime) await runtime.documents.transaction(store => projectFrozenCall(store, callId, now, runtime))
+  if (runtime) await runtime.documents.transaction(store => projectFrozenCall(store, callId, now, { receiptScope: receiptScope(runtime)! }))
   else await projectFrozenCall(documents, callId, now)
 }
 
@@ -272,32 +248,6 @@ async function exposeBookingReview(callId: string, state: CallState, now: Date, 
   }
 }
 
-/** Only document operations run here; the PostgreSQL caller owns one atomic unit. */
-async function projectFrozenCall(store: DocumentStore, callId: string, now: Date, runtime?: ResolvedPropertyRuntime): Promise<CallState> {
-  const frozen = reviveCall(await store.update<CallState>(callKey(callId), freshCall(), raw => {
-    const current = reviveCall(raw)
-    if (current.completedAt) return current
-    if (!current.work) throw new CallLifecycleError('call_work_unresolved')
-    return { ...current, work: freezeCall(current.work, { now: now.toISOString() }) }
-  }))
-  if (frozen.completedAt) return frozen
-  const work = frozen.work!, end = work.end!
-  const phone = normalisePhone(frozen.phone ?? end.reportedPhone ?? 'unknown')
-  await receiveFinishedCall(store, {
-    callId, phone, at: new Date(end.endedAt), durationSeconds: end.durationSeconds,
-    qualification: frozen.qualification, name: frozen.name, email: frozen.email,
-    ...(frozen.callbackPhone ? { callbackPhone: frozen.callbackPhone } : {}),
-    unitsDiscussed: frozen.unitsDiscussed, booking: frozen.booking, lossReason: frozen.lossReason,
-    escalation: frozen.escalation, toolsCalled: frozen.toolsCalled,
-  }, now, receiptScope(runtime))
-  return store.update<CallState>(callKey(callId), frozen, raw => {
-    const current = reviveCall(raw)
-    if (!current.work) throw new CallLifecycleError('call_revision_conflict')
-    const completed = completeCall(current.work, { now: now.toISOString(), frozenRevision: work.frozenRevision! })
-    return { ...freshCall(), phone, completedAt: end.endedAt, work: completed,
-      ...(current.tourChangeRequested ? { tourChangeRequested: true } : {}) }
-  })
-}
 
 /*
  * The tour calendar the phone line books against. It is the same store the operations
@@ -557,7 +507,7 @@ function emergencyToolResponse(signal: EmergencySignal | null, name: string): st
 async function runTool(
   name: string, args: Record<string, unknown>, callId: string, now: Date, state: CallState,
   runtime?: ResolvedPropertyRuntime,
-  execution?: { beforeBooking(): Promise<void>; bookingUncertain: boolean },
+  execution?: { beforeBooking(attempt: BookingReviewAttempt): Promise<void>; bookingUncertain: boolean },
 ): Promise<string> {
   const { inventory, articles, property } = load(now, runtime)
   const unitIds = runtime ? inventory.units.map(unit => unit.unitId) : rawUnits.map(unit => unit.unitId)
@@ -695,9 +645,7 @@ async function runTool(
       state.name = String(args.prospectName ?? state.name ?? '')
       state.email = args.prospectEmail ? String(args.prospectEmail) : state.email
 
-      state.booking = { slotId: slot.slotId, startsAt: slot.startsAt.toISOString(), unitId, status: 'arranging' }
-      await execution?.beforeBooking()
-      const booking = await bookTour({
+      const request: BookingRequest = {
         propertyId: ctx.propertyId,
         interactionId: ctx.interactionId,
         personId: null,
@@ -707,7 +655,12 @@ async function runTool(
         slot,
         unitId,
         floorPlanId: null,
-      }, callCalendar(now, timeZone, runtime), { now, makeIntentId: () => `intent-${callId}-${slot.slotId}` })
+      }
+      const attempt: BookingReviewAttempt = { externalId: idempotencyKey(request), slotId: slot.slotId,
+        startsAt: slot.startsAt.toISOString(), endsAt: slot.endsAt.toISOString(), unitId }
+      state.booking = { ...attempt, status: 'arranging' }
+      await execution?.beforeBooking(attempt)
+      const booking = await bookTour(request, callCalendar(now, timeZone, runtime), { now, makeIntentId: () => `intent-${callId}-${slot.slotId}` })
       if (execution) execution.bookingUncertain = booking.state.status === 'arranging'
       if (booking.state.status === 'failed') state.escalation = { trigger: 'booking_failed',
         detail: 'The tour could not be booked. Staff must contact the prospect to arrange a time; no notification has been sent.' }
@@ -718,8 +671,7 @@ async function runTool(
         prospectName: state.name, prospectEmail: state.email,
       })
       state.booking = {
-        slotId: slot.slotId, startsAt: slot.startsAt.toISOString(),
-        unitId,
+        ...attempt,
         ...('externalId' in booking.state && booking.state.externalId ? { externalId: booking.state.externalId } : {}),
         status: booking.state.status === 'confirmed' ? 'confirmed'
           : booking.state.status === 'arranging' ? 'arranging' : 'failed',
@@ -1201,17 +1153,19 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
         const execution = {
           bookingUncertain: false,
           dispatchStarted: false,
-          beforeBooking: async () => {
+          beforeBooking: async (attempt: BookingReviewAttempt) => {
             await documents.update<CallState>(callKey(callId), freshCall(), raw => {
               const current = reviveCall(raw)
-              if (!current.work) throw new CallLifecycleError('call_admission_stale')
-              return { ...current, name: state.name !== before.name ? state.name : current.name,
+              if (!current.work || current.bookingReviewWork) throw new CallLifecycleError('call_admission_stale')
+              const bookingAttempt = { ...attempt, toolId: tc.toolCallId }
+              return { ...current, bookingAttempt, name: state.name !== before.name ? state.name : current.name,
                 email: state.email !== before.email ? state.email : current.email, booking: state.booking,
                 ...(state.phone ? { phone: state.phone } : {}),
                 ...(state.callbackPhone && (!current.callbackPhone || state.callbackPhone.at >= current.callbackPhone.at)
                   ? { callbackPhone: state.callbackPhone } : {}),
                 work: markToolDispatch(current.work, { token, toolId: tc.toolCallId, now: new Date().toISOString() }) }
             })
+            state.bookingAttempt = { ...attempt, toolId: tc.toolCallId }
             execution.dispatchStarted = true
           },
         }
@@ -1350,12 +1304,13 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
           } }) }
         }))
         if (state.completedAt) { res.status(200).json({}); return }
-        if (state.work?.phase === 'needs_review') await recordBookingReview(documents, { ...state,
-          ...(state.phone ? {} : state.work.end?.reportedPhone ? { phone: state.work.end.reportedPhone } : {}), callId, now })
+        if (state.work?.phase === 'needs_review' || (state.bookingAttempt && state.work?.intents.some(intent =>
+          intent.id === state.bookingAttempt?.toolId && intent.name === 'book_tour' && intent.status === 'dispatch_started'))) await recordBookingReview(documents, { ...state,
+          ...(state.phone ? {} : state.work?.end?.reportedPhone ? { phone: state.work.end.reportedPhone } : {}), callId, now })
         // PostgreSQL freezes, projects receipt/profile/follow-ups, and completes the
         // same call revision atomically. KV retains the frozen snapshot for replay.
         const completed = runtime
-          ? await runtime.documents.transaction(store => projectFrozenCall(store, callId, now, runtime))
+          ? await runtime.documents.transaction(store => projectFrozenCall(store, callId, now, { receiptScope: receiptScope(runtime)! }))
           : await projectFrozenCall(documents, callId, now)
         const phone = completed.phone
         console.log('[call]', JSON.stringify({

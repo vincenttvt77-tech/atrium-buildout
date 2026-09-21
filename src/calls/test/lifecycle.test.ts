@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   initializeCallLifecycle, admitToolBatch, markToolDispatch, completeToolBatch, requestCallEnd, freezeCall, completeCall,
-  hashCallToolArgs, CallLifecycleError, CALL_WORK_LIMITS,
+  hashCallToolArgs, CallLifecycleError, CALL_WORK_LIMITS, resolveReviewedBookingIntent, validateCallLifecycle,
   type CallLifecycle, type CallProvenance, type CallToolIdentity, type CallToolResult,
 } from '../lifecycle.ts'
 
@@ -262,4 +262,30 @@ test('public commands reject malformed objects and do not execute getters or con
     assert.throws(() => freezeCall(fresh(), invalid as never), error('call_work_invalid'))
   }
   assert.equal(executed, 0)
+})
+
+test('staff resolution completes only the ended uncertain booking and retains every other intent result', () => {
+  let work = admit(fresh(), [identity(), { ...identity('contact'), name: 'capture_contact' }]).work
+  work = markToolDispatch(work, { token: 'request-one', toolId: 'tool-one', now: NOW })
+  work = finish(work, [result('tool-one', 'needs_review'), result('contact')])
+  work = end(work)
+  const contact = structuredClone(work.intents.find(row => row.id === 'contact'))
+  const input = { toolId: 'tool-one', requestId: 'staff-request', outcome: 'confirmed' as const, checkedAt: LATER, now: LATER }
+  const resolved = resolveReviewedBookingIntent(work, input)
+  assert.equal(resolved.phase, 'ending'); assert.equal(resolved.revision, work.revision + 1)
+  assert.deepEqual(resolved.intents.find(row => row.id === 'contact'), contact)
+  assert.equal(JSON.parse(resolved.intents[0]!.result!).decision, 'staff_booking_review')
+  assert.equal(JSON.parse(resolved.intents[0]!.result!).notificationSent, false)
+  assert.deepEqual(resolveReviewedBookingIntent(resolved, input), resolved)
+  assert.deepEqual(validateCallLifecycle(resolved), resolved)
+})
+
+test('staff booking proof cannot settle an open call, unstarted dispatch or a different unresolved tool', () => {
+  const input = { toolId: 'tool-one', requestId: 'staff-request', outcome: 'not_booked' as const, checkedAt: LATER, now: LATER }
+  const admitted = admit().work
+  const dispatch = markToolDispatch(admitted, { token: 'request-one', toolId: 'tool-one', now: NOW })
+  assert.throws(() => resolveReviewedBookingIntent(dispatch, input), error('call_work_unresolved'))
+  assert.throws(() => resolveReviewedBookingIntent(end(admitted), input), error('call_work_unresolved'))
+  const other = admit(fresh(), [identity(), { ...identity('other'), name: 'capture_contact' }]).work
+  assert.throws(() => resolveReviewedBookingIntent(end(markToolDispatch(other, { token: 'request-one', toolId: 'tool-one', now: NOW })), input), error('call_work_unresolved'))
 })

@@ -88,3 +88,14 @@ test('PostgreSQL receipts never resolve omitted property scope through the demo 
   await assert.rejects(receiveFinishedCall(store, outcome(), at), /property scope is required/)
   assert.deepEqual(await base.list(''), [])
 })
+
+test('explicit historical legacy timezone survives replay and cannot be mixed with a property scope', async () => {
+  const store = new MemoryDocumentStore()
+  const received = await receiveFinishedCall(store, outcome(), at, undefined, 'America/Los_Angeles')
+  assert.equal(received.timeZone, 'America/Los_Angeles')
+  assert.equal((await receiveFinishedCall(store, outcome(), at, undefined, 'America/Chicago')).timeZone, 'America/Los_Angeles')
+  await assert.rejects(receiveFinishedCall(new MemoryDocumentStore(), outcome(), at, undefined, 'not-a-zone'), /timezone/)
+  await assert.rejects(receiveFinishedCall(new MemoryDocumentStore(), outcome(), at,
+    { organizationId: 'org-a', propertyId: 'property-a', channelBindingId: 'channel-a', configurationVersion: 1, timeZone: 'America/New_York' },
+    'America/Los_Angeles'), /already define their timezone/)
+})

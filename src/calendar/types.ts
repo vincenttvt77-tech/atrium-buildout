@@ -64,9 +64,34 @@ export interface UnitBlock {
   removedAt?: string
 }
 
+/** Exact evidence recorded before a standalone-calendar booking dispatch. */
+export interface BookingReviewAttempt {
+  externalId: string
+  slotId: string
+  startsAt: string
+  endsAt: string
+  unitId: string | null
+}
+
+/** A durable admission fence and staff observation, never a new reservation. */
+export interface CalendarBookingReviewResolution {
+  requestId: string
+  callId: string
+  sourceRevision: number
+  actorId: string
+  checkedAt: string
+  attempt: BookingReviewAttempt
+  outcome: 'confirmed' | 'not_booked'
+  /** Pending projection prevents changing the checked reservation until documents catch up. */
+  projection: 'pending' | 'complete'
+  booking: (BookingReviewAttempt & { revision: number }) | null
+}
+
 export interface CalendarState {
   blocks: SlotBlock[]
   bookings: SlotBooking[]
+  /** Permanent late-create fences; a missing booking alone never proves absence. */
+  bookingReviewResolutions?: CalendarBookingReviewResolution[]
   /** Separate from staff/global blocks: one apartment never closes unrelated apartments. */
   unitBlocks?: UnitBlock[]
   settings?: TourSettings

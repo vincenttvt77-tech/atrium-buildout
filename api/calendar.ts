@@ -16,6 +16,7 @@ import type { CalendarStore, CalendarState } from '../src/calendar/types.ts'
 import { documentStoreFromEnv } from '../src/store/documents.ts'
 import type { DocumentStore } from '../src/store/documents.ts'
 import { reconcileRescheduledTour } from '../src/leads/reschedule.ts'
+import { reconcileBookingReview } from '../src/calls/reconcile-booking.ts'
 import rawUnits from '../data/inventory.json' with { type: 'json' }
 import rawPlans from '../data/floorplans.json' with { type: 'json' }
 import rawInventorySource from '../data/inventory-source.json' with { type: 'json' }
@@ -139,7 +140,7 @@ return async function handler(req: any, res: any) {
     if (req.method === 'POST' && body.expectedTimeZone !== timeZone) {
       res.status(409).json({ error: 'The property timezone changed. Reload the portal before changing tours.' }); return
     }
-    if (!runtime && req.method === 'POST' && ['unit_block', 'unit_unblock', 'reschedule', 'reschedule_sync'].includes(body.action)
+    if (!runtime && req.method === 'POST' && ['unit_block', 'unit_unblock', 'reschedule', 'reschedule_sync', 'booking_review'].includes(body.action)
       && req.headers?.['x-atrium-tenant-id'] === undefined) {
       res.status(428).json({ error: 'Reload the portal to confirm the current account before changing apartment availability or tours.', code: 'portal_tenant_required' }); return
     }
@@ -160,6 +161,22 @@ return async function handler(req: any, res: any) {
         res.status(200).json({ ...result, ...(preview ? { reschedule: preview } : {}) }); return
       }
       if (req.method !== 'POST') { res.status(405).json({ error: 'GET or POST only' }); return }
+      if (body.action === 'booking_review') {
+        const requestId = requestIdentity(body.requestId)
+        if (typeof body.callId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,255}$/.test(body.callId)
+          || !Number.isSafeInteger(body.sourceRevision) || body.sourceRevision < 0) {
+          throw new CalendarActionError('booking_review_request_invalid', 'Reload the saved booking review before checking it.', 400)
+        }
+        const input = { requestId, callId: body.callId, sourceRevision: body.sourceRevision, actorId: actorId!, now,
+          scope: runtime ? { organizationId: runtime.scope.organizationId, propertyId: runtime.scope.propertyId }
+            : { tenantId: tenantId! } }
+        if (runtime) await runtime.revalidate()
+        const result = runtime
+          ? await runtime.calendarStore.transaction(unit => reconcileBookingReview(unit.calendar, unit.documents, input))
+          : await reconcileBookingReview(store, options.documents ?? documents, input)
+        res.status(result.status === 'pending_projection' ? 202 : 200).json({ ...result, timeZone })
+        return
+      }
       if (body.action === 'reschedule' || body.action === 'reschedule_sync') {
         const requestId = requestIdentity(body.requestId)
         const perform = async (calendar: CalendarStore, projectionDocuments: DocumentStore) => {
@@ -303,6 +320,9 @@ return async function handler(req: any, res: any) {
       if (error instanceof Error && error.message === 'BLOCK_CONFLICT') { res.status(409).json({ error: 'The saved block changed or cannot be extended safely. Reload the calendar before changing it.' }); return }
       if (error instanceof Error && error.message === 'SETTINGS_CONFLICT') { res.status(409).json({ error: 'Showing settings changed in another session. Reload and try again.' }); return }
       if (runtime) { const failure = readRuntimeError(error); res.status(failure.status).json(failure.body); return }
+      if (body.action === 'booking_review') {
+        res.status(503).json({ error: 'The review could not be verified. Retry the saved review; do not create another booking.', code: 'booking_review_unavailable', retryable: true }); return
+      }
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) })
     }
   }

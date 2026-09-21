@@ -2279,7 +2279,7 @@ h2 { letter-spacing: -.025em; }
  *   Atrium.property           safe property display facts from server bootstrap (legacy fixture defaults only)
  *   Atrium.normalisePhone(s)  the server's rule: 10 digits → '+1…', 11 starting 1 → '+…', other → '+digits', empty → 'unknown'
  *   Atrium.labels / Atrium.label(map, key, fallback)  §6 vocabulary; own-property lookup, humanised fallback
- *   Atrium.derive.*           windowStart, personName, displayName, displayStage, needsPerson, callBackToday,
+ *   Atrium.derive.*           bookingReviewResolution, windowStart, personName, displayName, displayStage, needsPerson, callBackToday,
  *                             dueTodayCount, toursOn, callRecords, callStory, todoSentence, escalationText, lossText,
  *                             summarySentence, availabilityText, moveInText, profileByPhone, profileForCall
  *   Atrium.hint(key)          localStorage one-time flag (true the first time only)
@@ -2789,12 +2789,15 @@ const arr = (v) => (Array.isArray(v) ? v : [])
 let gated = false
 let serviceWritesInFlight = 0
 let serviceSignInPending = false
+let bookingReviewWritesInFlight = 0
+let bookingReviewSignInPending = false
 let scopeEpoch = 0
 const PROPERTY_ENDPOINTS = new Set(['/api/vapi', '/api/calendar', '/api/leads', '/api/vapi-sync', '/api/workflows', '/api/resident-services', '/api/maintenance-plans'])
 const propertyEndpoint = path => PROPERTY_ENDPOINTS.has(String(path).split('?')[0])
 const JSON_HEADERS = { accept: 'application/json' }
 function accessError(message, status = 409) { const error = new Error(message); error.status = status; error.propertyAccess = true; return error }
 function invalidateDocument(message, status = 409) {
+  if ((bookingReviewWritesInFlight > 0 || bookingReviewSignInPending) && !message.startsWith('The reservation review')) message = 'The reservation review is unconfirmed and may have been recorded. ' + message
   if (!documentAccessIssue) {
     documentAccessIssue = { message, status }; scopeEpoch += 1; stopPolling()
     for (const name of Object.keys(seq)) { seq[name] += 1; sig[name] = '' }
@@ -2825,7 +2828,7 @@ function checkResponseScope(data, serviceSave = false) {
 }
 function signedOut() { const e = new Error('Signed out'); e.signedOut = true; e.status = 401; return e }
 function gate() {
-  if (gated || serviceSignInPending) return
+  if (gated || serviceSignInPending || bookingReviewSignInPending) return
   gated = true
   stopPolling()
   try { location.reload() } catch (e) { /* nothing else to do */ }
@@ -2834,7 +2837,8 @@ async function request(path, init) {
   if (gated) throw signedOut()
   const propertyRequest = propertyEndpoint(path), scoped = databaseMode && propertyRequest
   const serviceSave = ['/api/resident-services', '/api/maintenance-plans'].includes(String(path).split('?')[0]) && init?.method === 'POST'
-  const serviceOutcome = () => serviceSave || serviceWritesInFlight > 0 || serviceSignInPending ? 'The service save is unconfirmed and may have been recorded. ' : ''
+  const serviceOutcome = () => (bookingReviewWritesInFlight > 0 || bookingReviewSignInPending ? 'The reservation review is unconfirmed and may have been recorded. ' : '')
+    + (serviceSave || serviceWritesInFlight > 0 || serviceSignInPending ? 'The service save is unconfirmed and may have been recorded. ' : '')
   if (propertyRequest && documentAccessIssue) throw accessError(documentAccessIssue.message, documentAccessIssue.status)
   const epoch = scopeEpoch
   const headers = { ...(init && init.headers), ...(scoped ? {
@@ -2848,13 +2852,15 @@ async function request(path, init) {
     const err = new Error("Couldn't reach the server"); err.status = 0; err.network = true; throw err
   }
   if (r.status === 401) {
+    const reviewUncertain = bookingReviewWritesInFlight > 0 || bookingReviewSignInPending
+    if (reviewUncertain) bookingReviewSignInPending = true
     const serviceUncertain = serviceSave || serviceWritesInFlight > 0 || serviceSignInPending
     if (serviceUncertain) serviceSignInPending = true
-    if (propertyRequest || serviceUncertain) invalidateDocument(serviceOutcome() + (serviceUncertain ? 'Your session ended. Before signing in again, note that the last service change may be saved. After sign-in, check the current record before recording another change.' : 'Your session ended. Sign in again.'), 401)
+    if (propertyRequest || serviceUncertain || reviewUncertain) invalidateDocument(serviceOutcome() + (reviewUncertain ? 'Your session ended. Sign in again and check the saved review before taking another booking action.' : serviceUncertain ? 'Your session ended. Before signing in again, note that the last service change may be saved. After sign-in, check the current record before recording another change.' : 'Your session ended. Sign in again.'), 401)
     // A Service write may have committed before session revalidation failed. Keep the
     // retired page warning visible until deliberate navigation; never carry its private
     // command into a replacement login or silently repeat it.
-    if (!serviceUncertain) gate()
+    if (!serviceUncertain && !reviewUncertain) gate()
     throw signedOut()
   }
   let body = null, parsed = false
@@ -2895,7 +2901,9 @@ const api = {
   get(path) { return request(path, { headers: JSON_HEADERS }) },
   async post(path, body, opts) {
     const endpoint = String(path).split('?')[0], serviceWrite = ['/api/resident-services', '/api/maintenance-plans'].includes(endpoint)
+    const bookingReviewWrite = endpoint === '/api/calendar' && body?.action === 'booking_review'
     if (serviceWrite) serviceWritesInFlight++
+    if (bookingReviewWrite) bookingReviewWritesInFlight++
     try {
       const needed = endpoint === '/api/vapi-sync' || endpoint === '/api/workflows' || (endpoint === '/api/resident-services' && ['add_resident', 'review_resident', 'revoke_resident'].includes(body?.action)) || (endpoint === '/api/maintenance-plans' && ['publish_policy', 'save_vendor', 'decide_plan'].includes(body?.action)) || (endpoint === '/api/calendar' && body && body.action === 'settings') ? 'configure' : 'operate'
       if (propertyEndpoint(path) && !permissionAllowed(needed)) throw accessError('Your access is view only for this operation.', 403)
@@ -2908,7 +2916,7 @@ const api = {
         state.lastWriteError = { message: e.message, status: e.status ?? null, at: new Date().toISOString(), doing: (opts && opts.doing) || null }
       }
       throw e
-    } finally { if (serviceWrite) serviceWritesInFlight-- }
+    } finally { if (serviceWrite) serviceWritesInFlight--; if (bookingReviewWrite) bookingReviewWritesInFlight-- }
   },
 }
 
@@ -3727,6 +3735,48 @@ function callbackQuestion(fu, profile) {
   const trigger = (esc_ && esc_.trigger) || 'other'
   return { detail, trigger, escalation: esc_ }
 }
+// A review receipt describes the calendar at checkedAt; it is never a live booking.
+const reviewObject = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+const reviewId = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,255}$/.test(value)
+const reviewInstant = value => typeof value === 'string' && Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value
+const reviewUnit = value => value === null ? null : typeof value === 'string' && value.trim() && value.length <= 128 && !/[\u0000-\u001f\u007f]/.test(value) ? value.trim().toUpperCase() : undefined
+function bookingReviewAttempt(value) {
+  if (!reviewObject(value) || !displayText(value.externalId, 1024) || !value.externalId.trim()
+    || typeof value.slotId !== 'string' || !/^slot-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value.slotId)
+    || !reviewInstant(value.startsAt) || !reviewInstant(value.endsAt) || value.endsAt <= value.startsAt
+    || value.startsAt !== `${value.slotId.slice(5)}:00.000Z` || reviewUnit(value.unitId) === undefined) return null
+  return { externalId: value.externalId, slotId: value.slotId, startsAt: value.startsAt, endsAt: value.endsAt, unitId: reviewUnit(value.unitId) }
+}
+const sameReviewAttempt = (left, right) => Boolean(left && right) && ['externalId', 'slotId', 'startsAt', 'endsAt', 'unitId'].every(key => left[key] === right[key])
+function bookingReviewResolution(review) {
+  if (!reviewObject(review) || review.version !== 1 || review.kind !== 'booking_review' || review.durable !== true
+    || !reviewId(review.callId) || review.id !== `booking-review:${review.callId}` || review.needsReview !== false
+    || review.notificationStatus !== 'not_sent' || !Number.isSafeInteger(review.sourceRevision) || review.sourceRevision < 0
+    || !reviewInstant(review.at) || !reviewInstant(review.updatedAt) || review.updatedAt < review.at
+    || !review.booking || review.booking.status !== 'arranging') return null
+  const value = review.resolution, original = bookingReviewAttempt(review.booking)
+  if (!reviewObject(value) || value.callId !== review.callId || value.sourceRevision !== review.sourceRevision
+    || typeof value.requestId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{7,127}$/.test(value.requestId)
+    || !displayText(value.actorId, 256) || !value.actorId.trim() || !reviewInstant(value.checkedAt)
+    || value.checkedAt < review.at || value.checkedAt > review.updatedAt
+    || !['confirmed', 'not_booked'].includes(value.outcome) || !['pending', 'complete'].includes(value.projection)) return null
+  const attempt = bookingReviewAttempt(value.attempt)
+  if (!sameReviewAttempt(original, attempt)) return null
+  const booking = value.booking === null ? null : bookingReviewAttempt(value.booking)
+  if (value.outcome === 'confirmed' ? !sameReviewAttempt(attempt, booking) || !Number.isSafeInteger(value.booking.revision) || value.booking.revision < 0 : value.booking !== null) return null
+  return { requestId: value.requestId, callId: value.callId, sourceRevision: value.sourceRevision, actorId: value.actorId,
+    checkedAt: value.checkedAt, attempt, outcome: value.outcome, projection: value.projection,
+    booking: booking ? { ...booking, revision: value.booking.revision } : null }
+}
+function completedBookingReview(review) {
+  const resolution = bookingReviewResolution(review)
+  return resolution && resolution.projection === 'complete' ? resolution : null
+}
+function reviewMatchesBooking(resolution, booking) {
+  return Boolean(resolution && booking) && booking.slotId === resolution.attempt.slotId
+    && reviewUnit(booking.unitId) === resolution.attempt.unitId
+    && (booking.startsAt === undefined || booking.startsAt === resolution.attempt.startsAt)
+}
 let npCache = { key: null, value: [] }
 function needsPerson(s) {
   const key = `${sig.calls}|${sig.leads}|${Math.floor(Date.now() / 60000)}`
@@ -3747,7 +3797,8 @@ function needsPerson(s) {
       phrase: label(labels.emergency, e.emergencyKind, 'an emergency'), matched: String(e.matched ?? ''), at: e.at, sortAt: toTime(e.at) ?? 0,
       action: emergencyAction(e.emergencyKind, rec && rec.call && rec.call.transcript, e) })
   }
-  const bookingReviews = arr(s.events).filter(e => e && e.kind === 'booking_review' && e.durable === true)
+  const completedReviews = new Map(arr(s.events).filter(e => e && e.kind === 'booking_review' && e.durable === true).map(e => [e.callId, completedBookingReview(e)]))
+  const bookingReviews = arr(s.events).filter(e => e && e.kind === 'booking_review' && e.durable === true && !completedReviews.get(e.callId))
     .filter(e => { if (seen.has(e.callId)) return false; seen.add(e.callId); return true })
     .map(review => ({ type: 'bookingReview', review, callId: review.callId,
       phone: review.phone || 'unknown', name: review.name, at: review.at, sortAt: toTime(review.at) ?? 0 }))
@@ -3774,6 +3825,7 @@ function needsPerson(s) {
     if (hasCallback) continue
     for (const b of arr(p.bookings)) {
       if (!b || (b.status !== 'failed' && b.status !== 'arranging')) continue
+      if (reviewMatchesBooking(completedReviews.get(b.callId), b)) continue
       const at = callAt(p, b.callId)
       if (at == null || now - (toTime(at) ?? 0) > 2 * DAY_MS) continue
       if (arr(p.bookings).some((o) => o && o.status === 'confirmed' && o.slotId === b.slotId)) continue
@@ -3783,7 +3835,10 @@ function needsPerson(s) {
     }
   }
   stuck.sort((a, b) => b.sortAt - a.sortAt)
-  const value = items.filter((i) => i.type === 'emergency').concat(bookingReviews, tourChanges, items.filter((i) => i.type === 'callback'), stuck)
+  const relatedConcerns = records.filter(rec => completedReviews.get(rec.id) && !seen.has(rec.id)
+    && !tourChanges.some(item => item.callId === rec.id) && callStory(rec, s).needsPerson)
+    .map(rec => ({ type: 'callReview', callId: rec.id, phone: rec.phone, name: rec.name, at: rec.startedAt }))
+  const value = items.filter((i) => i.type === 'emergency').concat(bookingReviews, tourChanges, items.filter((i) => i.type === 'callback'), stuck, relatedConcerns)
   npCache = { key, value }
   return value
 }
@@ -4002,6 +4057,9 @@ function callStory(record, s) {
       ? tc.result.replace(/^\[Inventory source:[^\]\r\n]{1,2000}\]\s*/, '') : null,
   })) : []
   const ev = (kind, pred) => events.filter((e) => e && e.kind === kind && (!pred || pred(e)))
+  const review = ev('booking_review', e => e.durable === true && e.callId === r.id)[0]
+  const checkedReview = completedBookingReview(review)
+  const resolvedTool = t => t.name === 'book_tour' && reviewMatchesBooking(checkedReview, { ...t.args, unitId: t.args.unitId ?? null })
   const f = {
     emergency: null, restricted: null, booked: null, arranging: null, bookFailed: false, slotTaken: false, bookInvalid: false,
     pricedOut: null, loss: null, units: [], stretch: [], later: [], refused: null, bedroomMismatch: false, noMatch: false, stale: false,
@@ -4028,17 +4086,19 @@ function callStory(record, s) {
   for (const e of ev('question_answered', (x) => x.decision === 'answer')) f.answered.push({ question: String(e.question ?? ''), topic: String(e.topic ?? '') })
   for (const e of ev('question_refused')) f.refused = { question: String(e.question ?? ''), timesAsked: Number(e.timesAsked) || 1 }
   for (const e of ev('tour_booked')) {
+    if (e.status !== 'confirmed' && reviewMatchesBooking(checkedReview, e)) continue
     if (e.status === 'confirmed') f.booked = { unitId: e.unitId || null, when: String(e.slot ?? '') || null, email: e.prospectEmail || null }
     else if (e.status === 'arranging') f.arranging = { unitId: e.unitId || null }
     else if (e.status === 'failed') f.bookFailed = true
     else if (e.status === 'slot_taken') f.slotTaken = true
   }
-  for (const e of ev('booking_review')) f.arranging = { unitId: e.booking && e.booking.unitId || null }
+  for (const e of ev('booking_review', e => e.durable === true && e.callId === r.id && !completedBookingReview(e))) f.arranging = { unitId: e.booking && e.booking.unitId || null }
   for (const e of ev('loss_reason')) if (e.reason) f.loss = { kind: String(e.reason.kind ?? ''), detail: String(e.reason.detail ?? ''), evidence: String(e.reason.evidence ?? '') }
   for (const e of ev('slots_listed')) f.slots = Number(e.count) || 0
   const bookedAt = { index: -1 }
   tools.forEach((t, i) => {
     const res = t.result
+    if (resolvedTool(t)) return
     if (res === null || !res.trim()) { f.dropped = true; return }
     if (failedToolResult(res) || /^Something went wrong on my end/.test(res.trim())) { f.crash = true; return }
     if (t.name === 'capture_signal') {
@@ -4132,6 +4192,9 @@ function callStory(record, s) {
   const rules = [
     { id: 1, hit: () => Boolean(f.emergency), say: () => `They reported ${f.emergency.phrase}${f.emergency.matched ? ` — "${f.emergency.matched}"` : ''}. ${f.emergency.action}` },
     { id: 2, hit: () => Boolean(f.restricted), say: askedSentence },
+    { id: 21, hit: () => Boolean(checkedReview) && !f.arranging && !f.crash && !f.bookFailed, say: () => checkedReview.outcome === 'confirmed'
+      ? `A reservation${checkedReview.attempt.unitId ? ` for apartment ${checkedReview.attempt.unitId}` : ''} was verified when checked ${fmt.dateTime(checkedReview.checkedAt, { inSentence: true })}. Review the current calendar for later changes.`
+      : `No matching reservation was found when checked ${fmt.dateTime(checkedReview.checkedAt, { inSentence: true })}. The original booking attempt is closed.` },
     { id: 3, hit: () => Boolean(f.booked), say: bookedSentence },
     { id: 4, hit: () => Boolean(f.arranging), say: () => `The assistant is arranging a tour${f.arranging.unitId ? ` of apartment ${f.arranging.unitId}` : ''} — it isn't confirmed yet.` },
     { id: 19, hit: () => f.crash, say: () => 'A system step failed, so one or more requests could not be verified. Review the call.' },
@@ -4163,6 +4226,7 @@ function callStory(record, s) {
 
   const needsPersonFlag = Boolean(f.restricted) || f.bookFailed || Boolean(f.arranging) || f.crash
   const chips = []
+  if (checkedReview) chips.push({ text: checkedReview.outcome === 'confirmed' ? 'Reservation verified' : 'No reservation found', cls: 'chip-info', icon: 'calendar' })
   if (f.emergency) chips.push({ text: 'Emergency', cls: 'chip-danger', icon: 'siren' })
   if (needsPersonFlag) chips.push({ text: 'Needs a person', cls: 'chip-warn', icon: 'hand' })
   if (f.booked) chips.push({ text: 'Tour booked', cls: 'chip-ok', icon: 'calendar' })
@@ -4194,6 +4258,11 @@ function callStory(record, s) {
   }
   for (const t of tools) {
     const res = t.result
+    if (resolvedTool(t)) {
+      flushRun()
+      steps.push({ icon: 'calendar', text: 'The original booking step was reviewed later. See the saved reservation review.' })
+      continue
+    }
     if (t.name === 'capture_signal' && res !== null && /^Got it/.test(res)) { run.push({ signal: String(t.args.signal ?? ''), value: t.args.value, excerpt: String(t.args.excerpt ?? '') }); continue }
     flushRun()
     if (res === null || !res.trim()) { steps.push({ icon: 'x', text: 'No result was saved for this step; its outcome is unverified.' }); continue }
@@ -4250,6 +4319,7 @@ function callStory(record, s) {
     } else steps.push({ icon: 'x', text: "Tried something the assistant can't do." })
   }
   flushRun()
+  if (checkedReview) steps.push({ icon: 'calendar', text: `${checkedReview.outcome === 'confirmed' ? 'Reservation verified' : 'No matching reservation found'} when checked ${fmt.dateTime(checkedReview.checkedAt, { inSentence: true })}. No notification was sent by this review.` })
 
   return {
     who, wants, sentence, chips, facts, steps, findings: f,
@@ -4330,7 +4400,7 @@ const derive = {
     // without coverage metadata must not be presented as covering an entire day.
     return block && isYmd(block.target) && !block.startsAt && !block.endsAt ? [block.target] : []
   },
-  windowStart, personName, displayName, displayStage, needsPerson, callBackToday, dueTodayCount, toursOn, callRecords, callStory,
+  bookingReviewResolution, windowStart, personName, displayName, displayStage, needsPerson, callBackToday, dueTodayCount, toursOn, callRecords, callStory,
   todoSentence, escalationText, lossText, summarySentence, availabilityText, moveInText, budgetText, profileByPhone, profileForCall, factValue, bedroomsText, emergencyAction,
 }
 
@@ -4392,6 +4462,81 @@ function tourChangeRequestHtml(request) {
     '</span><span class="row-actions">' +
     (!reviewed && permissionAllowed('operate') ? `<button type="button" class="btn" data-action="review-tour-change" data-request="${esc(request.id)}" data-key="tour-change:${esc(request.id)}:review" data-write="leads">Review request</button>` : '') +
     '<a class="btn btn-quiet" href="#/calendar">Open calendar</a></span></div>'
+}
+let bookingReviewDialogOpen = false
+function restoreBookingReviewFocus() {
+  if (gated || documentAccessIssue || dialogs.length || document.activeElement !== document.body) return
+  const view = document.querySelector('.view:not([hidden])')
+  // On a narrow screen the Calls hero is hidden while its detail is open.
+  const heading = view && [...view.querySelectorAll('h1, .call-panel h2[tabindex]')].find(node => node.getClientRects().length)
+  if (heading) heading.focus({ preventScroll: true })
+}
+function reviewBooking(review, button) {
+  if (bookingReviewDialogOpen || !permissionAllowed('operate') || gated || busyNow('calendar') || button?.disabled || button?.getAttribute?.('aria-disabled') === 'true') return
+  const latest = arr(state.events).find(event => event && event.kind === 'booking_review' && event.durable === true && event.callId === review?.callId)
+  if (!latest || latest.id !== review.id || latest.sourceRevision !== review.sourceRevision || !reviewId(latest.callId)
+    || !Number.isSafeInteger(latest.sourceRevision) || latest.sourceRevision < 0 || completedBookingReview(latest)) return
+  const existing = bookingReviewResolution(latest)
+  if (latest.needsReview !== true && existing?.projection !== 'pending') return
+  if (!window.crypto?.randomUUID) { window.Atrium.toast('Reload this secure workspace before checking the reservation.', { kind: 'error' }); return }
+  const attempt = bookingReviewAttempt(latest.booking), epoch = scopeEpoch
+  let command = Object.freeze({ action: 'booking_review', requestId: existing?.requestId || window.crypto.randomUUID(),
+    callId: latest.callId, sourceRevision: latest.sourceRevision, expectedTimeZone: propertyTimeZone })
+  let closed = false, sending = false, conflicted = false
+  bookingReviewDialogOpen = true
+  const active = () => !closed && !gated && !documentAccessIssue && scopeEpoch === epoch && permissionAllowed('operate')
+  return window.Atrium.dialog({ title: 'Check the saved reservation', secondary: { label: 'Cancel' },
+    build(body) {
+      body.innerHTML = '<p>Check this original booking attempt against the saved calendar. This will record the result and finish related staff records when possible. It does not create another reservation or send a notification.</p>' +
+        `<p>Requested tour: ${esc(latest.booking ? fmt.dateTime(latest.booking.startsAt) : 'Time not recorded')}${latest.booking?.unitId ? ` · Residence ${esc(latest.booking.unitId)}` : ''}</p>`
+    },
+    primary: { label: existing?.projection === 'pending' ? 'Finish review' : 'Check reservation', busyLabel: 'Checking reservation…', async onClick(d) {
+      if (!active() || sending || busyNow('calendar')) return
+      if (conflicted) { d.close(); await reread('calls'); return }
+      sending = true
+      d.setError('')
+      try {
+        const result = await busy('calls', busy('calendar', api.post('/api/calendar', command, { doing: 'checking the saved reservation' })))
+        if (!active()) return
+        const saved = result.bookingReview, checked = bookingReviewResolution(saved)
+        // The backend can resume a canonical claim created in another tab. Only its
+        // request id may differ; call, revision and every attempted booking field must match.
+        if (!checked || saved.callId !== command.callId || saved.sourceRevision !== command.sourceRevision
+          || !sameReviewAttempt(checked.attempt, attempt) || result.notificationSent !== false
+          || (checked.projection === 'complete' ? result.status !== 'complete' : result.status !== 'pending_projection')) {
+          throw new Error('The reservation review acknowledgement could not be verified.')
+        }
+        seq.calls += 1
+        ingest('calls', { scope: result.scope, calls: state.calls, events: [...state.events.filter(event => event?.id !== saved.id), saved],
+          callsError: state.callsError, callsConfigured: state.callsConfigured, safetyEventsError: state.safetyEventsError,
+          bookingReviewsError: state.bookingReviewsError })
+        emit('data', state, new Set(['calls'])); paintChrome()
+        if (checked.projection === 'pending') {
+          command = Object.freeze({ ...command, requestId: checked.requestId })
+          d.setError('The calendar was checked; review updates are still pending. Retry verification to finish the same review. No notification was sent.')
+          d.setPrimary({ label: 'Retry verification' })
+          return
+        }
+        d.close()
+        restoreBookingReviewFocus()
+        window.Atrium.toast(checked.outcome === 'confirmed'
+          ? 'Reservation verified when checked. No notification was sent by this review.'
+          : 'No matching reservation found when checked. No notification was sent by this review.', { kind: 'ok' })
+        await Promise.all([reread('calendar'), reread('leads')])
+        restoreBookingReviewFocus()
+      } catch (error) {
+        if (!active() || error.signedOut || error.propertyAccess) return
+        if (error.status === 409 || error.status === 404 || (error.status >= 400 && error.status < 500)) {
+          conflicted = true
+          d.setError('This request changed or could not be verified. Close and refresh before checking it again. No booking outcome is confirmed by this screen.')
+          d.setPrimary({ label: 'Close and refresh' })
+        } else {
+          d.setError('The review could not be confirmed and may have been recorded. Retry verification to check the same attempt. Do not create another reservation based on this screen.')
+          d.setPrimary({ label: 'Retry verification' })
+        }
+      } finally { sending = false }
+    } }, onClose() { closed = true; bookingReviewDialogOpen = false },
+  })
 }
 function reviewTourChange(id) {
   if (!permissionAllowed('operate') || busyNow('leads')) return
@@ -4563,14 +4708,15 @@ function pollBanner(s, resource, what) {
 }
 function personRowHtml(item, s) {
   if (item.type === 'tourChange') return tourChangeRequestHtml(item.request)
+  if (item.type === 'callReview') return `<div class="row row-stack" data-key="np:${esc(item.callId)}"><span class="row-lead"><span class="row-lead-icon warn-text">${ico('hand')}</span></span><span class="row-body"><span class="row-title"><strong>Other call steps still need review</strong></span><span class="row-sub">The booking review is complete, but another request in this call still needs attention.</span></span><span class="row-actions">${link('calls', { id: item.callId }, 'Review call', 'btn')}</span></div>`
   if (item.type === 'bookingReview') {
-    const review = item.review
+    const review = item.review, resolution = bookingReviewResolution(review), pending = resolution && resolution.projection === 'pending'
     return `<div class="row row-stack" data-key="np:${esc(item.callId)}"><span class="row-lead"><span class="row-lead-icon warn-text">${ico('hand')}</span></span><span class="row-body">` +
-      `<span class="row-title"><strong>Verify ${esc(review.name || 'the caller')}'s tour</strong></span>` +
-      `<span class="row-sub">The calendar response was uncertain. Check the existing reservation before creating another tour.</span>` +
+      `<span class="row-title"><strong>${pending ? 'Finish the review for' : 'Verify'} ${esc(review.name || 'the caller')}${pending ? '' : "'s tour"}</strong></span>` +
+      `<span class="row-sub">${pending ? 'The calendar was checked; review updates are still pending.' : 'The calendar response was uncertain. Check the existing reservation before creating another tour.'}</span>` +
       `<span class="meta">${review.booking ? esc(fmt.dateTime(review.booking.startsAt)) : 'Time not recorded'}${review.booking && review.booking.unitId ? ` · Residence ${esc(review.booking.unitId)}` : ''}</span>` +
       '<span class="reassure">Saved for staff review. No notification has been sent.</span></span>' +
-      `<span class="row-actions">${link('calls', { id: item.callId }, 'Review call', 'btn')}${link('calendar', {}, 'Open calendar', 'btn btn-quiet')}</span></div>`
+      `<span class="row-actions">${permissionAllowed('operate') && (pending || review.needsReview === true) ? `<button type="button" class="btn" data-action="review-booking" data-call="${esc(item.callId)}" data-key="booking-review:${esc(item.callId)}:check" data-write="calendar">${pending ? 'Finish review' : 'Check reservation'}</button>` : ''}${link('calls', { id: item.callId }, 'Review call', 'btn')}${link('calendar', {}, 'Open calendar', 'btn btn-quiet')}</span></div>`
   }
   const phone = item.phone, shown = fmt.phone(phone)
   const rec = callRecords(s).find((r) => r.id === item.callId)
@@ -4692,6 +4838,11 @@ const todayView = {
     const btn = e.target.closest('button[data-action]')
     if (!btn || btn.getAttribute('aria-disabled') === 'true') return
     if (btn.dataset.action === 'review-tour-change') { reviewTourChange(btn.dataset.request); return }
+    if (btn.dataset.action === 'review-booking') {
+      const review = arr(state.events).find(event => event && event.kind === 'booking_review' && event.durable === true && event.callId === btn.dataset.call)
+      if (review) reviewBooking(review, btn)
+      return
+    }
     const fu = followUpsOf(state).find((f) => f && f.id === btn.dataset.fu)
     if (!fu) return
     if (btn.dataset.action === 'done') setFollowUpStatus(fu, 'done', { button: btn })
@@ -5122,7 +5273,7 @@ window.Atrium = {
   escapeHtml, fmt, api, gate, toast, confirm, prompt, dialog, register, navigate, route, hashFor, state, on,
   busy, busyNow, apply, refresh, calendarUrl, setCalendarRange, icons, icon, property, normalisePhone, labels, label, derive, hint, text, href,
   can: permissionAllowed, paintPermissions, preferenceKey, propertyUrl, databaseMode,
-  html: html_, announce, escape: escape_, setFollowUpStatus, reviewTourChange, boot, views: VIEWS.slice(),
+  html: html_, announce, escape: escape_, setFollowUpStatus, reviewTourChange, reviewBooking, boot, views: VIEWS.slice(),
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot)
 else boot()
@@ -5169,14 +5320,49 @@ function callOverviewHtml(s, records, stories) {
     ['Calls to review', review, 'Open staff work or a flagged outcome']]
   return `<div class="page-metrics" aria-label="Loaded call history">${metrics.map(([label, value, detail]) => `<div><span class="metric-label">${esc(label)}</span><strong class="metric-value num">${known ? value : '—'}</strong><span class="metric-detail">${known ? esc(detail) : 'Waiting for call records'}</span></div>`).join('')}</div>`
 }
+function bookingReviewFor(rec) {
+  return (rec && rec.events || []).find(e => e && e.kind === 'booking_review' && e.durable === true && e.callId === rec.id) || null
+}
+function bookingReviewPresentation(review) {
+  if (!review) return null
+  const resolution = typeof derive.bookingReviewResolution === 'function' ? derive.bookingReviewResolution(review) : null
+  const complete = resolution && resolution.projection === 'complete' && review.needsReview === false
+  const pending = resolution && resolution.projection === 'pending'
+  if (pending) return { resolution, title: 'Review updates are still pending',
+    detail: 'The calendar was checked, but staff records still need updating. Finish the review before treating this request as resolved. No notification was sent by this review.', action: 'Finish review', attention: true }
+  if (complete) return { resolution, title: resolution.outcome === 'confirmed' ? 'Reservation verified' : 'No reservation found',
+    detail: resolution.outcome === 'confirmed'
+      ? 'The reservation matched this request when checked. Later changes may have been made; review the current calendar before contacting the prospect. No notification was sent by this review.'
+      : 'No matching reservation was on the calendar when checked. This original attempt cannot create one later. Arrange another time with the prospect if needed. No notification was sent by this review.', action: null, attention: false }
+  return { resolution: null, title: 'Tour booking needs verification',
+    detail: review.needsReview === true
+      ? 'The calendar response was uncertain. Check the existing reservation before arranging another tour. Caller details are saved here; no notification has been sent.'
+      : 'This review result could not be verified. Refresh the workspace and check the existing reservation before arranging another tour. No notification is confirmed here.',
+    action: review.needsReview === true ? 'Check reservation' : null, attention: true }
+}
+function checkBookingReview(button) {
+  if (!button || button.disabled || button.getAttribute?.('aria-disabled') === 'true'
+    || !A.can('operate') || A.busyNow('calendar') || typeof A.reviewBooking !== 'function') return
+  const record = derive.callRecords(A.state).find(rec => rec.id === button.dataset.call)
+  const review = bookingReviewFor(record), presentation = bookingReviewPresentation(review)
+  if (presentation && presentation.action) return A.reviewBooking(review, button)
+}
 function callContextHtml(rec, story, s) {
   const work = callWork(rec, s)
-  const review = (rec.events || []).find(e => e && e.kind === 'booking_review' && e.durable === true)
+  const review = bookingReviewFor(rec), verification = bookingReviewPresentation(review)
   const leadLink = rec.profile ? `<a class="btn btn-quiet" href="${esc(A.hashFor('leads', { phone: rec.profile.phone, ...(rec.profile.phone === 'unknown' ? { call: rec.id } : {}), tab: work.count ? 'todo' : 'all' }))}">View prospect ${ico('chevron-right')}</a>` : ''
   const queueLink = work.count ? `<a class="btn" href="${esc(A.hashFor('leads', { tab: 'todo', ...(rec.profile ? { phone: rec.profile.phone, ...(rec.profile.phone === 'unknown' ? { call: rec.id } : {}) } : {}) }))}">Review staff work ${ico('chevron-right')}</a>` : ''
-  const title = review ? 'Tour booking needs verification' : work.requests.length ? 'Tour change awaiting staff review' : work.followUps.length ? `${text.plural(work.followUps.length, 'follow-up')} to complete` : story.emergency ? 'Safety report needs review' : story.needsPerson ? 'A staff decision is needed' : rec.profile ? 'Conversation saved to this prospect' : 'Call record available'
-  const detail = review ? 'The calendar response was uncertain. Check the existing reservation before arranging another tour. Caller details are saved here; no notification has been sent.' : work.requests.length ? 'The request is saved. This does not confirm a changed tour or a notification to staff.' : work.followUps.length ? 'Open the work queue for the saved task, contact details, and due time.' : rec.profile ? 'Review requirements, tours, and conversation history together.' : 'A linked prospect profile is not available in the loaded records.'
-  return `<section class="call-context${work.count || story.needsPerson || story.emergency ? ' call-context-attention' : ''}"><span class="section-kicker">Next step</span><h3>${esc(title)}</h3><p>${esc(detail)}</p>${review ? `<p>Requested tour: ${esc(review.booking ? fmt.dateTime(review.booking.startsAt) : 'Time not recorded')}${review.booking && review.booking.unitId ? ` · Residence ${esc(review.booking.unitId)}` : ''}</p>${review.callbackPhone ? `<p>Requested callback: ${esc(fmt.phone(review.callbackPhone.value))}</p>` : ''}${review.email ? `<p>Email: ${esc(review.email)}</p>` : ''}<a class="btn" href="#/calendar">Review calendar</a>` : ''}${work.requests.map(r => `<p class="call-request-quote">“${esc(text.truncate((r.excerpts || []).slice(-1)[0] || 'Tour-change request', 220))}”</p>`).join('')}<div class="panel-actions">${queueLink}${leadLink}</div></section>`
+  const title = verification ? verification.title : work.requests.length ? 'Tour change awaiting staff review' : work.followUps.length ? `${text.plural(work.followUps.length, 'follow-up')} to complete` : story.emergency ? 'Safety report needs review' : story.needsPerson ? 'A staff decision is needed' : rec.profile ? 'Conversation saved to this prospect' : 'Call record available'
+  const detail = verification ? verification.detail : work.requests.length ? 'The request is saved. This does not confirm a changed tour or a notification to staff.' : work.followUps.length ? 'Open the work queue for the saved task, contact details, and due time.' : rec.profile ? 'Review requirements, tours, and conversation history together.' : 'A linked prospect profile is not available in the loaded records.'
+  const reviewAction = verification && verification.action && A.can('operate') && typeof A.reviewBooking === 'function'
+    ? `<button type="button" class="btn btn-primary" data-action="review-booking" data-call="${esc(rec.id)}" data-key="booking-review:${esc(rec.id)}:check" data-write="calendar">${esc(verification.action)}</button>` : ''
+  return `<section class="call-context${work.count || story.needsPerson || story.emergency || verification && verification.attention ? ' call-context-attention' : ''}"><span class="section-kicker">${verification && !verification.attention ? 'Booking review record' : 'Next step'}</span><h3>${esc(title)}</h3><p>${esc(detail)}</p>` +
+    (review ? `<p>Requested tour: ${esc(review.booking ? fmt.dateTime(review.booking.startsAt) : 'Time not recorded')}${review.booking && review.booking.unitId ? ` · Residence ${esc(review.booking.unitId)}` : ''}</p>` +
+      (verification.resolution ? `<p>Checked ${esc(fmt.dateTime(verification.resolution.checkedAt))}. This records the result at that time.</p>` : '') +
+      (review.callbackPhone ? `<p>Requested callback: ${esc(fmt.phone(review.callbackPhone.value))}</p>` : '') +
+      (review.email ? `<p>Email: ${esc(review.email)}</p>` : '') +
+      `<div class="panel-actions">${reviewAction}<a class="btn${reviewAction ? ' btn-quiet' : ''}" href="#/calendar">Review calendar</a></div>` : '') +
+    work.requests.map(r => `<p class="call-request-quote">“${esc(text.truncate((r.excerpts || []).slice(-1)[0] || 'Tour-change request', 220))}”</p>`).join('') + `<div class="panel-actions">${queueLink}${leadLink}</div></section>`
 }
 
 function matches(rec, story, q) {
@@ -5351,6 +5537,8 @@ const view = {
       else if (btn.dataset.action === 'read') {
         const d = this.panel.querySelector('.convo')
         if (d) { d.open = true; d.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }) }
+      } else if (btn.dataset.action === 'review-booking') {
+        checkBookingReview(btn)
       } else if (btn.dataset.action === 'handled') {
         const fu = ((A.state.leads && A.state.leads.followUps) || []).find((f) => f && f.id === btn.dataset.fu)
         if (fu) A.setFollowUpStatus(fu, 'done', { verb: 'handled', button: btn })

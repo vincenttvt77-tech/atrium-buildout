@@ -5,6 +5,7 @@ import { createServer, request } from 'node:http'
 import { createHash } from 'node:crypto'
 import handler from '../../api/vapi.ts'
 import syncHandler from '../../api/vapi-sync.ts'
+import calendarHandler from '../../api/calendar.ts'
 import { createFoundationTestDatabase, seedFoundationTestDatabase } from '../../scripts/lib/foundation-test.mjs'
 import { createDatabaseRuntime } from '../../src/application/runtime.ts'
 import { mintUserSession } from '../../src/auth/index.ts'
@@ -94,7 +95,7 @@ before(async () => {
       Object.defineProperty(req, 'atriumRuntime', { get() { runtimeLookups++; return runtime } })
       res.status = function (code) { this.statusCode = code; return this }
       res.json = function (value) { this.setHeader('content-type', 'application/json'); this.end(JSON.stringify(value)); return this }
-      await (req.url === '/api/vapi-sync' ? syncHandler : handler)(req, res)
+      await (req.url === '/api/vapi-sync' ? syncHandler : req.url === '/api/calendar' ? calendarHandler : handler)(req, res)
     } catch (error) {
       res.statusCode = 500; res.end(JSON.stringify({ testHarnessError: error.message }))
     }
@@ -585,4 +586,70 @@ test('uncertain PostgreSQL bookings retain callback details and expose durable r
   assert.equal(own.status, 200); assert.equal(foreign.status, 200)
   assert.ok(own.body.events.some(event => event.id === `booking-review:${callId}`))
   assert.ok(!foreign.body.events.some(event => event.id === `booking-review:${callId}`))
+})
+
+
+test('staff booking review enforces property permission and atomically repairs the actual uncertain webhook call', async () => {
+  const callId = 'postgres-uncertain-booking', caller = '+15555550403'
+  const ended = await http('POST', '/api/vapi', { message: { type: 'end-of-call-report',
+    call: { id: callId, assistantId: 'synthetic-assistant-b' } } }, { 'x-vapi-secret': secret })
+  assert.equal(ended.status, 503)
+  const readDocuments = async () => (await db.admin.query(`SELECT key,value FROM atrium.operational_documents
+    WHERE organization_id='organization-b' AND property_id='property-b1' ORDER BY key`)).rows
+  const readCalendar = async () => (await db.admin.query(`SELECT state FROM atrium.calendars
+    WHERE organization_id='organization-b' AND property_id='property-b1'`)).rows[0].state
+  const beforeDocuments = await readDocuments(), beforeCalendar = await readCalendar()
+  const review = beforeDocuments.find(row => row.key === `booking-review:${callId}`).value
+  assert.ok(review.booking.externalId)
+  assert.ok(review.booking.endsAt)
+  const body = { action: 'booking_review', requestId: 'postgres-staff-review', callId,
+    sourceRevision: review.sourceRevision, expectedTimeZone: 'America/Los_Angeles', actorId: 'forged-staff' }
+  assert.equal((await http('POST', '/api/calendar', body, headers('viewer-a'))).status, 403)
+  assert.equal((await http('POST', '/api/calendar', body, headers('owner-a', 'property-b1', 'organization-b'))).status, 403)
+  const wrongProperty = await http('POST', '/api/calendar', { ...body, expectedTimeZone: 'America/Chicago' }, headers('owner-a'))
+  assert.equal(wrongProperty.status, 409)
+  assert.deepEqual(await readDocuments(), beforeDocuments)
+  assert.deepEqual(await readCalendar(), beforeCalendar)
+
+  const transaction = db.app.transaction
+  let interrupted = false
+  db.app.transaction = function (context, work) {
+    return transaction.call(this, context, async client => {
+      const guarded = Object.create(client)
+      guarded.query = async (...args) => {
+        if (/INSERT INTO atrium\.operational_documents/.test(String(args[0])) && args[1]?.[2] === `lead:${caller}`) {
+          interrupted = true
+          throw new Error('Synthetic staff review projection failure')
+        }
+        return client.query(...args)
+      }
+      return work(guarded)
+    })
+  }
+  let failed
+  try { failed = await http('POST', '/api/calendar', body, headers('owner-b', 'property-b1', 'organization-b')) }
+  finally { db.app.transaction = transaction }
+  assert.equal(interrupted, true)
+  assert.equal(failed.status, 503)
+  assert.deepEqual(await readDocuments(), beforeDocuments, 'call claim, lead, receipt and review share rollback')
+  assert.deepEqual(await readCalendar(), beforeCalendar, 'calendar fence must roll back with failed projection')
+
+  const completed = await http('POST', '/api/calendar', body, headers('owner-b', 'property-b1', 'organization-b'))
+  assert.equal(completed.status, 200, JSON.stringify(completed.body))
+  assert.equal(completed.body.scope.propertyId, 'property-b1')
+  assert.equal(completed.body.status, 'complete')
+  assert.equal(completed.body.notificationSent, false)
+  assert.equal(completed.body.bookingReview.needsReview, false)
+  assert.equal(completed.body.bookingReview.resolution.outcome, 'confirmed')
+  assert.equal(completed.body.bookingReview.resolution.projection, 'complete')
+  assert.notEqual(completed.body.bookingReview.resolution.actorId, 'forged-staff')
+  const afterDocuments = await readDocuments(), profile = afterDocuments.find(row => row.key === `lead:${caller}`).value
+  assert.equal(profile.calls.filter(call => call.callId === callId).length, 1)
+  assert.equal(profile.callbackPhone.value, '+15555550404')
+  const receipts = (await readCalendar()).bookingReviewResolutions
+  assert.equal(receipts.filter(row => row.callId === callId).length, 1)
+  const replay = await http('POST', '/api/calendar', body, headers('owner-b', 'property-b1', 'organization-b'))
+  assert.equal(replay.status, 200)
+  assert.deepEqual(replay.body.bookingReview.resolution, completed.body.bookingReview.resolution)
+  assert.deepEqual((await readDocuments()).find(row => row.key === `lead:${caller}`).value, profile)
 })

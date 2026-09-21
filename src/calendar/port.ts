@@ -5,6 +5,7 @@ import { openSlots, generateSlots, bookingSlot, canBook, unitBlocksFor } from '.
 import { effectiveOptions } from './settings.ts'
 import type { SlotOptions } from './slots.ts'
 import { heldEmergency, CalendarInteractionPausedError } from './safety.ts'
+import { bookingReviewBlocksCreate } from './booking-review.ts'
 import { tourChangeHold, tourProspectPhone, TourChangeRequiredError } from '../leads/tour-change.ts'
 
 const normalizedUnit = (unit: string | null | undefined): string | null => unit?.trim().toUpperCase() || null
@@ -50,6 +51,9 @@ export function storeBackedCalendar(
           // The callback can be replayed after a competing write. Resolve all mutable
           // policy and occupancy against that invocation's state, never a stale pre-read.
           reason = 'slot already booked or blocked'
+          if (bookingReviewBlocksCreate(state, String(intent.request.interactionId), intent.idempotencyKey)) {
+            throw new BookingConflictError('This booking attempt was reconciled by staff. Contact the leasing team before arranging another tour.')
+          }
           const existing = state.bookings.find((booking) => booking.externalId === intent.idempotencyKey)
           if (existing) {
             verifyRetry(existing, intent)

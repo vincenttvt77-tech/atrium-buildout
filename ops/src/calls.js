@@ -38,14 +38,49 @@ function callOverviewHtml(s, records, stories) {
     ['Calls to review', review, 'Open staff work or a flagged outcome']]
   return `<div class="page-metrics" aria-label="Loaded call history">${metrics.map(([label, value, detail]) => `<div><span class="metric-label">${esc(label)}</span><strong class="metric-value num">${known ? value : '—'}</strong><span class="metric-detail">${known ? esc(detail) : 'Waiting for call records'}</span></div>`).join('')}</div>`
 }
+function bookingReviewFor(rec) {
+  return (rec && rec.events || []).find(e => e && e.kind === 'booking_review' && e.durable === true && e.callId === rec.id) || null
+}
+function bookingReviewPresentation(review) {
+  if (!review) return null
+  const resolution = typeof derive.bookingReviewResolution === 'function' ? derive.bookingReviewResolution(review) : null
+  const complete = resolution && resolution.projection === 'complete' && review.needsReview === false
+  const pending = resolution && resolution.projection === 'pending'
+  if (pending) return { resolution, title: 'Review updates are still pending',
+    detail: 'The calendar was checked, but staff records still need updating. Finish the review before treating this request as resolved. No notification was sent by this review.', action: 'Finish review', attention: true }
+  if (complete) return { resolution, title: resolution.outcome === 'confirmed' ? 'Reservation verified' : 'No reservation found',
+    detail: resolution.outcome === 'confirmed'
+      ? 'The reservation matched this request when checked. Later changes may have been made; review the current calendar before contacting the prospect. No notification was sent by this review.'
+      : 'No matching reservation was on the calendar when checked. This original attempt cannot create one later. Arrange another time with the prospect if needed. No notification was sent by this review.', action: null, attention: false }
+  return { resolution: null, title: 'Tour booking needs verification',
+    detail: review.needsReview === true
+      ? 'The calendar response was uncertain. Check the existing reservation before arranging another tour. Caller details are saved here; no notification has been sent.'
+      : 'This review result could not be verified. Refresh the workspace and check the existing reservation before arranging another tour. No notification is confirmed here.',
+    action: review.needsReview === true ? 'Check reservation' : null, attention: true }
+}
+function checkBookingReview(button) {
+  if (!button || button.disabled || button.getAttribute?.('aria-disabled') === 'true'
+    || !A.can('operate') || A.busyNow('calendar') || typeof A.reviewBooking !== 'function') return
+  const record = derive.callRecords(A.state).find(rec => rec.id === button.dataset.call)
+  const review = bookingReviewFor(record), presentation = bookingReviewPresentation(review)
+  if (presentation && presentation.action) return A.reviewBooking(review, button)
+}
 function callContextHtml(rec, story, s) {
   const work = callWork(rec, s)
-  const review = (rec.events || []).find(e => e && e.kind === 'booking_review' && e.durable === true)
+  const review = bookingReviewFor(rec), verification = bookingReviewPresentation(review)
   const leadLink = rec.profile ? `<a class="btn btn-quiet" href="${esc(A.hashFor('leads', { phone: rec.profile.phone, ...(rec.profile.phone === 'unknown' ? { call: rec.id } : {}), tab: work.count ? 'todo' : 'all' }))}">View prospect ${ico('chevron-right')}</a>` : ''
   const queueLink = work.count ? `<a class="btn" href="${esc(A.hashFor('leads', { tab: 'todo', ...(rec.profile ? { phone: rec.profile.phone, ...(rec.profile.phone === 'unknown' ? { call: rec.id } : {}) } : {}) }))}">Review staff work ${ico('chevron-right')}</a>` : ''
-  const title = review ? 'Tour booking needs verification' : work.requests.length ? 'Tour change awaiting staff review' : work.followUps.length ? `${text.plural(work.followUps.length, 'follow-up')} to complete` : story.emergency ? 'Safety report needs review' : story.needsPerson ? 'A staff decision is needed' : rec.profile ? 'Conversation saved to this prospect' : 'Call record available'
-  const detail = review ? 'The calendar response was uncertain. Check the existing reservation before arranging another tour. Caller details are saved here; no notification has been sent.' : work.requests.length ? 'The request is saved. This does not confirm a changed tour or a notification to staff.' : work.followUps.length ? 'Open the work queue for the saved task, contact details, and due time.' : rec.profile ? 'Review requirements, tours, and conversation history together.' : 'A linked prospect profile is not available in the loaded records.'
-  return `<section class="call-context${work.count || story.needsPerson || story.emergency ? ' call-context-attention' : ''}"><span class="section-kicker">Next step</span><h3>${esc(title)}</h3><p>${esc(detail)}</p>${review ? `<p>Requested tour: ${esc(review.booking ? fmt.dateTime(review.booking.startsAt) : 'Time not recorded')}${review.booking && review.booking.unitId ? ` · Residence ${esc(review.booking.unitId)}` : ''}</p>${review.callbackPhone ? `<p>Requested callback: ${esc(fmt.phone(review.callbackPhone.value))}</p>` : ''}${review.email ? `<p>Email: ${esc(review.email)}</p>` : ''}<a class="btn" href="#/calendar">Review calendar</a>` : ''}${work.requests.map(r => `<p class="call-request-quote">“${esc(text.truncate((r.excerpts || []).slice(-1)[0] || 'Tour-change request', 220))}”</p>`).join('')}<div class="panel-actions">${queueLink}${leadLink}</div></section>`
+  const title = verification ? verification.title : work.requests.length ? 'Tour change awaiting staff review' : work.followUps.length ? `${text.plural(work.followUps.length, 'follow-up')} to complete` : story.emergency ? 'Safety report needs review' : story.needsPerson ? 'A staff decision is needed' : rec.profile ? 'Conversation saved to this prospect' : 'Call record available'
+  const detail = verification ? verification.detail : work.requests.length ? 'The request is saved. This does not confirm a changed tour or a notification to staff.' : work.followUps.length ? 'Open the work queue for the saved task, contact details, and due time.' : rec.profile ? 'Review requirements, tours, and conversation history together.' : 'A linked prospect profile is not available in the loaded records.'
+  const reviewAction = verification && verification.action && A.can('operate') && typeof A.reviewBooking === 'function'
+    ? `<button type="button" class="btn btn-primary" data-action="review-booking" data-call="${esc(rec.id)}" data-key="booking-review:${esc(rec.id)}:check" data-write="calendar">${esc(verification.action)}</button>` : ''
+  return `<section class="call-context${work.count || story.needsPerson || story.emergency || verification && verification.attention ? ' call-context-attention' : ''}"><span class="section-kicker">${verification && !verification.attention ? 'Booking review record' : 'Next step'}</span><h3>${esc(title)}</h3><p>${esc(detail)}</p>` +
+    (review ? `<p>Requested tour: ${esc(review.booking ? fmt.dateTime(review.booking.startsAt) : 'Time not recorded')}${review.booking && review.booking.unitId ? ` · Residence ${esc(review.booking.unitId)}` : ''}</p>` +
+      (verification.resolution ? `<p>Checked ${esc(fmt.dateTime(verification.resolution.checkedAt))}. This records the result at that time.</p>` : '') +
+      (review.callbackPhone ? `<p>Requested callback: ${esc(fmt.phone(review.callbackPhone.value))}</p>` : '') +
+      (review.email ? `<p>Email: ${esc(review.email)}</p>` : '') +
+      `<div class="panel-actions">${reviewAction}<a class="btn${reviewAction ? ' btn-quiet' : ''}" href="#/calendar">Review calendar</a></div>` : '') +
+    work.requests.map(r => `<p class="call-request-quote">“${esc(text.truncate((r.excerpts || []).slice(-1)[0] || 'Tour-change request', 220))}”</p>`).join('') + `<div class="panel-actions">${queueLink}${leadLink}</div></section>`
 }
 
 function matches(rec, story, q) {
@@ -220,6 +255,8 @@ const view = {
       else if (btn.dataset.action === 'read') {
         const d = this.panel.querySelector('.convo')
         if (d) { d.open = true; d.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }) }
+      } else if (btn.dataset.action === 'review-booking') {
+        checkBookingReview(btn)
       } else if (btn.dataset.action === 'handled') {
         const fu = ((A.state.leads && A.state.leads.followUps) || []).find((f) => f && f.id === btn.dataset.fu)
         if (fu) A.setFollowUpStatus(fu, 'done', { verb: 'handled', button: btn })

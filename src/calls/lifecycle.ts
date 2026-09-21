@@ -279,3 +279,25 @@ export function completeCall(value: CallLifecycle, input: { now: string; frozenR
   work.phase = 'complete'; work.completedAt = at
   return change(work, at)
 }
+
+/** Validate stored lifecycle evidence without issuing new admission or changing its revision. */
+export function validateCallLifecycle(value: CallLifecycle): CallLifecycle { return copyWork(value) }
+
+/** Called only after a staff claim and authoritative fenced calendar observation. */
+export function resolveReviewedBookingIntent(value: CallLifecycle, input: {
+  toolId: string; requestId: string; outcome: 'confirmed' | 'not_booked'; checkedAt: string; now: string
+}): CallLifecycle {
+  const work = copyWork(value), request = command(input, ['toolId', 'requestId', 'outcome', 'checkedAt', 'now'])
+  const at = timestamp(request.now), checkedAt = timestamp(request.checkedAt)
+  if (!id(request.toolId) || !id(request.requestId) || !['confirmed', 'not_booked'].includes(request.outcome)) fail()
+  const result = JSON.stringify({ decision: 'staff_booking_review', requestId: request.requestId,
+    outcome: request.outcome, checkedAt, notificationSent: false })
+  const intent = work.intents.find(row => row.id === request.toolId)
+  if (intent?.name === 'book_tour' && intent.status === 'complete' && intent.result === result) return work
+  if (!work.end || work.phase === 'frozen' || work.phase === 'complete' || !intent || intent.name !== 'book_tour'
+    || !['needs_review', 'dispatch_started'].includes(intent.status) || intent.dispatchStartedAt === null
+    || work.intents.some(row => row.id !== request.toolId && !known(row))) fail('call_work_unresolved')
+  intent.status = 'complete'; intent.completedAt = at; intent.result = result
+  work.phase = 'ending'
+  return change(work, at)
+}
