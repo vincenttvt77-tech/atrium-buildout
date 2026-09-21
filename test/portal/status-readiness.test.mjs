@@ -49,13 +49,14 @@ function portal({ demo = false, persistent = false } = {}) {
     advance(ms) { clock += ms },
     transport(fn) { transport = fn },
     markRefreshedNow() { window.statusViewForTest.refreshedAt = clock },
-    success() {
+    html: () => root.innerHTML,
+    success(overrides = {}) {
       const p = window.ATRIUM_PROPERTY
       return { ok: true, status: 200, json: async () => ({
         scope: { organizationId: p.organizationId, propertyId: p.propertyId,
           configurationVersion: p.configurationVersion, permissionVersion: p.permissionVersion },
         timeZone: p.timeZone, store: { kind: 'postgres', durable: true }, callsConfigured: true,
-        calls: [], events: [], profiles: [], followUps: [], slots: [], bookings: [], blocks: [],
+        calls: [], events: [], profiles: [], followUps: [], slots: [], bookings: [], blocks: [], ...overrides,
       }) }
     },
     ready() {
@@ -289,4 +290,85 @@ test('manual refresh confirms only after every resource advances beyond its prio
   assert.equal(ui.messages.at(-1).text, 'Workspace data refreshed.')
   assert.equal(ui.messages.at(-1).kind, 'ok')
   assert.equal(ui.busy(), false); assert.equal(ui.buttonBusy(), false); assert.equal(ui.activeTimers(), 0)
+})
+
+
+test('a booking-review feed failure retires a healthy Status summary and recovery restores it', () => {
+  const ui = portal()
+  ui.ready()
+  assert.equal(ui.render().classes, 'is-ok')
+  ui.state.bookingReviewsError = 'Synthetic booking-review read unavailable'
+  const failed = ui.render()
+  assert.equal(failed.title, 'Booking reviews need attention.')
+  assert.equal(failed.classes, 'is-warn')
+  assert.match(failed.detail, /booking review list may be incomplete.*Refresh now/)
+  assert.doesNotMatch(failed.detail, /Workspace data is available|all.*loaded/)
+  ui.state.bookingReviewsError = null
+  const recovered = ui.render()
+  assert.equal(recovered.title, 'Workspace data is available.')
+  assert.equal(recovered.classes, 'is-ok')
+  assert.doesNotMatch(ui.html(), /<dt>Booking reviews<\/dt>/)
+})
+
+test('booking-review support details repaint even when a higher-priority outage keeps the summary unchanged', () => {
+  for (const [field, title] of [['safetyEventsError', 'Safety reports need attention.'], ['callsError', 'Call history needs attention.']]) {
+    const ui = portal()
+    ui.ready(); ui.state[field] = 'Synthetic earlier failure'
+    assert.equal(ui.render().title, title)
+    assert.doesNotMatch(ui.html(), /<dt>Booking reviews<\/dt>/)
+    ui.state.bookingReviewsError = '<img src=x onerror=secret()>private-review-diagnostic'
+    assert.equal(ui.render().title, title, 'the existing higher-priority warning remains')
+    assert.match(ui.html(), /<dt>Booking reviews<\/dt><dd>Temporarily unavailable; the booking review list may be incomplete\.<\/dd>/)
+    assert.doesNotMatch(ui.html(), /private-review-diagnostic|onerror=|&lt;img/, 'raw backend diagnostics are not displayed even escaped')
+    ui.state.bookingReviewsError = null
+    assert.equal(ui.render().title, title)
+    assert.doesNotMatch(ui.html(), /<dt>Booking reviews<\/dt>/, 'recovery repaints even though the summary is still unchanged')
+  }
+})
+
+test('booking-review warnings preserve setup, failed-request and historical-write evidence', () => {
+  const ui = portal()
+  ui.ready()
+  ui.state.bookingReviewsError = 'Synthetic unavailable'
+  ui.state.lastWriteError = { message: 'Synthetic unknown save', status: 503,
+    at: '2032-06-01T15:00:00Z', doing: 'Saving a note' }
+  const failure = ui.render()
+  assert.equal(failure.title, 'Booking reviews need attention.')
+  assert.match(failure.detail, /A previous change reported an error.*For support/)
+  assert.equal(failure.classes, 'is-warn')
+  ui.state.errors.calendar = { message: 'Synthetic calendar unavailable', at: '2032-06-01T15:00:00Z' }
+  assert.equal(ui.render().title, 'Some workspace information is unavailable.')
+  ui.state.notConfigured = true
+  assert.equal(ui.render().title, 'This workspace needs setup.')
+  delete ui.state.errors.calendar
+  ui.state.notConfigured = false
+  ui.state.bookingReviewsError = null
+  const recovered = ui.render()
+  assert.equal(recovered.title, 'Workspace data is available.')
+  assert.match(recovered.detail, /A previous change reported an error.*For support/)
+  assert.equal(recovered.classes, '', 'restored reads do not imply an uncertain write succeeded')
+})
+
+test('manual refresh warns on an HTTP200 partial booking-review failure and confirms a later full recovery', async () => {
+  const ui = portal()
+  ui.ready(); ui.advance(1000)
+  ui.transport(path => path === '/api/vapi'
+    ? ui.success({ bookingReviewsError: 'Synthetic review projection unavailable' }) : ui.success())
+  await ui.manualRefresh()
+  assert.deepEqual(Object.keys(ui.state.errors), [], 'HTTP resources loaded without a transport error')
+  assert.equal(ui.state.callsConfigured, true)
+  assert.equal(ui.state.lastGoodAt.calls, '2032-06-01T15:00:01.000Z')
+  assert.equal(ui.state.bookingReviewsError, 'Synthetic review projection unavailable')
+  assert.equal(ui.messages.at(-1).kind, 'warn')
+  assert.match(ui.messages.at(-1).text, /Refresh is incomplete/)
+  assert.doesNotMatch(ui.messages.at(-1).text, /data refreshed|up to date/i)
+  assert.equal(ui.render().title, 'Booking reviews need attention.')
+  assert.equal(ui.busy(), false); assert.equal(ui.buttonBusy(), false); assert.equal(ui.activeTimers(), 0)
+  ui.advance(1000); ui.transport(() => ui.success())
+  await ui.manualRefresh()
+  assert.equal(ui.state.bookingReviewsError, null)
+  assert.equal(ui.messages.at(-1).kind, 'ok')
+  assert.equal(ui.messages.at(-1).text, 'Workspace data refreshed.')
+  assert.equal(ui.render().classes, 'is-ok')
+  assert.doesNotMatch(ui.html(), /<dt>Booking reviews<\/dt>/)
 })

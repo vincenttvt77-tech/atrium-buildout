@@ -23,6 +23,11 @@ node scripts/validate-data.mjs   # check property data against the runtime contr
 See [db/README.md](db/README.md) for the PostgreSQL runtime contract and current
 deployment limits; [SETUP.md](SETUP.md) covers the existing phone integration.
 
+Use the [read-only deployment preflight](docs/demo-readiness.md) to check public
+HTML, persistent storage, the backend tool contract and unauthenticated access
+gates without credentials or paid calls. A pass does not establish phone, booking
+or tenant-isolation acceptance; the guide lists those separate checks.
+
 The PostgreSQL portal includes **Status → Account security** for changing your own
 password, viewing active logins and signing out individual or all other sessions.
 Current-password verification, shared database rate limits and registered session

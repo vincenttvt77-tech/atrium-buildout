@@ -2593,6 +2593,7 @@ function statusSummary(s, rows) {
     `Couldn’t refresh ${text.list(failed.map(name => labels[name]))}. Some information may be missing or out of date.`, 'is-warn')
   if (s.safetyEventsError) return summary('Safety reports need attention.', 'The safety report list may be incomplete. Try Refresh now.', 'is-warn')
   if (s.callsError) return summary('Call history needs attention.', 'Recent recordings and transcripts could not be refreshed. See the details below.', 'is-warn')
+  if (s.bookingReviewsError) return summary('Booking reviews need attention.', 'The booking review list may be incomplete. Try Refresh now.', 'is-warn')
   const stores = ['leads', 'calendar'].filter(name => s.loaded[name]).map(name => s[name] && s[name].store)
   if (stores.some(store => store && store.durable === false) && !(isDemo && !isPersistentDemo)) {
     return summary('Saving needs attention.', 'Changes to callers or the calendar may not be saved. See the details below.', 'is-warn')
@@ -2637,7 +2638,7 @@ const statusView = {
     const fresh = Object.fromEntries(Object.keys(RESOURCES).map(name => [name, dashboardFresh(s, name)]))
     const inventory = s.leads && s.leads.feedbackInventory
     const model = { rows, summary, errors: s.errors, lastWriteError: s.lastWriteError, health: s.health, counts, lastPollAt: s.lastPollAt, lstore: s.leads && s.leads.store, cstore: s.calendar && s.calendar.store,
-      fresh, inventory, callsError: s.callsError, callsConfigured: s.callsConfigured, safetyEventsError: s.safetyEventsError, outbound: Boolean(s.leads && s.leads.outboundEnabled), notConfigured: s.notConfigured, weekDays: week.length, weekSkipped: week.skipped.length, calLoaded: Boolean(s.calendar) }
+      fresh, inventory, callsError: s.callsError, callsConfigured: s.callsConfigured, safetyEventsError: s.safetyEventsError, bookingReviewsError: s.bookingReviewsError, outbound: Boolean(s.leads && s.leads.outboundEnabled), notConfigured: s.notConfigured, weekDays: week.length, weekSkipped: week.skipped.length, calLoaded: Boolean(s.calendar) }
     const key = JSON.stringify(model)
     if (key === this.sigKey) return
     this.sigKey = key
@@ -2680,6 +2681,7 @@ const statusView = {
     support.push(['Calendar', storeLine(model.cstore)])
     support.push(['Call history', s.callsError ? `"${s.callsError}"` : (s.callsConfigured === true ? 'connected' : 'not loaded yet')])
     if (s.safetyEventsError) support.push(['Safety reports', 'Temporarily unavailable; the incident list may be incomplete.'])
+    if (s.bookingReviewsError) support.push(['Booking reviews', 'Temporarily unavailable; the booking review list may be incomplete.'])
     support.push(['Last error', s.lastWriteError ? `"${s.lastWriteError.message}" · ${fmt.dateTime(s.lastWriteError.at)}${s.lastWriteError.doing ? ` · ${s.lastWriteError.doing}` : ''}` : 'none'])
     support.push(['Last refresh', s.lastPollAt ? `${s.lastPollAt} · calls ${counts.calls} · slots ${counts.slots} · leads ${counts.leads} · to-dos ${counts.todos}` : 'not yet'])
     for (const [name, err] of Object.entries(s.errors)) support.push([`Can't load ${name}`, `"${err.message}"${err.status ? ` · HTTP ${err.status}` : ''} · ${fmt.dateTime(err.at)}`])
@@ -2773,7 +2775,7 @@ const statusView = {
     if (gated || documentAccessIssue) return
     const fresh = names.every(name => state.loaded[name] && !state.errors[name]
       && Date.parse(state.lastGoodAt[name]) >= started && Date.parse(state.lastGoodAt[name]) > before[name])
-      && !state.callsError && !state.safetyEventsError && !state.notConfigured
+      && !state.callsError && !state.safetyEventsError && !state.bookingReviewsError && !state.notConfigured
     if (outcome === 'complete' && fresh) toast('Workspace data refreshed.', { kind: 'ok', key: 'refresh' })
     else if (outcome === 'pending' || names.some(name => inflight[name])) {
       toast('Refresh is still pending. Delayed requests may finish later; the information shown may be out of date.', { kind: 'warn', key: 'refresh' })
