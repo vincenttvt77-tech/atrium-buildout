@@ -423,3 +423,47 @@ test('invalid replay checkpoints and exhausted safe-integer counters fail closed
   await maxed.run(); assert.equal(maxed.repository.action.lastErrorCode, 'verification_counter_exhausted')
   assert.deepEqual(maxed.calls, { dispatch: 0, verify: 0 })
 })
+
+test('a reference-based provider persists its acknowledgement before a separate verification-only claim', async () => {
+  const s = setup(); s.connector.verificationRequiresReference = true
+  assert.equal((await s.run()).status, 'settled')
+  assert.equal(s.repository.action.state, 'verifying')
+  assert.equal(s.repository.action.providerReference, 'synthetic-result')
+  assert.equal(s.repository.action.verificationAttempts, 0)
+  assert.deepEqual(s.calls, { dispatch: 1, verify: 0 })
+  s.repository.advance(1000)
+  const verify = s.connector.verify
+  s.connector.verify = async (a, signal) => {
+    assert.equal(a.providerReference, 'synthetic-result')
+    return verify(a, signal)
+  }
+  await s.run()
+  assert.equal(s.repository.action.state, 'succeeded')
+  assert.deepEqual(s.calls, { dispatch: 1, verify: 1 })
+})
+
+test('invalid or lost reference acknowledgement never becomes a confirmed operation or a resend', async () => {
+  for (const reference of [undefined, '', ' spaced ', 'x'.repeat(257), 'invalid\nreference']) {
+    const s = setup(); s.connector.verificationRequiresReference = true
+    s.connector.dispatch = async () => ({ status: 'accepted', ...(reference !== undefined ? { providerReference: reference } : {}) })
+    await s.run()
+    assert.equal(s.repository.action.state, 'needs_review')
+    assert.equal(s.repository.action.lastErrorCode, 'provider_reference_missing')
+    assert.equal(s.calls.verify, 0)
+  }
+  const s = setup(); s.connector.verificationRequiresReference = true
+  s.repository.settle = async () => false
+  assert.equal((await s.run()).status, 'stale')
+  assert.equal(s.repository.action.state, 'running')
+  assert.equal(s.repository.action.providerReference, null)
+  assert.deepEqual(s.calls, { dispatch: 1, verify: 0 })
+})
+
+test('a definite reference-provider rejection keeps its actionable reason without pointless readback', async () => {
+  const s = setup(); s.connector.verificationRequiresReference = true
+  s.connector.dispatch = async () => ({ status: 'rejected', retryable: false, code: 'email_consent_expired' })
+  await s.run()
+  assert.equal(s.repository.action.state, 'needs_review')
+  assert.equal(s.repository.action.lastErrorCode, 'email_consent_expired')
+  assert.equal(s.calls.verify, 0)
+})

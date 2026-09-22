@@ -121,6 +121,8 @@ export interface WorkflowConnector {
   id: string
   /** True only when the real provider enforces this stable key for the complete operation. */
   idempotentWrites: boolean
+  /** Accepted reference must be durably saved before a later verification-only claim. */
+  verificationRequiresReference?: boolean
   dispatch(action: WorkflowAction, signal: AbortSignal): Promise<DispatchResult>
   verify(action: WorkflowAction, signal: AbortSignal): Promise<VerificationResult>
 }

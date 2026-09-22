@@ -16,7 +16,9 @@ export interface ConfirmationContext {
 
 export interface ConfirmationOutcome {
   attempted: boolean
-  sent: boolean
+  sent: false
+  accepted?: boolean
+  delivered?: false
   reason: string
   /** Placeholders the template wanted that we could not fill. Surfaced, never hidden. */
   missing: string[]
@@ -82,7 +84,9 @@ export function concessionCopy(concession: string | null | undefined, monthlyRen
 }
 
 /**
- * Sends the tour confirmation.
+ * Legacy confirmation rendering/preview helper. The real transport refuses a send
+ * without a persisted workflow identity. Future admission must bind permission to
+ * this exact rendered message and enqueue it through the authorized repository.
  *
  * Only ever called for a booking that read back as confirmed. Emailing a confirmation for
  * a booking that is merely "arranging" would put in writing the exact claim the read-back
@@ -149,8 +153,10 @@ export async function sendConfirmation(
   const result = await transport.send(message)
   return {
     attempted: true,
-    sent: result.sent,
-    reason: result.sent ? `sent (${result.id})` : result.reason,
+    sent: false,
+    accepted: result.accepted,
+    delivered: false,
+    reason: result.reason,
     missing,
     message,
   }

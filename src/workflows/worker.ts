@@ -190,6 +190,19 @@ export async function runWorkflowOnce(options: WorkflowWorkerOptions): Promise<W
     if (response.value.status === 'accepted' || response.value.status === 'unknown'
       || (response.value.status === 'rejected' && typeof response.value.retryable === 'boolean')) dispatchResult = response.value
   }
+  if (connector.verificationRequiresReference && dispatchResult.status === 'accepted') {
+    const reference = dispatchResult.providerReference
+    if (typeof reference !== 'string' || !reference.trim() || reference.trim() !== reference || reference.length > 256
+      || /[\u0000-\u001f\u007f]/.test(reference)) return review('provider_reference_missing')
+    // A failed/expired settlement never becomes a successful submission. Recovery
+    // remains verification-only even if the process dies before this acknowledgement.
+    return settle({ state: 'verifying', code: 'provider_accepted', providerReference: reference, delayMs: backoff() })
+  }
+  if (connector.verificationRequiresReference && dispatchResult.status === 'rejected' && !dispatchResult.retryable) {
+    // This contract means a known rejection before any effect. There is no provider
+    // identity to look up; preserve the actionable reason without polling forever.
+    return review(reason(dispatchResult.code, 'connector_rejected'))
+  }
   // Even a rejected request is read back: a provider result must never outrank a
   // persisted external object or bypass the final repository authority/lease check.
   return verify(dispatchResult)

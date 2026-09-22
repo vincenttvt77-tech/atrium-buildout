@@ -37,11 +37,13 @@ describe('placeholder substitution', () => {
 })
 
 describe('sending degrades honestly', () => {
-  test('with no provider the message is queued, not reported as sent', async () => {
+  test('with no provider the preview does not claim a durable queue or send', async () => {
     const t = new NoopTransport()
     const r = await t.send({ to: 'a@b.com', from: 'c@d.com', subject: 'x', html: '<p>x</p>' })
     assert.equal(r.sent, false)
-    assert.equal(r.sent === false && r.queued, true)
-    assert.equal(t.outbox.length, 1, 'the message is kept so it can be sent later')
+    assert.equal(r.status, 'not_configured')
+    assert.equal(r.accepted, false)
+    assert.match(r.reason, /nothing queued or sent/)
+    assert.equal(t.outbox.length, 1, 'only a process-local preview is kept')
   })
 })

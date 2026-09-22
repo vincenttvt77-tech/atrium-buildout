@@ -61,10 +61,13 @@ describe('confirmation email follows the read-back discipline', () => {
     assert.match(r.reason, /no email address/)
   })
 
-  test('with no provider it reports queued rather than sent', async () => {
+  test('with no provider it reports an in-memory preview, never a durable queue or send', async () => {
     const r = await sendConfirmation(booking('confirmed'), ctx, new NoopTransport())
     assert.equal(r.sent, false)
-    assert.match(r.reason, /no email provider/)
+    assert.equal(r.accepted, false)
+    assert.equal(r.delivered, false)
+    assert.match(r.reason, /no email provider/i)
+    assert.match(r.reason, /nothing queued or sent/)
   })
 })
 
