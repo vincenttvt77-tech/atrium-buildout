@@ -253,6 +253,8 @@ const staleAvailability = (): ToolResult => ({
   say: 'The inventory source is out of date, so I cannot verify current rent, concessions, availability, or move-in dates. Tell the caller this limitation and offer to take their details for a leasing-team follow-up. Do not quote from this snapshot or say a live refresh is underway.',
   record: { kind: 'availability_checked', outcome: 'stale', unitsOffered: [] },
 })
+const SHORTLIST_GUIDANCE = 'This is a shortlist, not an exhaustive list. Start with two or three relevant options, then ask which they prefer or what to narrow next. Do not read every option aloud at once.'
+const SHORTLIST_LIMIT = 5
 const CONCESSION_TIMING_GUIDANCE = ' Net effective rent is the average after the stated concession, not a promise of that payment every month. No concession-credit schedule was verified; do not say a free month is upfront or name a credit month.'
 function discloseInventory(ctx: ToolContext, result: ToolResult): ToolResult {
   const disclosure = inventoryDemoDisclosure(ctx.inventory, ctx.now)
@@ -412,8 +414,10 @@ function checkAvailabilityResult(ctx: ToolContext, args: AvailabilityArgs = {}):
        * exact residence number" and a caller hanging up is what this text used to produce.
        */
       const size = ctx.qualification.bedrooms ? sizeOf({ bedrooms: ctx.qualification.bedrooms.value.min }) : 'residence'
-      const nearest = out.nearest.map((m) => unitLine(m.unit))
-      const alternatives = out.alternatives.map((m) => unitLine(m.unit))
+      const nearestUnits = out.nearest.slice(0, 3)
+      const alternativeUnits = out.alternatives.slice(0, SHORTLIST_LIMIT - nearestUnits.length)
+      const nearest = nearestUnits.map((m) => unitLine(m.unit))
+      const alternatives = alternativeUnits.map((m) => unitLine(m.unit))
       return {
         say: [
           `Nothing ${size === 'residence' ? '' : `${size} `}is available at or below ${money(out.budgetMax)}. The closest is ${money(out.gap)}/month above what they said — say "${spokenMoney(out.gap)} a month over":`,
@@ -422,25 +426,34 @@ function checkAvailabilityResult(ctx: ToolContext, args: AvailabilityArgs = {}):
           alternatives.length
             ? `What DOES fit their budget is a size down — offer it plainly, as a real option, then ask which way they'd rather go:\n${alternatives.join('\n')}`
             : 'Nothing smaller fits either. Offer to take their details so someone can call when something closer opens up.',
+          SHORTLIST_GUIDANCE,
           'If they walk, call capture_loss_reason with what they said.',
           CONCESSION_TIMING_GUIDANCE,
         ].join('\n\n'),
         record: {
           kind: 'availability_checked', outcome: 'priced_out',
           budgetMax: out.budgetMax, cheapestAvailable: out.cheapestAvailable, gap: out.gap,
-          unitsOffered: [...out.nearest, ...out.alternatives].map((n) => n.unit.unitId),
+          unitsOffered: [...nearestUnits, ...alternativeUnits].map((n) => n.unit.unitId),
         },
       }
     }
 
     case 'matches': {
-      const lines = out.units.map((m) => unitLine(m.unit))
-      const stretchLines = out.stretch.map((m) =>
+      // Reserve space for a later option when both kinds of alternatives exist.
+      // Keep the full match count without sending hundreds of omitted identifiers.
+      const shown = out.units.slice(0, 3)
+      const stretch = out.stretch.slice(0, SHORTLIST_LIMIT - shown.length - (out.later.length ? 1 : 0))
+      const later = out.later.slice(0, SHORTLIST_LIMIT - shown.length - stretch.length)
+      const matchingUnitCount = out.units.length + out.moreInTime.length
+      const additionalMatchCount = matchingUnitCount - shown.length
+      const lines = shown.map((m) => unitLine(m.unit))
+      const stretchLines = stretch.map((m) =>
         `Slightly above their range: ${unitLine(m.unit)} — offer this ONLY after acknowledging it is over what they said.`)
-      const laterLines = out.later.map((m) =>
-        `Coming up a bit later: Unit ${m.unit.unitId}, ${sizeOf(m.unit)}, ${rentPhrase(m.unit)}, free ${availDate(m.unit.availableFrom)}.`)
-      const more = out.moreInTime.length
-        ? `There ${out.moreInTime.length === 1 ? 'is' : 'are'} also ${out.moreInTime.join(', ')} in their range and window — mention that more exist and offer to go through them. If they ask about one by name, look it up.`
+      const budgetMax = searchQualification.budget?.value.maxMonthly
+      const laterLines = later.map((m) =>
+        `Coming up a bit later: Unit ${m.unit.unitId}, ${sizeOf(m.unit)}, ${rentPhrase(m.unit)}, free ${availDate(m.unit.availableFrom)}.${budgetMax != null && m.unit.monthlyRent > budgetMax ? ' This is also above their budget; acknowledge both the price and date mismatch.' : ''}`)
+      const more = additionalMatchCount
+        ? `${matchingUnitCount} residences match this search; ${shown.length} are shown here and ${additionalMatchCount} more are not listed. Mention that more exist and offer to narrow the search. If they name a residence, look it up directly.`
         : ''
 
       /*
@@ -453,17 +466,19 @@ function checkAvailabilityResult(ctx: ToolContext, args: AvailabilityArgs = {}):
       if (lines.length) parts.push(`${args.includeOutsideMoveIn || args.ignoreBudget ? 'Available in the caller-requested broader search' : 'Available in their window and range'}${args.sortBy === 'price_desc' ? ', highest net effective rent first' : ''} — quote exactly these, net effective figure first, then the lease figure:\n${lines.join('\n')}`)
       if (stretchLines.length) parts.push(stretchLines.join('\n'))
       if (laterLines.length) parts.push(
-        `${lines.length ? 'Also, if they can wait a little' : 'Nothing frees up by their date, but if they can wait a little'}:\n${laterLines.join('\n')}\nThese open after the requested date. Ask whether a later move would work; do not describe them as within the window or as unavailable.`)
+        `${lines.length || stretchLines.length ? 'Also, if they can wait a little' : 'Nothing frees up by their date within the searched budget range, but if they can wait a little'}:\n${laterLines.join('\n')}\nThese open after the requested date. Ask whether a later move would work; do not describe them as within the window or as unavailable.`)
       if (more) parts.push(more)
       parts.push('These results describe this search only. Do not claim they are the only residences in the building; named residences and layouts require a direct lookup.')
-      if ([...out.units, ...out.stretch, ...out.later].some(match => match.unit.concession)) parts.push(CONCESSION_TIMING_GUIDANCE)
+      parts.push(SHORTLIST_GUIDANCE)
+      if ([...shown, ...stretch, ...later].some(match => match.unit.concession)) parts.push(CONCESSION_TIMING_GUIDANCE)
       if (parts.length === 0) parts.push('Nothing matches on any of size, date or budget. Say so plainly, then ask what they would be flexible on.')
 
       return {
         say: parts.join('\n\n'),
         record: {
           kind: 'availability_checked', outcome: 'matches',
-          unitsOffered: out.units.map((m) => m.unit.unitId),
+          unitsOffered: shown.map((m) => m.unit.unitId),
+          searchSummary: { matchingUnitCount, shownMatchCount: shown.length, additionalMatchCount },
         },
       }
     }
