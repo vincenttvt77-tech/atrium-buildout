@@ -1,3 +1,4 @@
+import { publicShortlistLink, type PublicShortlistWebsite } from '../properties/public-website.ts'
 import type { InventorySnapshot, FloorPlan } from '../inventory/types.ts'
 import { findMatches } from '../inventory/match.ts'
 import { inventoryIsQuotable, inventoryDemoDisclosure } from '../inventory/source.ts'
@@ -27,6 +28,8 @@ import type { LossReason } from '../record/store.ts'
 
 export interface ToolContext {
   propertyId: PropertyId
+  organizationId?: string
+  publicShortlistWebsite?: PublicShortlistWebsite
   interactionId: InteractionId
   inventory: InventorySnapshot
   articles: KnowledgeArticle[]
@@ -338,7 +341,19 @@ function lookupPlanResult(plan: FloorPlan, ctx: ToolContext): ToolResult {
 }
 
 export function checkAvailability(ctx: ToolContext, args: AvailabilityArgs = {}): ToolResult {
-  return discloseInventory(ctx, checkAvailabilityResult(ctx, args))
+  const result = discloseInventory(ctx, checkAvailabilityResult(ctx, args))
+  if (result.record.publicShortlist || !ctx.organizationId || !ctx.publicShortlistWebsite
+    || result.record.kind !== 'availability_checked' || !inventoryIsQuotable(ctx.inventory, ctx.now)) return result
+  const candidates = result.record.shortlistUnitIds ?? result.record.unitsOffered
+  if (!Array.isArray(candidates) || !candidates.length || candidates.length > 5
+    || candidates.some(id => typeof id !== 'string' || !ctx.inventory.units.some(unit => unit.unitId === id && unit.status === 'available'))) return result
+  const url = publicShortlistLink(ctx.publicShortlistWebsite, { organizationId: ctx.organizationId,
+    propertyId: ctx.propertyId, inventorySource: ctx.inventory.source }, candidates as string[], ctx.now)
+  if (!url) return result
+  return { ...result, say: result.say + '\n\nPublic review link prepared: ' + url +
+    '\nNo message was sent. Delivery is not connected by this tool: do not offer to text or email it, read the URL aloud, or claim it was sent. If the caller wants the link, offer to save their details for staff follow-up. The page may include the explicitly discussed price, size or timing alternatives; it is not a reservation.',
+    record: { ...result.record, publicShortlist: { status: 'prepared', delivery: 'not_sent', url, unitIds: candidates,
+      preparedAt: ctx.now.toISOString(), reviewExpiresAt: ctx.publicShortlistWebsite.reviewExpiresAt } } }
 }
 function checkAvailabilityResult(ctx: ToolContext, args: AvailabilityArgs = {}): ToolResult {
   // Signals passed inline are captured first, against the same state the lookup then reads.
@@ -479,6 +494,7 @@ function checkAvailabilityResult(ctx: ToolContext, args: AvailabilityArgs = {}):
           kind: 'availability_checked', outcome: 'matches',
           unitsOffered: shown.map((m) => m.unit.unitId),
           searchSummary: { matchingUnitCount, shownMatchCount: shown.length, additionalMatchCount },
+          shortlistUnitIds: [...shown, ...stretch, ...later].map(m => m.unit.unitId),
         },
       }
     }

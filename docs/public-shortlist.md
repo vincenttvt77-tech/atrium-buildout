@@ -38,10 +38,11 @@ prospect's budget, timing or other preferences.
 
 ## Integration boundary and remaining work
 
-This is a single-property public-demo experience. It is not a cross-property
-shortlist service and it is not connected to Vapi delivery. Before linking from
-staff or voice workflows, configure and verify each property's public website
-binding and authoritative inventory feed. Use the existing tenant authority and
+The bundled page remains a single-property public-demo experience. PostgreSQL
+voice availability tools can prepare a property-bound link after an explicit
+website binding is published (below). No deployed property has been enabled by
+this code change. This is not connected to Vapi delivery or a staff sending UI.
+Before enabling a binding, verify the property website and its inventory feed. Use the existing tenant authority and
 notification workflow, record permission to send, and distinguish pending/sent/
 failed delivery. Do not hard-code the Larkin public origin for other tenants.
 
@@ -57,3 +58,59 @@ failed delivery. Do not hard-code the Larkin public origin for other tenants.
   `ATRIUM_BROWSER_ARTIFACTS` for the existing browser harness.
 - Repository application, isolated database and build gates remain required for
   integration. Local acceptance is not production or phone delivery evidence.
+
+
+## Property-bound voice preparation
+
+An authorized configuration publisher can include `publicShortlistWebsite` in
+`bundle.property`. It has exactly these fields (illustrative values only):
+
+```json
+{
+  "format": "atrium-shortlist-v1",
+  "organizationId": "organization-example",
+  "propertyId": "property-example",
+  "inventorySource": "approved-property-feed",
+  "baseUrl": "https://building.example/leasing/",
+  "reviewedAt": "2026-09-22T12:00:00Z",
+  "reviewExpiresAt": "2026-10-01T12:00:00Z"
+}
+```
+
+This records the publisher's review, not automated domain ownership or content
+verification. The reviewer must actually open the destination with an example
+shortlist, confirm the correct building, inventory identifiers, public-only
+content and supported URL format. Another site's homepage is not automatically
+compatible. Publication remains subject to the existing property authority.
+
+Organization, property and source must match the exact published configuration.
+The URL must be canonical HTTPS, without credentials, query, fragment, custom port,
+IP literals or local hostnames. Paths use ordinary letters, digits, slashes, dots,
+hyphens and underscores. The review cannot postdate publication, and the review
+interval is at most 30 days. Malformed supplied configuration fails validation;
+omitting the field leaves the feature disabled. Expiry suppresses links without
+preventing ordinary leasing answers. Removal/replacement takes effect through
+normal configuration publication. The system never refreshes review dates itself.
+
+Only PostgreSQL voice requests receive the binding from the authorized snapshot.
+Legacy mode does not infer a website from the bundled Larkin data or incoming host.
+Model arguments cannot choose a website, organization or property. Existing live
+inventory freshness and fictional-demo disclosure gates remain in force. Named
+lookups, plan results and broad searches can prepare only their actual presented
+available units, capped at five. Broad results include explicitly described
+price/date/size alternatives; the link is not proof that every option meets the
+original criteria. Pending/leased/unknown units do not become voice offers.
+
+`availability_checked.publicShortlist` records `status: prepared`,
+`delivery: not_sent`, URL, public IDs, preparation time and review expiration.
+The response explicitly prohibits claiming delivery, offering to text/email from
+this tool, or reading the URL aloud. It may offer staff follow-up if requested.
+This is a historical prepared link, not a durable delivery request, live website
+verification, saved consent, or proof of staff action. Never dispatch from this
+record later without rechecking current property binding and permission/consent.
+
+The next delivery slice must use a supported native/provider messaging capability,
+record exact consent and destination, persist an idempotent intent, and reconcile
+provider acceptance/delivery before showing sent/delivered. A tool invocation or
+prepared link must not be reported as a successful message. No SMS tool, provider
+account, sender number or credentials were created by this implementation.

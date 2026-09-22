@@ -1,3 +1,4 @@
+import type { PublicShortlistWebsite } from './public-website.ts'
 import type { AuthorizedScope } from '../auth/index.ts'
 import type { InventoryProvenance, InventorySnapshot } from '../inventory/types.ts'
 import type { KnowledgeArticle } from '../knowledge/article.ts'
@@ -38,6 +39,7 @@ export interface PropertySnapshot {
   readonly version: number
   readonly timeZone: string
   readonly jurisdiction: string
+  readonly publicShortlistWebsite?: PublicShortlistWebsite
   readonly publishedAt: string
   readonly inventoryReadAt: string
   readonly inventorySource: string

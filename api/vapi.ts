@@ -519,6 +519,8 @@ async function runTool(
     inventory,
     articles,
     qualification: state.qualification,
+    ...(runtime ? { organizationId: runtime.scope.organizationId,
+      ...(runtime.snapshot.publicShortlistWebsite ? { publicShortlistWebsite: runtime.snapshot.publicShortlistWebsite } : {}) } : {}),
     jurisdiction: runtime ? runtime.snapshot.jurisdiction : 'NY',
     confidenceThreshold: 0.7,
     now,

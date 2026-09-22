@@ -122,3 +122,79 @@ test('explicitly broadening dates includes later residences without discarding t
   assert.doesNotMatch(result.say, /These open after the requested date/)
   assert.ok(result.qualificationPatch?.moveInTiming)
 })
+
+function linkedContext(units: Unit[]): ToolContext {
+  const ctx = context(units)
+  return { ...ctx, organizationId: 'org-shortlist', publicShortlistWebsite: {
+    format: 'atrium-shortlist-v1', organizationId: 'org-shortlist', propertyId: ctx.propertyId,
+    inventorySource: ctx.inventory.source, baseUrl: 'https://shortlist.example/',
+    reviewedAt: '2026-09-22T11:00:00Z', reviewExpiresAt: '2026-09-23T11:00:00Z',
+  } }
+}
+test('known-unit inquiry prepares only its public ID and explicitly disclaims sending', () => {
+  const result = checkAvailability(linkedContext([unit('19A'), unit('20A')]), { unitId: '19A' })
+  const link = result.record.publicShortlist as Record<string, unknown>
+  assert.equal(link.url, 'https://shortlist.example/#availability?units=19A')
+  assert.equal(link.delivery, 'not_sent')
+  assert.deepEqual(link.unitIds, ['19A'])
+  assert.match(result.say, /No message was sent/)
+  assert.match(result.say, /do not offer to text or email/)
+  assert.doesNotMatch(result.say, /Unit 20A/)
+})
+test('search link carries exactly the presented matches and qualified alternatives, never all inventory', () => {
+  const ctx = linkedContext([unit('M1'), unit('M2'), unit('M3'), unit('M4'), unit('S1', { monthlyRent: 3100 }),
+    unit('L1', { availableFrom: '2026-11-01' })])
+  const result = checkAvailability(ctx, search)
+  const link = result.record.publicShortlist as Record<string, unknown>
+  assert.deepEqual(link.unitIds, ['M1', 'M2', 'M3', 'S1', 'L1'])
+  assert.deepEqual(result.record.unitsOffered, ['M1', 'M2', 'M3'], 'existing lead semantics retained')
+  assert.equal(result.say.match(/Public review link prepared:/g)?.length, 1, 'inline qualification does not duplicate link')
+  assert.match(result.say, /above their range/)
+  assert.match(result.say, /after the requested date/)
+})
+test('missing or expired binding, wrong scope, stale inventory and nonavailable units never emit links', () => {
+  const base = linkedContext([unit('19A')])
+  const cases: ToolContext[] = [context([unit('19A')]), { ...base, organizationId: 'other-org' },
+    { ...base, publicShortlistWebsite: { ...base.publicShortlistWebsite!, propertyId: 'other-property' } },
+    { ...base, publicShortlistWebsite: { ...base.publicShortlistWebsite!, inventorySource: 'other-source' } },
+    { ...base, publicShortlistWebsite: { ...base.publicShortlistWebsite!, reviewExpiresAt: now.toISOString() } },
+    { ...base, inventory: { ...base.inventory, readAt: new Date(now.getTime() - 3600000) } },
+    linkedContext([unit('19A', { status: 'pending' })]), linkedContext([unit('19A', { status: 'leased' })]),
+  ]
+  for (const ctx of cases) {
+    const result = checkAvailability(ctx, { unitId: '19A' })
+    assert.equal(result.record.publicShortlist, undefined)
+    assert.doesNotMatch(result.say, /https:\/\//)
+  }
+})
+test('qualification gates, unknown units and zero-result searches do not prepare a link', () => {
+  const ctx = linkedContext([unit('19A')])
+  for (const args of [{}, { unitId: '99Z' }, { ...search, bedrooms: '4' }]) {
+    assert.equal(checkAvailability(ctx, args).record.publicShortlist, undefined)
+  }
+})
+
+test('plan and priced-out results link only the units actually presented', () => {
+  const ctx = linkedContext([
+    ...Array.from({ length: 6 }, (_, i) => unit(`B${i}`, { bedrooms: 2, monthlyRent: 4500 })),
+    unit('A1', { monthlyRent: 2800 }), unit('A2', { monthlyRent: 2900 }),
+  ])
+  for (const args of [{ unitId: 'One bedroom' }, { ...search, bedrooms: '2' }]) {
+    const result = checkAvailability(ctx, args)
+    const prepared = result.record.publicShortlist as Record<string, unknown>
+    assert.ok(prepared)
+    assert.deepEqual(prepared.unitIds, result.record.unitsOffered)
+    assert.ok((prepared.unitIds as string[]).length <= 5)
+  }
+})
+test('fictional catalogue links retain the demo disclosure instead of implying live availability', () => {
+  const ctx = linkedContext([unit('19A')])
+  const asOf = '2026-09-01T12:00:00Z'
+  ctx.inventory = { ...ctx.inventory, readAt: new Date(asOf), provenance: {
+    sourceMode: 'demo', fictional: true, catalogAsOf: asOf, catalogVersion: 'fixture-v1',
+  } }
+  const result = checkAvailability(ctx, { unitId: '19A' })
+  assert.ok(result.record.publicShortlist)
+  assert.match(result.say, /fictional demo catalogue/)
+  assert.match(result.say, /never live\/PMS data/)
+})

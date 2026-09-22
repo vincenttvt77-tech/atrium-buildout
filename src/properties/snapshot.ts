@@ -1,3 +1,4 @@
+import { validatePublicShortlistWebsite } from './public-website.ts'
 import { assertAuthorizedScope } from '../auth/index.ts'
 import type { AuthorizedScope } from '../auth/index.ts'
 import { validateTimeZone } from '../calendar/time.ts'
@@ -148,6 +149,7 @@ export function validatePublishedProperty(
   // The fixture loader excludes invalid records; a published customer configuration
   // cannot quietly turn a defective inventory into an empty or partial building.
   if (inventory.problems.length) invalid(`inventory:${inventory.problems[0]!.where}`)
+  const website = validatePublicShortlistWebsite(bundle.property.publicShortlistWebsite, { organizationId: scope.organizationId, propertyId: scope.propertyId, inventorySource: value.inventorySource }, value.publishedAt)
   const articles = knowledge.map((item, index) => article(item, index, scope, publishedAt))
   freezeJson(bundle)
   const snapshot: PropertySnapshot = Object.freeze({
@@ -155,6 +157,7 @@ export function validatePublishedProperty(
     timeZone, jurisdiction, publishedAt: publishedAt.toISOString(),
     inventoryReadAt: inventoryReadAt.toISOString(), inventorySource: value.inventorySource,
     bundle, property: bundle.property,
+    ...(website ? { publicShortlistWebsite: website } : {}),
     get inventory() { return structuredClone(inventory.snapshot) },
     get articles() { return structuredClone(articles) },
   })

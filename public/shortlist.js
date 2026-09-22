@@ -3,7 +3,7 @@
   'use strict';
   const limit = 5;
   const prefix = '#availability?units=';
-  const validId = (id) => typeof id === 'string' && /^[A-Z0-9][A-Z0-9-]{0,19}$/.test(id);
+  const validId = (id) => typeof id === 'string' && /^[A-Z0-9][A-Z0-9-]{0,19}$/i.test(id);
   const published = (units) => units.filter((u) => u.status === 'available' || u.status === 'pending');
 
   function read(hash, units) {
@@ -16,8 +16,8 @@
     catch { return bad; }
     if (!ids.length || ids.length > limit || ids.some((id) => !validId(id))) return bad;
     ids = [...new Set(ids)];
-    const board = new Set(published(units).map((u) => u.unitId));
-    return { active: true, ids: ids.filter((id) => board.has(id)), missing: ids.filter((id) => !board.has(id)).length, invalid: false };
+    const board = new Map(published(units).map((u) => [u.unitId.toUpperCase(), u.unitId]));
+    return { active: true, ids: ids.filter((id) => board.has(id)).map((id) => board.get(id)), missing: ids.filter((id) => !board.has(id)).length, invalid: false };
   }
 
   function link(origin, ids, units) {
@@ -26,7 +26,7 @@
     const url = new URL('/', origin);
     if (!['http:', 'https:'].includes(url.protocol)) return '';
     url.username = ''; url.password = ''; url.search = '';
-    url.hash = prefix + encodeURIComponent(ids.join(','));
+    url.hash = prefix + encodeURIComponent(ids.map((id) => id.toUpperCase()).join(','));
     return url.href;
   }
 

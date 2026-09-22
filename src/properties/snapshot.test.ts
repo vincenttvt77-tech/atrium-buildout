@@ -281,3 +281,19 @@ test('a source name containing demo does not change a published live inventory i
   assert.equal(snapshot.inventory.provenance, undefined)
   assert.equal(inventoryIsQuotable(snapshot.inventory, NOW), false)
 })
+
+test('published public website is scoped, validated and detached from configuration edits', async () => {
+  const authority = await scope()
+  const config = configuration(authority)
+  config.bundle.property.publicShortlistWebsite = {
+    format: 'atrium-shortlist-v1', organizationId: authority.organizationId, propertyId: authority.propertyId,
+    inventorySource: config.inventorySource, baseUrl: 'https://building-one.example/',
+    reviewedAt: config.publishedAt, reviewExpiresAt: '2026-09-20T12:00:00Z',
+  }
+  const snapshot = validatePublishedProperty(config, authority, NOW)
+  assert.equal(snapshot.publicShortlistWebsite?.baseUrl, 'https://building-one.example/')
+  assert.ok(Object.isFrozen(snapshot.publicShortlistWebsite))
+  ;(config.bundle.property.publicShortlistWebsite as Record<string, unknown>).propertyId = 'other-property'
+  assert.equal(snapshot.publicShortlistWebsite?.propertyId, authority.propertyId)
+  rejects(config, authority)
+})

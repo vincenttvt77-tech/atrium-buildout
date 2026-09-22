@@ -26,7 +26,12 @@ function propertyBundle(organizationId, propertyId, timeZone, jurisdiction, rent
     hours: Object.fromEntries(Array.from({ length: 7 }, (_, day) => [day, { openHour: 10, closeHour: 18 }])) }
   return {
     property: { id: propertyId, organizationId, buildingName: `Synthetic ${propertyId}`, timeZone, jurisdiction,
-      tourSettings, tourCapacityPerSlot: 2 },
+      tourSettings, tourCapacityPerSlot: 2,
+      ...(propertyId !== 'property-b2' ? { publicShortlistWebsite: {
+        format: 'atrium-shortlist-v1', organizationId, propertyId, inventorySource: 'synthetic-http-test',
+        baseUrl: `https://${propertyId}.example/`, reviewedAt: sourceAt,
+        reviewExpiresAt: new Date(NOW.getTime() + 86400000).toISOString(),
+      } } : {}) },
     inventory: [{ unitId: '4A', propertyId, floorPlanId: 'one-bed', floor: 4,
       monthlyRent: rent, availableFrom: NOW.toISOString().slice(0, 10), status: 'available' },
     { unitId: '9l', propertyId, floorPlanId: 'one-bed', floor: 9,
@@ -652,4 +657,30 @@ test('staff booking review enforces property permission and atomically repairs t
   assert.equal(replay.status, 200)
   assert.deepEqual(replay.body.bookingReview.resolution, completed.body.bookingReview.resolution)
   assert.deepEqual((await readDocuments()).find(row => row.key === `lead:${caller}`).value, profile)
+})
+
+
+test('HTTP voice shortlist uses the authenticated property website, ignoring model and caller destination overrides', async () => {
+  const providerCallsBefore = upstreamRequests.length
+  for (const [assistant, property] of [['synthetic-assistant-a', 'property-a1'], ['synthetic-assistant-b', 'property-b1']]) {
+    const response = await post(assistant, `public-shortlist-${property}`, [tool('check_availability', {
+      unitId: '4A', baseUrl: 'https://wrong-building.example/', organizationId: 'other-org',
+      publicShortlistWebsite: { baseUrl: 'https://wrong-building.example/' },
+    })])
+    assert.equal(response.status, 200)
+    assert.equal(response.body.scope.propertyId, property)
+    const spoken = response.body.results[0].result
+    assert.ok(spoken.includes(`https://${property}.example/#availability?units=4A`))
+    assert.ok(!spoken.includes('wrong-building.example'))
+    assert.ok(!spoken.includes(property === 'property-a1' ? 'property-b1.example' : 'property-a1.example'))
+    assert.match(spoken, /No message was sent/)
+  }
+  assert.equal(upstreamRequests.length, providerCallsBefore, 'preparing links performs no provider operation')
+})
+
+test('HTTP stale inventory cannot produce a shortlist link even with a reviewed website binding', async () => {
+  const response = await post('synthetic-assistant-stale', 'public-shortlist-stale', [tool('check_availability', { unitId: '4A' })])
+  assert.equal(response.status, 200)
+  assert.match(response.body.results[0].result, /out of date/)
+  assert.doesNotMatch(response.body.results[0].result, /https:\/\//)
 })

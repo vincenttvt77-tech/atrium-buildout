@@ -50,3 +50,9 @@ test('site loads the shortlist contract before the application and retains demo 
   assert.match(html, /Demo inventory; a selection is not a reservation/)
   assert.match(html, /No message is sent automatically/)
 })
+test('mixed-case published IDs round-trip canonical links without losing the unit', () => {
+  const units = [{ unitId: '9l', status: 'available' }]
+  const url = api.link('https://larkin.example', ['9l'], units)
+  assert.equal(url, 'https://larkin.example/#availability?units=9L')
+  assert.deepEqual(read(new URL(url).hash, units).ids, ['9l'])
+})
