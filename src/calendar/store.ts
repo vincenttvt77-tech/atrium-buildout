@@ -1,13 +1,16 @@
+import { KvClient } from '../store/kv.ts'
+import { storageConfig } from '../store/config.ts'
+import { currentTenantId, tenantNamespace } from '../tenancy/context.ts'
 import type { CalendarState, CalendarStore } from './types.ts'
 import { emptyCalendar } from './types.ts'
+import { isPostgresRuntime } from '../database/mode.ts'
+import { requirePropertyRuntime } from '../database/request.ts'
 
 /**
  * In-process. Survives nothing.
  *
- * Kept as the fallback so the calendar works with no configuration at all, but a block set
- * through one lambda is invisible to the next — which is exactly how the event log lost a
- * call. The dashboard says so rather than letting someone block a morning and wonder why
- * the agent still offers it.
+ * Kept for local previews with no configuration. Hosted runtimes require durable storage
+ * because a block held in one serverless instance is invisible to another instance.
  */
 export class MemoryCalendarStore implements CalendarStore {
   private state: CalendarState = emptyCalendar()
@@ -37,52 +40,26 @@ export class MemoryCalendarStore implements CalendarStore {
  * people blocking slots in the same second do not silently drop one of the changes.
  */
 export class KvCalendarStore implements CalendarStore {
-  private readonly url: string
-  private readonly token: string
-  private readonly key: string
-  private readonly fetchImpl: typeof fetch
-
+  private client: KvClient
+  private key: string
   constructor(url: string, token: string, opts: { key?: string; fetchImpl?: typeof fetch } = {}) {
-    this.url = url.replace(/\/$/, '')
-    this.token = token
+    this.client = new KvClient(url, token, opts.fetchImpl)
     this.key = opts.key ?? 'atrium:calendar'
-    this.fetchImpl = opts.fetchImpl ?? fetch
   }
-
-  private async command(parts: string[]): Promise<unknown> {
-    const res = await this.fetchImpl(`${this.url}/${parts.map(encodeURIComponent).join('/')}`, {
-      headers: { authorization: `Bearer ${this.token}` },
-    })
-    if (!res.ok) throw new Error(`KV ${res.status}`)
-    const body = await res.json() as { result?: unknown }
-    return body.result
-  }
-
-  async read(): Promise<CalendarState> {
-    try {
-      const raw = await this.command(['get', this.key])
-      if (typeof raw !== 'string' || raw.length === 0) return emptyCalendar()
-      const parsed = JSON.parse(raw) as Partial<CalendarState>
-      return {
-        blocks: Array.isArray(parsed.blocks) ? parsed.blocks : [],
-        bookings: Array.isArray(parsed.bookings) ? parsed.bookings : [],
-      }
-    } catch {
-      // A calendar that throws when the store is briefly unreachable would take the phone
-      // line down with it. An empty calendar offers no times, which is honest and safe.
-      return emptyCalendar()
+  private validate(state: CalendarState): CalendarState {
+    if (!state || !Array.isArray(state.blocks) || !Array.isArray(state.bookings)) {
+      throw new Error('Calendar data is invalid; availability cannot be verified')
     }
+    return state
   }
-
+  async read(): Promise<CalendarState> {
+    // A missing key is new. An unreachable key is unknown, never an open calendar.
+    return this.validate((await this.client.read<CalendarState>(this.key)) ?? emptyCalendar())
+  }
   async mutate(fn: (s: CalendarState) => CalendarState): Promise<CalendarState> {
-    const next = fn(await this.read())
-    await this.command(['set', this.key, JSON.stringify(next)])
-    return next
+    return this.client.update(this.key, emptyCalendar(), (state) => this.validate(fn(this.validate(state))))
   }
-
-  describe() {
-    return { kind: 'kv' as const, durable: true, note: 'Persisted in KV.' }
-  }
+  describe() { return this.client.describe() }
 }
 
 /*
@@ -94,13 +71,24 @@ export class KvCalendarStore implements CalendarStore {
  * read the same key — but the fallback has to behave the same way or the local test of
  * the whole feature passes for the wrong reason.
  */
-let sharedMemoryStore: MemoryCalendarStore | null = null
+const tenantMemory = new Map<string, MemoryCalendarStore>()
 
-/** KV when it is configured, memory when it is not. Never throws on startup. */
+/** Resolve tenant and configuration on use; hosted runtimes require KV. */
 export function calendarStoreFromEnv(env: NodeJS.ProcessEnv = process.env): CalendarStore {
-  const url = env.KV_REST_API_URL
-  const token = env.KV_REST_API_TOKEN
-  if (url && token && url.trim() && token.trim()) return new KvCalendarStore(url, token)
-  if (!sharedMemoryStore) sharedMemoryStore = new MemoryCalendarStore()
-  return sharedMemoryStore
+  const kvStores = new Map<string, KvCalendarStore>()
+  const resolve = (): CalendarStore => {
+    if (isPostgresRuntime(env)) return requirePropertyRuntime().calendarStore
+    const tenantId = currentTenantId()
+    const namespace = tenantNamespace(tenantId)
+    const config = storageConfig(env)
+    if (config.kind === 'kv') {
+      const { url, token } = config
+      const cacheKey = JSON.stringify([url, token, namespace])
+      if (!kvStores.has(cacheKey)) kvStores.set(cacheKey, new KvCalendarStore(url, token, { key: `${namespace}:calendar` }))
+      return kvStores.get(cacheKey)!
+    }
+    if (!tenantMemory.has(tenantId)) tenantMemory.set(tenantId, new MemoryCalendarStore())
+    return tenantMemory.get(tenantId)!
+  }
+  return { read: () => resolve().read(), mutate: (fn) => resolve().mutate(fn), describe: () => resolve().describe() }
 }

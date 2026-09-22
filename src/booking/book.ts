@@ -1,6 +1,9 @@
 import type {
   BookingRequest, BookingIntent, Booking, BookingState, CalendarPort, TourSlot,
 } from './types.ts'
+import { BookingConflictError, BookingWriteFailure } from './types.ts'
+import { DEFAULT_TIME_ZONE, validateTimeZone } from '../calendar/time.ts'
+import { TourChangeRequiredError } from '../leads/tour-change.ts'
 
 export interface BookOptions {
   now: Date
@@ -30,7 +33,19 @@ export function recordIntent(
 }
 
 const sameSlot = (a: TourSlot, b: TourSlot) =>
-  a.slotId === b.slotId && a.startsAt.getTime() === b.startsAt.getTime()
+  a.slotId === b.slotId && a.startsAt.getTime() === b.startsAt.getTime() && a.endsAt.getTime() === b.endsAt.getTime()
+
+const normalizedUnit = (unit: string | null | undefined) => unit?.trim().toUpperCase() || null
+
+async function alternativesFor(req: BookingRequest, calendar: CalendarPort): Promise<TourSlot[]> {
+  return calendar
+    .listSlots(req.propertyId, req.slot.startsAt, new Date(req.slot.startsAt.getTime() + 7 * 86_400_000), req.unitId)
+    // A time that just conflicted must not immediately be proposed again, even if
+    // the provider still reports general staff availability for that interval.
+    .then((slots) => slots.filter((slot) => slot.slotId !== req.slot.slotId
+      && slot.startsAt.getTime() !== req.slot.startsAt.getTime()))
+    .catch(() => [] as TourSlot[])
+}
 
 /**
  * Books a tour and verifies it landed.
@@ -50,14 +65,18 @@ export async function bookTour(
   let attempts = 0
   let lastError: string | null = null
   let externalId: string | null = null
+  let uncertainWrite = false
 
   while (attempts < maxAttempts) {
     attempts++
+    let creating = externalId === null
     try {
       if (externalId === null) {
         const created = await calendar.createBooking(intent)
         externalId = created.externalId
       }
+
+      creating = false
 
       const readBack = await calendar.readBooking(externalId)
 
@@ -66,14 +85,13 @@ export async function bookTour(
         continue
       }
 
-      if (!sameSlot(readBack.slot, req.slot)) {
-        // The calendar gave us a different time than we asked for. Never paper over this.
-        const alternatives = await calendar
-          .listSlots(req.propertyId, req.slot.startsAt, new Date(req.slot.startsAt.getTime() + 7 * 86_400_000))
-          .catch(() => [] as TourSlot[])
+      if (readBack.externalId !== externalId || !sameSlot(readBack.slot, req.slot)
+        || normalizedUnit(readBack.unitId) !== normalizedUnit(req.unitId)) {
+        // A booking exists but differs from the request. Offering another time
+        // could create two tours; preserve the original for staff reconciliation.
         return {
           intent,
-          state: { status: 'slot_taken', alternatives },
+          state: { status: 'arranging', externalId, attempts, lastError: 'read-back did not match the requested booking' },
           updatedAt: opts.now,
         }
       }
@@ -89,19 +107,34 @@ export async function bookTour(
         updatedAt: opts.now,
       }
     } catch (err) {
+      if (err instanceof TourChangeRequiredError) throw err
       lastError = err instanceof Error ? err.message : String(err)
-      if (/taken|conflict|unavailable|already booked/i.test(lastError)) {
-        const alternatives = await calendar
-          .listSlots(req.propertyId, req.slot.startsAt, new Date(req.slot.startsAt.getTime() + 7 * 86_400_000))
-          .catch(() => [] as TourSlot[])
+      // This is a safety pause, not calendar unavailability. Preserve it for the
+      // caller-facing handler instead of retrying or offering another tour time.
+      if (lastError === 'CALENDAR_INTERACTION_PAUSED') throw err
+      if (creating && err instanceof BookingWriteFailure) {
+        if (err.certainty === 'not_created') continue
+        uncertainWrite = true
+        externalId = err.externalId
+        if (externalId === null) break
+        continue
+      }
+      if (creating && err instanceof BookingConflictError) {
+        const alternatives = await alternativesFor(req, calendar)
         return { intent, state: { status: 'slot_taken', alternatives }, updatedAt: opts.now }
+      }
+      if (creating) {
+        // The provider may have committed before its response was lost. Without
+        // an authoritative identifier there is nothing safe to read or repeat.
+        uncertainWrite = true
+        break
       }
     }
   }
 
-  const state: BookingState = externalId !== null
+  const state: BookingState = externalId !== null || uncertainWrite
     ? { status: 'arranging', externalId, attempts, lastError }
-    : { status: 'failed', attempts, lastError: lastError ?? 'unknown', queuedForHuman: true }
+    : { status: 'failed', attempts, lastError: lastError ?? 'unknown' }
 
   return { intent, state, updatedAt: opts.now }
 }
@@ -110,24 +143,25 @@ export async function bookTour(
  * What the agent is allowed to say about a booking. Derived from state rather than chosen
  * by the model, so no amount of conversational pressure produces a false confirmation.
  */
-export function sayableStatus(booking: Booking): string {
+export function sayableStatus(booking: Booking, timeZone = DEFAULT_TIME_ZONE): string {
+  const zone = validateTimeZone(timeZone)
   const s = booking.state
   const name = booking.intent.request.prospectName
   switch (s.status) {
     case 'confirmed': {
       const when = s.slot.startsAt
       return `You're all set, ${name}. I've got you down for ${when.toLocaleString('en-US', {
-        weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit',
-        timeZone: 'America/New_York',
-      })}. Someone from the leasing office will confirm with you before then.`
+        weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
+        timeZone: zone,
+      })}. Your tour is confirmed.`
     }
     case 'arranging':
-      return `I'm getting that booked for you now, ${name}. The leasing office will confirm with you as soon as it's locked in — if you don't hear from them within the hour, please call back.`
+      return `I haven't been able to verify that booking yet, ${name}, so it isn't confirmed. The leasing team will need to check it with you.`
     case 'slot_taken':
       return s.alternatives.length > 0
-        ? `That time just went, I'm afraid. I do have ${s.alternatives.slice(0, 3).map((a) => a.startsAt.toLocaleString('en-US', { weekday: 'long', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })).join(', or ')}. Would any of those work?`
-        : `That time just went, I'm afraid, and I don't have anything else on the calendar right now. Let me have someone call you back with options.`
+        ? `That time isn't available. I do have ${s.alternatives.slice(0, 3).map((a) => a.startsAt.toLocaleString('en-US', { weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: zone })).join(', or ')}. Would any of those work?`
+        : `That time isn't available, and I couldn't find another opening in the dates I checked. Would you like help from the leasing team?`
     case 'failed':
-      return `I'm having trouble reaching the calendar right now, ${name}. I've flagged this for the leasing team and someone will call you back shortly to lock in a time — I don't want to tell you it's booked when I can't see it.`
+      return `I'm having trouble reaching the calendar right now, ${name}, so I couldn't confirm a tour. The leasing team will need to help arrange a time.`
   }
 }

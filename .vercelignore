@@ -4,6 +4,5 @@
 # log nobody reads when a real one appears.
 **/test/**
 **/*.test.ts
-scripts/
 .vercel-build/
 node_modules/

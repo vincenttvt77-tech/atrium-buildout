@@ -19,6 +19,7 @@ export function transcriptText(run: RunResult): string {
 export function reportMarkdown(outcomes: Outcome[], meta: { at: Date; assistantModel: string; callerModel: string; judgeModel: string | null }): string {
   const lines: string[] = []
   lines.push(`# Simulated calls — ${meta.at.toISOString()}`, '')
+  lines.push('Off-phone text/tool simulation. Each scenario uses a separate memory-only worker and synthetic workspace; operational network transports are denied. Model requests run separately. This does not test live calls, audio, transcription, Vapi turn detection or latency.', '')
   lines.push(`Assistant model: ${meta.assistantModel}. Caller model: ${meta.callerModel}. Judge: ${meta.judgeModel ?? 'off'}.`, '')
   lines.push('| Scenario | Checks | Judge | Turns | Ended by |', '|---|---|---|---|---|')
   for (const o of outcomes) {

@@ -99,6 +99,105 @@ describe('life-safety outranks everything else present', () => {
     const p = primaryEmergency(detectEmergency('there is a fire'))!
     assert.match(safetyInstruction(p), /stairs, not the elevator/i)
   })
+
+  test('every safety response distinguishes guidance from notifications or dispatch', () => {
+    for (const utterance of ['I smell gas', 'there is a fire', 'carbon monoxide alarm', 'someone is injured',
+      'someone broke in', 'my bathroom is flooding', 'we have no heat', 'the ceiling collapsed']) {
+      const p = primaryEmergency(detectEmergency(utterance))!
+      assert.ok(p, utterance)
+      const instruction = safetyInstruction(p)
+      assert.match(instruction, /I have not contacted emergency services or building staff/, utterance)
+      assert.doesNotMatch(instruction, /I.?m (alerting|dispatching)|I (have )?(alerted|dispatched|notified)|on (their|the) way/i, utterance)
+    }
+  })
+
+  test('flooding does not ask a caller to handle electrical equipment in water', () => {
+    const text = safetyInstruction(primaryEmergency(detectEmergency('my bathroom is flooding'))!)
+    assert.match(text, /Stay out of the water/)
+    assert.match(text, /Don't touch switches, plugs, or appliances while wet or standing in water/)
+    assert.match(text, /Contact the building.*directly/i)
+    assert.doesNotMatch(text, /move anything electrical|shut off the water|dispatching/i)
+  })
+})
+
+describe('heating context distinguishes policy and past issues from current reports', () => {
+  const ordinary = [
+    'What happens if there is no heat?',
+    "What should I do if the heat is out?",
+    'Can I call you if the heat is not working?',
+    'If there is no heat, who should I contact?',
+    'What is your policy for no heat?',
+    'What is the procedure for no heat in winter?',
+    'I had no heat at my old apartment last winter.',
+    'We had no heat yesterday, but it was repaired.',
+    'We had no heat and it is working again.',
+    'We had no heat yesterday. The heat has been restored.',
+    'We had no heat yesterday; it was fixed this morning.',
+    'I am not reporting no heat; I want to book a tour.',
+    "I'm not saying there is no heat.",
+    "I don't have a problem with no heat.",
+    'No heat is not the problem.',
+    "It's not freezing in here.",
+  ]
+  for (const utterance of ordinary) {
+    test(`does not hold a call for ${JSON.stringify(utterance)}`, () => {
+      assert.deepEqual(detectEmergency(utterance), [])
+    })
+  }
+
+  const current = [
+    'There is no heat.',
+    'No heat.',
+    'We have no heat and it is freezing.',
+    'The heat is out.',
+    'The heat is not working.',
+    'It is freezing in here.',
+    'I had no heat.',
+    'We had no heat yesterday.',
+    'We had no heat last night.',
+    'We had no heat yesterday and the problem continues.',
+    'We had no heat last night and nobody has fixed it.',
+    'We had no heat yesterday, it has not been repaired.',
+    'I reported no heat yesterday. Please send somebody to fix it.',
+    'We had no heat yesterday. It was not fixed.',
+    'We had no heat yesterday. It has never been resolved.',
+    'We had no heat yesterday. I do not believe it was fixed.',
+    'We had no heat yesterday. Nobody said it was fixed.',
+    'We had no heat yesterday. It is fixed?',
+    'We had no heat yesterday. It was fixed but the problem continues.',
+    'We had no heat yesterday; it was fixed but broke again.',
+    'We had no heat yesterday; it was fixed but has stopped working again.',
+    'We had no heat yesterday; it was fixed. It stopped working again.',
+    'No heat again after they fixed it yesterday.',
+    'What should I do when there is no heat?',
+    'What should I do if I have no heat right now?',
+    'What is your policy for no heat since yesterday?',
+    'What should I do if the heat is still out?',
+    'I had no heat yesterday and it is still not fixed.',
+    'What happens if there is no heat? Anyway, there is no heat in my apartment.',
+    'What is your policy for no heat, but we have no heat right now.',
+    'I am not reporting no heat in that unit; my heat is out.',
+    'If the heat is out, actually my heat is out right now.',
+    'We had no heat last winter. Now we have no heat again.',
+  ]
+  for (const utterance of current) {
+    test(`preserves the heating guard for ${JSON.stringify(utterance)}`, () => {
+      assert.ok(detectEmergency(utterance).some(signal => signal.kind === 'no_heat'))
+    })
+  }
+
+  test('hypothetical heating wording cannot suppress stronger reports or life-safety guidance', () => {
+    for (const [text, kind] of [
+      ['What if there is no heat? I smell gas now.', 'gas'],
+      ['I had no heat in my old apartment last winter, and there is a fire in my apartment.', 'smoke_or_fire'],
+      ["I'm not reporting no heat, but my carbon monoxide alarm is going off.", 'carbon_monoxide'],
+      ['What is your policy for no heat? My bathroom is flooding.', 'flooding'],
+    ]) {
+      const signals = detectEmergency(text!)
+      assert.equal(signals.some(signal => signal.kind === 'no_heat'), false, text)
+      assert.equal(primaryEmergency(signals)?.kind, kind, text)
+    }
+  })
 })
 
 describe('escalation carries everything the human needs', () => {

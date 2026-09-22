@@ -33,7 +33,7 @@
  *                             overdue: 'Was due 4 hours ago' | 'Was due yesterday 10:00 AM' | 'Was due Sun, Sep 6'
  *   Atrium.fmt.respondPhrase(iso) 'respond by 4:00 PM today' | 'respond by tomorrow 10:00 AM' | … | 'was due 2 hours ago'
  *   Atrium.fmt.elapsed(ms)    '14 hours' | '20 min' | '2 days' — for "oldest waiting …"
- *   Atrium.api.get(path)      parsed JSON; 401/403 → Atrium.gate() and throws { signedOut:true }
+ *   Atrium.api.get(path)      parsed JSON; 401 signs out; revoked property access retires the document
  *   Atrium.api.post(path, body, { doing }) same; JSON body; throws Error(server {error}) with .status;
  *                             a failed write is remembered as state.lastWriteError (Status › For support)
  *   Atrium.gate()             session over: stop polling, no more requests, location.reload()
@@ -62,10 +62,10 @@
  *   Atrium.apply(resource, data)    replace that resource's state from a write response; emits 'data'
  *   Atrium.refresh()          one forced poll round of all three resources (+ /api/health) → Promise
  *   Atrium.icons / Atrium.icon(name)  inline SVG strings (24px, currentColor); '' for an unknown name
- *   Atrium.property           { name, leasingPhone, leasingPhoneDisplay, hours } — build-time copy of data/property.json
+ *   Atrium.property           safe property display facts from server bootstrap (legacy fixture defaults only)
  *   Atrium.normalisePhone(s)  the server's rule: 10 digits → '+1…', 11 starting 1 → '+…', other → '+digits', empty → 'unknown'
  *   Atrium.labels / Atrium.label(map, key, fallback)  §6 vocabulary; own-property lookup, humanised fallback
- *   Atrium.derive.*           windowStart, personName, displayName, displayStage, needsPerson, callBackToday,
+ *   Atrium.derive.*           bookingReviewResolution, windowStart, personName, displayName, displayStage, needsPerson, callBackToday,
  *                             dueTodayCount, toursOn, callRecords, callStory, todoSentence, escalationText, lossText,
  *                             summarySentence, availabilityText, moveInText, profileByPhone, profileForCall
  *   Atrium.hint(key)          localStorage one-time flag (true the first time only)
@@ -97,21 +97,81 @@
 (function () {
 'use strict'
 
-const NY = 'America/New_York'
+const LEGACY_TIME_ZONE = 'America/New_York'
+const databaseMode = window.ATRIUM_RUNTIME_MODE === 'postgres'
+// Snapshot the rendered account once. A different tab can replace the shared login cookie.
+const legacyTenantId = databaseMode ? null : window.ATRIUM_ACCOUNT && Object.prototype.hasOwnProperty.call(window.ATRIUM_ACCOUNT, 'tenantId')
+  ? window.ATRIUM_ACCOUNT.tenantId : 'legacy'
+const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/
+const PERMISSIONS = ['read', 'operate', 'configure', 'manage_members', 'manage_organization']
+let documentScope = null
+let displayProperty = null
+let documentAccessIssue = null
+function permissionAllowed(permission) {
+  return !documentAccessIssue && (!databaseMode || documentScope.permissions.includes(permission))
+}
+function displayText(value, max = 200) { return typeof value === 'string' && value.length <= max && !/[\u0000-\u001f\u007f]/.test(value) }
+function scopeIdentity(value) {
+  return value && typeof value === 'object' && typeof value.organizationId === 'string' && typeof value.propertyId === 'string'
+    && ID_PATTERN.test(value.organizationId) && ID_PATTERN.test(value.propertyId)
+}
+function validatedBootstrap(value) {
+  if (!scopeIdentity(value) || !Number.isSafeInteger(value.configurationVersion) || value.configurationVersion < 1
+    || !displayText(value.permissionVersion) || !value.permissionVersion
+    || !Array.isArray(value.permissions) || !value.permissions.includes('read')
+    || value.permissions.some(p => !PERMISSIONS.includes(p)) || new Set(value.permissions).size !== value.permissions.length
+    || !displayText(value.buildingName) || !value.buildingName.trim()
+    || !displayText(value.locationLabel ?? '', 300) || !value.hours || typeof value.hours !== 'object' || Array.isArray(value.hours)) throw new Error('Invalid property bootstrap')
+  const hours = {}
+  for (const [day, range] of Object.entries(value.hours)) {
+    if (!/^[0-6]$/.test(day) || !Array.isArray(range) || range.length !== 2
+      || range.some(n => typeof n !== 'number' || !Number.isFinite(n) || n < 0 || n > 24) || range[1] <= range[0]) throw new Error('Invalid property hours')
+    hours[day] = Object.freeze([...range])
+  }
+  for (const key of ['leasingPhone', 'leasingPhoneDisplay']) if (value[key] != null && !displayText(value[key], 80)) throw new Error('Invalid property contact')
+  documentScope = Object.freeze({ organizationId: value.organizationId, propertyId: value.propertyId,
+    configurationVersion: value.configurationVersion, permissionVersion: value.permissionVersion,
+    permissions: Object.freeze([...value.permissions]) })
+  return Object.freeze({ name: value.buildingName, locationLabel: value.locationLabel || '',
+    leasingPhone: value.leasingPhone || null, leasingPhoneDisplay: value.leasingPhoneDisplay || value.leasingPhone || null,
+    hours: Object.freeze(hours) })
+}
+function validatedTimeZone(value) {
+  if (typeof value !== 'string' || !/^(?:UTC|GMT|[A-Za-z_]+(?:\/[A-Za-z0-9_+.-]+)+)$/.test(value)) throw new Error('Invalid property timezone')
+  return new Intl.DateTimeFormat('en-US', { timeZone: value }).resolvedOptions().timeZone
+}
+let propertyTimeZone
+try {
+  if (window.ATRIUM_RUNTIME_MODE !== undefined && !['legacy', 'postgres'].includes(window.ATRIUM_RUNTIME_MODE)) throw new Error('Unknown runtime mode')
+  if (!databaseMode && (typeof legacyTenantId !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(legacyTenantId))) throw new Error('Invalid account identity')
+  if (databaseMode) displayProperty = validatedBootstrap(window.ATRIUM_PROPERTY)
+  const supplied = window.ATRIUM_PROPERTY && Object.prototype.hasOwnProperty.call(window.ATRIUM_PROPERTY, 'timeZone')
+    ? window.ATRIUM_PROPERTY.timeZone : databaseMode ? null : LEGACY_TIME_ZONE
+  propertyTimeZone = validatedTimeZone(supplied)
+} catch {
+  document.body.textContent = databaseMode
+    ? 'Property configuration needs attention. The property details or timezone are invalid; ask an administrator to correct them, then reload.'
+    : 'Property configuration needs attention. The account identity or timezone is invalid; ask an administrator to correct it, then reload.'
+  return
+}
 const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const WD_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const MON_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const DAY_MS = 86400000
+const isDemo = window.ATRIUM_DEMO === true
+const isPersistentDemo = isDemo && window.ATRIUM_DEMO_PERSISTENT === true
 const USD = "$"
 
-/** Build-time copy of data/property.json (buildingName, leasingPhone, leasingHoursByDay). Gap G-9/G-10. */
-const property = {
-  name: 'The Larkin',
-  leasingPhone: '+15169909252',
-  leasingPhoneDisplay: '(516) 990-9252',
-  hours: { 0: [11, 16], 1: [10, 18], 2: [10, 18], 3: [10, 19], 4: [10, 19], 5: [10, 18], 6: [10, 17] },
-}
+/** DB mode never inherits another building's phone, hours, name or location. */
+const property = Object.freeze({
+  ...(displayProperty || { name: 'The Larkin', locationLabel: 'Long Island City, NY',
+    leasingPhone: '+15169909252', leasingPhoneDisplay: '(516) 990-9252',
+    hours: { 0: [11, 16], 1: [10, 18], 2: [10, 18], 3: [10, 19], 4: [10, 19], 5: [10, 18], 6: [10, 17] } }),
+  timeZone: propertyTimeZone,
+  timeZoneLabel: new Intl.DateTimeFormat('en-US', { timeZone: propertyTimeZone, timeZoneName: 'longGeneric' })
+    .formatToParts(new Date()).find(part => part.type === 'timeZoneName').value,
+})
 
 // ---------------------------------------------------------------------------------------
 // Escaping and text
@@ -149,14 +209,14 @@ const text = {
 }
 
 // ---------------------------------------------------------------------------------------
-// Time — New York, always, via Intl. Never the viewer's zone.
+// Time — the server-authorized property timezone, never the viewer's zone.
 // ---------------------------------------------------------------------------------------
 
 const partsFmt = new Intl.DateTimeFormat('en-US', {
-  timeZone: NY, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+  timeZone: propertyTimeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
   hour: '2-digit', minute: '2-digit', weekday: 'short',
 })
-const timeFmt = new Intl.DateTimeFormat('en-US', { timeZone: NY, hour: 'numeric', minute: '2-digit' })
+const timeFmt = new Intl.DateTimeFormat('en-US', { timeZone: propertyTimeZone, hour: 'numeric', minute: '2-digit' })
 const tidy = (s) => String(s).replace(/[\u202f\u00a0]/g, ' ')
 
 function toTime(v) {
@@ -188,7 +248,7 @@ const dayOfWeek = (ymd) => new Date(ymdNoon(ymd)).getUTCDay()
 const daysBetween = (a, b) => Math.round((ymdNoon(b) - ymdNoon(a)) / DAY_MS)
 const nyDate = (v) => (isYmd(v) ? v : (nyParts(v) || {}).ymd || null)
 const nyNow = () => nyParts(Date.now())
-/** The instant of a New York wall-clock time. */
+/** The instant of a property-local wall-clock time; ny* names remain module compatibility aliases. */
 function nyInstant(ymd, hour, minute) {
   const [y, m, d] = ymd.split('-').map(Number)
   const want = Date.UTC(y, m - 1, d, hour, minute)
@@ -202,7 +262,7 @@ function nyInstant(ymd, hour, minute) {
 }
 const ymdBits = (ymd) => { const [y, m, d] = ymd.split('-').map(Number); return { y, m, d, dow: dayOfWeek(ymd) } }
 const yearSuffix = (y) => (String(y) === nyNow().ymd.slice(0, 4) ? '' : `, ${y}`)
-/** The NY calendar day of anything: a day value renders as itself, an instant on its NY day. */
+/** A day value renders as itself; a timestamp uses its property-local calendar day. */
 const dayOf = (v) => dayValue(v) || nyDate(v)
 
 const fmt = {
@@ -343,7 +403,12 @@ const href = {
   tel(phone) { const d = String(phone ?? '').replace(/[^\d+]/g, ''); return /\d/.test(d) && phone !== 'unknown' ? `tel:${d}` : null },
   sms(phone) { const d = String(phone ?? '').replace(/[^\d+]/g, ''); return /\d/.test(d) && phone !== 'unknown' ? `sms:${d}` : null },
   mailto(email) { const e = String(email ?? '').trim(); return e.includes('@') && !/\s/.test(e) ? `mailto:${e}` : null },
-  recording(url) { const u = String(url ?? ''); return /^https:\/\//.test(u) ? u : null },
+  recording(url) {
+    const u = String(url ?? '')
+    // Fictional fixture URLs are placeholders, not playable demo recordings.
+    if (!/^https:\/\//.test(u) || /^https:\/\/(?:[^/]*\.)?example\.(?:com|org|net)(?::\d+)?(?:\/|$)/i.test(u)) return null
+    return u
+  },
 }
 
 // ---------------------------------------------------------------------------------------
@@ -471,6 +536,7 @@ const ICON_PATHS = {
   spinner: '<path d="M21 12a9 9 0 1 1-6.22-8.56"/>',
 }
 ICON_PATHS.phone = ICON_PATHS.calls
+ICON_PATHS.units = ICON_PATHS.home
 const icons = {}
 for (const name of Object.keys(ICON_PATHS)) {
   icons[name] = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${ICON_PATHS[name]}</svg>`
@@ -485,7 +551,7 @@ const ico = (name, cls = '') => `<span class="ico${cls ? ` ${cls}` : ''}">${icon
 
 const state = {
   calls: [], events: [], calendar: null, leads: null, health: null,
-  updatedAt: null, errors: {}, callsError: null, callsConfigured: null,
+  updatedAt: null, errors: {}, callsError: null, callsConfigured: null, safetyEventsError: null, bookingReviewsError: null,
   loaded: { calls: false, calendar: false, leads: false },
   lastGoodAt: {}, lastPollAt: null, failedRounds: 0, notConfigured: false, lastWriteError: null,
 }
@@ -503,50 +569,140 @@ function emit(ev, ...args) {
 const arr = (v) => (Array.isArray(v) ? v : [])
 
 // ---------------------------------------------------------------------------------------
-// API — same-origin only; 401/403 means the session is over
+// API — immutable document scope; only 401 ends authentication
 // ---------------------------------------------------------------------------------------
 
 let gated = false
+let serviceWritesInFlight = 0
+let serviceSignInPending = false
+let bookingReviewWritesInFlight = 0
+let bookingReviewSignInPending = false
+let scopeEpoch = 0
+const PROPERTY_ENDPOINTS = new Set(['/api/vapi', '/api/calendar', '/api/leads', '/api/vapi-sync', '/api/workflows', '/api/resident-services', '/api/maintenance-plans'])
+const propertyEndpoint = path => PROPERTY_ENDPOINTS.has(String(path).split('?')[0])
 const JSON_HEADERS = { accept: 'application/json' }
+function accessError(message, status = 409) { const error = new Error(message); error.status = status; error.propertyAccess = true; return error }
+function invalidateDocument(message, status = 409) {
+  if ((bookingReviewWritesInFlight > 0 || bookingReviewSignInPending) && !message.startsWith('The reservation review')) message = 'The reservation review is unconfirmed and may have been recorded. ' + message
+  if (!documentAccessIssue) {
+    documentAccessIssue = { message, status }; scopeEpoch += 1; stopPolling()
+    for (const name of Object.keys(seq)) { seq[name] += 1; sig[name] = '' }
+    Object.assign(state, { calls: [], events: [], calendar: null, leads: null, callsError: null, callsConfigured: null, safetyEventsError: null, bookingReviewsError: null,
+      loaded: { calls: false, calendar: false, leads: false }, errors: {}, lastWriteError: null, lastGoodAt: {}, updatedAt: null })
+    crCache = { key: null, value: [] }
+    if (booted) {
+      for (const item of [...dialogs]) item.close()
+      for (const item of [...toasts]) item.close()
+      for (const media of document.querySelectorAll('audio, video')) media.pause()
+      // Retire every view, including hidden views with cached caller details. A new
+      // authorized document is required; hash navigation must not revive them.
+      for (const view of document.querySelectorAll('.view')) { view.hidden = true; view.replaceChildren() }
+      const live = document.getElementById('live'); if (live) live.textContent = ''
+      paintChrome()
+    }
+  }
+  return accessError(message, status)
+}
+function checkResponseScope(data, serviceSave = false) {
+  if (documentAccessIssue) throw accessError(documentAccessIssue.message, documentAccessIssue.status)
+  if (!databaseMode) return
+  const scope = data && data.scope
+  if (!scope || scope.organizationId !== documentScope.organizationId || scope.propertyId !== documentScope.propertyId
+    || scope.configurationVersion !== documentScope.configurationVersion || scope.permissionVersion !== documentScope.permissionVersion) {
+    throw invalidateDocument((serviceSave ? 'The service save is unconfirmed and may have been recorded. ' : '') + 'The property or your access changed. Reload this property before viewing or making changes.')
+  }
+}
 function signedOut() { const e = new Error('Signed out'); e.signedOut = true; e.status = 401; return e }
 function gate() {
-  if (gated) return
+  if (gated || serviceSignInPending || bookingReviewSignInPending) return
   gated = true
   stopPolling()
   try { location.reload() } catch (e) { /* nothing else to do */ }
 }
 async function request(path, init) {
   if (gated) throw signedOut()
+  const propertyRequest = propertyEndpoint(path), scoped = databaseMode && propertyRequest
+  const serviceSave = ['/api/resident-services', '/api/maintenance-plans'].includes(String(path).split('?')[0]) && init?.method === 'POST'
+  const serviceOutcome = () => (bookingReviewWritesInFlight > 0 || bookingReviewSignInPending ? 'The reservation review is unconfirmed and may have been recorded. ' : '')
+    + (serviceSave || serviceWritesInFlight > 0 || serviceSignInPending ? 'The service save is unconfirmed and may have been recorded. ' : '')
+  if (propertyRequest && documentAccessIssue) throw accessError(documentAccessIssue.message, documentAccessIssue.status)
+  const epoch = scopeEpoch
+  const headers = { ...(init && init.headers), ...(scoped ? {
+    'x-atrium-organization-id': documentScope.organizationId, 'x-atrium-property-id': documentScope.propertyId,
+    'x-atrium-config-version': String(documentScope.configurationVersion),
+  } : propertyRequest ? { 'x-atrium-tenant-id': legacyTenantId } : {}) }
   let r
   try {
-    r = await fetch(path, { credentials: 'same-origin', cache: 'no-store', ...init })
+    r = await fetch(path, { credentials: 'same-origin', cache: 'no-store', ...init, headers })
   } catch (e) {
     const err = new Error("Couldn't reach the server"); err.status = 0; err.network = true; throw err
   }
-  if (r.status === 401 || r.status === 403) { gate(); throw signedOut() }
+  if (r.status === 401) {
+    const reviewUncertain = bookingReviewWritesInFlight > 0 || bookingReviewSignInPending
+    if (reviewUncertain) bookingReviewSignInPending = true
+    const serviceUncertain = serviceSave || serviceWritesInFlight > 0 || serviceSignInPending
+    if (serviceUncertain) serviceSignInPending = true
+    if (propertyRequest || serviceUncertain || reviewUncertain) invalidateDocument(serviceOutcome() + (reviewUncertain ? 'Your session ended. Sign in again and check the saved review before taking another booking action.' : serviceUncertain ? 'Your session ended. Before signing in again, note that the last service change may be saved. After sign-in, check the current record before recording another change.' : 'Your session ended. Sign in again.'), 401)
+    // A Service write may have committed before session revalidation failed. Keep the
+    // retired page warning visible until deliberate navigation; never carry its private
+    // command into a replacement login or silently repeat it.
+    if (!serviceUncertain && !reviewUncertain) gate()
+    throw signedOut()
+  }
   let body = null, parsed = false
   try { body = await r.json(); parsed = true } catch (e) { parsed = false }
+  if (propertyRequest && epoch !== scopeEpoch) throw accessError(serviceOutcome() + 'This response belongs to an earlier property session. Reload the property.')
   if (!r.ok) {
+    if (propertyRequest && r.status === 409 && body && body.code === 'portal_tenant_changed')
+      throw invalidateDocument('The signed-in account changed in another tab. Reload the workspace before viewing or making changes.')
+    const planningStepUp = String(path).split('?')[0] === '/api/maintenance-plans' && body?.code === 'planning_mfa_required'
+    if (scoped && r.status === 403 && !planningStepUp) throw invalidateDocument(serviceOutcome() + 'Access to this property or operation is no longer available. Choose a property you can access or reload to refresh your permissions.', 403)
+    if (scoped && (r.status === 428 || (r.status === 409 && /property|configuration|scope/.test(String(body && body.code))))) {
+      throw invalidateDocument(serviceOutcome() + 'The property configuration changed. Reload this property before continuing.')
+    }
     const msg = body && typeof body.error === 'string' ? body.error : `HTTP ${r.status}`
     if (r.status === 503 && /OPS_DASHBOARD_PASSCODE/.test(msg)) state.notConfigured = true
     const err = new Error(msg); err.status = r.status; err.body = body; throw err
   }
   if (!parsed || body === null || typeof body !== 'object') { const err = new Error('Unexpected response'); err.status = r.status; err.badJson = true; throw err }
+  if (scoped) checkResponseScope(body, serviceSave || serviceWritesInFlight > 0 || serviceSignInPending)
+  if (path.split('?')[0] === '/api/calendar') checkCalendarTimeZone(body)
   return body
+}
+function checkCalendarTimeZone(data) {
+  let zone
+  try { zone = validatedTimeZone(data.timeZone === undefined && !databaseMode ? LEGACY_TIME_ZONE : data.timeZone) }
+  catch {
+    const message = 'The calendar returned an invalid property timezone. Reload after the configuration is corrected.'
+    if (databaseMode) throw invalidateDocument(message, 503)
+    const error = new Error(message); error.status = 503; throw error
+  }
+  if (zone !== propertyTimeZone) {
+    const message = 'The property timezone changed. Reload the portal before viewing or changing tours.'
+    if (databaseMode) throw invalidateDocument(message)
+    const error = new Error(message); error.status = 409; throw error
+  }
 }
 const api = {
   get(path) { return request(path, { headers: JSON_HEADERS }) },
   async post(path, body, opts) {
+    const endpoint = String(path).split('?')[0], serviceWrite = ['/api/resident-services', '/api/maintenance-plans'].includes(endpoint)
+    const bookingReviewWrite = endpoint === '/api/calendar' && body?.action === 'booking_review'
+    if (serviceWrite) serviceWritesInFlight++
+    if (bookingReviewWrite) bookingReviewWritesInFlight++
     try {
+      const needed = endpoint === '/api/vapi-sync' || endpoint === '/api/workflows' || (endpoint === '/api/resident-services' && ['add_resident', 'review_resident', 'revoke_resident'].includes(body?.action)) || (endpoint === '/api/maintenance-plans' && ['publish_policy', 'save_vendor', 'decide_plan'].includes(body?.action)) || (endpoint === '/api/calendar' && body && body.action === 'settings') ? 'configure' : 'operate'
+      if (propertyEndpoint(path) && !permissionAllowed(needed)) throw accessError('Your access is view only for this operation.', 403)
+      if (endpoint === '/api/calendar') body = { ...body, ...calendarRequestRange(), expectedTimeZone: propertyTimeZone }
       return await request(path, {
-        method: 'POST', headers: { ...JSON_HEADERS, 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}),
+        method: 'POST', headers: { ...JSON_HEADERS, 'content-type': 'application/json', ...(endpoint === '/api/resident-services' ? { 'x-atrium-service-form': opts?.formToken, 'x-atrium-service-action': body?.action } : endpoint === '/api/maintenance-plans' ? { 'x-atrium-planning-form': opts?.formToken, 'x-atrium-planning-action': body?.action } : {}) }, body: JSON.stringify(body ?? {}),
       })
     } catch (e) {
       if (!e.signedOut) {
         state.lastWriteError = { message: e.message, status: e.status ?? null, at: new Date().toISOString(), doing: (opts && opts.doing) || null }
       }
       throw e
-    }
+    } finally { if (serviceWrite) serviceWritesInFlight--; if (bookingReviewWrite) bookingReviewWritesInFlight-- }
   },
 }
 
@@ -561,21 +717,60 @@ const inflight = {}
 const busyMap = {}
 let pollTimer = null
 let lastRoundAt = 0
+let calendarRange = null
+function calendarRequestRange() {
+  const today = nyNow().ymd
+  return calendarRange || { from: today, to: addDays(today, 14) }
+}
+function calendarUrl() { return `/api/calendar?${new URLSearchParams(calendarRequestRange())}` }
+function calendarRangeMatches(data) {
+  const wanted = calendarRequestRange()
+  return !data.range || (data.range.from === wanted.from && data.range.to === wanted.to)
+}
+/** Range changes invalidate older reads; responses never move the operator's selected date. */
+function setCalendarRange(range) {
+  const next = range ? { from: range.from, to: range.to } : null
+  if (JSON.stringify(next) === JSON.stringify(calendarRange)) return Promise.resolve()
+  calendarRange = next
+  seq.calendar += 1
+  delete state.errors.calendar
+  if (gated || busyMap.calendar) return Promise.resolve()
+  return fetchOne('calendar').then((result) => {
+    if (!result.dropped) { emit('data', state, new Set(['calendar'])); paintChrome() }
+  })
+}
 
 /** The comparable shape of a resource: generatedAt and note never take part. */
 function snapshot(name, d) {
-  if (name === 'calls') return { calls: arr(d.calls), events: arr(d.events), callsError: d.callsError ?? null, callsConfigured: typeof d.callsConfigured === 'boolean' ? d.callsConfigured : null }
-  if (name === 'calendar') return { slots: arr(d.slots), blocks: arr(d.blocks), bookings: arr(d.bookings), store: d.store ?? null }
-  return { profiles: arr(d.profiles), followUps: arr(d.followUps), outboundEnabled: d.outboundEnabled === true, store: d.store ?? null }
+  if (name === 'calls') {
+    const events = arr(d.events).slice()
+    // A partial safety-feed failure must not erase already displayed durable incidents.
+    for (const event of state.events) {
+      if (event && event.durable === true && ((d.safetyEventsError && event.kind === 'emergency')
+        || (d.bookingReviewsError && event.kind === 'booking_review')) && !events.some(e => e && e.id === event.id)) events.push(event)
+    }
+    return { calls: arr(d.calls), events, callsError: d.callsError ?? null, safetyEventsError: d.safetyEventsError ?? null, bookingReviewsError: d.bookingReviewsError ?? null,
+      callsConfigured: typeof d.callsConfigured === 'boolean' ? d.callsConfigured : null }
+  }
+  if (name === 'calendar') return { slots: arr(d.slots), blocks: arr(d.blocks), bookings: arr(d.bookings), units: arr(d.units), unitBlocks: arr(d.unitBlocks), store: d.store ?? null,
+    rescheduleProjectionPending: arr(d.rescheduleProjectionPending),
+    timeZone: d.timeZone ?? LEGACY_TIME_ZONE, range: d.range ?? null, settings: d.settings ?? null, settingsRevision: d.settingsRevision ?? null }
+  const heldFollowUps = arr(d.heldFollowUps), heldIds = new Set(heldFollowUps.map(f => f && f.id))
+  return { profiles: arr(d.profiles), followUps: arr(d.followUps).filter(f => !f || f.status !== 'scheduled' || !heldIds.has(f.id)), outboundEnabled: d.outboundEnabled === true, store: d.store ?? null,
+    heldFollowUps, rescheduleProjectionPending: arr(d.rescheduleProjectionPending), tourChangeRequests: arr(d.tourChangeRequests),
+    unitFeedback: arr(d.unitFeedback), feedbackUnits: arr(d.feedbackUnits), feedbackInventory: d.feedbackInventory ?? null,
+    unitFeedbackTruncated: d.unitFeedbackTruncated === true }
 }
 function assign(name, snap) {
-  if (name === 'calls') { state.calls = snap.calls; state.events = snap.events; state.callsError = snap.callsError; state.callsConfigured = snap.callsConfigured }
+  if (name === 'calls') { state.calls = snap.calls; state.events = snap.events; state.callsError = snap.callsError; state.callsConfigured = snap.callsConfigured; state.safetyEventsError = snap.safetyEventsError; state.bookingReviewsError = snap.bookingReviewsError }
   else if (name === 'calendar') state.calendar = snap
   else state.leads = snap
   state.loaded[name] = true
 }
 /** Replace a resource from a payload; true when its signature changed. */
 function ingest(name, data) {
+  checkResponseScope(data)
+  if (name === 'calendar') checkCalendarTimeZone(data || {})
   const snap = snapshot(name, data || {})
   const s = JSON.stringify(snap)
   const changed = s !== sig[name]
@@ -584,12 +779,12 @@ function ingest(name, data) {
   return changed
 }
 async function fetchOne(name) {
-  inflight[name] = true
   const mySeq = ++seq[name]
+  inflight[name] = mySeq
   const hadError = Boolean(state.errors[name])
   try {
-    const data = await api.get(RESOURCES[name])
-    if (seq[name] !== mySeq || busyMap[name]) return { name, dropped: true }
+    const data = await api.get(name === 'calendar' ? calendarUrl() : RESOURCES[name])
+    if (seq[name] !== mySeq || busyMap[name] || (name === 'calendar' && !calendarRangeMatches(data))) return { name, dropped: true }
     const changed = ingest(name, data)
     delete state.errors[name]
     state.lastGoodAt[name] = new Date().toISOString()
@@ -599,7 +794,7 @@ async function fetchOne(name) {
     state.errors[name] = { message: e.message, status: e.status ?? null, at: new Date().toISOString() }
     return { name, ok: false, changed: !hadError }
   } finally {
-    inflight[name] = false
+    if (inflight[name] === mySeq) inflight[name] = false
   }
 }
 async function pollRound(force) {
@@ -622,7 +817,7 @@ async function pollRound(force) {
   paintChrome()
 }
 function startPolling() {
-  if (pollTimer || gated) return
+  if (pollTimer || gated || documentAccessIssue) return
   pollTimer = setInterval(() => { pollRound(false) }, 5000)
   pollRound(true)
 }
@@ -660,20 +855,38 @@ function paintBusy(resource) {
     if (on) { if (!el.classList.contains('is-busy')) el.setAttribute('aria-disabled', 'true') }
     else el.removeAttribute('aria-disabled')
   }
+  paintPermissions()
 }
 function apply(resource, data) {
+  checkResponseScope(data)
+  if (resource === 'calendar' && data && !calendarRangeMatches(data)) return
   seq[resource] += 1
   const d = data || {}
   if (resource === 'calendar') {
     const cur = state.calendar || { slots: [], blocks: [], bookings: [], store: null }
     ingest('calendar', {
+      scope: d.scope,
       slots: Array.isArray(d.slots) ? d.slots : cur.slots, blocks: Array.isArray(d.blocks) ? d.blocks : cur.blocks,
       bookings: Array.isArray(d.bookings) ? d.bookings : cur.bookings, store: d.store ?? cur.store,
+      units: Array.isArray(d.units) ? d.units : arr(cur.units), unitBlocks: Array.isArray(d.unitBlocks) ? d.unitBlocks : arr(cur.unitBlocks),
+      rescheduleProjectionPending: Array.isArray(d.rescheduleProjectionPending) ? d.rescheduleProjectionPending : arr(cur.rescheduleProjectionPending),
+      timeZone: d.timeZone ?? cur.timeZone ?? LEGACY_TIME_ZONE,
+      range: d.range ?? cur.range, settings: d.settings ?? cur.settings, settingsRevision: d.settingsRevision ?? cur.settingsRevision,
     })
   } else if (resource === 'leads') {
     const cur = state.leads || { profiles: [], followUps: [], outboundEnabled: false, store: null }
     let profiles = Array.isArray(d.profiles) ? d.profiles : cur.profiles.slice()
     let followUps = Array.isArray(d.followUps) ? d.followUps : cur.followUps.slice()
+    let tourChangeRequests = Array.isArray(d.tourChangeRequests) ? d.tourChangeRequests : arr(cur.tourChangeRequests).slice()
+    if (d.tourChangeRequest && typeof d.tourChangeRequest === 'object' && d.tourChangeRequest.id != null) {
+      const i = tourChangeRequests.findIndex(r => r && r.id === d.tourChangeRequest.id)
+      if (i >= 0) tourChangeRequests[i] = d.tourChangeRequest; else tourChangeRequests.unshift(d.tourChangeRequest)
+    }
+    let unitFeedback = Array.isArray(d.unitFeedback) ? d.unitFeedback : arr(cur.unitFeedback).slice()
+    if (d.unitFeedback && !Array.isArray(d.unitFeedback) && typeof d.unitFeedback === 'object' && d.unitFeedback.id != null) {
+      const i = unitFeedback.findIndex(f => f && f.id === d.unitFeedback.id)
+      if (i >= 0) unitFeedback[i] = d.unitFeedback; else unitFeedback.unshift(d.unitFeedback)
+    }
     if (d.followUp && typeof d.followUp === 'object' && d.followUp.id != null) {
       const i = followUps.findIndex((f) => f && f.id === d.followUp.id)
       if (i >= 0) followUps[i] = d.followUp; else followUps.push(d.followUp)
@@ -683,7 +896,12 @@ function apply(resource, data) {
       const i = profiles.findIndex((p) => p && p.phone === d.profile.phone)
       if (i >= 0) profiles[i] = d.profile; else profiles.unshift(d.profile)
     }
-    ingest('leads', { profiles, followUps, outboundEnabled: typeof d.outboundEnabled === 'boolean' ? d.outboundEnabled : cur.outboundEnabled, store: d.store ?? cur.store })
+    ingest('leads', { scope: d.scope, profiles, followUps, outboundEnabled: typeof d.outboundEnabled === 'boolean' ? d.outboundEnabled : cur.outboundEnabled, store: d.store ?? cur.store,
+      tourChangeRequests, unitFeedback, feedbackUnits: Array.isArray(d.feedbackUnits) ? d.feedbackUnits : arr(cur.feedbackUnits),
+      heldFollowUps: Array.isArray(d.heldFollowUps) ? d.heldFollowUps : arr(cur.heldFollowUps),
+      rescheduleProjectionPending: Array.isArray(d.rescheduleProjectionPending) ? d.rescheduleProjectionPending : arr(cur.rescheduleProjectionPending),
+      feedbackInventory: d.feedbackInventory === undefined ? cur.feedbackInventory : d.feedbackInventory,
+      unitFeedbackTruncated: d.unitFeedbackTruncated === undefined ? cur.unitFeedbackTruncated : d.unitFeedbackTruncated })
   } else if (resource === 'calls') {
     ingest('calls', d)
   } else return
@@ -697,9 +915,9 @@ function apply(resource, data) {
 // Routing and views
 // ---------------------------------------------------------------------------------------
 
-const VIEWS = ['today', 'calls', 'leads', 'calendar', 'status']
-const VIEW_LABEL = { today: 'Today', calls: 'Calls', leads: 'Leads', calendar: 'Calendar', status: 'Status' }
-const VIEW_H1 = { today: 'Today', calls: 'Calls', leads: 'Leads', calendar: 'Tour calendar', status: 'Status' }
+const VIEWS = ['today', 'calls', 'leads', 'units', 'calendar', ...(databaseMode ? ['workflows', ...(permissionAllowed('operate') ? ['services'] : [])] : []), 'status']
+const VIEW_LABEL = { today: 'Today', calls: 'Calls', leads: 'Leads', units: 'Units', calendar: 'Calendar', workflows: 'Work queue', services: 'Service', status: 'Status' }
+const VIEW_H1 = { today: 'Today', calls: 'Calls', leads: 'Leads', units: 'Unit workspace', calendar: 'Tour calendar', workflows: 'Work queue', services: 'Service', status: 'Status' }
 const modules = {}
 let current = null
 let booted = false
@@ -740,6 +958,7 @@ function placeholderView(name) {
     `<p class="faint" style="margin-top:12px">Loading…</p></div>`
 }
 function showView(r, moveFocus) {
+  if (documentAccessIssue) return
   for (const sec of document.querySelectorAll('.view')) sec.hidden = sec.dataset.view !== r.name
   for (const a of document.querySelectorAll('.nav-item')) {
     if (a.dataset.view === r.name) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current')
@@ -759,6 +978,9 @@ function showView(r, moveFocus) {
     root.innerHTML = placeholderView(r.name)
   }
   if (moveFocus && root) {
+    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) root.animate?.([
+      { opacity: .82, transform: 'translateY(5px)' }, { opacity: 1, transform: 'none' },
+    ], { duration: 180, easing: 'ease-out' })
     // a modal dialog keeps focus while it is open (its close handler then lands on this view's heading)
     const h1 = root.querySelector('h1')
     if (h1 && !dialogs.length) { if (!h1.hasAttribute('tabindex')) h1.setAttribute('tabindex', '-1'); try { h1.focus({ preventScroll: false }) } catch (e) { /* ignore */ } }
@@ -769,6 +991,7 @@ function applyRoute() {
   const r = route()
   const prev = current
   current = r
+  if (r.name !== 'calendar') setCalendarRange(null)
   const switched = !prev || prev.name !== r.name
   showView(r, switched && Boolean(prev))
   if (switched) window.scrollTo({ top: 0, behavior: 'auto' })
@@ -789,7 +1012,7 @@ function statusRows() {
   const leadsStore = state.leads && state.leads.store
   const calStore = state.calendar && state.calendar.store
   const savingOff = (s) => Boolean(s) && s.durable === false
-  const kvUnreachable = (s) => Boolean(s) && /^KV configured but unreachable/.test(String(s.note ?? ''))
+  const kvUnreachable = (s) => Boolean(s) && s.kind === 'kv' && s.durable === false
   const rows = {
     leadsSaving: !state.loaded.leads ? null : (savingOff(leadsStore) ? (kvUnreachable(leadsStore) ? 'temp' : 'off') : 'on'),
     calendarSaving: !state.loaded.calendar ? null : (savingOff(calStore) ? (kvUnreachable(calStore) ? 'temp' : 'off') : 'on'),
@@ -797,7 +1020,7 @@ function statusRows() {
     reconnecting: state.failedRounds >= 2,
   }
   rows.ok = rows.leadsSaving !== 'off' && rows.leadsSaving !== 'temp' && rows.calendarSaving !== 'off' && rows.calendarSaving !== 'temp' &&
-    rows.recordings !== 'off' && rows.recordings !== 'down' && !rows.reconnecting && !state.notConfigured
+    rows.recordings !== 'off' && rows.recordings !== 'down' && !rows.reconnecting && !state.notConfigured && !state.safetyEventsError && !state.bookingReviewsError
   return rows
 }
 function badgeFor(name) {
@@ -811,6 +1034,21 @@ function badgeFor(name) {
   return 0
 }
 function paintChrome() {
+  const account = window.ATRIUM_ACCOUNT
+  document.title = `Atrium — ${property.name}`
+  document.querySelectorAll('[data-property-name]').forEach(node => { node.textContent = property.name })
+  document.querySelectorAll('[data-property-location]').forEach(node => { node.textContent = property.locationLabel ? `/ ${property.locationLabel}` : '' })
+  document.querySelectorAll('[data-workspace-name]').forEach(node => { node.textContent = databaseMode ? property.name : account ? account.displayName : property.name })
+  document.querySelectorAll('[data-property-switch]').forEach(node => { node.hidden = !databaseMode })
+  document.querySelectorAll('[data-postgres-only]').forEach(node => { node.hidden = !databaseMode })
+  document.querySelectorAll('[data-service-only]').forEach(node => { node.hidden = !databaseMode || !permissionAllowed('operate') })
+  document.body.classList.toggle('has-work-queue', databaseMode)
+  document.querySelectorAll('[data-view-only]').forEach(node => { node.hidden = !databaseMode || permissionAllowed('operate') })
+  if (account) {
+    document.querySelectorAll('[data-account-name]').forEach((node) => { node.textContent = account.username })
+    document.querySelectorAll('[data-account-avatar]').forEach(node => { node.textContent = String(account.displayName || account.username || 'A').trim().slice(0, 1).toUpperCase() })
+  }
+  paintPermissions()
   const needs = derive.needsPerson(state)
   const live = needs.some((n) => n.type === 'emergency')
   const badges = {
@@ -839,8 +1077,8 @@ function paintCluster(rows) {
   const anyLoaded = state.loaded.leads || state.loaded.calendar || state.loaded.calls
   if (rows.reconnecting) { iconName = 'refresh'; l1 = 'Trying to reconnect…'; l2 = at ? `Showing what we had at ${at}` : ''; mobile = 'Reconnecting…'; cls = 'cluster-warn' }
   else if (anyLoaded && (rows.leadsSaving === 'off' || rows.leadsSaving === 'temp' || rows.calendarSaving === 'off' || rows.calendarSaving === 'temp')) {
-    iconName = 'cloud-off'; l1 = "Changes aren't being saved"; l2 = at ? `Updated ${at}` : ''; mobile = 'Not saving'; cls = 'cluster-warn'
-  } else if (anyLoaded) { iconName = 'check-circle'; l1 = 'Changes are being saved'; l2 = at ? `Updated ${at}` : ''; mobile = at ? `Updated ${at}` : 'Updated'; cls = 'cluster-ok' }
+    iconName = 'cloud-off'; l1 = isDemo && !isPersistentDemo ? 'Demo workspace' : "Changes aren't being saved"; l2 = isDemo && !isPersistentDemo ? 'Sample data resets on restart' : at ? `Updated ${at}` : ''; mobile = isDemo && !isPersistentDemo ? 'Demo' : 'Not saving'; cls = isDemo && !isPersistentDemo ? '' : 'cluster-warn'
+  } else if (anyLoaded) { iconName = 'check-circle'; l1 = isPersistentDemo ? 'Local demo workspace' : 'Changes are being saved'; l2 = isPersistentDemo ? 'Sample data saved locally' : at ? `Updated ${at}` : ''; mobile = isPersistentDemo ? 'Local demo' : at ? `Updated ${at}` : 'Updated'; cls = 'cluster-ok' }
   el.innerHTML = `<span class="cluster-desk ${cls}">${ico(iconName)}<span><span class="cluster-l1">${esc(l1)}</span>${l2 ? `<span class="cluster-l2">${esc(l2)}</span>` : ''}</span></span>` +
     `<span class="cluster-mobile ${cls}">${ico(iconName)}<span>${esc(mobile)}</span></span>`
   el.setAttribute('aria-label', l2 ? `${l1}${/[.…!?]$/.test(l1) ? '' : '.'} ${l2}` : l1)
@@ -848,8 +1086,57 @@ function paintCluster(rows) {
 function paintGlobalBanners() {
   const host = document.getElementById('global-banners')
   if (!host) return
-  const html = state.notConfigured ? html_.banner('warn', "This page isn't set up yet. Ask Atrium support.") : ''
+  const pending = new Set([...arr(state.leads && state.leads.rescheduleProjectionPending), ...arr(state.calendar && state.calendar.rescheduleProjectionPending)]
+    .filter(Boolean).map(item => `${item.externalId}:${item.requestId}`)).size
+  const html = documentAccessIssue ? html_.banner('warn', documentAccessIssue.message, { actionsHtml:
+    `<a class="btn" href="${esc(propertyUrl(documentScope))}">Reload property</a><a class="btn btn-quiet" href="/api/dashboard">Choose a property</a>` })
+    : state.notConfigured ? html_.banner('warn', "This page isn't set up yet. Ask Atrium support.")
+      : pending ? html_.banner('warn', `${pending === 1 ? 'A tour change is' : `${pending} tour changes are`} saved; CRM follow-ups are pending reconciliation. Check the updated calendar before contacting a prospect.`,
+        { actionsHtml: '<a class="btn" href="#/calendar">Review calendar</a>' }) : ''
   if (host.innerHTML !== html) host.innerHTML = html
+}
+
+/** UI affordances follow bootstrap permissions; the server independently authorizes writes. */
+function paintPermissions(root = document) {
+  if (!databaseMode || typeof root.querySelectorAll !== 'function') return
+  for (const control of root.querySelectorAll('[data-write], [data-permission]')) {
+    const permission = control.dataset.permission || 'operate'
+    const allowed = permissionAllowed(permission)
+    if (!allowed) { control.hidden = true; control.setAttribute('aria-disabled', 'true'); if ('disabled' in control) control.disabled = true }
+  }
+  if (root === document && document.body.classList) {
+    document.body.classList.toggle('portal-read-only', !permissionAllowed('operate'))
+    document.body.classList.toggle('portal-no-configure', !permissionAllowed('configure'))
+  }
+}
+
+function propertyUrl(scope) {
+  if (!scopeIdentity(scope)) return '/api/dashboard'
+  return `/api/dashboard?${new URLSearchParams({ organizationId: scope.organizationId, propertyId: scope.propertyId })}`
+}
+
+async function openPropertySwitcher() {
+  if (!databaseMode) return
+  let list
+  const panel = dialog({ title: 'Switch property', secondary: { label: 'Close' }, build(body) {
+    list = document.createElement('div'); list.className = 'property-list'; list.textContent = 'Loading your properties…'; body.append(list)
+  } })
+  try {
+    const result = await api.get('/api/properties')
+    if (!Array.isArray(result.properties)) throw new Error('The property list could not be verified.')
+    const seen = new Set()
+    const properties = result.properties.map(item => {
+      const selection = { organizationId: item && item.organizationId, propertyId: item && item.id }
+      if (!scopeIdentity(selection) || !displayText(item.name) || !item.name.trim() || !displayText(item.organizationName)
+        || seen.has(propertyUrl(selection))) throw new Error('The property list could not be verified.')
+      seen.add(propertyUrl(selection))
+      return { ...selection, name: item.name, organizationName: item.organizationName }
+    })
+    list.innerHTML = properties.length ? properties.map(item => {
+      const current = item.organizationId === documentScope.organizationId && item.propertyId === documentScope.propertyId
+      return `<a class="property-choice${current ? ' is-current' : ''}" href="${esc(propertyUrl(item))}"${current ? ' aria-current="page"' : ''}><span><strong>${esc(item.name)}</strong><small>${esc(item.organizationName)}</small></span><span>${current ? 'Current property' : 'Open property'} ${ico('chevron-right')}</span></a>`
+    }).join('') : '<p class="muted">You do not currently have access to any properties. Contact your administrator.</p>'
+  } catch (error) { list.textContent = ''; panel.setError(error.message || 'The property list is unavailable.') }
 }
 
 // ---------------------------------------------------------------------------------------
@@ -858,6 +1145,12 @@ function paintGlobalBanners() {
 
 const html_ = {
   chip(cls, iconName, txt) { return `<span class="chip ${esc(cls)}">${iconName ? ico(iconName) : ''}<span>${esc(txt)}</span></span>` },
+  tourChangeRequest: tourChangeRequestHtml,
+  followUpReview(fu) {
+    if (fu?.reconciliation?.status !== 'needs_review' || fu.reconciliation.code !== 'legacy_followup_identity_ambiguous') return ''
+    return `<span class="row-chips">${html_.chip('chip-warn', 'warning', 'Review needed')}</span>` +
+      '<span class="row-sub warn-text">This older task may refer to more than one tour. Check the booking before contacting the caller.</span>'
+  },
   banner(kind, txt, opts) {
     const o = opts || {}
     const iconName = o.icon || (kind === 'danger' ? 'siren' : kind === 'warn' ? 'warning' : 'info')
@@ -874,12 +1167,17 @@ const html_ = {
   },
 }
 function hint(key) {
-  const k = `atrium.hint.${String(key)}`
+  const k = preferenceKey(`hint.${String(key)}`)
   try {
     if (localStorage.getItem(k)) return false
     localStorage.setItem(k, '1')
     return true
   } catch (e) { return true }
+}
+const preferenceIdentity = databaseMode ? JSON.stringify([documentScope.organizationId, documentScope.propertyId, window.ATRIUM_ACCOUNT?.userId || '']) : window.ATRIUM_ACCOUNT?.tenantId || 'legacy'
+function preferenceKey(key) {
+  const identity = preferenceIdentity
+  return `atrium.${identity}.${String(key)}`
 }
 const escStack = []
 const escape_ = {
@@ -995,7 +1293,7 @@ function dialog(spec) {
   const progEl = el.querySelector('.dlg-progress')
   const primaryBtn = el.querySelector('.dlg-primary')
   const secondaryBtn = el.querySelector('.dlg-secondary')
-  let closed = false, busyText = null
+  let closed = false, busyText = null, idlePrimaryLabel = primary ? String(primary.label || 'OK') : '', primaryDisabled = Boolean(primary && primary.disabled)
   const api_ = {
     el, body,
     close() {
@@ -1022,15 +1320,15 @@ function dialog(spec) {
     },
     setPrimary(p) {
       if (!primaryBtn) return
-      if (p && p.label != null) primaryBtn.textContent = String(p.label)
-      if (p && p.disabled != null) { if (p.disabled) primaryBtn.setAttribute('aria-disabled', 'true'); else primaryBtn.removeAttribute('aria-disabled') }
+      if (p && p.label != null) { idlePrimaryLabel = String(p.label); if (busyText == null) primaryBtn.textContent = idlePrimaryLabel }
+      if (p && p.disabled != null) { primaryDisabled = Boolean(p.disabled); if (primaryDisabled || busyText != null) primaryBtn.setAttribute('aria-disabled', 'true'); else primaryBtn.removeAttribute('aria-disabled') }
       if (p && p.danger != null) { primaryBtn.classList.toggle('btn-danger', Boolean(p.danger)); primaryBtn.classList.toggle('btn-primary', !p.danger) }
     },
     setBusy(t) {
       busyText = t == null ? null : String(t)
       if (!primaryBtn) return
       if (busyText != null) { primaryBtn.textContent = busyText; primaryBtn.setAttribute('aria-busy', 'true'); primaryBtn.setAttribute('aria-disabled', 'true'); secondaryBtn.setAttribute('aria-disabled', 'true') }
-      else { primaryBtn.removeAttribute('aria-busy'); primaryBtn.removeAttribute('aria-disabled'); secondaryBtn.removeAttribute('aria-disabled') }
+      else { primaryBtn.textContent = idlePrimaryLabel; primaryBtn.removeAttribute('aria-busy'); if (primaryDisabled) primaryBtn.setAttribute('aria-disabled', 'true'); else primaryBtn.removeAttribute('aria-disabled'); secondaryBtn.removeAttribute('aria-disabled') }
     },
     setError(t) {
       if (t == null || t === '') { errEl.hidden = true; errEl.querySelector('.dlg-error-text').textContent = '' }
@@ -1189,7 +1487,9 @@ const escalationFor = (profile, callId) => {
  * or structural damage give other instructions, so those are only "treated it as an emergency".
  */
 const LEAVE_AND_911 = ['gas', 'smoke_or_fire', 'carbon_monoxide'], CALL_911 = ['injury', 'intruder']
-function emergencyAction(kind, transcript) {
+function emergencyAction(kind, transcript, event) {
+  if (event && event.durable === true && event.notificationStatus === 'not_sent')
+    return 'Emergency report saved for staff review. No automatic notification has been sent.'
   const t = String(transcript ?? '')
   if (t.trim()) {
     const assistant = t.split('\n').filter((l) => /^AI:/.test(l)).join('\n')
@@ -1209,12 +1509,8 @@ function openItemsFor(s, phone) { return needsPerson(s).filter((n) => n.phone ==
 function displayStage(profile, s) {
   const stage = String((profile && profile.stage) ?? '')
   const out = { key: stage, label: label(labels.stage, stage), chipClass: label(labels.stageChip, stage, 'chip-neutral'), icon: label(labels.stageIcon, stage, '') }
-  const now = Date.now()
-  if (stage === 'tour_scheduled') {
-    const confirmed = arr(profile.bookings).filter((b) => b && b.status === 'confirmed')
-    if (confirmed.length && confirmed.every((b) => (toTime(b.startsAt) ?? Infinity) < now)) return { key: 'toured', label: 'Toured', chipClass: 'chip-ok', icon: 'check' }
-  }
-  if (stage === 'escalated' && s && !openItemsFor(s, profile.phone).length) return { key: 'handled', label: 'Handled by a person', chipClass: 'chip-neutral', icon: 'check' }
+  // The clock does not establish attendance; keep the evidence-derived server stage.
+  if (stage === 'escalated' && s && !openItemsFor(s, profile.phone).filter(n => profile.phone !== 'unknown' || arr(profile.calls).some(c => c.callId === n.callId)).length) return { key: 'handled', label: 'Handled by a person', chipClass: 'chip-neutral', icon: 'check' }
   return out
 }
 const CALLBACK_RE = /could not handle: ([\s\S]*?)\. A person needs to call\.$/
@@ -1225,6 +1521,48 @@ function callbackQuestion(fu, profile) {
   const trigger = (esc_ && esc_.trigger) || 'other'
   return { detail, trigger, escalation: esc_ }
 }
+// A review receipt describes the calendar at checkedAt; it is never a live booking.
+const reviewObject = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+const reviewId = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,255}$/.test(value)
+const reviewInstant = value => typeof value === 'string' && Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value
+const reviewUnit = value => value === null ? null : typeof value === 'string' && value.trim() && value.length <= 128 && !/[\u0000-\u001f\u007f]/.test(value) ? value.trim().toUpperCase() : undefined
+function bookingReviewAttempt(value) {
+  if (!reviewObject(value) || !displayText(value.externalId, 1024) || !value.externalId.trim()
+    || typeof value.slotId !== 'string' || !/^slot-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value.slotId)
+    || !reviewInstant(value.startsAt) || !reviewInstant(value.endsAt) || value.endsAt <= value.startsAt
+    || value.startsAt !== `${value.slotId.slice(5)}:00.000Z` || reviewUnit(value.unitId) === undefined) return null
+  return { externalId: value.externalId, slotId: value.slotId, startsAt: value.startsAt, endsAt: value.endsAt, unitId: reviewUnit(value.unitId) }
+}
+const sameReviewAttempt = (left, right) => Boolean(left && right) && ['externalId', 'slotId', 'startsAt', 'endsAt', 'unitId'].every(key => left[key] === right[key])
+function bookingReviewResolution(review) {
+  if (!reviewObject(review) || review.version !== 1 || review.kind !== 'booking_review' || review.durable !== true
+    || !reviewId(review.callId) || review.id !== `booking-review:${review.callId}` || review.needsReview !== false
+    || review.notificationStatus !== 'not_sent' || !Number.isSafeInteger(review.sourceRevision) || review.sourceRevision < 0
+    || !reviewInstant(review.at) || !reviewInstant(review.updatedAt) || review.updatedAt < review.at
+    || !review.booking || review.booking.status !== 'arranging') return null
+  const value = review.resolution, original = bookingReviewAttempt(review.booking)
+  if (!reviewObject(value) || value.callId !== review.callId || value.sourceRevision !== review.sourceRevision
+    || typeof value.requestId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{7,127}$/.test(value.requestId)
+    || !displayText(value.actorId, 256) || !value.actorId.trim() || !reviewInstant(value.checkedAt)
+    || value.checkedAt < review.at || value.checkedAt > review.updatedAt
+    || !['confirmed', 'not_booked'].includes(value.outcome) || !['pending', 'complete'].includes(value.projection)) return null
+  const attempt = bookingReviewAttempt(value.attempt)
+  if (!sameReviewAttempt(original, attempt)) return null
+  const booking = value.booking === null ? null : bookingReviewAttempt(value.booking)
+  if (value.outcome === 'confirmed' ? !sameReviewAttempt(attempt, booking) || !Number.isSafeInteger(value.booking.revision) || value.booking.revision < 0 : value.booking !== null) return null
+  return { requestId: value.requestId, callId: value.callId, sourceRevision: value.sourceRevision, actorId: value.actorId,
+    checkedAt: value.checkedAt, attempt, outcome: value.outcome, projection: value.projection,
+    booking: booking ? { ...booking, revision: value.booking.revision } : null }
+}
+function completedBookingReview(review) {
+  const resolution = bookingReviewResolution(review)
+  return resolution && resolution.projection === 'complete' ? resolution : null
+}
+function reviewMatchesBooking(resolution, booking) {
+  return Boolean(resolution && booking) && booking.slotId === resolution.attempt.slotId
+    && reviewUnit(booking.unitId) === resolution.attempt.unitId
+    && (booking.startsAt === undefined || booking.startsAt === resolution.attempt.startsAt)
+}
 let npCache = { key: null, value: [] }
 function needsPerson(s) {
   const key = `${sig.calls}|${sig.leads}|${Math.floor(Date.now() / 60000)}`
@@ -1233,21 +1571,31 @@ function needsPerson(s) {
   const items = [], seen = new Set()
   const records = callRecords(s)
   const byId = new Map(records.map((r) => [r.id, r]))
-  const emergencies = arr(s.events).filter((e) => e && e.kind === 'emergency' && now - (toTime(e.at) ?? 0) < DAY_MS)
+  const durableCalls = new Set(arr(s.events).filter(e => e && e.kind === 'emergency' && e.durable === true).map(e => e.callId))
+  const emergencies = arr(s.events).filter((e) => e && e.kind === 'emergency' && (e.durable === true || !durableCalls.has(e.callId)) && now - (toTime(e.at) ?? 0) < DAY_MS)
   for (const e of emergencies.slice().sort((a, b) => (toTime(b.at) ?? 0) - (toTime(a.at) ?? 0))) {
     if (seen.has(e.callId)) continue
     seen.add(e.callId)
     const rec = byId.get(e.callId)
     const profile = (rec && rec.profile) || profileForCall(s, e.callId)
     const phone = (rec && rec.phone) || (profile && profile.phone) || 'unknown'
-    items.push({ type: 'emergency', callId: e.callId, phone, name: (profile && profile.name) || null, profile,
+    items.push({ type: 'emergency', callId: e.callId, phone, name: (profile && profile.name) || (rec && rec.name) || null, profile,
       phrase: label(labels.emergency, e.emergencyKind, 'an emergency'), matched: String(e.matched ?? ''), at: e.at, sortAt: toTime(e.at) ?? 0,
-      action: emergencyAction(e.emergencyKind, rec && rec.call && rec.call.transcript) })
+      action: emergencyAction(e.emergencyKind, rec && rec.call && rec.call.transcript, e) })
   }
+  const completedReviews = new Map(arr(s.events).filter(e => e && e.kind === 'booking_review' && e.durable === true).map(e => [e.callId, completedBookingReview(e)]))
+  const bookingReviews = arr(s.events).filter(e => e && e.kind === 'booking_review' && e.durable === true && !completedReviews.get(e.callId))
+    .filter(e => { if (seen.has(e.callId)) return false; seen.add(e.callId); return true })
+    .map(review => ({ type: 'bookingReview', review, callId: review.callId,
+      phone: review.phone || 'unknown', name: review.name, at: review.at, sortAt: toTime(review.at) ?? 0 }))
+  const tourChanges = arr(s.leads && s.leads.tourChangeRequests).filter(r => r && r.status === 'pending')
+    .sort((a, b) => (toTime(a.firstRequestedAt) ?? 0) - (toTime(b.firstRequestedAt) ?? 0))
+    .map(request => ({ type: 'tourChange', request, callId: request.callId, phone: request.phone || 'unknown',
+      name: request.name, at: request.firstRequestedAt, sortAt: toTime(request.firstRequestedAt) ?? 0 }))
   const callbacks = followUpsOf(s).filter((f) => f && f.kind === 'callback' && f.status === 'scheduled')
     .sort((a, b) => (toTime(a.dueAt) ?? 0) - (toTime(b.dueAt) ?? 0))
   for (const fu of callbacks) {
-    const profile = profileByPhone(s, fu.phone)
+    const profile = fu.phone === 'unknown' ? profileForCall(s, fu.createdFromCall) : profileByPhone(s, fu.phone)
     const q = callbackQuestion(fu, profile)
     const calledAt = callAt(profile, fu.createdFromCall) || fu.createdAt
     const callId = (q.escalation && q.escalation.callId) || fu.createdFromCall
@@ -1259,10 +1607,11 @@ function needsPerson(s) {
   const stuck = []
   for (const p of profilesOf(s)) {
     if (!p) continue
-    const hasCallback = callbacks.some((f) => f.phone === p.phone)
+    const hasCallback = callbacks.some((f) => f.phone === p.phone && (p.phone !== 'unknown' || arr(p.calls).some(c => c.callId === f.createdFromCall)))
     if (hasCallback) continue
     for (const b of arr(p.bookings)) {
       if (!b || (b.status !== 'failed' && b.status !== 'arranging')) continue
+      if (reviewMatchesBooking(completedReviews.get(b.callId), b)) continue
       const at = callAt(p, b.callId)
       if (at == null || now - (toTime(at) ?? 0) > 2 * DAY_MS) continue
       if (arr(p.bookings).some((o) => o && o.status === 'confirmed' && o.slotId === b.slotId)) continue
@@ -1272,7 +1621,10 @@ function needsPerson(s) {
     }
   }
   stuck.sort((a, b) => b.sortAt - a.sortAt)
-  const value = items.filter((i) => i.type === 'emergency').concat(items.filter((i) => i.type === 'callback'), stuck)
+  const relatedConcerns = records.filter(rec => completedReviews.get(rec.id) && !seen.has(rec.id)
+    && !tourChanges.some(item => item.callId === rec.id) && callStory(rec, s).needsPerson)
+    .map(rec => ({ type: 'callReview', callId: rec.id, phone: rec.phone, name: rec.name, at: rec.startedAt }))
+  const value = items.filter((i) => i.type === 'emergency').concat(bookingReviews, tourChanges, items.filter((i) => i.type === 'callback'), stuck, relatedConcerns)
   npCache = { key, value }
   return value
 }
@@ -1284,37 +1636,54 @@ function callBackToday(s) {
 function dueTodayCount(s) {
   const today = nyNow().ymd
   return followUpsOf(s).filter((f) => f && f.status === 'scheduled' && (nyDate(f.dueAt) || '9999') <= today).length
+    + arr(s.leads && s.leads.tourChangeRequests).filter(r => r && r.status === 'pending').length
 }
 function toursOn(s, ymd) {
   const now = Date.now()
   const cal = s.calendar
   const calLoaded = Boolean(cal)
   const calBookingIds = new Set(arr(cal && cal.bookings).map((b) => b && b.slotId))
-  const calBookingBy = new Map(arr(cal && cal.bookings).map((b) => [b && b.slotId, b]))
   const out = [], seen = new Set()
   for (const p of profilesOf(s)) {
     for (const b of arr(p && p.bookings)) {
       if (!b || b.status !== 'confirmed' || nyDate(b.startsAt) !== ymd) continue
       if (calLoaded && !calBookingIds.has(b.slotId)) continue
       // Two tours can share a time (two model residences): dedupe per tour, not per time.
-      const key = `${b.slotId}|${(b.unitId ?? '')}|${(p.name || '').trim()}`
+      const matches = arr(cal && cal.bookings).filter((x) => x && x.slotId === b.slotId && (x.unitId ?? '') === (b.unitId ?? ''))
+      const cb = matches.find((x) => (p.phone && p.phone !== 'unknown' && x.prospectPhone === p.phone) || (p.name && x.prospectName === p.name)) || (matches.length === 1 ? matches[0] : null)
+      const key = (cb && cb.externalId) || `${b.slotId}|${(b.unitId ?? '')}|${(p.name || '').trim()}`
       if (seen.has(key)) continue
       seen.add(key)
-      const cb = arr(cal && cal.bookings).find((x) => x && x.slotId === b.slotId && (x.unitId ?? '') === (b.unitId ?? '')) || calBookingBy.get(b.slotId)
-      out.push({ slotId: b.slotId, startsAt: b.startsAt, endsAt: null, name: p.name || (cb && cb.prospectName) || 'Tour', phone: p.phone, email: p.email || null,
+      out.push({ slotId: b.slotId, startsAt: (cb && cb.startsAt) || b.startsAt, endsAt: (cb && cb.endsAt) || null, name: p.name || (cb && cb.prospectName) || 'Tour', phone: p.phone, email: p.email || null,
         unitId: b.unitId ?? (cb && cb.unitId) ?? null, callId: b.callId, source: 'lead', profile: p, past: (toTime(b.startsAt) ?? 0) < now })
     }
+  }
+  // The staff calendar fetches only its displayed range. Saved bookings still cover every
+  // date, so Today remains correct after someone browses a distant week or removes a lead.
+  for (const b of arr(cal && cal.bookings)) {
+    if (!b) continue
+    const sl = arr(cal && cal.slots).find((slot) => slot && slot.slotId === b.slotId)
+    const legacyStart = /^slot-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(b.slotId || '') ? `${b.slotId.slice(5)}:00.000Z` : null
+    const startsAt = b.startsAt || (sl && sl.startsAt) || legacyStart
+    if (!startsAt || nyDate(startsAt) !== ymd) continue
+    const name = String(b.prospectName ?? '').trim()
+    const key = b.externalId || `${b.slotId}|${b.unitId ?? ''}|${name}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({ slotId: b.slotId, startsAt, endsAt: b.endsAt || (sl && sl.endsAt) || null, name: name || 'Tour',
+      phone: normalisePhone(b.prospectPhone) || null, email: b.prospectEmail || null,
+      unitId: b.unitId ?? null, callId: null, source: 'calendar', profile: null, past: (toTime(startsAt) ?? 0) < now })
   }
   for (const sl of arr(cal && cal.slots)) {
     if (!sl || sl.date !== ymd) continue
     const onSlot = arr(sl.bookings).length ? arr(sl.bookings) : (sl.booking ? [sl.booking] : [])
     for (const b of onSlot) {
-      if (!b) continue
+      if (!b || (b.startsAt && toTime(b.startsAt) !== toTime(sl.startsAt))) continue
       const name = String(b.prospectName ?? '').trim()
-      const key = `${sl.slotId}|${(b.unitId ?? '')}|${name}`
+      const key = b.externalId || `${sl.slotId}|${(b.unitId ?? '')}|${name}`
       if (seen.has(key)) continue
       seen.add(key)
-      out.push({ slotId: sl.slotId, startsAt: sl.startsAt, endsAt: sl.endsAt, name: name || 'Tour', phone: null, email: null,
+      out.push({ slotId: sl.slotId, startsAt: b.startsAt || sl.startsAt, endsAt: b.endsAt || sl.endsAt, name: name || 'Tour', phone: null, email: null,
         unitId: b.unitId ?? null, callId: null, source: 'calendar', profile: null, past: (toTime(sl.startsAt) ?? 0) < now })
     }
   }
@@ -1333,7 +1702,7 @@ function callRecords(s) {
     const id = String(call.id)
     const phone = normalisePhone(call.customerNumber)
     const known = byCallId.get(id)
-    const profile = (known && known.profile) || profileByPhone(s, phone)
+    const profile = (known && known.profile) || (phone === 'unknown' ? null : profileByPhone(s, phone))
     records.set(id, { id, phone, profile, call, events: [], summary: (known && known.summary) || null, startedAt: call.startedAt || null, durationSeconds: call.durationSeconds ?? null })
   }
   for (const [id, { profile, summary }] of byCallId) {
@@ -1355,7 +1724,9 @@ function callRecords(s) {
     records.set(id, { id, phone: (profile && profile.phone) || 'unknown', profile, call: null, events: evs, summary: null, startedAt: evs[0].at || null, durationSeconds: null })
   }
   for (const r of records.values()) {
-    r.name = (r.profile && r.profile.name) || null
+    const safety = r.events.find(e => e && (e.kind === 'emergency' || e.kind === 'booking_review') && e.durable === true)
+    if (r.phone === 'unknown' && safety) r.phone = normalisePhone(safety.phone)
+    r.name = (r.profile && r.profile.name) || (safety && safety.name) || null
     r.displayName = r.name || fmt.phone(r.phone) || 'Hidden number'
   }
   const value = [...records.values()].sort((a, b) => (toTime(b.startedAt) ?? -1) - (toTime(a.startedAt) ?? -1))
@@ -1374,14 +1745,31 @@ const sizeNoun = (v) => { const w = sizeWord(v); return w ? w.replace(/^a /, '')
 const bedroomsText = (v) => { const n = (v === 'studio' || v === '0' || v === 0) ? 0 : Number(v); return isNaN(n) ? String(v ?? '') : (n === 0 ? 'Studio or larger' : `${n} or more`) }
 function moveInText(value) {
   if (value == null) return ''
-  if (typeof value === 'string') return value ? `from ${fmt.monthDay(value)}` : ''
+  if (typeof value === 'string') {
+    const day = value ? fmt.monthDay(value) : ''
+    return day && day !== '—' ? `from ${day}` : ''
+  }
   const a = value.earliest, b = value.latest
   if (a && b) return `${fmt.monthDay(a)} – ${fmt.monthDay(b)}`
   if (a) return `from ${fmt.monthDay(a)}`
   return ''
 }
+/** Preserve a stated minimum/range; a premium shopper never becomes priced out. */
+function budgetText(value) {
+  const amount = n => typeof n === 'number' && Number.isFinite(n) && n >= 0 ? n : null
+  if (value && typeof value === 'object') {
+    const min = amount(value.minMonthly), max = amount(value.maxMonthly)
+    if (min != null && max != null && min <= max) return `${fmt.money(min)}–${fmt.money(max)}/mo`
+    if (min != null && max == null) return `${fmt.money(min)}+/mo`
+    if (max != null && min == null) return `up to ${fmt.money(max)}/mo`
+    return ''
+  }
+  if (amount(value) != null) return `up to ${fmt.money(value)}/mo`
+  // Older call events retain the caller's words, not a normalized budget range.
+  return typeof value === 'string' ? value : ''
+}
 function factValue(signal, value) {
-  if (signal === 'budget') return `up to ${fmt.money(value)}/mo`
+  if (signal === 'budget') return budgetText(value)
   if (signal === 'bedrooms') return bedroomsText(value)
   if (signal === 'moveInTiming') return moveInText(typeof value === 'object' ? value : String(value ?? '')) || String(value ?? '')
   return String(value ?? '')
@@ -1413,7 +1801,7 @@ function summarySentence(outcome) {
   if (o === 'Enquired') return 'They asked about apartments.'
   return o ? text.staff(o) : ''
 }
-const PRICED_OUT_RE = /^Nothing(?: \S+)? is available at or below \$/
+const PRICED_OUT_RE = /^Nothing(?: [^\r\n]{1,40})? is available at or below \$/
 const num = (s) => Number(String(s).replace(/,/g, ''))
 /** Budget / cheapest / gap from either wording of the priced-out result; nulls when unreadable. */
 function pricedOutNumbers(res) {
@@ -1431,6 +1819,17 @@ function gateMissing(result) {
   return { moveInTiming: 'their move-in date', bedrooms: 'how many bedrooms', budget: 'their budget' }[m ? m[1] : ''] || 'more'
 }
 
+function failedToolResult(result) {
+  if (typeof result !== 'string') return false
+  const value = result.trim()
+  if (/^(?:Error:\s*)?(?:(?:401|403|408|429|5\d\d)\s*[: -]?\s*)?(?:unauthorized|forbidden|request timeout|too many requests|internal server error|bad gateway|service unavailable|gateway timeout)[.!]?$/i.test(value)) return true
+  if (/^(?:Error:\s*)?(?:Request failed with status code|HTTP)\s+(?:401|403|408|429|5\d\d)\b/i.test(value)) return true
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) && Boolean(parsed.error)
+  } catch { return false }
+}
+
 function callStory(record, s) {
   const r = record || {}
   const call = r.call || null
@@ -1439,16 +1838,25 @@ function callStory(record, s) {
   const tools = call ? arr(call.toolCalls).map((tc) => ({
     name: String((tc && tc.name) ?? 'unknown'),
     args: tc && tc.arguments && typeof tc.arguments === 'object' ? tc.arguments : {},
-    result: tc && typeof tc.result === 'string' ? tc.result : null,
+    // Keep the dated demo declaration in raw history, but classify the actual answer.
+    result: tc && typeof tc.result === 'string'
+      ? tc.result.replace(/^\[Inventory source:[^\]\r\n]{1,2000}\]\s*/, '') : null,
   })) : []
   const ev = (kind, pred) => events.filter((e) => e && e.kind === kind && (!pred || pred(e)))
+  const review = ev('booking_review', e => e.durable === true && e.callId === r.id)[0]
+  const checkedReview = completedBookingReview(review)
+  const resolvedTool = t => t.name === 'book_tour' && reviewMatchesBooking(checkedReview, { ...t.args, unitId: t.args.unitId ?? null })
   const f = {
     emergency: null, restricted: null, booked: null, arranging: null, bookFailed: false, slotTaken: false, bookInvalid: false,
     pricedOut: null, loss: null, units: [], stretch: [], later: [], refused: null, bedroomMismatch: false, noMatch: false, stale: false,
-    answered: [], captured: {}, unreadable: [], slots: null, noSlots: false, dropped: false, crash: false,
+    answered: [], responded: [], captured: {}, unreadable: [], slots: null, noSlots: false, dropped: false, crash: false,
   }
   // events first (structured numbers), then tool calls (authoritative wording) overwrite or fill
-  for (const e of ev('emergency')) f.emergency = { phrase: label(labels.emergency, e.emergencyKind, 'an emergency'), matched: String(e.matched ?? ''), kind: String(e.emergencyKind ?? '') }
+  for (const e of ev('emergency')) {
+    if (f.emergency && f.emergency.durable && !e.durable) continue
+    f.emergency = { phrase: label(labels.emergency, e.emergencyKind, 'an emergency'), matched: String(e.matched ?? ''), kind: String(e.emergencyKind ?? ''),
+      durable: e.durable === true, notificationStatus: e.notificationStatus }
+  }
   for (const e of ev('escalated')) {
     if (e.trigger === 'emergency') { if (!f.emergency) f.emergency = { phrase: 'an emergency', matched: '', kind: '' } }
     else if (/^restricted:/.test(String(e.trigger))) f.restricted = { question: String(e.detail ?? ''), trigger: String(e.trigger) }
@@ -1464,18 +1872,21 @@ function callStory(record, s) {
   for (const e of ev('question_answered', (x) => x.decision === 'answer')) f.answered.push({ question: String(e.question ?? ''), topic: String(e.topic ?? '') })
   for (const e of ev('question_refused')) f.refused = { question: String(e.question ?? ''), timesAsked: Number(e.timesAsked) || 1 }
   for (const e of ev('tour_booked')) {
+    if (e.status !== 'confirmed' && reviewMatchesBooking(checkedReview, e)) continue
     if (e.status === 'confirmed') f.booked = { unitId: e.unitId || null, when: String(e.slot ?? '') || null, email: e.prospectEmail || null }
     else if (e.status === 'arranging') f.arranging = { unitId: e.unitId || null }
     else if (e.status === 'failed') f.bookFailed = true
     else if (e.status === 'slot_taken') f.slotTaken = true
   }
+  for (const e of ev('booking_review', e => e.durable === true && e.callId === r.id && !completedBookingReview(e))) f.arranging = { unitId: e.booking && e.booking.unitId || null }
   for (const e of ev('loss_reason')) if (e.reason) f.loss = { kind: String(e.reason.kind ?? ''), detail: String(e.reason.detail ?? ''), evidence: String(e.reason.evidence ?? '') }
   for (const e of ev('slots_listed')) f.slots = Number(e.count) || 0
   const bookedAt = { index: -1 }
   tools.forEach((t, i) => {
     const res = t.result
-    if (res === null) { f.dropped = true; return }
-    if (/^Something went wrong on my end/.test(res)) { f.crash = true; return }
+    if (resolvedTool(t)) return
+    if (res === null || !res.trim()) { f.dropped = true; return }
+    if (failedToolResult(res) || /^Something went wrong on my end/.test(res.trim())) { f.crash = true; return }
     if (t.name === 'capture_signal') {
       const signal = String(t.args.signal ?? '')
       if (/^Got it/.test(res)) f.captured[signal] = { signal, value: t.args.value, excerpt: String(t.args.excerpt ?? '') }
@@ -1485,7 +1896,7 @@ function callStory(record, s) {
         if (!f.pricedOut) f.pricedOut = pricedOutNumbers(res)
       } else if (/^We do not have that bedroom count/.test(res)) f.bedroomMismatch = true
       else if (/^Nothing is available matching that/.test(res) || /^Nothing matches on any of size/.test(res)) f.noMatch = true
-      else if (/^I need to re-check/.test(res)) f.stale = true
+      else if (/^(?:I need to re-check|The inventory source is out of date)/.test(res)) f.stale = true
       else {
         for (const id of unitIdsIn(res, /^Unit ([A-Za-z0-9-]+)/)) if (!f.units.includes(id)) f.units.push(id)
         for (const id of unitIdsIn(res, /Slightly above their range: Unit ([A-Za-z0-9-]+)/)) if (!f.stretch.includes(id)) f.stretch.push(id)
@@ -1495,10 +1906,10 @@ function callStory(record, s) {
       const question = String(t.args.question ?? '')
       if (/^That is something a member of the team/.test(res)) f.restricted = { question: question || (f.restricted && f.restricted.question) || '', trigger: (f.restricted && f.restricted.trigger) || `restricted:${String(t.args.topic ?? '')}` }
       else if (/^You do not have an approved answer/.test(res)) f.refused = { question, timesAsked: (f.refused && f.refused.timesAsked) || 1 }
-      else if (!/^That is live information/.test(res)) { if (!f.answered.some((a) => a.question === question)) f.answered.push({ question, topic: String(t.args.topic ?? '') }) }
+      else if (!/^That is live information/.test(res) && !f.answered.some((a) => a.question === question)) f.responded.push({ question })
     } else if (t.name === 'list_tour_slots') {
       if (/^No tour times are open/.test(res)) { f.noSlots = true; f.slots = 0 }
-      else if (f.slots == null) f.slots = (res.match(/^slot-/gm) || []).length
+      else if (f.slots == null && /^slot-/m.test(res)) f.slots = (res.match(/^slot-/gm) || []).length
     } else if (t.name === 'book_tour') {
       if (/^You're all set/.test(res)) { f.booked = { unitId: t.args.unitId || (f.booked && f.booked.unitId) || null, when: (f.booked && f.booked.when) || parseWhen(res), email: t.args.prospectEmail || (f.booked && f.booked.email) || null }; bookedAt.index = i; f.slotTaken = false }
       else if (/^I'm getting that booked/.test(res)) f.arranging = { unitId: t.args.unitId || null }
@@ -1533,7 +1944,7 @@ function callStory(record, s) {
     }
   }
   // What it did is said only as far as the transcript (or, without one, the kind's fixed instruction) shows.
-  if (f.emergency) f.emergency.action = emergencyAction(f.emergency.kind, call && call.transcript)
+  if (f.emergency) f.emergency.action = emergencyAction(f.emergency.kind, call && call.transcript, f.emergency)
 
   // who / wants
   const who = (() => {
@@ -1548,8 +1959,8 @@ function callStory(record, s) {
     const c = f.captured
     const parts = []
     const size = c.bedrooms ? sizeWord(c.bedrooms.value) : null
-    const budget = c.budget ? fmt.money(c.budget.value) : null
-    if (size || budget) parts.push(`looking for ${size || 'a place'}${budget ? ` under ${budget}` : ''}`)
+    const budget = c.budget ? budgetText(c.budget.value) : null
+    if (size || budget) parts.push(`looking for ${size || 'a place'}${budget ? ` with a budget of ${budget}` : ''}`)
     // Value phrases, not verbatim excerpts: the full quotes live in "What the assistant learned".
     // When only an excerpt exists it is cut to its first clause so the sentence still scans.
     const clause = (s) => { const t = String(s ?? '').trim(); const m = /^(.*?)[.!?](?:\s|$)/.exec(t); return text.truncate(m && m[1].trim() ? m[1].trim() : t, 40) }
@@ -1567,9 +1978,13 @@ function callStory(record, s) {
   const rules = [
     { id: 1, hit: () => Boolean(f.emergency), say: () => `They reported ${f.emergency.phrase}${f.emergency.matched ? ` — "${f.emergency.matched}"` : ''}. ${f.emergency.action}` },
     { id: 2, hit: () => Boolean(f.restricted), say: askedSentence },
+    { id: 21, hit: () => Boolean(checkedReview) && !f.arranging && !f.crash && !f.bookFailed, say: () => checkedReview.outcome === 'confirmed'
+      ? `A reservation${checkedReview.attempt.unitId ? ` for apartment ${checkedReview.attempt.unitId}` : ''} was verified when checked ${fmt.dateTime(checkedReview.checkedAt, { inSentence: true })}. Review the current calendar for later changes.`
+      : `No matching reservation was found when checked ${fmt.dateTime(checkedReview.checkedAt, { inSentence: true })}. The original booking attempt is closed.` },
     { id: 3, hit: () => Boolean(f.booked), say: bookedSentence },
     { id: 4, hit: () => Boolean(f.arranging), say: () => `The assistant is arranging a tour${f.arranging.unitId ? ` of apartment ${f.arranging.unitId}` : ''} — it isn't confirmed yet.` },
-    { id: 5, hit: () => f.bookFailed, say: () => "They wanted a tour but it couldn't be booked — the assistant said someone would call back with times." },
+    { id: 19, hit: () => f.crash, say: () => 'A system step failed, so one or more requests could not be verified. Review the call.' },
+    { id: 5, hit: () => f.bookFailed, say: () => 'They wanted a tour, but the booking could not be completed. Staff review is needed.' },
     { id: 6, hit: () => f.slotTaken, say: () => 'The time they wanted was taken; the assistant offered other times.' },
     { id: 7, hit: () => Boolean(f.pricedOut), say: () => (f.pricedOut.budget != null ? `Nothing was under ${fmt.money(f.pricedOut.budget)} — our lowest is ${fmt.money(f.pricedOut.cheapest)}, so they're ${fmt.money(f.pricedOut.gap)} short.` : 'Nothing was under their budget — the assistant said so plainly.') },
     { id: 8, hit: () => Boolean(f.loss), say: () => `It may not work out: ${lossText(f.loss)}.` },
@@ -1579,29 +1994,32 @@ function callStory(record, s) {
     { id: 12, hit: () => f.noMatch, say: () => 'Nothing was available for what they wanted; the assistant offered the waitlist.' },
     { id: 13, hit: () => f.stale, say: () => "The assistant looked for apartments, but the list was out of date, so it didn't quote anything." },
     { id: 14, hit: () => f.answered.length > 0, say: () => `They asked about ${text.list([...new Set(f.answered.map((a) => label(labels.topic, a.topic)))])} and the assistant answered from the approved information.` },
+    { id: 20, hit: () => f.responded.length > 0, say: () => 'A response was recorded for their question. Review the call for the answer and its source.' },
     { id: 15, hit: () => Object.keys(f.captured).length > 0, say: () => "They told the assistant what they're looking for; nothing was booked yet." },
-    { id: 16, hit: () => Boolean(call) && tools.length === 0 && r.durationSeconds != null && r.durationSeconds < 20, say: () => 'A very short call — they hung up before saying what they needed.' },
-    { id: 17, hit: () => Boolean(call) && tools.length === 0, say: () => 'The assistant answered without needing to look anything up.' },
+    { id: 16, hit: () => Boolean(call) && tools.length === 0 && r.durationSeconds != null && r.durationSeconds < 20, say: () => 'A short call with no recorded tool activity.' },
+    { id: 17, hit: () => Boolean(call) && tools.length === 0, say: () => 'No tool activity was recorded for this call.' },
   ]
   let fired = null, sentence = ''
   for (const rule of rules) { if (rule.hit()) { fired = rule.id; sentence = rule.say(); break } }
   if (!fired) {
     if (!call && r.summary) sentence = summarySentence(r.summary.outcome)
-    if (!sentence) sentence = call ? 'The assistant answered without needing to look anything up.' : "Details weren't kept for this call."
+    if (!sentence) sentence = call ? 'The saved call does not include a verified outcome.' : "Details weren't kept for this call."
     fired = 18
   }
   if (fired === 2 && f.booked) sentence += ` The assistant also booked a tour${f.booked.unitId ? ` of apartment ${f.booked.unitId}` : ''} for ${f.booked.when || 'a time on the calendar'}.`
   else if (fired === 3 && f.restricted) sentence += ` They also asked "${text.truncate(f.restricted.question || label(labels.trigger, f.restricted.trigger, 'something only a person can answer'), 90)}" — that's for a person to answer.`
   else if (fired === 1) { if (f.restricted) sentence += ` ${askedSentence()}`; else if (f.booked) sentence += ` ${bookedSentence()}` }
 
-  const needsPersonFlag = Boolean(f.restricted) || f.bookFailed
+  const needsPersonFlag = Boolean(f.restricted) || f.bookFailed || Boolean(f.arranging) || f.crash
   const chips = []
+  if (checkedReview) chips.push({ text: checkedReview.outcome === 'confirmed' ? 'Reservation verified' : 'No reservation found', cls: 'chip-info', icon: 'calendar' })
   if (f.emergency) chips.push({ text: 'Emergency', cls: 'chip-danger', icon: 'siren' })
   if (needsPersonFlag) chips.push({ text: 'Needs a person', cls: 'chip-warn', icon: 'hand' })
   if (f.booked) chips.push({ text: 'Tour booked', cls: 'chip-ok', icon: 'calendar' })
   if (f.pricedOut || (f.loss && f.loss.kind === 'priced_out')) chips.push({ text: 'Priced out', cls: 'chip-lost', icon: 'x' })
   if (f.loss && f.loss.kind !== 'priced_out') chips.push({ text: "Didn't work out", cls: 'chip-lost', icon: 'x' })
-  if (f.dropped) chips.push({ text: 'Call dropped', cls: 'chip-info', icon: 'info' })
+  if (f.dropped) chips.push({ text: 'Result unavailable', cls: 'chip-info', icon: 'info' })
+  if (f.crash) chips.push({ text: 'System step failed', cls: 'chip-warn', icon: 'info' })
 
   // facts
   const facts = []
@@ -1612,7 +2030,8 @@ function callStory(record, s) {
   const steps = []
   if (f.emergency) {
     const did = f.emergency.action.replace(/^The assistant /, '').replace(/\.$/, '')
-    steps.push({ icon: 'siren', text: `Treated this as an emergency (${f.emergency.phrase})${/^told/.test(did) ? ` and ${did}` : ''}.` })
+      steps.push({ icon: 'siren', text: f.emergency.durable ? `Saved an emergency report (${f.emergency.phrase}) for staff review. No automatic notification has been sent.`
+        : `Treated this as an emergency (${f.emergency.phrase})${/^told/.test(did) ? ` and ${did}` : ''}.` })
   }
   let run = []
   const flushRun = () => {
@@ -1625,10 +2044,15 @@ function callStory(record, s) {
   }
   for (const t of tools) {
     const res = t.result
+    if (resolvedTool(t)) {
+      flushRun()
+      steps.push({ icon: 'calendar', text: 'The original booking step was reviewed later. See the saved reservation review.' })
+      continue
+    }
     if (t.name === 'capture_signal' && res !== null && /^Got it/.test(res)) { run.push({ signal: String(t.args.signal ?? ''), value: t.args.value, excerpt: String(t.args.excerpt ?? '') }); continue }
     flushRun()
-    if (res === null) { steps.push({ icon: 'x', text: 'This step never finished — the call may have dropped here.' }); continue }
-    if (/^Something went wrong on my end/.test(res)) { steps.push({ icon: 'x', text: 'Something went wrong on our side; the assistant apologised and offered a call back.' }); continue }
+    if (res === null || !res.trim()) { steps.push({ icon: 'x', text: 'No result was saved for this step; its outcome is unverified.' }); continue }
+    if (failedToolResult(res) || /^Something went wrong on my end/.test(res.trim())) { steps.push({ icon: 'x', text: 'This step returned a system error; its outcome was not confirmed.' }); continue }
     if (t.name === 'capture_signal') {
       const signal = String(t.args.signal ?? '')
       if (/^Could not read/.test(res)) steps.push({ icon: 'note', text: `Couldn't make out their ${label(labels.signalShort, signal, 'answer')} from "${String(t.args.value ?? '')}"; asked again differently.` })
@@ -1644,7 +2068,8 @@ function callStory(record, s) {
         steps.push({ icon: 'home', text: size ? `Checked what's available — no ${size} apartments.` : "Checked what's available — no apartments of that size." })
       } else if (/^Nothing is available matching that/.test(res)) steps.push({ icon: 'home', text: "Checked what's available — nothing for what they wanted; offered the waitlist." })
       else if (/^Nothing matches on any of size/.test(res)) steps.push({ icon: 'home', text: "Checked what's available — nothing matched on size, date or budget; asked what they'd be flexible on." })
-      else if (/^I need to re-check/.test(res)) steps.push({ icon: 'home', text: "Checked what's available — the list was out of date, so it didn't quote." })
+      else if (/^No currently listed residences meet that spending minimum/.test(res)) steps.push({ icon: 'home', text: "Checked what's available — none met their spending minimum; asked whether they'd consider a lower price." })
+      else if (/^(?:I need to re-check|The inventory source is out of date)/.test(res)) steps.push({ icon: 'home', text: "Checked what's available — the list was out of date, so it didn't quote." })
       else if ((m = /^Residence (\S+) is available:[^$]*\$([\d,]+)\/month/.exec(res))) steps.push({ icon: 'home', text: `Looked up apartment ${m[1]}: available at ` + USD + m[2] + '.' })
       else if ((m = /^There is no residence (\S+?) /i.exec(res))) steps.push({ icon: 'home', text: `Looked up apartment ${m[1]}: not on the list.` })
       else if ((m = /^Residence (\S+) is pending/.exec(res))) steps.push({ icon: 'home', text: `Looked up apartment ${m[1]}: pending an application.` })
@@ -1663,15 +2088,16 @@ function callStory(record, s) {
       if (/^That is something a member of the team/.test(res)) steps.push({ icon: 'hand', text: `Asked "${q}" — passed to a person; took their details.` })
       else if (/^That is live information/.test(res)) steps.push({ icon: 'message', text: `Asked "${q}" — checked the live list instead of answering from memory.` })
       else if (/^You do not have an approved answer/.test(res)) steps.push({ icon: 'message', text: `Asked "${q}" — no approved answer, so the assistant offered a call back rather than guess.${f.refused && f.refused.timesAsked >= 2 ? ' Asked twice.' : ''}` })
-      else steps.push({ icon: 'message', text: `Answered "${q}" from ${label(labels.topic, t.args.topic, 'the approved information')}: "${text.truncate(text.staff(res.replace(/\s+/g, ' ').trim()), 140)}"` })
+      else steps.push({ icon: 'message', text: `${f.answered.some(a => a.question === q) ? `Answered "${q}" from ${label(labels.topic, t.args.topic, 'the approved information')}` : `A response was recorded for "${q}"`}: "${text.truncate(text.staff(res.replace(/\s+/g, ' ').trim()), 140)}"` })
     } else if (t.name === 'list_tour_slots') {
       if (/^No tour times are open/.test(res)) steps.push({ icon: 'calendar', text: 'No tour times were open, so offered a call back.' })
-      else steps.push({ icon: 'calendar', text: `Offered ${text.plural((res.match(/^slot-/gm) || []).length, 'tour time')}.` })
+      else if (/^slot-/m.test(res)) steps.push({ icon: 'calendar', text: `Offered ${text.plural((res.match(/^slot-/gm) || []).length, 'tour time')}.` })
+      else steps.push({ icon: 'calendar', text: 'The tour-time request has no verified slot list.' })
     } else if (t.name === 'book_tour') {
-      if (/^You're all set/.test(res)) steps.push({ icon: 'calendar', text: `Booked a tour${t.args.unitId ? ` of apartment ${t.args.unitId}` : ''} for ${(f.booked && f.booked.when) || parseWhen(res) || 'a time on the calendar'}${t.args.prospectEmail ? `; confirmation to ${t.args.prospectEmail}` : ''}.` })
+      if (/^You're all set/.test(res)) steps.push({ icon: 'calendar', text: `Booked a tour${t.args.unitId ? ` of apartment ${t.args.unitId}` : ''} for ${(f.booked && f.booked.when) || parseWhen(res) || 'a time on the calendar'}${t.args.prospectEmail ? `; email recorded: ${t.args.prospectEmail}` : ''}.` })
       else if (/^I'm getting that booked/.test(res)) steps.push({ icon: 'calendar', text: 'Started arranging a tour; not confirmed yet.' })
       else if (/^That time just went/.test(res)) steps.push({ icon: 'calendar', text: 'The time was taken while booking; offered other times.' })
-      else if (/^I'm having trouble reaching the calendar/.test(res)) steps.push({ icon: 'hand', text: "Couldn't reach the calendar; flagged this for a call back." })
+      else if (/^I'm having trouble reaching the calendar/.test(res)) steps.push({ icon: 'hand', text: 'The calendar request failed. Staff review is needed.' })
       else if (/^That slot is not on the calendar/.test(res)) steps.push({ icon: 'calendar', text: "Tried a time that wasn't on the calendar and was told to list real times." })
       else steps.push({ icon: 'calendar', text: 'Tried to book a tour.' })
     } else if (t.name === 'capture_loss_reason') {
@@ -1679,6 +2105,7 @@ function callStory(record, s) {
     } else steps.push({ icon: 'x', text: "Tried something the assistant can't do." })
   }
   flushRun()
+  if (checkedReview) steps.push({ icon: 'calendar', text: `${checkedReview.outcome === 'confirmed' ? 'Reservation verified' : 'No matching reservation found'} when checked ${fmt.dateTime(checkedReview.checkedAt, { inSentence: true })}. No notification was sent by this review.` })
 
   return {
     who, wants, sentence, chips, facts, steps, findings: f,
@@ -1695,7 +2122,15 @@ function todoSentence(fu, profile, s) {
   const kind = String(fu.kind ?? '')
   const today = nyNow().ymd
   const verbFor = (ch) => label(labels.channelVerb, ch, 'Call')
-  const bookingOn = (ymd) => arr(p.bookings).find((b) => b && b.status === 'confirmed' && nyDate(b.startsAt) === ymd) || null
+  const sourceBooking = fu.source?.version === 2 && fu.source.kind === 'booking' ? fu.source.booking : null
+  const hasBookingSource = fu.source?.version === 2
+  const unitKey = value => String(value ?? '').trim().toUpperCase()
+  const exactBooking = sourceBooking && arr(p.bookings).find(b => b && b.status === 'confirmed'
+    && b.slotId === sourceBooking.slotId && toTime(b.startsAt) != null && toTime(b.startsAt) === toTime(sourceBooking.startsAt)
+    && unitKey(b.unitId) === unitKey(sourceBooking.unitId))
+  // A v2 task cannot borrow another tour's details merely because the dates match.
+  const bookingOn = (ymd) => hasBookingSource ? exactBooking || null
+    : arr(p.bookings).find((b) => b && b.status === 'confirmed' && nyDate(b.startsAt) === ymd) || null
   const tourPhrase = (b) => `${fmt.time(b.startsAt)} tour${b.unitId ? ` of apartment ${b.unitId}` : ''}`
   const dayWord = (ymd) => { const d = daysBetween(today, ymd); return d === 0 ? "today's" : d === 1 ? "tomorrow's" : `${WD_LONG[dayOfWeek(ymd)]}'s` }
   const reason = String(fu.reason ?? '')
@@ -1710,14 +2145,17 @@ function todoSentence(fu, profile, s) {
     const tour = bookingOn(addDays(nyDate(fu.dueAt) || today, 1))
     after = ` a reminder about tomorrow's ${tour ? tourPhrase(tour) : 'tour'}`
   } else if (kind === 'post_tour') {
-    const past = arr(p.bookings).filter((b) => b && b.status === 'confirmed' && (toTime(b.startsAt) ?? Infinity) < Date.now()).sort((a, b) => (toTime(b.startsAt) ?? 0) - (toTime(a.startsAt) ?? 0))
+    const past = hasBookingSource ? (exactBooking ? [exactBooking] : [])
+      : arr(p.bookings).filter((b) => b && b.status === 'confirmed' && (toTime(b.startsAt) ?? Infinity) < Date.now()).sort((a, b) => (toTime(b.startsAt) ?? 0) - (toTime(a.startsAt) ?? 0))
     let unit = past.length ? past[0].unitId : null
-    if (!unit && (m = /toured(?: residence (\S+?))? —/.exec(reason))) unit = m[1] || null
-    after = ` — how did the tour${unit ? ` of apartment ${unit}` : ''} go? Do they want to apply?`
+    if (!unit && (m = /(?:toured|was scheduled to tour)(?: residence (\S+?))? —/.exec(reason))) unit = m[1] || null
+    after = ` to check whether they attended the tour${unit ? ` of apartment ${unit}` : ''}. If so, ask how it went and whether they want to apply.`
   } else if (kind === 'priced_out_watch') {
     verb = verbFor(fu.channel); before = `${verb} `
+    const range = p.signals && p.signals.budgetRange && budgetText(p.signals.budgetRange.value)
     const budget = p.signals && p.signals.budget && p.signals.budget.value
-    if (budget != null && !isNaN(Number(budget))) after = ` if anything under ${fmt.money(budget)} opens up`
+    if (range) after = ` if anything in their ${range} range opens up`
+    else if (budget != null && !isNaN(Number(budget))) after = ` if anything under ${fmt.money(budget)} opens up`
     else if ((m = /priced out \((.+?)\)/.exec(reason))) after = ` if anything in their range opens up (${text.staff(m[1])})`
     else after = ' if anything in their range opens up'
   } else if (kind === 'nurture') {
@@ -1725,7 +2163,11 @@ function todoSentence(fu, profile, s) {
   } else if (kind === 'callback') {
     const q = callbackQuestion(fu, p)
     const t = escalationText({ trigger: q.trigger, detail: q.detail })
-    after = ` back — ${t.headline}`; needs = true
+    if (q.trigger === 'emergency' || /^Emergency reported by /.test(reason)) {
+      verb = 'Review'; before = 'Review the emergency reported by '
+      after = " now. No automatic notification has been sent; follow the building's emergency protocol."
+    } else after = ` back — ${t.headline}`
+    needs = true
   } else if (kind === 'collect_email') {
     if (p.name) { before = 'Get '; after = "'s email so the tour confirmation can go out" }
     else { before = 'Get an email address for '; after = ' so the tour confirmation can go out' }
@@ -1737,8 +2179,15 @@ function todoSentence(fu, profile, s) {
 }
 
 const derive = {
-  windowStart, personName, displayName, displayStage, needsPerson, callBackToday, dueTodayCount, toursOn, callRecords, callStory,
-  todoSentence, escalationText, lossText, summarySentence, availabilityText, moveInText, profileByPhone, profileForCall, factValue, bedroomsText, emergencyAction,
+  /** The API resolves saved UTC bounds against the current property timezone. */
+  wholeDayBlockDates(block) {
+    if (Array.isArray(block && block.wholeDayDates)) return block.wholeDayDates.filter(isYmd)
+    // Date-only legacy records have no preserved interval. Timestamped records
+    // without coverage metadata must not be presented as covering an entire day.
+    return block && isYmd(block.target) && !block.startsAt && !block.endsAt ? [block.target] : []
+  },
+  bookingReviewResolution, windowStart, personName, displayName, displayStage, needsPerson, callBackToday, dueTodayCount, toursOn, callRecords, callStory,
+  todoSentence, escalationText, lossText, summarySentence, availabilityText, moveInText, budgetText, profileByPhone, profileForCall, factValue, bedroomsText, emergencyAction,
 }
 
 // ---------------------------------------------------------------------------------------
@@ -1747,7 +2196,7 @@ const derive = {
 
 function reread(resource) {
   if (!RESOURCES[resource] || gated) return Promise.resolve()
-  return api.get(RESOURCES[resource]).then((d) => { apply(resource, d) }, () => { /* the poll will try again */ })
+  return api.get(resource === 'calendar' ? calendarUrl() : RESOURCES[resource]).then((d) => { apply(resource, d) }, () => { /* the poll will try again */ })
 }
 /**
  * Where keyboard focus goes when the control that started a write leaves the list with its row:
@@ -1784,6 +2233,138 @@ function restoreFocus(keys, toastHandle) {
   for (const k of keys) { if (view) for (const el of view.querySelectorAll(`[data-key="${cssq(k)}"]`)) if (tryFocus(el)) return }
   if (toastHandle && toastHandle.el && tryFocus(toastHandle.el.querySelector('.toast-action'))) return
   if (view) tryFocus(view.querySelector('h1'))
+}
+function tourChangeRequestHtml(request) {
+  if (!request) return ''
+  const reviewed = request.status === 'reviewed'
+  const contact = [request.name, fmt.phone(request.phone), request.email].filter(Boolean).map(esc).join(' · ')
+  return `<div class="row row-stack tour-change-row" data-key="tour-change:${esc(request.id)}"><span class="row-body">` +
+    `<span class="row-title"><strong>Tour-change request</strong> ${html_.chip(reviewed ? 'chip-neutral' : 'chip-warn', reviewed ? 'check' : 'hand', reviewed ? 'Reviewed' : 'Needs review')}</span>` +
+    `<span class="row-sub">${contact || 'Caller details not provided'} · identity unverified</span>` +
+    `<span class="meta">Requested ${esc(fmt.dateTime(request.firstRequestedAt))}${request.reason === 'existing_future_tour' ? ' · a possible existing tour needs checking' : ''}</span>` +
+    arr(request.excerpts).map(excerpt => `<span class="quote">“${esc(excerpt)}”</span>`).join('') +
+    '<span class="reassure">Verify the caller and the correct booking before changing a tour. No tour change or notification is made by reviewing this request.</span>' +
+    (reviewed ? `<span class="row-sub">Review recorded ${esc(fmt.dateTime(request.review && request.review.at))}. This does not confirm rescheduling or contact.</span>${request.review && request.review.note ? `<span class="row-sub">Review note: ${esc(request.review.note)}</span>` : ''}` : '') +
+    '</span><span class="row-actions">' +
+    (!reviewed && permissionAllowed('operate') ? `<button type="button" class="btn" data-action="review-tour-change" data-request="${esc(request.id)}" data-key="tour-change:${esc(request.id)}:review" data-write="leads">Review request</button>` : '') +
+    '<a class="btn btn-quiet" href="#/calendar">Open calendar</a></span></div>'
+}
+let bookingReviewDialogOpen = false
+function restoreBookingReviewFocus() {
+  if (gated || documentAccessIssue || dialogs.length || document.activeElement !== document.body) return
+  const view = document.querySelector('.view:not([hidden])')
+  // On a narrow screen the Calls hero is hidden while its detail is open.
+  const heading = view && [...view.querySelectorAll('h1, .call-panel h2[tabindex]')].find(node => node.getClientRects().length)
+  if (heading) heading.focus({ preventScroll: true })
+}
+function reviewBooking(review, button) {
+  if (bookingReviewDialogOpen || !permissionAllowed('operate') || gated || busyNow('calendar') || button?.disabled || button?.getAttribute?.('aria-disabled') === 'true') return
+  const latest = arr(state.events).find(event => event && event.kind === 'booking_review' && event.durable === true && event.callId === review?.callId)
+  if (!latest || latest.id !== review.id || latest.sourceRevision !== review.sourceRevision || !reviewId(latest.callId)
+    || !Number.isSafeInteger(latest.sourceRevision) || latest.sourceRevision < 0 || completedBookingReview(latest)) return
+  const existing = bookingReviewResolution(latest)
+  if (latest.needsReview !== true && existing?.projection !== 'pending') return
+  if (!window.crypto?.randomUUID) { window.Atrium.toast('Reload this secure workspace before checking the reservation.', { kind: 'error' }); return }
+  const attempt = bookingReviewAttempt(latest.booking), epoch = scopeEpoch
+  let command = Object.freeze({ action: 'booking_review', requestId: existing?.requestId || window.crypto.randomUUID(),
+    callId: latest.callId, sourceRevision: latest.sourceRevision, expectedTimeZone: propertyTimeZone })
+  let closed = false, sending = false, conflicted = false
+  bookingReviewDialogOpen = true
+  const active = () => !closed && !gated && !documentAccessIssue && scopeEpoch === epoch && permissionAllowed('operate')
+  return window.Atrium.dialog({ title: 'Check the saved reservation', secondary: { label: 'Cancel' },
+    build(body) {
+      body.innerHTML = '<p>Check this original booking attempt against the saved calendar. This will record the result and finish related staff records when possible. It does not create another reservation or send a notification.</p>' +
+        `<p>Requested tour: ${esc(latest.booking ? fmt.dateTime(latest.booking.startsAt) : 'Time not recorded')}${latest.booking?.unitId ? ` · Residence ${esc(latest.booking.unitId)}` : ''}</p>`
+    },
+    primary: { label: existing?.projection === 'pending' ? 'Finish review' : 'Check reservation', busyLabel: 'Checking reservation…', async onClick(d) {
+      if (!active() || sending || busyNow('calendar')) return
+      if (conflicted) { d.close(); await reread('calls'); return }
+      sending = true
+      d.setError('')
+      try {
+        const result = await busy('calls', busy('calendar', api.post('/api/calendar', command, { doing: 'checking the saved reservation' })))
+        if (!active()) return
+        const saved = result.bookingReview, checked = bookingReviewResolution(saved)
+        // The backend can resume a canonical claim created in another tab. Only its
+        // request id may differ; call, revision and every attempted booking field must match.
+        if (!checked || saved.callId !== command.callId || saved.sourceRevision !== command.sourceRevision
+          || !sameReviewAttempt(checked.attempt, attempt) || result.notificationSent !== false
+          || (checked.projection === 'complete' ? result.status !== 'complete' : result.status !== 'pending_projection')) {
+          throw new Error('The reservation review acknowledgement could not be verified.')
+        }
+        seq.calls += 1
+        ingest('calls', { scope: result.scope, calls: state.calls, events: [...state.events.filter(event => event?.id !== saved.id), saved],
+          callsError: state.callsError, callsConfigured: state.callsConfigured, safetyEventsError: state.safetyEventsError,
+          bookingReviewsError: state.bookingReviewsError })
+        emit('data', state, new Set(['calls'])); paintChrome()
+        if (checked.projection === 'pending') {
+          command = Object.freeze({ ...command, requestId: checked.requestId })
+          d.setError('The calendar was checked; review updates are still pending. Retry verification to finish the same review. No notification was sent.')
+          d.setPrimary({ label: 'Retry verification' })
+          return
+        }
+        d.close()
+        restoreBookingReviewFocus()
+        window.Atrium.toast(checked.outcome === 'confirmed'
+          ? 'Reservation verified when checked. No notification was sent by this review.'
+          : 'No matching reservation found when checked. No notification was sent by this review.', { kind: 'ok' })
+        await Promise.all([reread('calendar'), reread('leads')])
+        restoreBookingReviewFocus()
+      } catch (error) {
+        if (!active() || error.signedOut || error.propertyAccess) return
+        if (error.status === 409 || error.status === 404 || (error.status >= 400 && error.status < 500)) {
+          conflicted = true
+          d.setError('This request changed or could not be verified. Close and refresh before checking it again. No booking outcome is confirmed by this screen.')
+          d.setPrimary({ label: 'Close and refresh' })
+        } else {
+          d.setError('The review could not be confirmed and may have been recorded. Retry verification to check the same attempt. Do not create another reservation based on this screen.')
+          d.setPrimary({ label: 'Retry verification' })
+        }
+      } finally { sending = false }
+    } }, onClose() { closed = true; bookingReviewDialogOpen = false },
+  })
+}
+function reviewTourChange(id) {
+  if (!permissionAllowed('operate') || busyNow('leads')) return
+  const request = arr(state.leads && state.leads.tourChangeRequests).find(r => r && r.id === id)
+  if (!request || request.status !== 'pending') return
+  let note, pending = null, closed = false, conflicted = false
+  return window.Atrium.dialog({ title: 'Review tour-change request', secondary: { label: 'Cancel' },
+    build(body) {
+      body.innerHTML = '<p>Verify the caller and the correct booking before moving a tour. Marking this request reviewed only records your review; it does not change a booking or send a notification.</p>' +
+        '<label class="stack">Review note (optional)<textarea class="input tour-change-note" data-review-note maxlength="1000" rows="4" placeholder="Record what you checked or what still needs attention"></textarea></label>'
+      note = body.querySelector('[data-review-note]')
+    },
+    primary: { label: 'Mark reviewed', busyLabel: 'Saving review…', async onClick(d) {
+      if (closed || !permissionAllowed('operate')) return
+      if (conflicted) { d.close(); await reread('leads'); return }
+      if (!pending) pending = Object.freeze({ action: 'review_tour_change', id: request.id, expectedRevision: request.revision, note: note.value.trim() })
+      note.disabled = true
+      d.setError('')
+      try {
+        const result = await busy('leads', api.post('/api/leads', pending, { doing: 'recording a tour-change review' }))
+        const saved = result.tourChangeRequest
+        if (!saved || saved.id !== pending.id || saved.status !== 'reviewed' || saved.revision !== pending.expectedRevision + 1) throw new Error('The review acknowledgement could not be verified.')
+        if (closed) return
+        apply('leads', result)
+        d.close()
+        window.Atrium.toast('Review recorded. No booking changed or notification sent.', { kind: 'ok' })
+      } catch (error) {
+        if (closed || error.signedOut || !permissionAllowed('operate')) return
+        if (error.status === 409 || error.status === 404) {
+          conflicted = true
+          d.setError('This request changed or is no longer available. Close and refresh to review the latest record; this screen cannot confirm your review.')
+          d.setPrimary({ label: 'Close and refresh' })
+        } else if (!error.status || error.status >= 500 || error.badJson || (error.status >= 200 && error.status < 300)) {
+          d.setError('The review could not be confirmed. Retry to check the same review; your note is held so it cannot be submitted as a different review.')
+          d.setPrimary({ label: 'Retry review' })
+        } else {
+          pending = null; note.disabled = false
+          d.setError(error.message || 'Check the note and try again.')
+        }
+      }
+    } }, onClose() { closed = true },
+  })
 }
 async function setFollowUpStatus(fu, status, opts) {
   const o = opts || {}
@@ -1822,10 +2403,10 @@ const link = (name, params, txt, cls) => `<a class="${cls || 'btn btn-quiet'}" h
 const telBtn = (phone, txt, cls) => { const h = href.tel(phone); return h ? `<a class="${cls || 'btn btn-call'}" href="${esc(h)}">${esc(txt || 'Call')}</a>` : '' }
 const telLink = (phone) => { const h = href.tel(phone), shown = fmt.phone(phone); return h && shown ? `<a href="${esc(h)}">${esc(shown)}</a>` : esc(shown) }
 /** A person's name as the link to their lead (every person mention links onward, §2.6). */
-const personLink = (phone, name) => `<a class="name" href="${esc(hashFor('leads', { phone: phone || 'unknown' }))}">${esc(name)}</a>`
+const personLink = (phone, name, callId) => `<a class="name" href="${esc(hashFor('leads', { phone: phone || 'unknown', ...((!phone || phone === 'unknown') && callId ? { call: callId } : {}) }))}">${esc(name)}</a>`
 const mailLink = (email) => { const h = href.mailto(email); return h ? `<a href="${esc(h)}">${esc(email)}</a>` : esc(email || '') }
 const chipHtml = (c) => html_.chip(c.cls, c.icon, c.text)
-const isAfterHours = (t) => { const p = nyParts(t); if (!p) return false; const h = property.hours[p.dayOfWeek]; if (!h) return true; const x = p.hour + p.minute / 60; return x < h[0] || x >= h[1] }
+const isAfterHours = (t) => { const p = nyParts(t); if (!p || !Object.keys(property.hours).length) return false; const h = property.hours[p.dayOfWeek]; if (!h) return true; const x = p.hour + p.minute / 60; return x < h[0] || x >= h[1] }
 function sectionHead(title, count, trailing) {
   // tabindex=-1 + data-key: where keyboard focus lands when the row it was on has just left the list
   return `<div class="section-head"><h2 tabindex="-1" data-key="section:${esc(title)}">${esc(title)}${count != null ? ` <span class="count">· ${count}</span>` : ''}</h2>${trailing || ''}</div>`
@@ -1853,7 +2434,7 @@ function todayModel(s) {
     for (const p of profilesOf(s)) for (const b of arr(p.bookings)) if (b && b.status === 'confirmed' && (toTime(callAt(p, b.callId)) ?? 0) >= wsT) toursBooked++
   }
   const nextTour = tours.find((t) => !t.past)
-  const needValue = s.loaded.leads ? needs.length : null
+  const needValue = s.loaded.leads && ((!s.safetyEventsError && !s.bookingReviewsError) || needs.length) ? needs.length : null
   const oldest = needs.length ? Math.min(...needs.map((n) => toTime(n.at) ?? now)) : null
   const leadsStore = s.leads && s.leads.store, calStore = s.calendar && s.calendar.store
   const leadsOff = Boolean(leadsStore) && leadsStore.durable === false, calOff = Boolean(calStore) && calStore.durable === false
@@ -1869,15 +2450,41 @@ function todayModel(s) {
       if (callBacks.length) parts.push(`${callBacks.length} to call back`)
       const callsPart = text.plural(callsValue === '20+' ? 20 : Number(callsValue), 'call').replace(/^20 /, '20+ ')
       briefing = parts.length ? `Since 6 PM yesterday: ${callsPart}${toursPart}, ${parts.join(', ')}.`
-        : `Since 6 PM yesterday: ${callsPart}${toursPart}. Nothing needs you right now.`
+        : `Since 6 PM yesterday: ${callsPart}${toursPart}. ${s.safetyEventsError || s.bookingReviewsError ? 'Saved reports could not be checked.' : 'Nothing needs you right now.'}`
     }
   }
   return {
     today, now, ws, records, needs, emergencies, people, callBacks, tours, toursTomorrow, callsKnown, callsValue, callsNote, toursBooked,
-    nextTour: nextTour ? fmt.time(nextTour.startsAt) : null, needValue, oldest, leadsOff, calOff, briefing,
+    nextTour: nextTour ? fmt.time(nextTour.startsAt) : null, nextTourRecord: nextTour || null, needValue, oldest, leadsOff, calOff, briefing,
     errors: { calls: Boolean(s.errors.calls), calendar: Boolean(s.errors.calendar), leads: Boolean(s.errors.leads) },
-    loaded: { ...s.loaded }, notConfigured: s.notConfigured, callsConfigured: s.callsConfigured,
+    loaded: { ...s.loaded }, notConfigured: s.notConfigured, callsConfigured: s.callsConfigured, safetyEventsError: s.safetyEventsError,
   }
+}
+function dashboardFresh(s, resource) {
+  const at = toTime(s.lastGoodAt?.[resource])
+  return Boolean(s.loaded[resource] && !s.errors[resource] && at != null && at <= Date.now() + 5000 && Date.now() - at <= 60000)
+}
+function todayPresentation(s, m) {
+  const leads = dashboardFresh(s, 'leads'), calendar = dashboardFresh(s, 'calendar')
+  const calls = dashboardFresh(s, 'calls') && !s.callsError
+  const complete = leads && calendar && calls && !s.safetyEventsError
+  return { leads, calendar, calls, complete,
+    waiting: !s.loaded.leads || !s.loaded.calendar || !s.loaded.calls,
+    briefing: complete ? m.briefing : 'Calls, tours and the work waiting for your team, together in one place.',
+    checked: complete ? 'Current workspace records' : 'Overview from loaded records',
+  }
+}
+function todayHeroHtml(m, presentation) {
+  const next = presentation.calendar ? m.nextTourRecord : null
+  const upcoming = next ? `<span class="page-eyebrow">NEXT TOUR TODAY</span><strong class="today-next-time">${esc(fmt.time(next.startsAt))}</strong>` +
+    `<span class="today-next-name">${esc(next.name)}</span><span>${next.unitId ? `Apartment ${esc(next.unitId)}` : 'Apartment not selected'}</span>` +
+    `<div class="page-hero-actions">${next.unitId ? link('units', { unit: next.unitId }, 'Prepare for this tour', 'btn btn-primary') : link('calendar', { date: m.today, slot: next.slotId }, 'View this tour', 'btn btn-primary')}</div>`
+    : `<span class="page-eyebrow">${presentation.calendar ? 'LOOK AHEAD' : 'CALENDAR'}</span><strong class="today-next-label">${presentation.calendar ? 'Prepare the next showing.' : 'Tour schedule unconfirmed.'}</strong>` +
+      `<span>${presentation.calendar ? 'Apartments, prospect context and saved feedback.' : 'The calendar is still loading or needs a refresh.'}</span><div class="page-hero-actions">${link(presentation.calendar ? 'units' : 'status', {}, presentation.calendar ? 'Explore apartments' : 'Check workspace status', 'btn btn-primary')}</div>`
+  return `<header class="page-hero today-hero"><div class="today-hero-copy"><span class="page-eyebrow">${esc(fmt.dayLong(m.today))} · ${esc(property.timeZoneLabel)}</span>` +
+    `<h1 tabindex="-1">Today</h1><p class="today-briefing">${esc(presentation.briefing)}</p><div class="today-mode">${ico(isDemo ? 'info' : 'home')}<span>${esc(isDemo ? isPersistentDemo ? 'Local demo workspace' : 'Demo workspace' : property.name)}</span><span>${esc(presentation.checked)}</span></div>` +
+    `<div class="page-hero-actions">${link('calls', {}, 'Review calls', 'btn')}${link('leads', { tab: 'todo' }, 'Open team to-dos', 'btn')}</div></div>` +
+    `<div class="today-next" aria-label="Next showing">${upcoming}</div></header>`
 }
 function pollBanner(s, resource, what) {
   const err = s.errors[resource]
@@ -1886,6 +2493,17 @@ function pollBanner(s, resource, what) {
   return html_.banner('warn', `We can't load ${what} right now.${at ? ` Showing what we had at ${fmt.time(at)}.` : ''}`)
 }
 function personRowHtml(item, s) {
+  if (item.type === 'tourChange') return tourChangeRequestHtml(item.request)
+  if (item.type === 'callReview') return `<div class="row row-stack" data-key="np:${esc(item.callId)}"><span class="row-lead"><span class="row-lead-icon warn-text">${ico('hand')}</span></span><span class="row-body"><span class="row-title"><strong>Other call steps still need review</strong></span><span class="row-sub">The booking review is complete, but another request in this call still needs attention.</span></span><span class="row-actions">${link('calls', { id: item.callId }, 'Review call', 'btn')}</span></div>`
+  if (item.type === 'bookingReview') {
+    const review = item.review, resolution = bookingReviewResolution(review), pending = resolution && resolution.projection === 'pending'
+    return `<div class="row row-stack" data-key="np:${esc(item.callId)}"><span class="row-lead"><span class="row-lead-icon warn-text">${ico('hand')}</span></span><span class="row-body">` +
+      `<span class="row-title"><strong>${pending ? 'Finish the review for' : 'Verify'} ${esc(review.name || 'the caller')}${pending ? '' : "'s tour"}</strong></span>` +
+      `<span class="row-sub">${pending ? 'The calendar was checked; review updates are still pending.' : 'The calendar response was uncertain. Check the existing reservation before creating another tour.'}</span>` +
+      `<span class="meta">${review.booking ? esc(fmt.dateTime(review.booking.startsAt)) : 'Time not recorded'}${review.booking && review.booking.unitId ? ` · Residence ${esc(review.booking.unitId)}` : ''}</span>` +
+      '<span class="reassure">Saved for staff review. No notification has been sent.</span></span>' +
+      `<span class="row-actions">${permissionAllowed('operate') && (pending || review.needsReview === true) ? `<button type="button" class="btn" data-action="review-booking" data-call="${esc(item.callId)}" data-key="booking-review:${esc(item.callId)}:check" data-write="calendar">${pending ? 'Finish review' : 'Check reservation'}</button>` : ''}${link('calls', { id: item.callId }, 'Review call', 'btn')}${link('calendar', {}, 'Open calendar', 'btn btn-quiet')}</span></div>`
+  }
   const phone = item.phone, shown = fmt.phone(phone)
   const rec = callRecords(s).find((r) => r.id === item.callId)
   const actions = []
@@ -1893,7 +2511,7 @@ function personRowHtml(item, s) {
     // The emergency is the first item of the list as well as the banner above, so the section's count,
     // the tile, the badge and the briefing sentence all count the same things.
     if (shown) actions.push(telBtn(phone, 'Call'))
-    if (item.profile) actions.push(link('leads', { phone }, 'Open lead', 'btn btn-quiet link-action'))
+    if (item.profile) actions.push(link('leads', { phone, ...(phone === 'unknown' ? { call: item.callId } : {}) }, 'Open lead', 'btn btn-quiet link-action'))
     if (rec) actions.push(link('calls', { id: item.callId }, 'See the call', 'btn btn-quiet link-action'))
     const by = item.name ? esc(item.name) : (shown ? telLink(phone) : 'a caller with a hidden number')
     return `<div class="row" data-key="np:${esc(item.callId)}">` +
@@ -1909,13 +2527,14 @@ function personRowHtml(item, s) {
     const overdue = (toTime(item.respondBy) ?? Infinity) <= Date.now()
     actions.push(telBtn(phone, 'Call'))
     actions.push(`<button type="button" class="btn" data-action="handled" data-fu="${esc(item.fu.id)}" data-key="fu:${esc(item.fu.id)}:done" data-write="leads">Mark handled</button>`)
-    actions.push(link('leads', { phone }, 'Open lead', 'btn btn-quiet link-action'))
+    actions.push(link('leads', { phone, ...(phone === 'unknown' ? { call: item.callId } : {}) }, 'Open lead', 'btn btn-quiet link-action'))
     if (rec) actions.push(link('calls', { id: item.callId }, 'See the call', 'btn btn-quiet link-action'))
     return `<div class="row" data-key="np:${esc(item.callId)}">` +
       `<span class="row-lead"><span class="row-lead-icon warn-text">${ico('hand')}</span></span><span class="row-body">` +
       `<span class="row-title"><span class="name">Call ${esc(personName(item.profile || { phone }))} back</span> — ${esc(t.headline)}</span>` +
       (t.quote ? `<span class="quote">"${esc(t.quote)}"</span>` : '') +
       `<span class="reassure">${esc(t.reassurance)}</span>` +
+      html_.followUpReview(item.fu) +
       `<span class="meta">${shown ? `${telLink(phone)} · ` : ''}called ${esc(fmt.dateTime(item.calledAt, { inSentence: true }))} · <span class="${overdue ? 'overdue' : ''}">${esc(fmt.respondPhrase(item.respondBy))}</span></span>` +
       `</span><span class="row-actions">${actions.join('')}</span></div>`
   }
@@ -1923,7 +2542,7 @@ function personRowHtml(item, s) {
   const name = item.name || personName(item.profile)
   const failed = b.status === 'failed'
   actions.push(telBtn(phone, 'Call'))
-  actions.push(link('leads', { phone }, 'Open lead', 'btn btn-quiet link-action'))
+  actions.push(link('leads', { phone, ...(phone === 'unknown' ? { call: item.callId } : {}) }, 'Open lead', 'btn btn-quiet link-action'))
   actions.push(link('calendar', { date: nyDate(b.startsAt) || undefined }, 'Calendar', 'btn btn-quiet link-action'))
   return `<div class="row" data-key="np:${esc(item.callId)}">` +
     `<span class="row-lead"><span class="row-lead-icon warn-text">${ico('hand')}</span></span><span class="row-body">` +
@@ -1933,20 +2552,22 @@ function personRowHtml(item, s) {
     `</span><span class="row-actions">${actions.join('')}</span></div>`
 }
 function followUpRowHtml(fu, s) {
-  const profile = profileByPhone(s, fu.phone)
+  const profile = fu.phone === 'unknown' ? profileForCall(s, fu.createdFromCall) : profileByPhone(s, fu.phone)
   const sen = todoSentence(fu, profile, s)
   const overdue = (toTime(fu.dueAt) ?? Infinity) <= Date.now()
   const channel = String(fu.channel ?? 'call')
   const email = profile && profile.email
+  const requestedCallback = profile && profile.callbackPhone && /^\+[1-9]\d{6,14}$/.test(profile.callbackPhone.value) ? profile.callbackPhone.value : null
   const from = callAt(profile, fu.createdFromCall) || fu.createdAt
   let primary = ''
   if (channel === 'email' && href.mailto(email)) primary = `<a class="btn btn-call" href="${esc(href.mailto(email))}">Email</a>`
   else if (channel === 'sms' && href.sms(fu.phone)) primary = `<a class="btn btn-call" href="${esc(href.sms(fu.phone))}">Text</a>`
-  else primary = telBtn(fu.phone, 'Call')
+  else primary = telBtn(requestedCallback || fu.phone, requestedCallback ? 'Call requested number' : 'Call')
   return `<div class="row row-stack" data-key="fu:${esc(fu.id)}">` +
     `<span class="row-lead"><span class="${overdue ? 'overdue' : ''}">${overdue ? ico('clock') : ''} ${esc(fmt.duePhrase(fu.dueAt))}</span><span class="row-lead-icon">${ico(label(labels.channelIcon, channel, 'phone'))}</span></span>` +
-    `<span class="row-body"><span class="row-title">${esc(sen.before)}${personLink(fu.phone, sen.name)}${esc(sen.after)}</span>` +
-    `<span class="row-sub">${fmt.phone(fu.phone) ? `${telLink(fu.phone)} · ` : ''}${channel === 'email' && email ? `${mailLink(email)} · ` : ''}from their call ${esc(fmt.dateTime(from, { inSentence: true }))}</span></span>` +
+    `<span class="row-body"><span class="row-title">${esc(sen.before)}${personLink(fu.phone, sen.name, fu.createdFromCall)}${esc(sen.after)}</span>` +
+    html_.followUpReview(fu) +
+    `<span class="row-sub">${fmt.phone(fu.phone) ? `${telLink(fu.phone)} · ` : ''}${requestedCallback ? `Requested callback: ${telLink(requestedCallback)} · ` : ''}${channel === 'email' && email ? `${mailLink(email)} · ` : ''}from their call ${esc(fmt.dateTime(from, { inSentence: true }))}</span></span>` +
     `<span class="row-actions">${primary}` +
     `<button type="button" class="btn" data-action="done" data-fu="${esc(fu.id)}" data-key="fu:${esc(fu.id)}:done" data-write="leads">Done</button>` +
     `<button type="button" class="btn" data-action="skip" data-fu="${esc(fu.id)}" data-key="fu:${esc(fu.id)}:skip" data-write="leads">Not needed</button></span></div>`
@@ -1956,12 +2577,13 @@ function tourRowHtml(t, s, today) {
   const actions = []
   if (confirmPending && href.tel(t.phone)) actions.push(telBtn(t.phone, 'Call to confirm', 'btn btn-call'))
   if (t.profile) actions.push(link('leads', { phone: t.phone }, 'Open lead', 'btn btn-quiet link-action'))
+  if (t.unitId) actions.push(link('units', { unit: t.unitId }, 'Tour brief', 'btn btn-quiet link-action'))
   actions.push(link('calendar', { date: today, slot: t.slotId }, 'Calendar', 'btn btn-quiet link-action'))
-  const chip = t.past ? html_.chip('chip-ok', 'check', 'Toured') : html_.chip('chip-ok', 'check', 'Confirmed')
-  return `<div class="row row-stack${t.past ? ' row-muted' : ''}" data-key="tour:${esc(t.slotId)}">` +
+  const chip = t.past ? html_.chip('chip-neutral', 'clock', 'Scheduled earlier') : html_.chip('chip-neutral', 'calendar', 'Tour booked')
+  return `<div class="row row-stack${t.past ? ' row-muted' : ''}" data-key="tour:${esc(t.slotId)}:${esc(t.unitId || '')}:${esc(t.phone || t.name)}">` +
     `<span class="row-lead"><span class="num strong">${esc(fmt.time(t.startsAt))}</span></span>` +
-    `<span class="row-body"><span class="row-title">${t.profile ? personLink(t.phone, t.name) : esc(t.name)} · ${t.unitId ? `apartment ${esc(t.unitId)}` : 'no apartment picked yet'}</span>` +
-    `<span class="row-sub">${fmt.phone(t.phone) ? `${telLink(t.phone)} · Confirmed` : 'Confirmed · no phone on file'}</span></span>` +
+    `<span class="row-body"><span class="row-title">${t.profile ? personLink(t.phone, t.name, t.profile.calls && t.profile.calls[0] && t.profile.calls[0].callId) : esc(t.name)} · ${t.unitId ? `apartment ${esc(t.unitId)}` : 'no apartment picked yet'}</span>` +
+    `<span class="row-sub">${fmt.phone(t.phone) ? telLink(t.phone) : 'No phone on file'}${t.past ? ' · attendance not recorded here' : ''}</span></span>` +
     `<span class="row-actions">${chip}${actions.join('')}</span></div>`
 }
 function recentCallRowHtml(rec, s) {
@@ -1996,11 +2618,17 @@ const todayView = {
     this.root = root
     root.addEventListener('click', (e) => this.onClick(e))
     const repaint = () => { if (this.root && !this.root.hidden) this.render(state) }
-    on('data', repaint); on('minute', repaint)
+    on('data', repaint); on('poll', repaint); on('minute', repaint)
   },
   onClick(e) {
     const btn = e.target.closest('button[data-action]')
     if (!btn || btn.getAttribute('aria-disabled') === 'true') return
+    if (btn.dataset.action === 'review-tour-change') { reviewTourChange(btn.dataset.request); return }
+    if (btn.dataset.action === 'review-booking') {
+      const review = arr(state.events).find(event => event && event.kind === 'booking_review' && event.durable === true && event.callId === btn.dataset.call)
+      if (review) reviewBooking(review, btn)
+      return
+    }
     const fu = followUpsOf(state).find((f) => f && f.id === btn.dataset.fu)
     if (!fu) return
     if (btn.dataset.action === 'done') setFollowUpStatus(fu, 'done', { button: btn })
@@ -2011,65 +2639,69 @@ const todayView = {
     const root = this.root
     if (!root) return
     const m = todayModel(s)
-    const key = JSON.stringify([m.callsValue, m.callsNote, m.toursBooked, m.nextTour, m.needValue, m.oldest, m.leadsOff, m.calOff, m.briefing, m.errors, m.loaded, m.notConfigured, m.callsConfigured,
-      m.emergencies.map((x) => [x.callId, x.at, x.matched, x.action, x.name]), m.people.map((x) => [x.type, x.callId, x.respondBy, x.calledAt, fmt.respondPhrase(x.respondBy), x.question, x.name]),
-      m.callBacks.map((f) => [f.id, f.dueAt, f.status, fmt.duePhrase(f.dueAt), todoSentence(f, profileByPhone(s, f.phone), s).text]),
+    const presentation = todayPresentation(s, m)
+    const key = JSON.stringify([m.today, presentation, m.callsValue, m.callsNote, m.toursBooked, m.nextTour, m.needValue, m.oldest, m.leadsOff, m.calOff, m.briefing, m.errors, m.loaded, m.notConfigured, m.callsConfigured, m.safetyEventsError,
+      m.emergencies.map((x) => [x.callId, x.at, x.matched, x.action, x.name]), m.people.map((x) => [x.type, x.callId, x.respondBy, x.calledAt, fmt.respondPhrase(x.respondBy), x.question, x.name, x.request, html_.followUpReview(x.fu)]),
+      m.callBacks.map((f) => [f.id, f.dueAt, f.status, fmt.duePhrase(f.dueAt), todoSentence(f, profileByPhone(s, f.phone), s).text, html_.followUpReview(f)]),
       m.tours.map((t) => [t.slotId, t.name, t.unitId, t.past, t.phone]), m.toursTomorrow.length,
       m.records.slice(0, 5).map((r) => [r.id, r.displayName, fmt.dateTime(r.startedAt), callStory(r, s).sentence]), busyNow('leads')])
     if (key === this.sigKey) return
     this.sigKey = key
     const focusKey = root.contains(document.activeElement) && document.activeElement.dataset ? document.activeElement.dataset.key : null
     const loading = !m.callsKnown && !s.loaded.calendar && !m.errors.calls && !m.errors.leads
-    let out = `<div class="view-head"><h1 tabindex="-1">Today</h1><p class="dateline small muted">${esc(fmt.dayLong(m.today))} · ${esc(property.name)}</p>${m.briefing ? `<p class="briefing muted">${esc(m.briefing)}</p>` : ''}</div>`
+    let out = todayHeroHtml(m, presentation)
     if (m.notConfigured) { root.innerHTML = out; return }
     out += m.emergencies.map((x) => emergencyBannerHtml(x, this.announced)).join('')
+    if (m.safetyEventsError) out += html_.banner('warn', 'Safety reports are temporarily unavailable. The list may be incomplete. Trying again.')
     if (m.leadsOff || m.calOff) {
-      const txt = m.leadsOff && m.calOff ? "Heads up: changes aren't being saved right now. Anything you mark may disappear. Ask Atrium support."
+      const txt = isDemo && !isPersistentDemo ? 'Demo workspace: explore these sample calls, leads and tours. Changes last until the local preview restarts.' : m.leadsOff && m.calOff ? "Heads up: changes aren't being saved right now. Anything you mark may disappear. Ask Atrium support."
         : m.leadsOff ? "Heads up: callers and to-dos aren't being saved right now. Anything you mark here may disappear. Ask Atrium support."
           : "Heads up: calendar changes aren't being saved right now. Blocks you add may disappear. Ask Atrium support."
       out += html_.banner('warn', '', { raw: `<a class="banner-link" href="#/status" style="color:inherit;text-decoration:none">${esc(txt)}</a>` })
     }
-    out += `<p class="label muted" style="margin-top:${m.emergencies.length || m.leadsOff || m.calOff ? '16px' : '0'}">Since 6 PM yesterday</p>`
+    out += `<p class="section-kicker">Since 6 PM yesterday · ${esc(property.timeZoneLabel)}${presentation.complete ? '' : ' · last loaded records'}</p>`
     if (loading) {
       out += `<div class="tiles" aria-busy="true"><span class="vh">Loading today…</span><div class="skeleton-tile skeleton-row"></div><div class="skeleton-tile skeleton-row"></div><div class="skeleton-tile skeleton-row"></div></div>`
       for (const title of ['Needs a person', 'Call back today', 'Tours today']) out += `<section class="section">${sectionHead(title)}${html_.skeletonRows(2)}</section>`
       root.innerHTML = out
       return
     }
-    const tile = (label_, value, note, extra) => `<a class="card big-number${extra || ''}" href="${esc(extra === ' big-number-warn' || label_.includes('person') ? '#needs-a-person' : (label_ === 'Calls' ? '#/calls' : '#/calendar'))}" data-key="tile:${esc(label_)}"><span class="big-number-label">${esc(label_)}</span><span class="big-number-value num">${esc(value)}</span><span class="big-number-note">${note}</span></a>`
-    const callsNote = m.callsNote === 'notConnected' ? `<a href="#/status" class="link">Call history isn't connected</a>` : esc(m.callsNote || '')
+    const tile = (label_, value, note, destination, warning = false) => `<a class="today-metric${warning ? ' today-metric-warn' : ''}" href="${esc(destination)}" data-key="tile:${esc(label_)}"><span class="metric-label">${esc(label_)}</span><span class="metric-value">${esc(value)}</span><span class="metric-detail">${esc(note)}</span></a>`
+    const callsNote = m.callsNote === 'notConnected' ? 'Call history is not connected' : m.callsNote || 'Recorded in this reporting window'
     const toursVal = m.toursBooked == null ? '—' : String(m.toursBooked)
     const needVal = m.needValue == null ? '—' : String(m.needValue)
-    out += `<div class="tiles">${tile('Calls', m.callsValue === '—' ? '—' : m.callsValue, callsNote)}` +
-      `${tile(m.toursBooked === 1 ? 'Tour booked' : 'Tours booked', toursVal, esc(m.toursBooked == null ? '' : (m.nextTour ? `next one ${m.nextTour}` : 'none today')))}` +
-      `${tile(m.needValue === 1 ? 'Needs a person' : 'Need a person', needVal, esc(m.needValue == null ? '' : (m.needs.length ? `oldest waiting ${fmt.elapsed(m.now - m.oldest)}` : 'all handled')), m.needValue > 0 ? ' big-number-warn' : '')}</div>`
+    out += `<div class="page-metrics today-metrics">${tile('Calls received', m.callsValue, callsNote, m.callsNote === 'notConnected' ? '#/status' : '#/calls')}` +
+      `${tile('Tours booked', toursVal, 'Saved during this reporting window', '#/calendar')}` +
+      `${tile('Needs a person', needVal, m.needValue == null ? 'Review queue is still loading' : m.needs.length ? `Oldest waiting ${fmt.elapsed(m.now - m.oldest)}` : presentation.complete ? 'No saved items waiting for review' : 'Review status not confirmed', '#needs-a-person', m.needValue > 0)}</div>`
+    if (!presentation.complete) out += `<div class="today-data-note">${ico('info')}<span>${presentation.waiting ? 'Some workspace information is still loading. Records appear as they arrive.' : 'Some information needs a refresh. Check Status before relying on an empty list.'}</span>${link('status', {}, 'Check status', 'btn-link')}</div>`
+    out += '<div class="today-workbench"><div class="today-main">'
     // Needs a person — every needsPerson item in order, the live emergency first (it is also the banner
     // above), so the count here is the tile's, the badge's and the briefing sentence's number.
-    out += `<section class="section today-list" id="needs-a-person">${sectionHead('Needs a person', m.needs.length)}`
+    out += `<section class="section today-list" id="needs-a-person">${sectionHead('Needs a person', s.loaded.leads ? m.needs.length : null)}`
     out += pollBanner(s, 'leads', 'callers')
     if (m.needs.length) out += `<div class="card card-warn rows">${m.needs.map((p) => personRowHtml(p, s)).join('')}</div>`
-    else if (s.loaded.leads) out += `<div class="card">${html_.empty({ title: 'Nothing needs a person right now.', text: "When the assistant hands something off — an accommodation question, a dispute, a tour it couldn't book — it shows up here." })}</div>`
+    else if (s.loaded.leads) out += `<div class="card">${html_.empty({ icon: 'check-circle', title: m.safetyEventsError ? 'Safety reports could not be checked.' : presentation.complete ? 'Nothing needs a person right now.' : 'Review status is not confirmed yet.', text: presentation.complete ? 'Questions, requests and booking issues that need your team appear here.' : 'Wait for the workspace checks to finish, or open Status to review the connection.' })}</div>`
     out += '</section>'
     // Call back today
     const more = m.callBacks.length > 6 ? link('leads', { tab: 'todo' }, `See all ${m.callBacks.length} in Leads ›`, 'btn-link') : ''
-    out += `<section class="section today-list">${sectionHead('Call back today', m.callBacks.length, more)}`
+    out += `<section class="section today-list">${sectionHead('Call back today', s.loaded.leads ? m.callBacks.length : null, more)}`
     if (!m.needs.length) out += pollBanner(s, 'leads', 'callers')
     if (m.callBacks.length) out += `<div class="card rows">${m.callBacks.slice(0, 6).map((f) => followUpRowHtml(f, s)).join('')}</div>`
-    else if (s.loaded.leads) out += `<div class="card">${html_.empty({ title: 'No one to call back today.', text: "To-dos the assistant creates — a tour to confirm, a question it couldn't answer — appear here on the day they're due." })}</div>`
-    out += '</section>'
+    else if (s.loaded.leads) out += `<div class="card">${html_.empty({ icon: 'phone', title: presentation.leads ? 'No one to call back today.' : 'Follow-ups are not confirmed yet.', text: presentation.leads ? 'Tour confirmations and other follow-ups appear here when they are due.' : 'The last loaded records may be out of date. Check Status for details.' })}</div>`
+    out += '</section></div><aside class="today-aside" aria-label="Tours and apartment preparation">'
     // Tours today
     const tomorrowLink = m.toursTomorrow.length ? link('calendar', { date: addDays(m.today, 1) }, `Tomorrow: ${text.plural(m.toursTomorrow.length, 'tour')} ›`, 'btn-link') : ''
-    out += `<section class="section today-list">${sectionHead('Tours today', m.tours.length, tomorrowLink)}`
+    out += `<section class="section today-list today-tours">${sectionHead('Tours today', s.loaded.calendar ? m.tours.length : null, tomorrowLink)}`
     out += pollBanner(s, 'calendar', 'the calendar')
     if (m.tours.length) out += `<div class="card rows">${m.tours.map((t) => tourRowHtml(t, s, m.today)).join('')}</div>`
-    else if (s.loaded.calendar || s.loaded.leads) out += `<div class="card">${html_.empty({ title: 'No tours today.', text: "When the assistant books one, it shows up here with the caller's name and apartment." })}</div>`
-    out += '</section>'
+    else if (s.loaded.calendar || s.loaded.leads) out += `<div class="card">${html_.empty({ icon: 'calendar', title: presentation.calendar ? 'No tours today.' : 'Today’s calendar is not confirmed yet.', text: presentation.calendar ? 'Open the calendar to review upcoming dates and availability.' : 'The calendar has not finished refreshing.' })}</div>`
+    out += `</section><section class="workspace-panel today-prep"><span class="page-eyebrow">BEFORE THE SHOWING</span><h2>The apartment brief</h2><p>Bring prospect needs, upcoming tours and saved feedback into the same conversation.</p><div class="page-hero-actions">${link('units', {}, 'Open unit workspace', 'btn btn-primary')}</div></section></aside></div>`
     // Recent calls
     out += `<section class="section today-list">${sectionHead('Recent calls', null, link('calls', {}, 'All calls ›', 'btn-link'))}`
     out += pollBanner(s, 'calls', 'calls')
     if (s.callsConfigured === false) out += html_.banner('info', "Call recordings and transcripts aren't connected, so this list is built from the assistant's notes.")
     if (m.records.length) out += `<div class="card rows">${m.records.slice(0, 5).map((r) => recentCallRowHtml(r, s)).join('')}</div>`
-    else if (s.loaded.calls || s.loaded.leads) out += `<div class="card">${html_.empty({ title: 'No calls yet.', text: 'Calls to the leasing line show up here within a minute of ending.' })}</div>`
+    else if (s.loaded.calls || s.loaded.leads) out += `<div class="card">${html_.empty({ icon: 'phone', title: presentation.calls || (s.callsConfigured === false && presentation.leads) ? 'No calls in the loaded records.' : 'Call history is not confirmed yet.', text: 'Completed calls appear here after their records are received.' })}</div>`
     out += '</section>'
     root.innerHTML = out
     if (focusKey) { const el = root.querySelector(`[data-key="${cssq(focusKey)}"]`); if (el) { try { el.focus({ preventScroll: true }) } catch (e) { /* ignore */ } } }
@@ -2092,14 +2724,54 @@ document.addEventListener('click', (e) => {
 // Status and Demo tools (§11)
 // ---------------------------------------------------------------------------------------
 
-const ASSISTANT_PARA = "It answers the leasing line, learns what a caller is looking for, quotes only the apartments on the live availability list, answers questions from the approved building information, offers real tour times and books them on this calendar. It doesn't guess: if it hasn't been told something, it says so and offers a call back. It never handles accommodation requests, fair-housing or legal questions, disputes, eligibility or payments — those always go to a person, and you'll see them under \"Needs a person\". If a caller reports an emergency it gives them the safety instruction for it (get out and call 911 for gas, smoke or carbon monoxide), then flags it on Today. It doesn't make outgoing calls or send messages yet."
+const ASSISTANT_PARA = "The assistant uses configured property information, records what a prospect needs and offers tour times that pass the calendar checks. Quotes depend on the inventory source checks; a demo catalogue stays a sample. Questions that need staff judgment, including accommodation, legal, eligibility, payment and dispute questions, go to a person. Emergency guidance and a staff-visible report do not mean that someone has been notified. Review the actual call and booking records for each outcome."
 
 function storeLine(store) {
   if (!store) return 'not loaded yet'
   return `${String(store.kind ?? '?')} · ${store.durable ? 'durable' : 'not durable'} · "${String(store.note ?? '')}"`
 }
+function statusSummary(s, rows) {
+  const labels = { leads: 'callers and to-dos', calendar: 'calendar', calls: 'call history' }
+  const names = Object.keys(labels)
+  const loaded = names.filter(name => s.loaded[name])
+  const pending = names.filter(name => !s.loaded[name])
+  const failed = names.filter(name => s.errors[name])
+  const errorAt = s.lastWriteError && Number.isFinite(Date.parse(s.lastWriteError.at)) ? fmt.dateTime(s.lastWriteError.at) : ''
+  const history = s.lastWriteError ? ` A previous change reported an error${errorAt ? ` (${errorAt})` : ''}. Open For support for details.` : ''
+  const summary = (title, detail, tone = '') => ({ title, detail: detail + history, tone: history && tone === 'is-ok' ? '' : tone })
+  if (s.notConfigured) return summary('This workspace needs setup.', 'Ask Atrium support to restore access.', 'is-warn')
+  if (failed.length) return summary(loaded.length ? 'Some workspace information is unavailable.' : 'Workspace information is unavailable.',
+    `Couldn’t refresh ${text.list(failed.map(name => labels[name]))}. Some information may be missing or out of date.`, 'is-warn')
+  if (s.safetyEventsError) return summary('Safety reports need attention.', 'The safety report list may be incomplete. Try Refresh now.', 'is-warn')
+  if (s.callsError) return summary('Call history needs attention.', 'Recent recordings and transcripts could not be refreshed. See the details below.', 'is-warn')
+  if (s.bookingReviewsError) return summary('Booking reviews need attention.', 'The booking review list may be incomplete. Try Refresh now.', 'is-warn')
+  const stores = ['leads', 'calendar'].filter(name => s.loaded[name]).map(name => s[name] && s[name].store)
+  if (stores.some(store => store && store.durable === false) && !(isDemo && !isPersistentDemo)) {
+    return summary('Saving needs attention.', 'Changes to callers or the calendar may not be saved. See the details below.', 'is-warn')
+  }
+  if (!isDemo && s.loaded.calls && s.callsConfigured === false) {
+    return summary('Call history isn’t connected.', 'Recordings and transcripts are unavailable. Check the other workspace details below.', 'is-warn')
+  }
+  if (rows.reconnecting) return summary('Trying to reconnect…', 'Previously loaded information may be out of date.', 'is-warn')
+  if (pending.length) return summary(loaded.length ? 'Still checking this workspace…' : 'Checking this workspace…',
+    `Waiting for ${text.list(pending.map(name => labels[name]))}.`)
+  if (stores.some(store => !store || typeof store.durable !== 'boolean') || (!isDemo && s.callsConfigured !== true)) {
+    return summary('Some workspace checks are unconfirmed.', 'Refresh to check saving and call history.')
+  }
+  const checked = names.map(name => Date.parse(s.lastGoodAt[name]))
+  if (checked.some(value => !Number.isFinite(value))) return summary('Some workspace checks are unconfirmed.', 'A complete refresh has not been confirmed yet.')
+  const oldest = Math.min(...checked)
+  const refreshed = `Last complete refresh: ${fmt.dateTime(new Date(oldest).toISOString())}.`
+  // A normal round runs every five seconds. A stalled/skipped request must not
+  // borrow a newer timestamp from another resource or a manual refresh click.
+  if (Date.now() - oldest > 60000) return summary('Some information needs a refresh.', `${refreshed} Previously loaded information may be out of date.`)
+  if (isDemo && !isPersistentDemo) return summary('Demo data is loaded.', 'Sample changes reset when the preview restarts.')
+  return isPersistentDemo
+    ? summary('Local demo data is loaded.', `Sample callers, tours and call history are loaded. ${refreshed}`, 'is-ok')
+    : summary('Workspace data is available.', `Callers, calendar and call history are loaded. ${refreshed}`, 'is-ok')
+}
 const statusView = {
-  title: 'Status', icon: icons.status, root: null, sigKey: null, busyAction: false, demoFocused: null,
+  title: 'Status', icon: icons.status, root: null, sigKey: null, busyAction: false, signOutPending: false, demoFocused: null,
   mount(root) {
     this.root = root
     root.addEventListener('click', (e) => this.onClick(e))
@@ -2109,46 +2781,58 @@ const statusView = {
   },
   render(s) {
     const root = this.root
-    if (!root || this.busyAction) return
+    if (!root || this.busyAction || this.signOutPending) return
     const rows = statusRows()
-    // "Updated just now" for a minute after Refresh now was pressed (the minute tick repaints it back to the clock time)
-    const justNow = Boolean(this.refreshedAt) && Date.now() - this.refreshedAt < 60000
-    const at = justNow ? 'just now' : (s.updatedAt ? fmt.time(s.updatedAt) : '')
     const counts = { calls: arr(s.calls).length, slots: arr(s.calendar && s.calendar.slots).length, leads: profilesOf(s).length, todos: followUpsOf(s).length }
     const week = this.weekDays(s)
-    const model = { rows, at, errors: s.errors, lastWriteError: s.lastWriteError, health: s.health, counts, lastPollAt: s.lastPollAt, lstore: s.leads && s.leads.store, cstore: s.calendar && s.calendar.store,
-      callsError: s.callsError, callsConfigured: s.callsConfigured, outbound: Boolean(s.leads && s.leads.outboundEnabled), notConfigured: s.notConfigured, weekDays: week.length, weekSkipped: week.skipped.length, calLoaded: Boolean(s.calendar) }
+    const summary = statusSummary(s, rows)
+    const fresh = Object.fromEntries(Object.keys(RESOURCES).map(name => [name, dashboardFresh(s, name)]))
+    const inventory = s.leads && s.leads.feedbackInventory
+    const model = { rows, summary, errors: s.errors, lastWriteError: s.lastWriteError, health: s.health, counts, lastPollAt: s.lastPollAt, lstore: s.leads && s.leads.store, cstore: s.calendar && s.calendar.store,
+      fresh, inventory, callsError: s.callsError, callsConfigured: s.callsConfigured, safetyEventsError: s.safetyEventsError, bookingReviewsError: s.bookingReviewsError, outbound: Boolean(s.leads && s.leads.outboundEnabled), notConfigured: s.notConfigured, weekDays: week.length, weekSkipped: week.skipped.length, calLoaded: Boolean(s.calendar) }
     const key = JSON.stringify(model)
     if (key === this.sigKey) return
     this.sigKey = key
     const focusKey = root.contains(document.activeElement) && document.activeElement.dataset ? document.activeElement.dataset.key : null
-    const savingRow = (labelText, v) => {
+    const savingRow = (labelText, v, resource) => {
       if (v === null) return `<div class="status-row"><span class="dot dot-neutral"></span><span class="muted">${esc(labelText)}: not loaded yet</span></div>`
+      if (!fresh[resource]) return `<div class="status-row"><span class="dot dot-neutral"></span><span>${esc(labelText)}: saving check needs a refresh. ${v === 'on' ? 'Saving was available at the last check.' : 'Saving was not confirmed at the last check.'}</span></div>`
       const off = v !== 'on'
-      const word = v === 'on' ? 'Saving on' : v === 'temp' ? 'Saving temporarily off — Atrium has been told' : 'Saving off — changes may be lost'
+      const word = v === 'on' ? (isPersistentDemo ? 'Sample data saved locally' : 'Saving on') : v === 'temp' ? 'Saving temporarily unavailable — check the connection' : isDemo && !isPersistentDemo ? 'Demo data — resets when the preview restarts' : 'Saving off — changes may be lost'
       return `<div class="status-row"><span class="dot${off ? ' dot-warn' : ''}"></span><span class="${off ? 'warn-text' : ''}">${off ? ico('cloud-off') : ico('check')} ${esc(labelText)}: ${esc(word)}</span></div>`
     }
     const rec = rows.recordings
-    const recText = rec === null ? 'Checking…' : rec === 'on' ? 'Connected — recordings and transcripts are available for the 20 most recent calls.'
+    const recText = !s.loaded.calls ? 'Checking call history…' : s.errors.calls || s.callsError ? 'Call history could not be refreshed. Previously loaded recordings and transcripts may be out of date.'
+      : !fresh.calls ? 'Call history needs a refresh. The last loaded records may be out of date.'
+      : isDemo ? 'Sample calls and transcripts are included for this demo account.' : s.callsConfigured == null ? 'The call history connection has not been confirmed yet.' : rec === 'on' ? 'Connected — recordings and transcripts are available for the 20 most recent calls.'
       : rec === 'off' ? "Not connected yet — calls still show from the leads' records, without recordings or transcripts. Ask Atrium support." : 'Connected, but not answering right now — trying again.'
-    const summaryOk = rows.ok
-    let out = `<div class="view-head"><h1 tabindex="-1">Status</h1></div><div class="status-col">`
-    out += `<div class="card status-summary ${summaryOk ? 'is-ok' : 'is-warn'}"><div style="display:flex;gap:10px;min-width:0">${ico(summaryOk ? 'check-circle' : 'warning')}<div><div class="summary-title">${summaryOk ? 'Everything is working.' : 'Something needs attention.'}</div>` +
-      `<div class="summary-sub">${rows.reconnecting ? `Trying to reconnect…${at ? ` showing what we had at ${esc(at)}` : ''}` : (at ? `Updated ${esc(at)}` : 'Loading…')}</div></div></div>` +
+    const recConfirmed = fresh.calls && !s.callsError && (isDemo || s.callsConfigured === true) && rec === 'on'
+    let out = `<header class="page-hero status-hero"><div><span class="page-eyebrow">WORKSPACE CONTROLS</span><h1 tabindex="-1">Status</h1><p>See what is available, what needs a check, and how your team is signed in.</p><div class="today-mode">${ico('home')}<span>${esc(property.name)}</span><span>${esc(isDemo ? isPersistentDemo ? 'Local demo' : 'Demo workspace' : 'Property workspace')}</span></div></div>` +
+      '<div class="workspace-stack" aria-hidden="true"><span>CALLS</span><span>TOURS</span><span>TEAM</span></div></header><div class="status-col">'
+    out += `<div class="card status-summary ${summary.tone}"><div style="display:flex;gap:10px;min-width:0">${ico(summary.tone === 'is-ok' ? 'check-circle' : summary.tone === 'is-warn' ? 'warning' : 'refresh')}<div><div class="summary-title">${esc(summary.title)}</div>` +
+      `<div class="summary-sub">${esc(summary.detail)}</div></div></div>` +
       `<button type="button" class="btn" data-action="refresh" data-key="refresh">Refresh now</button></div>`
-    out += `<section class="status-section"><h2>Saving</h2>${savingRow('Callers and to-dos', rows.leadsSaving)}${savingRow('Calendar', rows.calendarSaving)}` +
-      (rows.leadsSaving === 'off' || rows.calendarSaving === 'off' ? `<p class="status-p muted small">Ask Atrium support to turn saving on.</p>` : '') + '</section>'
-    out += `<section class="status-section"><h2>Call recordings and transcripts</h2><div class="status-row"><span class="dot${rec === 'on' ? '' : rec === null ? ' dot-neutral' : ' dot-warn'}"></span><span class="${rec === 'on' || rec === null ? '' : 'warn-text'}">${esc(recText)}</span></div></section>`
-    out += `<section class="status-section" id="phone-assistant"><h2>Phone assistant</h2><p class="status-p">The script and tools the assistant runs on live in this system. Pushing them to Vapi keeps the phone line in step with every fix here — no more pasting. The voice, timing and model settings you set in Vapi are kept.</p><div class="status-actions"><button type="button" class="btn" data-action="sync-assistant" data-key="sync-assistant">Update the phone assistant</button></div></section>`
-    out += `<section class="status-section"><h2>Outgoing calls</h2><div class="status-row"><span class="dot dot-neutral"></span><span>${model.outbound ? 'The assistant can make outgoing calls.' : "The assistant answers calls; it doesn't make them. Everything under To do is for your team."}</span></div></section>`
-    out += `<section class="status-section"><h2>Times</h2><p class="status-p">All times on this page are New York time.</p></section>`
-    out += `<section class="status-section"><h2>Signed in</h2><p class="status-p">You're signed in on this device. Sessions end after 8 hours; you'll be asked for the passcode again.</p><div class="status-actions"><button type="button" class="btn" data-action="signout" data-key="signout">Sign out</button></div></section>`
-    out += `<section class="status-section"><h2>Who can see this</h2><p class="status-p">This page has callers' names, numbers and what they said. Keep it to the leasing team, don't screenshot it into a shared channel, and sign out when you're done.</p></section>`
-    out += `<section class="status-section"><h2>What the assistant does and doesn't do</h2><p class="status-p">${esc(ASSISTANT_PARA)}</p></section>`
+    out += '<p class="section-kicker">CONNECTIONS AND SAVING</p><div class="status-grid">'
+    out += `<section class="status-section"><h2>Saving</h2>${savingRow('Callers and to-dos', rows.leadsSaving, 'leads')}${savingRow('Calendar', rows.calendarSaving, 'calendar')}` +
+      (!isDemo && (rows.leadsSaving === 'off' || rows.calendarSaving === 'off') ? `<p class="status-p muted small">Ask Atrium support to turn saving on.</p>` : '') + '</section>'
+    out += `<section class="status-section"><h2>Call recordings and transcripts</h2><div class="status-row"><span class="dot${recConfirmed ? '' : s.errors.calls || s.callsError || rec === 'off' ? ' dot-warn' : ' dot-neutral'}"></span><span>${esc(recText)}</span></div></section>`
+    const fictional = inventory?.fictional === true || inventory?.sourceMode === 'demo'
+    out += `<section class="status-section status-inventory"><h2>Apartment information</h2><p class="status-p">${inventory ? fictional ? '<strong>Fictional demo catalogue.</strong> Rent and availability are sample facts, not a live PMS feed.' : '<strong>Property source snapshot.</strong> Check the source system for current availability.' : 'The property inventory source has not loaded yet.'}</p>` +
+      (inventory ? `<p class="status-p small muted">${esc(inventory.source || 'Configured property source')}${inventory.readAt ? ` · snapshot ${esc(fmt.dateTime(inventory.readAt))}` : ''}</p>` : '') +
+      `<div class="status-actions">${link('units', {}, 'View apartments', 'btn')}</div></section></div><p class="section-kicker">ACCESS AND OPERATING CONTROLS</p><div class="status-grid">`
+    out += isDemo ? `<section class="status-section" id="phone-assistant"><h2>Phone assistant</h2><p class="status-p">This demo uses sample conversations. It does not update your live phone assistant.</p></section>` : `<section class="status-section" id="phone-assistant"><h2>Phone assistant</h2><p class="status-p">${databaseMode ? 'Phone assistant changes require an administrator and a verified property connection.' : 'Apply the latest leasing instructions and tools to your phone assistant. Your existing voice, model, and webhook authentication settings are preserved.'}</p>${!databaseMode ? '<div class="status-actions"><button type="button" class="btn" data-action="sync-assistant" data-key="sync-assistant" data-permission="configure">Update the phone assistant</button></div>' : ''}</section>`
+    out += `<section class="status-section"><h2>Outgoing calls</h2><div class="status-row"><span class="dot dot-neutral"></span><span>${!s.loaded.leads ? 'Outgoing-call settings have not loaded yet.' : model.outbound ? 'Outgoing calls are enabled in this workspace’s settings. Check provider readiness before placing a call.' : "Outgoing assistant calls are off. Everything under To do is for your team."}</span></div></section>`
+    out += `<section class="status-section"><h2>Times</h2><p class="status-timezone">${esc(property.timeZoneLabel)}</p><p class="status-p">Tour times and work dates follow this property’s time zone.</p></section>`
+    out += `<section class="status-section"><h2>Signed in</h2><p class="status-p">${window.ATRIUM_ACCOUNT ? `Signed in as <strong>${esc(window.ATRIUM_ACCOUNT.username)}</strong> to ${esc(databaseMode ? property.name : window.ATRIUM_ACCOUNT.displayName)}. ` : "You're signed in on this device. "}${databaseMode && !permissionAllowed('operate') ? 'Your property access is view only. ' : ''}Sessions end after 8 hours. Sign out before switching accounts.</p><div class="status-actions">${databaseMode ? '<a class="btn" href="/api/account" data-key="account-security">Account security</a><a class="btn" href="/api/organizations" data-key="team-management">Team</a>' : ''}<button type="button" class="btn" data-action="signout" data-key="signout">Sign out</button></div></section>`
+    out += '</div><p class="section-kicker">WORKSPACE GUIDANCE</p><div class="status-grid">'
+    out += `<section class="status-section"><h2>Who can see this</h2><p class="status-p">Names, contact details and call notes are available to authorized staff in this workspace. Use the account controls to review your own access and sessions.</p></section>`
+    out += `<section class="status-section"><h2>Assistant responsibilities</h2><details class="status-guidance" data-key="assistant-guidance"><summary>Review the assistant’s boundaries</summary><p class="status-p">${esc(ASSISTANT_PARA)}</p></details></section></div>`
     const support = []
     support.push(['Callers and to-dos', storeLine(model.lstore)])
     support.push(['Calendar', storeLine(model.cstore)])
     support.push(['Call history', s.callsError ? `"${s.callsError}"` : (s.callsConfigured === true ? 'connected' : 'not loaded yet')])
+    if (s.safetyEventsError) support.push(['Safety reports', 'Temporarily unavailable; the incident list may be incomplete.'])
+    if (s.bookingReviewsError) support.push(['Booking reviews', 'Temporarily unavailable; the booking review list may be incomplete.'])
     support.push(['Last error', s.lastWriteError ? `"${s.lastWriteError.message}" · ${fmt.dateTime(s.lastWriteError.at)}${s.lastWriteError.doing ? ` · ${s.lastWriteError.doing}` : ''}` : 'none'])
     support.push(['Last refresh', s.lastPollAt ? `${s.lastPollAt} · calls ${counts.calls} · slots ${counts.slots} · leads ${counts.leads} · to-dos ${counts.todos}` : 'not yet'])
     for (const [name, err] of Object.entries(s.errors)) support.push([`Can't load ${name}`, `"${err.message}"${err.status ? ` · HTTP ${err.status}` : ''} · ${fmt.dateTime(err.at)}`])
@@ -2156,11 +2840,12 @@ const statusView = {
     out += `<details class="support status-section" data-key="support"><summary>${ico('chevron-down')}For support</summary><dl class="facts">${support.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl></details>`
     const weekN = model.weekDays
     const weekNote = model.calLoaded && !weekN && model.weekSkipped ? ' Every remaining day of this week is already blocked.' : (model.weekSkipped ? ` ${text.plural(model.weekSkipped, 'day is', 'days are')} already blocked and will be left as ${model.weekSkipped === 1 ? 'it is' : 'they are'}.` : '')
-    out += `<section class="card card-demo status-section" id="demo-tools"><div class="demo-head" tabindex="-1" data-key="demo-head">${ico('warning')}<span>Demo tools</span></div><p class="demo-standing">These are for demos and testing. They change real data.</p>` +
+    if (!databaseMode) out += `<section class="card card-demo status-section" id="demo-tools"><div class="demo-head" tabindex="-1" data-key="demo-head">${ico('warning')}<span>Demo tools</span></div><p class="demo-standing">These are for demos and testing. They change real data.</p>` +
       `<div class="demo-row"><p>Try it: call the leasing line and the call shows up on Today within a minute.</p><a class="btn" href="${esc(href.tel(property.leasingPhone))}">Call ${esc(property.leasingPhoneDisplay)}</a></div>` +
       `<div class="demo-row"><p>Blocks every remaining day of this week so a caller is told there's nothing available.${esc(weekNote)}</p><button type="button" class="btn" data-action="block-week" data-key="block-week" data-write="calendar"${model.calLoaded && weekN ? '' : ' aria-disabled="true"'}>Block the rest of this week</button><div class="demo-progress" hidden></div></div>` +
       `<div class="demo-row"><p>Removes every tour from the calendar, including real ones. Only for resetting a demo.</p><button type="button" class="btn btn-danger" data-action="clear-bookings" data-key="clear-bookings" data-write="calendar">Delete all tours</button></div>` +
-      `<div class="demo-row"><p>Removes every caller and to-do so you can run a fresh demo. Don't use this with real callers.</p><button type="button" class="btn btn-danger" data-action="clear-leads" data-key="clear-leads" data-write="leads">Delete all callers</button></div></section></div>`
+      `<div class="demo-row"><p>Removes every caller and to-do so you can run a fresh demo. Don't use this with real callers.</p><button type="button" class="btn btn-danger" data-action="clear-leads" data-key="clear-leads" data-write="leads">Delete all callers</button></div></section>`
+    out += '</div>'
     // an open "For support" and the focused control survive the re-render a poll causes
     const wasOpen = new Set([...root.querySelectorAll('details[open]')].map((d) => d.dataset.key))
     root.innerHTML = out
@@ -2190,7 +2875,7 @@ const statusView = {
     const days = []
     for (let i = 0; dow + i <= 6; i++) days.push(addDays(today, i))
     const withSlots = new Set(arr(cal.slots).map((x) => x && x.date))
-    const blocked = new Set(arr(cal.blocks).map((b) => b && b.target).filter((t) => isYmd(t)))
+    const blocked = new Set(arr(cal.blocks).flatMap(derive.wholeDayBlockDates))
     for (const d of days) { if (!withSlots.has(d)) continue; if (blocked.has(d)) out.skipped.push(d); else out.push(d) }
     return out
   },
@@ -2206,7 +2891,7 @@ const statusView = {
     else if (a === 'sync-assistant') this.syncAssistant(btn)
   },
   async syncAssistant(btn) {
-    const ok = await confirm('This rewrites the phone assistant\'s script and tools in Vapi to match this system. Voice, timing and model settings in Vapi are kept.', { title: 'Update the phone assistant?', confirmLabel: 'Update' })
+    const ok = await confirm('This updates the phone assistant’s workflow, tools and selected timing settings. Your voice and model providers are kept.', { title: 'Update the phone assistant?', confirmLabel: 'Update' })
     if (!ok) return
     btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true')
     try {
@@ -2218,29 +2903,58 @@ const statusView = {
       toast(`Couldn't update the phone assistant. ${e.message || ''}`.trim(), { kind: 'error', ms: 12000 })
     } finally { if (btn.isConnected) { btn.classList.remove('is-busy'); btn.removeAttribute('aria-busy') } }
   },
-  /** A round finishes in a few ms, so the busy state is held for 600 ms and the result is said in a toast. */
+  /** Bound the UI wait without cancelling or duplicating any pending read. */
   async refreshNow(btn) {
+    if (this.busyAction) return
     this.busyAction = true
     btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true')
     const started = Date.now()
-    const before = state.updatedAt
-    try { await refresh() } finally {
-      await new Promise((r) => setTimeout(r, Math.max(0, 600 - (Date.now() - started))))
+    const names = Object.keys(RESOURCES)
+    const before = Object.fromEntries(names.map(name => [name, Date.parse(state.lastGoodAt[name]) || 0]))
+    let deadline, outcome
+    try {
+      outcome = await Promise.race([
+        refresh().then(() => 'complete', () => 'failed'),
+        new Promise(resolve => { deadline = setTimeout(() => resolve('pending'), 15000) }),
+      ])
+    } finally {
+      clearTimeout(deadline)
       this.busyAction = false
-      const fresh = state.updatedAt && state.updatedAt !== before && state.failedRounds === 0
-      this.refreshedAt = fresh ? Date.now() : null
-      this.sigKey = null; this.render(state)
-      if (fresh) toast(`Up to date · ${fmt.time(state.updatedAt)}`, { kind: 'ok', key: 'refresh' })
-      else toast(`Couldn't reach the server.${state.updatedAt ? ` Showing what we had at ${fmt.time(state.updatedAt)}.` : ''}`, { kind: 'warn', key: 'refresh' })
+      if (btn.isConnected) { btn.classList.remove('is-busy'); btn.removeAttribute('aria-busy') }
+      if (!gated && !documentAccessIssue) { this.sigKey = null; this.render(state) }
     }
+    if (gated || documentAccessIssue) return
+    const fresh = names.every(name => state.loaded[name] && !state.errors[name]
+      && Date.parse(state.lastGoodAt[name]) >= started && Date.parse(state.lastGoodAt[name]) > before[name])
+      && !state.callsError && !state.safetyEventsError && !state.bookingReviewsError && !state.notConfigured
+    if (outcome === 'complete' && fresh) toast('Workspace data refreshed.', { kind: 'ok', key: 'refresh' })
+    else if (outcome === 'pending' || names.some(name => inflight[name])) {
+      toast('Refresh is still pending. Delayed requests may finish later; the information shown may be out of date.', { kind: 'warn', key: 'refresh' })
+    } else toast('Refresh is incomplete. Some information could not be checked; review the status details.', { kind: 'warn', key: 'refresh' })
   },
   async signOut(btn) {
-    btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true')
-    stopPolling(); gated = true
+    if (btn.disabled || this.signOutPending) return
+    this.signOutPending = true
+    btn.disabled = true; btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true')
+    const controller = new AbortController(), deadline = setTimeout(() => controller.abort(), 15000)
     try {
-      await fetch('/api/dashboard', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { ...JSON_HEADERS, 'content-type': 'application/json' }, body: JSON.stringify({ action: 'logout' }) })
-    } catch (e) { /* the reload lands on the sign-in page either way */ }
-    location.reload()
+      const response = await fetch('/api/dashboard', { method: 'POST', credentials: 'same-origin', cache: 'no-store',
+        redirect: 'error', signal: controller.signal, headers: { ...JSON_HEADERS, 'content-type': 'application/json',
+          ...(databaseMode ? { 'x-atrium-user-id': window.ATRIUM_ACCOUNT?.userId, 'x-atrium-session-id': window.ATRIUM_ACCOUNT?.sessionId, 'x-atrium-csrf': window.ATRIUM_SESSION_FORM_TOKEN } : {}) }, body: JSON.stringify({ action: 'logout' }) })
+      if (databaseMode) {
+        const result = await response.json()
+        if (!response.ok || result?.status !== 'signed_out') throw new Error('Sign-out was not confirmed')
+      } else if (!response.ok) throw new Error('Sign-out was not confirmed')
+      stopPolling(); gated = true
+      if (databaseMode) invalidateDocument('Signed out. Sign in again to continue.', 401)
+      location.assign('/api/dashboard?reauthenticate=1')
+    } catch {
+      this.signOutPending = false
+      toast('Sign-out could not be confirmed. Reload the workspace to check your session before trying again.', { kind: 'warn', key: 'sign-out' })
+      btn.disabled = false
+    } finally {
+      clearTimeout(deadline); btn.classList.remove('is-busy'); btn.removeAttribute('aria-busy')
+    }
   },
   async blockWeek(btn) {
     const days = this.weekDays(state)
@@ -2324,6 +3038,7 @@ const statusView = {
 function boot() {
   if (booted) return
   booted = true
+  for (const button of document.querySelectorAll('[data-property-switch]')) button.addEventListener('click', openPropertySwitcher)
   for (const el of document.querySelectorAll('[data-icon]')) el.innerHTML = icon(el.dataset.icon)
   // the Inter stylesheet arrived as media="print" so it never blocked first paint; apply it now (index.html)
   for (const l of document.querySelectorAll('link[data-font-swap]')) l.media = 'all'
@@ -2332,6 +3047,7 @@ function boot() {
   paintChrome()
   applyRoute()
   window.addEventListener('hashchange', applyRoute)
+  window.addEventListener('popstate', applyRoute)
   document.addEventListener('visibilitychange', () => { if (!document.hidden) pollSoon() })
   window.addEventListener('focus', pollSoon)
   setInterval(() => { emit('minute', state); paintChrome() }, 60000)
@@ -2341,8 +3057,9 @@ function boot() {
 
 window.Atrium = {
   escapeHtml, fmt, api, gate, toast, confirm, prompt, dialog, register, navigate, route, hashFor, state, on,
-  busy, busyNow, apply, refresh, icons, icon, property, normalisePhone, labels, label, derive, hint, text, href,
-  html: html_, announce, escape: escape_, setFollowUpStatus, boot, views: VIEWS.slice(),
+  busy, busyNow, apply, refresh, calendarUrl, setCalendarRange, icons, icon, property, normalisePhone, labels, label, derive, hint, text, href,
+  can: permissionAllowed, paintPermissions, preferenceKey, propertyUrl, databaseMode,
+  html: html_, announce, escape: escape_, setFollowUpStatus, reviewTourChange, reviewBooking, boot, views: VIEWS.slice(),
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot)
 else boot()

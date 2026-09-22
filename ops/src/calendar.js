@@ -2,7 +2,7 @@
  * Tour calendar view (brief §10). Owner: calendar. Registers 'calendar' on window.Atrium at
  * load; app.js boots on DOMContentLoaded after every module script ran, so this module is
  * mounted the first time #/calendar is shown. Constraint 7 holds throughout: the grid draws
- * exactly the slots /api/calendar returned, positioned by their New York minutes; slot ids and
+ * exactly the slots /api/calendar returned, positioned by their property-local minutes; slot ids and
  * times are never computed; merged bands are presentation only; every write targets a slotId
  * or a YYYY-MM-DD the API gave us. Nothing here calls fetch — Atrium.api/busy/apply only.
  *
@@ -21,22 +21,29 @@ const arr = (v) => (Array.isArray(v) ? v : [])
 const isMobile = () => matchMedia('(max-width: 959px)').matches
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches
 const isYmd = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)
+const calendarDate = (v) => isYmd(v) && Number(v.slice(0, 4)) >= 1900 && Number(v.slice(0, 4)) <= 9998 && fmt.addDays(v, 0) === v
 const ROW_H = 40, HEAD_H = 76
 const QUICK = ['Painting', 'Staff out', 'Maintenance', 'Holiday', 'Private showing']
 const KEYS_HINT = 'Use the arrow keys to move, Enter to open, Shift + arrows to select a range.'
 
 // ---------------------------------------------------------------------------------------
-// Words — every date word comes from Atrium.fmt (New York); the hour label is an integer
+// Words — every date word comes from Atrium.fmt (property timezone); the hour label is an integer
 // formatter for the gutter only (layout, not data).
 // ---------------------------------------------------------------------------------------
 
 const weekStart = (ymd) => fmt.addDays(ymd, -fmt.dayOfWeek(ymd))
+function visibleRange(opts) {
+  const date = calendarDate(opts.date) ? opts.date : fmt.nyNow().ymd
+  const day = isMobile() || opts.view === 'day'
+  const from = day ? date : weekStart(date)
+  return { from, to: day ? date : fmt.addDays(from, 6) }
+}
 const ymdNoon = (ymd) => { const [y, m, d] = ymd.split('-').map(Number); return Date.UTC(y, m - 1, d, 12) }
 const dayDiff = (a, b) => Math.round((ymdNoon(b) - ymdNoon(a)) / 86400000)
 const longDay = (ymd) => fmt.dayLong(ymd).split(',')[0]
 const shortDay = (ymd) => fmt.day(ymd).split(',')[0]
 const monthDayNoYear = (ymd) => fmt.monthDay(ymd).split(',')[0]
-const longMonthDay = (ymd) => fmt.dayLong(ymd).split(', ').slice(1).join(', ')
+const longMonthDay = (ymd) => fmt.dayLong(ymd).split(', ')[1]
 /** 'Thursday, Sep 10' (+ ', 2027' when not this year). */
 const dayLabel = (ymd) => `${longDay(ymd)}, ${fmt.monthDay(ymd)}`
 const hourLabel = (h) => { h = ((h % 24) + 24) % 24; return h === 0 ? '12 AM' : h === 12 ? '12 PM' : h < 12 ? `${h} AM` : `${h - 12} PM` }
@@ -59,12 +66,14 @@ const plural = (n, one, many) => text.plural(n, one, many)
 // ---------------------------------------------------------------------------------------
 
 function buildModel(s, opts) {
-  const c = s.calendar
+  const range = visibleRange(opts)
+  const matches = s.calendar && s.calendar.range && s.calendar.range.from <= range.from && s.calendar.range.to >= range.to
+  const c = matches ? s.calendar : null
   const today = fmt.nyNow().ymd
   const rawSlots = c ? arr(c.slots) : []
   const blocks = c ? arr(c.blocks).filter((b) => b && b.target != null) : []
   const bookings = c ? arr(c.bookings).filter((b) => b && b.slotId != null) : []
-  const slots = [], byId = new Map(), byDate = new Map()
+  const slots = [], byId = new Map(), byDate = new Map(), seenTours = new Set()
   let lo = Infinity, hi = -Infinity, lastDate = null
   for (const raw of rawSlots) {
     if (!raw || raw.slotId == null) continue
@@ -74,19 +83,26 @@ function buildModel(s, opts) {
     const startMin = ps.minutes
     let endMin = pe ? pe.minutes + (pe.ymd !== ps.ymd ? 1440 : 0) : startMin + 30
     if (endMin <= startMin) endMin = startMin + 30
-    const status = raw.status === 'booked' || raw.status === 'blocked' ? raw.status : 'open'
+    const status = ['open', 'booked', 'blocked', 'unavailable'].includes(raw.status) ? raw.status : 'unavailable'
     // Every tour on this time — two callers can tour at once as long as it is not the same
     // apartment — so a time with one of two places taken is still open and still shows the tour.
     const onSlot = arr(raw.bookings).length ? arr(raw.bookings) : (raw.booking ? [raw.booking] : [])
-    const tours = onSlot.filter(Boolean).map((b, i) => ({
-      i, name: String((b && b.prospectName) ?? '').trim(),
-      unitId: b && b.unitId != null && b.unitId !== '' ? String(b.unitId) : null,
-      booking: bookings.find((x) => String(x.slotId) === String(raw.slotId) && String(x.prospectName ?? '').trim() === String((b && b.prospectName) ?? '').trim()) || null,
+    const tours = onSlot.filter((b) => {
+      if (!b || (b.startsAt && Date.parse(b.startsAt) !== Date.parse(raw.startsAt))) return false
+      const key = b.externalId || `${raw.slotId}|${b.prospectName || ''}|${b.unitId || ''}`
+      if (seenTours.has(key)) return false
+      seenTours.add(key); return true
+    }).map((b, i) => ({
+      i, name: String(b.prospectName ?? '').trim(),
+      unitId: b.unitId != null && b.unitId !== '' ? String(b.unitId) : null,
+      startsAt: b.startsAt || raw.startsAt, endsAt: b.endsAt || raw.endsAt,
+      booking: bookings.find((x) => b.externalId ? x.externalId === b.externalId : String(x.slotId) === String(raw.slotId) && String(x.prospectName ?? '').trim() === String(b.prospectName ?? '').trim()) || null,
     }))
     const sl = {
       id: String(raw.slotId), date, startsAt: raw.startsAt, endsAt: raw.endsAt, startMin, endMin, status,
-      capacity: Number(raw.capacity) > 0 ? Number(raw.capacity) : 1, tours,
+      capacity: Number(raw.capacity) > 0 ? Number(raw.capacity) : 1, tours, unavailableReason: String(raw.reason || 'Not offered'),
       rawReason: status === 'blocked' ? String((raw.block && raw.block.reason) ?? '') : '',
+      blockTarget: status === 'blocked' && raw.block && raw.block.target ? String(raw.block.target) : null,
       reason: status === 'blocked' ? reasonOf(raw.block && raw.block.reason) : '',
       wholeDay: status === 'blocked' && Boolean(raw.block && raw.block.wholeDay),
       name: tours[0] ? tours[0].name : '',
@@ -96,42 +112,46 @@ function buildModel(s, opts) {
     if (!byDate.has(date)) byDate.set(date, [])
     byDate.get(date).push(sl)
     lo = Math.min(lo, startMin); hi = Math.max(hi, endMin)
+    for (const tour of tours) { const end = fmt.nyParts(tour.endsAt); if (end) hi = Math.max(hi, end.minutes + (end.ymd !== date ? 1440 : 0)) }
     if (!lastDate || date > lastDate) lastDate = date
   }
   for (const list of byDate.values()) list.sort((a, b) => a.startMin - b.startMin)
   const minM = lo === Infinity ? 600 : Math.floor(lo / 60) * 60
   const maxM = hi === -Infinity ? 1140 : Math.max(minM + 60, Math.ceil(hi / 60) * 60)
-  const rows = Math.round((maxM - minM) / 30)
-  const rowOf = (sl) => Math.max(0, Math.min(rows - 1, Math.round((sl.startMin - minM) / 30)))
-  const spanOf = (sl) => Math.max(1, Math.min(rows - rowOf(sl), Math.round((sl.endMin - sl.startMin) / 30)))
+  const gcd = (a, b) => b ? gcd(b, a % b) : a
+  const stepMin = slots.reduce((step, sl) => sl.tours.reduce((value, tour) => gcd(value, Math.round((Date.parse(tour.endsAt) - Date.parse(tour.startsAt)) / 60000)),
+    gcd(gcd(step, Math.round(sl.startMin - minM)), Math.round(sl.endMin - sl.startMin))), 30) || 30
+  const rowHeight = ROW_H * stepMin / 30
+  const rows = Math.round((maxM - minM) / stepMin)
+  const rowOf = (sl) => Math.max(0, Math.min(rows - 1, Math.round((sl.startMin - minM) / stepMin)))
+  const spanOf = (sl) => Math.max(1, Math.min(rows - rowOf(sl), Math.round((sl.endMin - sl.startMin) / stepMin)))
   const lastSlotDate = lastDate || today
   const firstWeek = weekStart(today)
   const lastWeek = weekStart(lastSlotDate > today ? lastSlotDate : today)
   const lastDay = fmt.addDays(lastWeek, 6)
   const mobile = isMobile()
   const view = mobile ? 'day' : (opts.view === 'day' ? 'day' : 'week')
-  let date = isYmd(opts.date) ? opts.date : today
-  if (date < firstWeek) date = firstWeek
-  if (date > lastDay) date = lastDay
+  const date = calendarDate(opts.date) ? opts.date : today
   const ws = weekStart(date)
   const days = view === 'week' ? [0, 1, 2, 3, 4, 5, 6].map((i) => fmt.addDays(ws, i)) : [date]
   const dayBlocks = new Map()
-  for (const b of blocks) if (isYmd(b.target) && !dayBlocks.has(b.target)) dayBlocks.set(b.target, b)
+  for (const b of blocks) for (const date of derive.wholeDayBlockDates(b)) if (!dayBlocks.has(date)) dayBlocks.set(date, b)
   const bookingBySlot = new Map()
   for (const b of bookings) if (!bookingBySlot.has(String(b.slotId))) bookingBySlot.set(String(b.slotId), b)
 
   /** One item per tour. The item's slot is a copy carrying that tour's name and apartment. */
-  const tourItems = (sl) => sl.tours.map((t) => ({
-    kind: 'tour', key: `tour:${sl.id}:${t.i}`, ymd: sl.date,
-    slot: { ...sl, name: t.name, unitId: t.unitId, booking: t.booking, tourIndex: t.i, shared: sl.tours.length > 1 || sl.status === 'open' },
-    slots: [sl], row: rowOf(sl), span: spanOf(sl),
-  }))
+  const tourItems = (sl) => sl.tours.map((t) => {
+    const end = fmt.nyParts(t.endsAt)
+    const actual = { ...sl, startsAt: t.startsAt, endsAt: t.endsAt, endMin: end ? end.minutes + (end.ymd !== sl.date ? 1440 : 0) : sl.endMin,
+      name: t.name, unitId: t.unitId, booking: t.booking, tourIndex: t.i, shared: sl.tours.length > 1 || sl.status === 'open' }
+    return { kind: 'tour', key: `tour:${sl.id}:${t.i}`, ymd: sl.date, slot: actual, slots: [sl], row: rowOf(actual), span: spanOf(actual) }
+  })
   /** Consecutive own-block slots with one reason inside a day band are one labelled segment (presentation only). */
   function mergeSegs(own, first) {
     const out = []
     for (const x of own) {
       const prev = out[out.length - 1]
-      if (prev && prev.slot.rawReason === x.rawReason && x.startMin === prev.slots[prev.slots.length - 1].endMin) { prev.slots.push(x); prev.span += spanOf(x); continue }
+      if (prev && prev.slot.blockTarget === x.blockTarget && prev.slot.rawReason === x.rawReason && x.startMin <= prev.slots[prev.slots.length - 1].endMin) { prev.slots.push(x); prev.span = rowOf(x) + spanOf(x) - rowOf(prev.slot); continue }
       out.push({ slot: x, slots: [x], row: rowOf(x) - rowOf(first), span: spanOf(x) })
     }
     return out
@@ -154,33 +174,59 @@ function buildModel(s, opts) {
       let i = 0
       while (i < list.length) {
         const sl = list[i]
-        if (sl.status === 'open') { items.push({ kind: 'open', key: `cell:${sl.id}`, ymd, slot: sl, slots: [sl], row: rowOf(sl), span: spanOf(sl) }); for (const t of tourItems(sl)) items.push(t); i++; continue }
+        if (sl.status === 'open') {
+          const nextStart = list.slice(i + 1).find((next) => next.startMin > sl.startMin)
+          const span = nextStart ? Math.min(spanOf(sl), rowOf(nextStart) - rowOf(sl)) : spanOf(sl)
+          items.push({ kind: 'open', key: `cell:${sl.id}`, ymd, slot: sl, slots: [sl], row: rowOf(sl), span })
+          for (const t of tourItems(sl)) items.push(t); i++; continue
+        }
+        if (sl.status === 'unavailable') { for (const t of tourItems(sl)) items.push(t); i++; continue }
         if (sl.status === 'booked') { for (const t of tourItems(sl)) items.push(t); i++; continue }
         const run = [sl]
         let j = i + 1
-        while (j < list.length && list[j].status === 'blocked' && list[j].rawReason === sl.rawReason && list[j].wholeDay === sl.wholeDay && list[j].startMin === list[j - 1].endMin) { run.push(list[j]); j++ }
+        while (j < list.length && list[j].status === 'blocked' && list[j].blockTarget === sl.blockTarget && list[j].rawReason === sl.rawReason && list[j].wholeDay === sl.wholeDay && list[j].startMin <= list[j - 1].endMin) { run.push(list[j]); j++ }
         const last = run[run.length - 1]
         items.push({ kind: 'band', key: `band:${sl.id}`, ymd, slots: run, first: sl, last, row: rowOf(sl), span: rowOf(last) + spanOf(last) - rowOf(sl), reason: sl.reason, rawReason: sl.rawReason, wholeDay: sl.wholeDay })
         i = j
       }
     }
     items.sort((a, b) => a.row - b.row || (a.kind === 'dayband' ? -1 : b.kind === 'dayband' ? 1 : 0))
+    // Overlapping tours need independent columns even when they start at different times.
+    let group = [], groupEnd = -1
+    const arrangeTours = () => {
+      if (!group.length) return
+      const ends = []
+      for (const item of group) {
+        let lane = ends.findIndex((end) => end <= item.row)
+        if (lane < 0) lane = ends.length
+        ends[lane] = item.row + item.span
+        item.lane = lane
+      }
+      const reserve = group.some((item) => open.some((sl) => sl.startMin < item.slot.endMin && sl.endMin > item.slot.startMin)) ? 1 : 0
+      for (const item of group) { item.lane += reserve; item.lanes = ends.length + reserve }
+      group = []
+    }
+    for (const item of items.filter((item) => item.kind === 'tour')) {
+      if (item.row >= groupEnd) { arrangeTours(); groupEnd = -1 }
+      group.push(item); groupEnd = Math.max(groupEnd, item.row + item.span)
+    }
+    arrangeTours()
     const stops = items.filter((x) => x.kind !== 'tour' || true).slice().sort((a, b) => a.row - b.row)
     let status
     if (ymd < today) status = { text: 'Past', kind: 'past', sr: 'past' }
     else if (dayBlock) { const r = reasonOf(dayBlock.reason); status = { text: r ? `Blocked · ${r}` : 'Blocked', kind: 'blocked', sr: `blocked all day${r ? `, ${r}` : ''}` } }
     else if (ymd === today && !open.length && !tours.length) status = { text: 'No more times today', kind: 'none', sr: 'no more times today' }
+    else if (list.length && !open.length && list.every((x) => x.status === 'unavailable')) status = { text: tours.length ? plural(tours.length, 'tour') : 'Not offered', kind: 'none', sr: tours.length ? plural(tours.length, 'tour') : 'not offered' }
     else if (list.length && !open.length && tours.length) status = { text: 'Fully booked', kind: 'full', sr: `fully booked, ${plural(tours.length, 'tour')}` }
-    else if (ymd > lastSlotDate) status = { text: 'Not open yet', kind: 'none', sr: 'not open yet' }
     else if (!list.length) status = { text: 'Closed', kind: 'none', sr: 'closed' }
     else status = { text: `${open.length} open${tours.length ? ` · ${plural(tours.length, 'tour')}` : ''}`, kind: 'open', sr: `${plural(open.length, 'open time')}${tours.length ? `, ${plural(tours.length, 'tour')}` : ''}` }
     const operable = ymd < today ? null : dayBlock ? 'blocked' : list.length ? 'block' : null
     return { ymd, list, open, tours, dayBlock, items, stops, status, operable, hasBlock: Boolean(dayBlock) || list.some((x) => x.status === 'blocked') }
   }
   const dayModels = days.map(dayModel)
-  const old = blocks.filter((b) => (isYmd(b.target) ? b.target < today : !byId.has(String(b.target))))
+  const old = blocks.filter((b) => (isYmd(b.target) ? b.target < today : /^slot-(\d{4}-\d{2}-\d{2})T/.exec(String(b.target))?.[1] < today))
   return {
-    loaded: Boolean(c), today, slots, byId, byDate, blocks, bookings, bookingBySlot, dayBlocks, minM, maxM, rows, rowOf, spanOf,
+    loaded: Boolean(c), range, settings: c && c.settings, today, slots, byId, byDate, blocks, bookings, bookingBySlot, dayBlocks, minM, maxM, rows, stepMin, rowHeight, rowOf, spanOf,
     lastSlotDate, hasSlots: slots.length > 0, firstWeek, lastWeek, lastDay, mobile, view, date, weekStart: ws, days, dayModels, dayModel, old,
     nowMin: fmt.nyNow().minutes,
   }
@@ -204,7 +250,7 @@ function tourInfo(s, m, sl) {
   return {
     name: sl.name || (profile && profile.name) || 'Tour', profile, phone: profile && profile.phone !== 'unknown' ? profile.phone : null,
     email: (profile && profile.email) || null, unitId: sl.unitId != null ? sl.unitId : (lb && lb.unitId != null ? String(lb.unitId) : null),
-    bookedAt: booking ? booking.bookedAt : null, callId,
+    bookedAt: booking ? booking.bookedAt : null, booking, callId,
   }
 }
 
@@ -250,7 +296,7 @@ const cal = {
   // focusBy: who last set the roving tab stop ('kbd' | 'mouse'), so Tab into the grid lands per §10.7.
   slotBlocksFail: false, picked: null, pickedShown: null, wasCalendar: false, focusBy: null, entering: false,
 }
-try { const v = localStorage.getItem('atrium.calendar.view'); if (v === 'day' || v === 'week') cal.view = v } catch (e) { /* no local state */ }
+try { const v = localStorage.getItem(A.preferenceKey('calendar.view')); if (v === 'day' || v === 'week') cal.view = v } catch (e) { /* no local state */ }
 
 /** The polite live region, never more than once per 2 s (the latest sentence wins). */
 function say(msg) {
@@ -264,14 +310,55 @@ function say(msg) {
 // HTML — everything from the API or a person passes through esc()
 // ---------------------------------------------------------------------------------------
 
-function stripHtml(s, m) {
-  const tours = derive.toursOn(s, m.today)
-  if (!tours.length) return '<p class="cal-today-strip">Today: no tours.</p>'
-  const items = tours.map((t) => {
-    const name = t.profile && href.tel(t.phone) !== null ? `<a href="${esc(A.hashFor('leads', { phone: t.phone }))}">${esc(t.name)}</a>` : esc(t.name)
-    return `<span class="cal-strip-item${t.past ? ' is-past' : ''}"><span class="num">${esc(fmt.time(t.startsAt))}</span> ${name}${t.unitId ? ` (${esc(t.unitId)})` : ''}</span>`
-  })
-  return `<p class="cal-today-strip">Today: ${esc(plural(tours.length, 'tour'))} — ${items.join(' · ')}</p>`
+/** Counts describe only the selected, successfully loaded property-local range. */
+function summaryModel(s, m) {
+  if (!m.loaded) return null
+  const inRange = instant => { const date = fmt.nyDate(instant); return date && date >= m.range.from && date <= m.range.to }
+  const tours = new Map()
+  for (const booking of m.bookings) {
+    if (!booking.externalId || (booking.status && booking.status !== 'confirmed') || !inRange(booking.startsAt)
+      || !Number.isFinite(Date.parse(booking.endsAt)) || Date.parse(booking.endsAt) <= Date.parse(booking.startsAt)) continue
+    tours.set(booking.externalId, booking)
+  }
+  // A supplied interval is authoritative, including blocks created in an older timezone.
+  const overlaps = block => {
+    const start = Date.parse(block.startsAt), end = Date.parse(block.endsAt)
+    if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
+      const first = fmt.nyDate(start), last = fmt.nyDate(end - 1)
+      return first && last && first <= m.range.to && last >= m.range.from
+    }
+    const date = isYmd(block.target) ? block.target : /^slot-(\d{4}-\d{2}-\d{2})T/.exec(String(block.target))?.[1]
+    return date && date >= m.range.from && date <= m.range.to
+  }
+  const building = new Set(m.blocks.filter(overlaps).map(block => block.target)).size
+  const unit = new Set(arr(s.calendar?.unitBlocks).filter(block => block && !block.removedAt && overlaps(block)).map(block => block.id)).size
+  const open = new Set(m.slots.filter(slot => slot.status === 'open' && slot.date >= m.range.from && slot.date <= m.range.to).map(slot => slot.id)).size
+  return { tours: tours.size, open, building, unit, holds: building + unit }
+}
+function heroHtml(m) {
+  const busy = A.busyNow('calendar') || cal.inert
+  const actions = []
+  if (A.can('operate')) {
+    actions.push(`<button type="button" class="btn btn-primary" data-action="block" data-key="block" data-write="calendar"${dis(busy)}>${ico('plus')}Block building time</button>`)
+    actions.push(`<button type="button" class="btn cal-hero-secondary" data-action="unit-blocks" data-key="unit-blocks" data-write="calendar"${dis(busy)}>Unit availability</button>`)
+  }
+  if (A.can('configure')) actions.push(`<button type="button" class="btn cal-hero-secondary" data-action="settings" data-key="settings" data-write="calendar" data-permission="configure"${dis(busy)}>Tour settings</button>`)
+  if (A.can('operate')) actions.push(`<button type="button" class="btn-icon cal-hero-secondary" data-action="more" data-key="more" aria-label="More calendar actions" aria-haspopup="dialog" data-write="calendar"${dis(busy)}>${A.icon('more')}</button>`)
+  return `<section class="page-hero cal-hero"><div class="cal-hero-copy"><span class="page-eyebrow">${esc(A.property.name)} · Tour operations</span><h1 tabindex="-1">Tour calendar</h1><p>Coordinate showings, team capacity and apartment availability in one place.</p><span class="cal-zone">${ico('clock')}${esc(A.property.timeZoneLabel)}</span></div><div class="page-hero-actions cal-hero-actions">${actions.length ? actions.join('') : '<span class="cal-read-only">View-only access</span>'}</div></section>`
+}
+function summaryHtml(s, m) {
+  const values = summaryModel(s, m)
+  const detail = !values ? 'Waiting for this date range' : s.errors.calendar ? 'Last saved view · reconnecting' : m.view === 'day' ? 'In the selected day' : 'In the selected week'
+  const card = (key, label, value, explanation) => `<article class="card cal-metric" data-calendar-metric="${key}"><span class="metric-label">${label}</span><strong class="metric-value num">${value == null ? '—' : value}</strong><span class="metric-detail">${esc(explanation)}</span></article>`
+  return `<div class="page-metrics cal-metrics" aria-label="Selected calendar range">` +
+    card('tours', 'Tours scheduled', values?.tours, detail) +
+    card('starts', 'Open start times', values?.open, values ? 'Available starts, subject to apartment availability' : detail) +
+    card('holds', 'Availability holds', values?.holds, values ? `${plural(values.unit, 'unit hold')} · ${plural(values.building, 'building hold')}` : detail) + '</div>'
+}
+function rulesHtml(m) {
+  if (!m.loaded || !m.settings) return ''
+  const settings = m.settings
+  return `<div class="cal-rules" aria-label="Current tour rules"><div><span>Team capacity</span><strong>${esc(plural(settings.capacity, 'tour'))} at once</strong></div><div><span>Tour length</span><strong>${esc(settings.slotMinutes)} minutes</strong></div><div><span>Apartment policy</span><strong>${settings.sameUnitPolicy === 'shared' ? 'Shared tours allowed' : 'One tour per apartment'}</strong></div><div><span>Book ahead</span><strong>${settings.bookingWindowDays == null ? 'No advance limit' : `${esc(settings.bookingWindowDays)} days`}</strong></div></div>`
 }
 
 function bannersHtml(s, m) {
@@ -279,7 +366,9 @@ function bannersHtml(s, m) {
   let out = ''
   const store = s.calendar && s.calendar.store
   if (m.loaded && store && store.durable === false) {
-    out += A.html.banner('warn', '', { raw: '<a class="banner-link" href="#/status">Heads up: calendar changes aren\'t being saved right now. Blocks you add may disappear. Ask Atrium support.</a>' })
+    out += window.ATRIUM_DEMO === true && window.ATRIUM_DEMO_PERSISTENT !== true
+      ? A.html.banner('info', 'Demo workspace — tour settings and sample bookings reset when the preview restarts.')
+      : A.html.banner('warn', '', { raw: '<a class="banner-link" href="#/status">Heads up: calendar changes aren\'t being saved right now. Blocks you add may disappear. Ask Atrium support.</a>' })
   }
   const err = s.errors.calendar
   if (err && m.loaded) out += A.html.banner('info', `Showing the calendar as of ${s.lastGoodAt.calendar ? fmt.time(s.lastGoodAt.calendar) : 'a moment ago'} — trying to reconnect.`)
@@ -293,19 +382,18 @@ const dis = (on) => (on ? ' aria-disabled="true"' : '')
 function toolbarHtml(m) {
   const rt = rangeText(m)
   const unit = m.view === 'week' ? 'week' : 'day'
-  const prevOff = m.view === 'week' ? m.weekStart <= m.firstWeek : m.date <= m.firstWeek
-  const nextOff = m.view === 'week' ? m.weekStart >= m.lastWeek : m.date >= m.lastDay
-  const busy = A.busyNow('calendar') || cal.inert
-  return `<div class="cal-toolbar"><div class="cal-nav">${navBtn('prev', `Previous ${unit}`, prevOff)}<button type="button" class="btn" data-action="today" data-key="today">Today</button>${navBtn('next', `Next ${unit}`, nextOff)}</div>` +
-    `<h2 class="cal-range" aria-live="polite" data-key="range">${rt.when ? `<span class="cal-range-when">${esc(rt.when)} · </span>` : ''}${esc(rt.range)}</h2><span class="cal-spacer"></span>` +
-    `<div class="cal-tools"><div class="seg cal-seg" role="radiogroup" aria-label="Layout"><button type="button" class="tab" role="radio" aria-checked="${m.view === 'week' ? 'true' : 'false'}" data-action="view-week" data-key="view-week">Week</button><button type="button" class="tab" role="radio" aria-checked="${m.view === 'day' ? 'true' : 'false'}" data-action="view-day" data-key="view-day">Day</button></div>` +
-    `<button type="button" class="btn btn-primary" data-action="block" data-key="block" data-write="calendar"${dis(busy)}>Block time…</button>` +
-    `<button type="button" class="btn-icon" data-action="more" data-key="more" aria-label="More calendar actions" aria-haspopup="dialog" data-write="calendar"${dis(busy)}>${A.icon('more')}</button></div></div>` +
+  const prevOff = Number(m.date.slice(0, 4)) <= 1900
+  const nextOff = Number(m.date.slice(0, 4)) >= 9998
+  const navigation = m.mobile ? '' : `<div class="cal-nav">${navBtn('prev', `Previous ${unit}`, prevOff)}<button type="button" class="btn" data-action="today" data-key="today">Today</button>${navBtn('next', `Next ${unit}`, nextOff)}</div>`
+  const heading = m.mobile ? '<h2 class="cal-schedule-title">Daily schedule</h2>' : `<h2 class="cal-range" aria-live="polite" data-key="range">${rt.when ? `<span class="cal-range-when">${esc(rt.when)} · </span>` : ''}${esc(rt.range)}</h2>`
+  const layout = m.mobile ? '<button type="button" class="btn" data-action="today" data-key="today">Today</button>' : `<div class="seg cal-seg" role="radiogroup" aria-label="Layout"><button type="button" class="tab" role="radio" aria-checked="${m.view === 'week' ? 'true' : 'false'}" data-action="view-week" data-key="view-week">Week</button><button type="button" class="tab" role="radio" aria-checked="${m.view === 'day' ? 'true' : 'false'}" data-action="view-day" data-key="view-day">Day</button></div>`
+  return `<div class="cal-schedule-heading"><div><span class="section-kicker">${m.mobile ? 'One day at a time' : 'Schedule overview'}</span>${heading}</div><div class="cal-tools">${layout}<button type="button" class="btn" data-action="goto" data-key="goto">Go to date</button></div></div>` +
+    `<div class="cal-toolbar">${navigation}<p class="cal-window-note">${m.loaded ? `Showing ${esc(fmt.monthDay(m.range.from))}${m.range.to !== m.range.from ? ` – ${esc(fmt.monthDay(m.range.to))}` : ''}` : 'Loading selected dates'} · ${esc(A.property.timeZoneLabel)}</p></div>` +
     `<div class="cal-progress"${A.busyNow('calendar') ? '' : ' hidden'}></div>`
 }
 
 function itemHtml(m, it, col) {
-  const r = it.row, isHour = (m.minM + r * 30) % 60 === 0
+  const r = it.row, isHour = (m.minM + r * m.stepMin) % 60 === 0
   const place = `grid-row:${r + 2} / span ${it.span};grid-column:${col}`
   const common = `data-key="${esc(it.key)}" data-date="${esc(it.ymd)}" data-row="${r}" data-col="${col - 2}" data-kind="${it.kind}"`
   if (it.kind === 'open') {
@@ -327,11 +415,7 @@ function itemHtml(m, it, col) {
     const short = m.view === 'day' ? full : `${clock(sl.startsAt)} ${firstName(sl.name)}`
     // Tours sharing one time split the cell; a lone tour on a time with a place still open
     // keeps to the right so the open cell beside it can be clicked.
-    const n = Math.max(1, arr(sl.tours).length)
-    // Grid items: split the cell with width + justify-self (left/top would do nothing here).
-    const lay = !sl.shared ? '' : sl.status === 'booked'
-      ? `;width:${Math.floor(100 / n)}%;justify-self:${sl.tourIndex === 0 ? 'start' : sl.tourIndex === n - 1 ? 'end' : 'center'}`
-      : ';width:60%;justify-self:end'
+    const lay = it.lanes > 1 ? `;width:${100 / it.lanes}%;justify-self:start;transform:translateX(${it.lane * 100}%)` : ''
     return `<div class="cal-cell cal-slot${isHour ? '' : ' is-half'}${over ? ' is-over' : ''}${sl.shared ? ' is-shared' : ''}" role="presentation" style="${place}${lay}">` +
       `<button type="button" class="cal-tour${past ? ' is-past' : ''}" role="gridcell" aria-colindex="${col}" ${common} data-slot="${esc(sl.id)}" tabindex="-1" aria-label="${esc(itemLabel(m, it))}">${ico('person')}<span class="cal-ev-text"><span class="cal-ev-name-full">${esc(full)}</span><span class="cal-ev-name-short">${esc(short)}</span></span></button></div>`
   }
@@ -339,7 +423,7 @@ function itemHtml(m, it, col) {
   const n = it.span
   const topSegs = it.kind === 'dayband' ? it.segs.filter((sg) => sg.row === 0) : []
   const nextSeg = it.kind === 'dayband' ? it.segs.find((sg) => sg.row > 0) : null
-  const linesFor = (rows) => Math.max(2, Math.min(6, Math.floor((rows * ROW_H - 8) / 15)))
+  const linesFor = (rows) => Math.max(2, Math.min(6, Math.floor((rows * m.rowHeight - 8) / 15)))
   // A segment on the band's first row takes the second line, so the day's own label keeps to one.
   const lines = topSegs.length ? 1 : (nextSeg ? Math.max(1, Math.min(linesFor(n), linesFor(nextSeg.row))) : linesFor(n))
   let words
@@ -351,8 +435,8 @@ function itemHtml(m, it, col) {
   let hits = ''
   for (let i = 0; i < n; i++) hits += i === 0
     ? `<div class="cal-band-hit" role="gridcell" aria-colindex="${col}" aria-rowspan="${n}" tabindex="-1" aria-label="${esc(itemLabel(m, it))}" style="top:0"></div>`
-    : `<div class="cal-band-hit" aria-hidden="true" style="top:${i * ROW_H}px"></div>`
-  const segs = it.kind === 'dayband' ? it.segs.map((sg) => `<div class="cal-band-seg" aria-hidden="true" style="top:${sg.row * ROW_H}px;height:${sg.span * ROW_H}px" data-seg="${esc(sg.slot.id)}"><span class="cal-band-words${sg.row === 0 ? ' cal-band-words-2' : ''}">${esc(segWords(sg))}</span></div>`).join('') : ''
+    : `<div class="cal-band-hit" aria-hidden="true" style="top:${i * m.rowHeight}px"></div>`
+  const segs = it.kind === 'dayband' ? it.segs.map((sg) => `<div class="cal-band-seg" aria-hidden="true" style="top:${sg.row * m.rowHeight}px;height:${sg.span * m.rowHeight}px" data-seg="${esc(sg.slot.id)}"><span class="cal-band-words${sg.row === 0 ? ' cal-band-words-2' : ''}">${esc(segWords(sg))}</span></div>`).join('') : ''
   const slotList = it.slots.map((x) => x.id).join(' ')
   return `<div class="cal-cell cal-slot${isHour ? '' : ' is-half'}" role="presentation" style="${place}">` +
     `<div class="cal-band${n >= 2 ? ' is-tall' : ''}" ${common} data-slots="${esc(slotList)}" style="--cal-lines:${lines}"><span class="cal-band-text">${ico('slash')}<span class="cal-band-words">${esc(words).replace(/\n/g, '<br>')}</span></span>${segs}${hits}</div></div>`
@@ -365,8 +449,8 @@ function gridHtml(m) {
     const [sm, sd] = longMonthDay(m.weekStart).split(' '), [em, ed] = longMonthDay(fmt.addDays(m.weekStart, 6)).split(' ')
     label = `Tour calendar, week of ${sm === em ? `${sm} ${sd} to ${ed}` : `${sm} ${sd} to ${em} ${ed}`}`
   } else label = `Tour calendar, ${fmt.dayLong(m.date)}`
-  let out = `<div class="cal-grid" role="grid" aria-label="${esc(label)}" aria-rowcount="${m.rows + 1}" aria-colcount="${cols + 1}" aria-describedby="cal-keys-hint" style="--cal-cols:${cols};--cal-rows:${m.rows}">`
-  out += '<div role="row" aria-rowindex="1" style="display:contents"><div class="cal-corner" role="columnheader" aria-colindex="1" aria-label="Time" style="grid-row:1;grid-column:1"></div>'
+  let out = `<div class="cal-grid" role="grid" aria-label="${esc(label)}" aria-rowcount="${m.rows + 1}" aria-colcount="${cols + 1}" aria-describedby="cal-keys-hint" style="--cal-cols:${cols};--cal-rows:${m.rows};--cal-row-height:${m.rowHeight}px">`
+  out += '<div role="row" aria-rowindex="1" style="display:contents"><div class="cal-corner" role="columnheader" aria-colindex="1" aria-label="Time" style="grid-row:1;grid-column:1"><span aria-hidden="true">Time</span></div>'
   m.dayModels.forEach((d, i) => {
     const isToday = d.ymd === m.today, col = i + 2
     const isPicked = cal.pickedShown === d.ymd
@@ -382,8 +466,8 @@ function gridHtml(m) {
   const covered = m.dayModels.map((d) => { const c = new Array(m.rows).fill(false); for (const it of d.items) for (let r = it.row; r < Math.min(m.rows, it.row + it.span); r++) c[r] = true; return c })
   const starts = m.dayModels.map((d) => { const map = new Map(); for (const it of d.items) { if (!map.has(it.row)) map.set(it.row, []); map.get(it.row).push(it) } return map })
   for (let r = 0; r < m.rows; r++) {
-    const min = m.minM + r * 30, isHour = min % 60 === 0
-    const gl = isHour ? hourLabel(min / 60) : hourLabel(Math.floor(min / 60)).replace(' ', ':30 ')
+    const min = m.minM + r * m.stepMin, isHour = min % 60 === 0
+    const gl = isHour ? hourLabel(min / 60) : hourLabel(Math.floor(min / 60)).replace(' ', `:${String(min % 60).padStart(2, '0')} `)
     out += `<div role="row" aria-rowindex="${r + 2}" style="display:contents"><div class="cal-gutter ${isHour ? 'is-hour' : 'is-half'}" role="rowheader" aria-colindex="1" aria-label="${esc(gl)}" style="grid-row:${r + 2};grid-column:1">${isHour ? `<span class="num">${esc(gl)}</span>` : ''}</div>`
     m.dayModels.forEach((d, i) => {
       const col = i + 2
@@ -400,7 +484,7 @@ function nowHtml(m) {
   const col = m.days.indexOf(m.today)
   const nowMin = fmt.nyNow().minutes
   if (col < 0 || nowMin < m.minM || nowMin >= m.maxM) return ''
-  const row = Math.floor((nowMin - m.minM) / 30), off = Math.round(((nowMin - m.minM) % 30) / 30 * ROW_H)
+  const row = Math.floor((nowMin - m.minM) / m.stepMin), off = Math.round(((nowMin - m.minM) % m.stepMin) / m.stepMin * m.rowHeight)
   return `<div class="cal-now-faint" aria-hidden="true" style="grid-row:${row + 2};grid-column:2 / -1;transform:translateY(${off}px)"></div>` +
     `<div class="cal-now" aria-hidden="true" style="grid-row:${row + 2};grid-column:${col + 2};transform:translateY(${off}px)"></div>`
 }
@@ -409,8 +493,8 @@ function agendaHtml(m) {
   const d = m.dayModels[0]
   const diff = dayDiff(m.today, d.ymd)
   const when = diff === 0 ? 'Today' : diff === 1 ? 'Tomorrow' : ''
-  let out = `<div class="cal-agenda-head"><div class="cal-agenda-nav">${navBtn('prev', 'Previous day', m.date <= m.firstWeek)}` +
-    `<h2 class="cal-range" aria-live="polite" data-key="range">${esc(fmt.day(d.ymd))}${when ? ` <span class="cal-range-when">· ${when}</span>` : ''}</h2>${navBtn('next', 'Next day', m.date >= m.lastDay)}</div>`
+  let out = `<div class="cal-agenda-head"><div class="cal-agenda-nav">${navBtn('prev', 'Previous day', Number(m.date.slice(0, 4)) <= 1900)}` +
+    `<h2 class="cal-range" aria-live="polite" data-key="range">${esc(fmt.day(d.ymd))}${when ? ` <span class="cal-range-when">· ${when}</span>` : ''}</h2>${navBtn('next', 'Next day', Number(m.date.slice(0, 4)) >= 9998)}</div>`
   out += '<div class="cal-strip" role="group" aria-label="Days this week">'
   for (let i = 0; i < 7; i++) {
     const ymd = fmt.addDays(m.weekStart, i), dm = m.dayModel(ymd)
@@ -423,9 +507,9 @@ function agendaHtml(m) {
   const inert = (txt, lead) => `<div class="row cal-arow is-inert"><span class="row-lead num">${esc(lead || '')}</span><span class="row-body">${esc(txt)}</span></div>`
   const arow = (cls, lead, body, attrs, label) => `<button type="button" class="row row-click cal-arow ${cls}" ${attrs} aria-label="${esc(label)}"><span class="row-lead num"><span class="row-lead-bar">${esc(lead)}</span></span><span class="row-body">${body}</span><span class="cal-chev" aria-hidden="true">${ico('chevron-right')}</span></button>`
   const rows = []
-  if (d.ymd < m.today) rows.push(inert('Past — not offered'))
-  else if (d.ymd > m.lastSlotDate && !d.dayBlock) rows.push(inert(`Not open yet — the assistant offers tour times through ${fmt.day(m.lastSlotDate)}.`))
-  else {
+  if (d.ymd < m.today) rows.push(inert('Past tour times — existing bookings are shown below.'))
+  if (d.list.length && d.list.every((sl) => sl.status === 'unavailable') && !d.tours.length) rows.push(inert(d.list[0].unavailableReason))
+  {
     // "Earlier today" exists only once the day's first listed time has passed; before that (at
     // midnight, say) nothing has been withheld and the row would claim otherwise.
     if (d.ymd === m.today) { if (!d.list.length) rows.push(inert('No more times today')); else if (m.nowMin >= d.list[0].startMin) rows.push(inert('Earlier today · Not offered')) }
@@ -448,7 +532,7 @@ function agendaHtml(m) {
       } else if (it.kind === 'tour') {
         const sl = it.slot
         rows.push(arow('is-tour', fmt.timeRange(sl.startsAt, sl.endsAt), `${ico('person')}<span>${esc(sl.name || 'Tour')}</span>${sl.unitId ? `<span class="cal-ar-sub">· apartment ${esc(sl.unitId)}</span>` : ''}<span class="cal-ar-sub">· Confirmed</span>`,
-          `data-action="agenda-tour" data-slot="${esc(sl.id)}" data-key="tour:${esc(sl.id)}"`, `${fmt.timeRange(sl.startsAt, sl.endsAt)}, tour with ${sl.name || 'a caller'}${sl.unitId ? `, apartment ${sl.unitId}` : ''}, confirmed. Open the details`))
+          `data-action="agenda-tour" data-slot="${esc(sl.id)}" data-key="${esc(it.key)}"`, `${fmt.timeRange(sl.startsAt, sl.endsAt)}, tour with ${sl.name || 'a caller'}${sl.unitId ? `, apartment ${sl.unitId}` : ''}, confirmed. Open the details`))
         i++
       } else {
         const lead = it.kind === 'dayband' ? fmt.timeRange(it.first.startsAt, it.last.endsAt) : (it.slots.length > 1 ? fmt.timeRange(it.first.startsAt, it.last.endsAt) : fmt.time(it.first.startsAt))
@@ -467,10 +551,11 @@ function footHtml(m) {
   let out = '<div class="cal-foot">'
   out += `<div class="cal-legend" role="list" aria-label="Legend"><span class="muted" aria-hidden="true">Legend:</span>` +
     `<span class="cal-lg" role="listitem"><span class="cal-sw" aria-hidden="true"></span>Open</span>` +
-    `<span class="cal-lg" role="listitem"><span class="cal-sw cal-sw-na" aria-hidden="true"></span>Not offered (past, or outside tour hours)</span>` +
+    `<span class="cal-lg" role="listitem"><span class="cal-sw cal-sw-na" aria-hidden="true"></span>Not offered</span>` +
     `<span class="cal-lg cal-lg-tour" role="listitem"><span class="cal-sw cal-sw-tour" aria-hidden="true"></span>${ico('person')}Tour</span>` +
     `<span class="cal-lg cal-lg-blocked" role="listitem"><span class="cal-sw cal-sw-blocked" aria-hidden="true"></span>${ico('slash')}Blocked</span></div>`
-  if (m.hasSlots) out += `<p class="cal-through small">The assistant offers tour times through ${esc(fmt.day(m.lastSlotDate))}.</p>`
+  out += rulesHtml(m)
+  out += '<p class="cal-through">Select a tour to review its prospect or move the appointment. A unit hold affects only that apartment; building blocks affect all new tours.</p>'
   if (m.old.length) {
     const n = m.old.length, allDates = m.old.every((b) => isYmd(b.target))
     const desc = (b) => `${monthDayNoYear(b.target)}${reasonOf(b.reason) ? ` · ${reasonOf(b.reason)}` : ''}`
@@ -485,7 +570,8 @@ function footHtml(m) {
 }
 
 const skeletonHtml = () => `<div class="cal-skeleton" aria-busy="true"><span class="vh">Loading the calendar…</span><div class="cal-sk-col"><div class="skeleton-line"></div></div>${'<div class="cal-sk-col"><div class="skeleton-line"></div><div class="skeleton-line"></div><div class="skeleton-line"></div><div class="skeleton-line"></div></div>'.repeat(7)}</div>`
-const emptyHtml = () => `<div class="cal-empty-card">${A.html.empty({ icon: 'calendar', title: 'No tour times to show.', text: 'The assistant only offers times during tour hours and at least a couple of hours out. As soon as some are open they appear here.' })}</div>`
+const emptyHtml = () => `<div class="cal-empty-card">${A.html.empty({ icon: 'calendar', title: 'No tour times in this range.', text: 'Try another date or review your tour hours and booking window in Tour settings.' })}</div>`
+const unavailableHtml = () => `<div class="cal-empty-card" role="status">${A.html.empty({ icon: 'calendar', title: 'Schedule unavailable', text: 'These dates have not loaded. Keep the current bookings unchanged and try again when the connection returns.' })}</div>`
 
 // ---------------------------------------------------------------------------------------
 // Writes (§10.5, §10.6, §12.2) — every one inside Atrium.busy('calendar', …), painted from
@@ -494,7 +580,7 @@ const emptyHtml = () => `<div class="cal-empty-card">${A.html.empty({ icon: 'cal
 
 const post = (body, doing) => A.api.post('/api/calendar', body, { doing })
 const signedOut = (e) => Boolean(e && e.signedOut)
-function reread() { return A.api.get('/api/calendar').then((d) => { A.apply('calendar', d) }, () => { /* the poll will try again */ }) }
+function reread() { return A.api.get(A.calendarUrl()).then((d) => { A.apply('calendar', d) }, () => { /* the poll will try again */ }) }
 const isKnown400 = (e) => Boolean(e) && e.status === 400 && /^target must be/i.test(String(e.message))
 
 /** One POST after another, each 200 applied at once so the calendar grows as blocks land. */
@@ -512,7 +598,14 @@ async function sequential(bodies, doing, onEach) {
 }
 
 const rawReasonFor = (target) => { const b = arr(A.state.calendar && A.state.calendar.blocks).find((x) => x && x.target === target); return b ? b.reason : undefined }
-const blockBody = (t) => { const b = { action: 'block', target: t.target }; if (t.reason != null && String(t.reason).trim() && !/^blocked$/i.test(String(t.reason).trim())) b.reason = String(t.reason).slice(0, 120); return b }
+const savedBlock = (target) => ({ ...arr(A.state.calendar && A.state.calendar.blocks).find((block) => block && block.target === target), target })
+const reopenTargets = (it) => [...new Set(it.slots.map((slot) => slot.blockTarget || slot.id))].map(savedBlock)
+const blockBody = (t) => {
+  const b = { action: 'block', target: t.target }
+  if (t.reason != null && String(t.reason).trim() && !/^blocked$/i.test(String(t.reason).trim())) b.reason = String(t.reason).slice(0, 120)
+  if (t.startsAt && t.endsAt) { b.startsAt = t.startsAt; b.endsAt = t.endsAt }
+  return b
+}
 
 /** Undo of a block: unblock each target. Rejects so the toast reads "Couldn't undo that". */
 function undoBlocks(targets) {
@@ -520,6 +613,12 @@ function undoBlocks(targets) {
     const r = await sequential(targets.map((t) => ({ action: 'unblock', target: t })), 'undoing a block')
     if (r.failed) { if (!signedOut(r.failed.error)) reread(); throw r.failed.error }
   })())
+}
+/** Restore a partial block after extending its date, without deleting prior coverage. */
+function undoDayExtension(previous, extended) {
+  return A.busy('calendar', post({ ...blockBody(previous), expectedBlock: {
+    startsAt: extended.startsAt, endsAt: extended.endsAt,
+  } }, 'undoing a block extension').then(res => { A.apply('calendar', res) }))
 }
 /** Undo of a reopen / of removing old blocks: block each target again with its original reason. */
 function reblock(targets, handle) {
@@ -558,11 +657,13 @@ async function reopen(it) {
     closePopover(true)
     const ok = await A.confirm(`The assistant will offer tour times on ${longDay(ymd)} again.`, { title: `Reopen ${dayLabel(ymd)}?`, confirmLabel: `Reopen ${longDay(ymd)}` })
     if (!ok) return
-    await runReopen([{ target: ymd, reason: it.block ? it.block.reason : rawReasonFor(ymd) }], `Reopened ${longDay(ymd)}`, `day:${ymd}`, ymd)
+    const target = it.block ? it.block.target : ymd
+    await runReopen([savedBlock(target)], `Reopened ${longDay(ymd)}`, `day:${ymd}`, ymd)
     return
   }
-  const targets = it.slots.map((sl) => ({ target: sl.id, reason: rawReasonFor(sl.id) }))
-  const label = it.slots.length > 1 ? `${shortDay(ymd)} ${fmt.timeRange(it.first.startsAt, it.last.endsAt)}` : `${shortDay(ymd)} ${fmt.time(it.first.startsAt)}`
+  const targets = reopenTargets(it)
+  const single = targets.length === 1 && targets[0].startsAt && targets[0].endsAt ? targets[0] : null
+  const label = single ? `${shortDay(ymd)} ${fmt.timeRange(single.startsAt, single.endsAt)}` : it.slots.length > 1 ? `${shortDay(ymd)} ${fmt.timeRange(it.first.startsAt, it.last.endsAt)}` : `${shortDay(ymd)} ${fmt.time(it.first.startsAt)}`
   await runReopen(targets, `Reopened ${label}`, `cell:${it.first.id}`, ymd)
 }
 async function runReopen(targets, toastText, focusKey, ymd) {
@@ -605,7 +706,7 @@ async function removeOld() {
   if (!old.length) return
   const ok = await A.confirm("They're on days that have passed.", { title: `Remove ${plural(old.length, 'old block')}?`, confirmLabel: 'Remove old blocks' })
   if (!ok) return
-  const targets = old.map((b) => ({ target: String(b.target), reason: b.reason }))
+  const targets = old.map((b) => ({ ...b, target: String(b.target) }))
   const r = await A.busy('calendar', sequential(targets.map((t) => ({ action: 'unblock', target: t.target })), 'removing old blocks'))
   if (r.failed) { if (signedOut(r.failed.error)) return; A.toast("Couldn't do that. Nothing changed — try again.", { kind: 'error' }); reread(); return }
   const canUndo = !(cal.slotBlocksFail && targets.some((t) => !isYmd(t.target)))
@@ -616,24 +717,23 @@ async function removeOld() {
 
 /** preset: { date, mode:'day'|'range', from, to, reason, only:Set } */
 function openSheet(preset) {
-  if (A.busyNow('calendar') || cal.inert) return
+  if (!A.can('operate') || A.busyNow('calendar') || cal.inert) return
   if (cal.sheet) return
   closePopover(false)
   const p = preset || {}
   const m0 = cal.model || buildModel(A.state, {})
   // With no day preset, start on the first day from today that still has an open time (late in the
   // day that is tomorrow), so the sheet never opens with nothing to block.
-  const firstOpenDay = (m) => { for (let d = m.today; d <= m.lastSlotDate; d = fmt.addDays(d, 1)) if ((m.byDate.get(d) || []).some((x) => x.status === 'open')) return d; return m.today }
+  const firstOpenDay = (m) => { for (let d = m.range.from > m.today ? m.range.from : m.today; d <= m.range.to; d = fmt.addDays(d, 1)) if ((m.byDate.get(d) || []).some((x) => x.status === 'open')) return d; return m.date }
   const st = { date: isYmd(p.date) ? p.date : firstOpenDay(m0), mode: p.mode === 'range' && !cal.slotBlocksFail ? 'range' : 'day', from: p.from || null, to: p.to || null, only: p.only || null, fallback: false, reason: String(p.reason || '') }
   const base = `cal-sheet-${Date.now()}`
   const model = () => cal.model || buildModel(A.state, {})
   const daySlots = () => model().byDate.get(st.date) || []
   const dayList = () => {
     const m = model(), out = []
-    const end = m.hasSlots ? m.lastSlotDate : fmt.addDays(m.today, 14)
-    for (let d = m.today; d <= end; d = fmt.addDays(d, 1)) {
+    for (let d = m.range.from; d <= m.range.to; d = fmt.addDays(d, 1)) {
       const has = (m.byDate.get(d) || []).length > 0
-      out.push({ ymd: d, label: d === m.today ? `Today · ${fmt.day(d)}` : dayLabel(d), disabled: m.hasSlots && !has })
+      out.push({ ymd: d, label: d === m.today ? `Today · ${fmt.day(d)}` : dayLabel(d), disabled: d < m.today || (m.hasSlots && !has) })
     }
     return out
   }
@@ -711,13 +811,17 @@ function openSheet(preset) {
     if (st.mode === 'day' || st.fallback) {
       const body = { action: 'block', target: date }
       if (reason) body.reason = reason
+      const previous = savedBlock(date)
       try {
         const res = await A.busy('calendar', post(body, `blocking ${longDay(date)}`))
+        const extended = arr(res.blocks).find(block => block.target === date)
+        const undo = previous.startsAt && previous.endsAt && extended
+          ? () => undoDayExtension(previous, extended) : () => undoBlocks([date])
         A.apply('calendar', res)
         d.close()
         cal.sel = null; cal.focusKey = `dayband:${date}`; cal.focusDate = date
         focusKeyNow()
-        A.toast(`Blocked ${longDay(date)}${reason ? ` (${reasonOf(reason)})` : ''}`, { kind: 'ok', key: `cal:${date}`, actions: [{ label: 'Undo', fn: () => undoBlocks([date]) }] })
+        A.toast(`Blocked ${longDay(date)}${reason ? ` (${reasonOf(reason)})` : ''}`, { kind: 'ok', key: `cal:${date}`, actions: [{ label: 'Undo', fn: undo }] })
       } catch (e) {
         if (signedOut(e)) return
         reread()
@@ -812,7 +916,9 @@ function showEl(el) { if (el && el.scrollIntoView) { try { el.scrollIntoView({ b
 // ---------------------------------------------------------------------------------------
 
 let popSeq = 0
-const popSig = (it) => JSON.stringify([it.kind, it.slots.map((x) => [x.id, x.status, x.rawReason, x.name, x.unitId]), it.reason || '', it.kind === 'dayband' && it.block ? it.block.blockedAt : ''])
+const popSig = (it) => JSON.stringify([it.kind, it.slots.map((x) => [x.id, x.status, x.blockTarget, x.rawReason, x.name, x.unitId]), it.reason || '', it.kind === 'dayband' && it.block ? it.block.blockedAt : '',
+  arr(A.state.calendar?.bookings).map(booking => [booking.externalId, booking.revision, booking.conflictBlockIds]),
+  A.state.calendar?.rescheduleProjectionPending])
 
 function closePopover(returnFocus) {
   const p = cal.pop
@@ -849,26 +955,35 @@ function tourContent(s, m, it) {
   let body = `<p>${esc(dayLabel(sl.date))} · ${esc(fmt.timeRange(sl.startsAt, sl.endsAt))}</p><p>${t.unitId ? `Apartment ${esc(t.unitId)}` : 'No apartment picked yet'}</p><p>${contact.length ? contact.join(' · ') : 'No phone on file'}</p>`
   if (t.bookedAt && fmt.dateTime(t.bookedAt) !== '—') body += `<p>Booked by the assistant ${esc(fmt.dateTime(t.bookedAt, { inSentence: true }))}</p>`
   const actions = []
+  if (t.booking && t.booking.externalId && A.can('operate')) actions.push(`<button type="button" class="btn btn-primary" data-pop="reschedule" data-write="calendar">Reschedule</button>`)
   if (tel) actions.push(`<a class="btn" href="${esc(tel)}">Call</a>`)
   if (t.profile) actions.push(`<a class="btn btn-quiet" href="${esc(A.hashFor('leads', { phone: t.profile.phone }))}">Open lead</a>`)
   if (t.callId) actions.push(`<a class="btn btn-quiet" href="${esc(A.hashFor('calls', { id: t.callId }))}">See the call</a>`)
-  const who = t.name === 'Tour' ? 'them' : firstName(t.name)
-  return { title: t.name, body, actions: actions.join(''), note: `To move or cancel this tour, call ${esc(who)} — the assistant can't change tours yet.` }
+  const conflicts = arr(s.calendar && s.calendar.unitBlocks).filter(block => !block.removedAt && (Array.isArray(t.booking?.conflictBlockIds)
+    ? t.booking.conflictBlockIds.includes(block.id)
+    : block.unitId === t.unitId && Date.parse(block.startsAt) < Date.parse(t.booking?.occupiedEndsAt || sl.endsAt) && Date.parse(block.endsAt) > Date.parse(t.booking?.occupiedStartsAt || sl.startsAt)))
+  if (conflicts.length) body += `<p class="cal-unit-conflict">This apartment is blocked during the tour or its reserved preparation time: ${conflicts.map(block => esc(block.reason)).join('; ')}. Contact the prospect and choose another time or apartment.</p>`
+  const pending = arr(s.calendar && s.calendar.rescheduleProjectionPending).find(item => item.externalId === t.booking?.externalId)
+  if (pending) {
+    body += '<p class="cal-unit-conflict">The tour moved, but its CRM follow-ups still need to sync.</p>'
+    if (A.can('operate')) actions.unshift('<button type="button" class="btn btn-primary" data-pop="reschedule-sync" data-write="calendar">Retry follow-up sync</button>')
+  }
+  return { title: t.name, body, actions: actions.join(''), note: 'Changing a tour does not send a text or email. Contact the prospect to confirm the new time.' }
 }
 function blockedContent(m, it, seg) {
   const ymd = it.ymd
   let title, reopenLabel, block
   if (it.kind === 'dayband' || it.kind === 'day') { title = `Blocked all day · ${dayLabel(ymd)}`; reopenLabel = `Reopen ${longDay(ymd)}`; block = it.block }
   else {
-    const rangeTxt = it.slots.length > 1 ? fmt.timeRange(it.first.startsAt, it.last.endsAt) : fmt.time(it.first.startsAt)
-    title = `Blocked · ${fmt.day(ymd)} · ${rangeTxt}`; reopenLabel = `Reopen ${rangeTxt}`
-    const all = arr(A.state.calendar && A.state.calendar.blocks)
-    const entries = it.slots.map((x) => all.find((b) => b && b.target === x.id)).filter(Boolean).sort((a, b) => String(a.blockedAt).localeCompare(String(b.blockedAt)))
+    const entries = reopenTargets(it).sort((a, b) => String(a.blockedAt).localeCompare(String(b.blockedAt)))
     block = entries[0] || null
+    const rangeTxt = entries.length === 1 && block.startsAt && block.endsAt ? fmt.timeRange(block.startsAt, block.endsAt) : it.slots.length > 1 ? fmt.timeRange(it.first.startsAt, it.last.endsAt) : fmt.time(it.first.startsAt)
+    title = `Blocked · ${fmt.day(ymd)} · ${rangeTxt}`; reopenLabel = `Reopen ${rangeTxt}`
   }
   const reason = reasonOf(block && block.reason) || it.reason || ''
   const added = block && block.blockedAt && fmt.dateTime(block.blockedAt) !== '—' ? ` · added ${fmt.dateTime(block.blockedAt, { inSentence: true })}` : ''
   let body = `<p>${reason ? esc(reason) : 'No reason given'}${esc(added)}</p>`
+  if (block && block.startsAt && block.endsAt && it.slots.length > 1) body += '<p>Tour start times that overlap this block are unavailable. Reopening removes the saved block from all of those times.</p>'
   if (it.kind === 'dayband' && it.tours) body += `<p>Tours already booked on ${esc(longDay(ymd))} stay on the calendar.</p>`
   if (seg) body += `<p>This time also has its own block: ${seg.reason ? esc(seg.reason) : 'no reason given'}.</p>`
   const actions = `<button type="button" class="btn" data-pop="reopen" data-write="calendar"${dis(A.busyNow('calendar'))}>${esc(reopenLabel)}</button><button type="button" class="btn btn-quiet" data-pop="close">Close</button>`
@@ -885,6 +1000,12 @@ function showDetails(kind, it, anchorEl, seg) {
       title: content.title,
       build(body) {
         body.innerHTML = `<div class="popover-body">${content.body}${content.note ? `<p class="muted-line">${content.note}</p>` : ''}</div>${kind === 'tour' && content.actions ? `<div class="cal-sheet-links">${content.actions}</div>` : ''}`
+        body.addEventListener('click', event => {
+          const action = event.target.closest('[data-pop]')?.dataset.pop
+          const booking = it.slot && it.slot.booking
+          if (action === 'reschedule' && booking && A.can('operate')) { closePopover(false); A.calendarActions.openReschedule(booking) }
+          if (action === 'reschedule-sync' && booking && A.can('operate')) { closePopover(false); A.calendarActions.retryProjection(booking.externalId) }
+        })
       },
       secondary: { label: 'Close' },
       onClose() { if (cal.pop && cal.pop.dialog === d) cal.pop = null },
@@ -917,6 +1038,8 @@ function showDetails(kind, it, anchorEl, seg) {
     const b = e.target.closest('[data-pop]'); if (!b) return
     if (b.dataset.pop === 'close') closePopover(true)
     else if (b.dataset.pop === 'reopen' && b.getAttribute('aria-disabled') !== 'true') reopen(findItem(it.key) || it)
+    else if (b.dataset.pop === 'reschedule' && it.slot?.booking && A.can('operate')) { closePopover(false); A.calendarActions.openReschedule(it.slot.booking) }
+    else if (b.dataset.pop === 'reschedule-sync' && it.slot?.booking && A.can('operate')) { closePopover(false); A.calendarActions.retryProjection(it.slot.booking.externalId) }
   })
   cal.pop = { kind, key: it.key, sig: popSig(it), anchorKey, el, onDown, onEsc, seg: seg ? seg.id : null }
   const first = el.querySelector('.popover-actions .btn, .popover-actions a') || el.querySelector('.popover-x')
@@ -938,8 +1061,8 @@ function refreshPopover() {
 
 // --- the ⋯ menu ---------------------------------------------------------------------------
 
-const menuButtons = () => `<button type="button" class="btn btn-quiet" data-menu="remove-all">${ico('slash')}Remove all blocks…</button><button type="button" class="btn btn-quiet" data-menu="goto">${ico('calendar')}Go to date…</button>`
-function runMenu(a) { if (a === 'remove-all') removeAll(); else if (a === 'goto') goToDate() }
+const menuButtons = () => `<button type="button" class="btn btn-quiet" data-menu="unit-blocks" data-write="calendar">${ico('calendar')}Unit availability</button><button type="button" class="btn btn-quiet" data-menu="settings" data-permission="configure">${ico('calendar')}Tour settings</button><button type="button" class="btn btn-quiet" data-menu="goto">${ico('calendar')}Go to date…</button><button type="button" class="btn btn-quiet" data-menu="remove-all" data-write="calendar">${ico('slash')}Remove all blocks…</button>`
+function runMenu(a) { if (a === 'unit-blocks' && A.can('operate')) A.calendarActions?.openUnitBlocks(); else if (a === 'remove-all' && A.can('operate')) removeAll(); else if (a === 'goto') goToDate(); else if (a === 'settings') openSettings() }
 function openMenu(anchorEl) {
   if (A.busyNow('calendar') || cal.inert) return
   if (cal.pop && cal.pop.kind === 'menu') { closePopover(true); return }
@@ -995,10 +1118,84 @@ async function goToDate() {
   if (v === null) return
   const ymd = parseDate(v)
   if (!ymd) { A.toast('Try a date like "Sep 10".', { kind: 'warn' }); return }
-  const m = cal.model || buildModel(A.state, {})
-  if (ymd < m.firstWeek || ymd > m.lastDay) { A.toast('The calendar only shows the next two weeks.', { kind: 'info' }); return }
+  if (!calendarDate(ymd)) { A.toast('Enter a valid calendar date.', { kind: 'warn' }); return }
   cal.picked = ymd
   setParams({ date: ymd }, undefined, { keepPicked: true })
+}
+
+// --- tour settings ------------------------------------------------------------------------
+
+function openSettings() {
+  if (!A.can('configure') || A.busyNow('calendar') || cal.inert) return
+  const current = A.state.calendar
+  if (!current || !current.settings || !Number.isInteger(current.settingsRevision)) {
+    A.toast('Tour settings are still loading. Try again in a moment.', { kind: 'info' }); return
+  }
+  closePopover(false)
+  const settings = structuredClone(current.settings), revision = current.settingsRevision
+  const base = `tour-settings-${Date.now()}`
+  const week = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+  const timeValue = (hour) => {
+    const minutes = Math.round(Number(hour) * 60) % 1440
+    return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
+  }
+  const numeric = (key, label, min, max, hint, blank) => `<div class="field"><label class="field-label" for="${base}-${key}">${esc(label)}</label>` +
+    `<input class="input" id="${base}-${key}" name="${key}" type="number" min="${min}" max="${max}" step="1" value="${settings[key] == null ? '' : esc(settings[key])}"${blank ? ' placeholder="Unlimited"' : ' required'} aria-describedby="${base}-${key}-hint"><p class="field-hint" id="${base}-${key}-hint">${esc(hint)}</p></div>`
+  A.dialog({
+    title: 'Tour settings',
+    build(body, d) {
+      d.el.classList.add('cal-settings')
+      body.innerHTML = `<p class="cal-settings-intro">Set when new tours can be booked. Existing bookings stay on the calendar when you change these settings.</p>` +
+        `<form class="cal-settings-form"><fieldset><legend>Tour availability</legend><div class="cal-settings-grid">` +
+        numeric('capacity', 'Tours at the same time', 1, 50, 'Total staff capacity across apartments.') +
+        numeric('slotMinutes', 'Tour duration (minutes)', 5, 240, 'How long each tour lasts.') +
+        numeric('startIntervalMinutes', 'Start times every (minutes)', 5, 120, 'For example, every 30 minutes.') +
+        numeric('bufferMinutes', 'Buffer before and after (minutes)', 0, 120, 'Staff preparation and reset time on each side of a tour.') +
+        numeric('minimumNoticeMinutes', 'Minimum notice (minutes)', 0, 10080, '120 minutes means at least two hours ahead.') +
+        numeric('bookingWindowDays', 'Book up to (days ahead)', 1, 730, 'Leave empty to accept bookings without an advance limit.', true) +
+        `</div><div class="field"><label class="field-label" for="${base}-sameUnitPolicy">Same apartment at the same time</label><select class="select" name="sameUnitPolicy" id="${base}-sameUnitPolicy"><option value="exclusive"${settings.sameUnitPolicy === 'exclusive' ? ' selected' : ''}>One tour at a time per apartment</option><option value="shared"${settings.sameUnitPolicy === 'shared' ? ' selected' : ''}>Allow shared tours within staff capacity</option></select></div></fieldset>` +
+        `<fieldset><legend>Weekly tour hours</legend><p class="field-hint">All times use ${esc(A.property.timeZoneLabel)}. An end time of 12:00 AM means midnight at the end of that day.</p><div class="cal-hours">` +
+        week.map((day, i) => {
+          const hours = settings.hours && settings.hours[i]
+          return `<div class="cal-hours-row" data-hours-day="${i}"><label class="cal-hours-day" for="${base}-day-${i}"><input type="checkbox" id="${base}-day-${i}" name="day-${i}"${hours ? ' checked' : ''}>${day}</label><span class="cal-hours-state">${hours ? 'Open' : 'Closed'}</span><div class="cal-hours-times"><label class="vh" for="${base}-open-${i}">${day} opens</label><input class="input" id="${base}-open-${i}" type="time" name="open-${i}" value="${hours ? timeValue(hours.openHour) : '09:00'}" step="60"${hours ? ' required' : ' disabled'}><span>to</span><label class="vh" for="${base}-close-${i}">${day} closes</label><input class="input" id="${base}-close-${i}" type="time" name="close-${i}" value="${hours ? timeValue(hours.closeHour) : '17:00'}" step="60"${hours ? ' required' : ' disabled'}></div></div>`
+        }).join('') + '</div></fieldset></form>'
+      body.querySelector('form').addEventListener('submit', (event) => event.preventDefault())
+      body.addEventListener('change', (event) => {
+        d.setError(null)
+        const row = event.target.closest('[data-hours-day]')
+        if (!row || event.target.type !== 'checkbox') return
+        const open = event.target.checked
+        row.querySelector('.cal-hours-state').textContent = open ? 'Open' : 'Closed'
+        for (const input of row.querySelectorAll('input[type="time"]')) { input.disabled = !open; input.required = open }
+      })
+    },
+    primary: { label: 'Save tour settings', busyLabel: 'Saving settings…', async onClick(d) {
+      const form = d.body.querySelector('form')
+      if (!form.reportValidity()) return
+      const values = new FormData(form)
+      const next = { ...settings, hours: {} }
+      for (const key of ['capacity', 'slotMinutes', 'startIntervalMinutes', 'bufferMinutes', 'minimumNoticeMinutes']) next[key] = Number(values.get(key))
+      next.bookingWindowDays = String(values.get('bookingWindowDays') || '').trim() === '' ? null : Number(values.get('bookingWindowDays'))
+      next.sameUnitPolicy = values.get('sameUnitPolicy')
+      for (let day = 0; day < 7; day++) {
+        if (!values.has(`day-${day}`)) continue
+        const minutes = (name) => String(values.get(name)).split(':').reduce((total, value) => total * 60 + Number(value), 0)
+        const open = minutes(`open-${day}`), close = minutes(`close-${day}`) || 1440
+        if (!Number.isFinite(open) || !Number.isFinite(close) || close <= open) { d.setError(`${week[day]} must close after it opens.`); return }
+        next.hours[day] = { openHour: open / 60, closeHour: close / 60 }
+      }
+      try {
+        const result = await A.busy('calendar', post({ action: 'settings', settings: next, settingsRevision: revision }, 'saving tour settings'))
+        A.apply('calendar', result)
+        d.close()
+        A.toast('Tour settings saved. Existing bookings are preserved.', { kind: 'ok' })
+      } catch (error) {
+        if (signedOut(error)) return
+        await reread()
+        d.setError(error.status === 409 ? 'Someone changed tour settings while this window was open. Close and reopen it to review the latest settings before saving.' : `Could not save tour settings. ${error.message || 'Try again in a moment.'}`)
+      }
+    } },
+  })
 }
 
 // --- navigation ---------------------------------------------------------------------------
@@ -1013,15 +1210,14 @@ function setParams(patch, replace, opts) {
 }
 function page(dir) {
   const m = cal.model; if (!m) return
-  let next = m.view === 'week' ? fmt.addDays(m.date, 7 * dir) : fmt.addDays(m.date, dir)
-  if (next < m.firstWeek) next = m.firstWeek
-  if (next > m.lastDay) next = m.lastDay
+  const next = m.view === 'week' ? fmt.addDays(m.date, 7 * dir) : fmt.addDays(m.date, dir)
+  if (!calendarDate(next)) return
   if (next === m.date || (m.view === 'week' && weekStart(next) === m.weekStart)) return
   setParams({ date: next })
 }
 function setView(v) {
   cal.view = v
-  try { localStorage.setItem('atrium.calendar.view', v) } catch (e) { /* no local state */ }
+  try { localStorage.setItem(A.preferenceKey('calendar.view'), v) } catch (e) { /* no local state */ }
   setParams({ view: v })
 }
 
@@ -1102,7 +1298,7 @@ function activate(el, seg) {
 }
 function segAt(bandEl, it, clientY) {
   if (!it || it.kind !== 'dayband' || !it.segs.length) return null
-  const r = Math.floor((clientY - bandEl.getBoundingClientRect().top) / ROW_H)
+  const r = Math.floor((clientY - bandEl.getBoundingClientRect().top) / cal.model.rowHeight)
   const sg = it.segs.find((x) => r >= x.row && r < x.row + x.span)
   return sg ? sg.slot : null
 }
@@ -1183,6 +1379,7 @@ function paintBusy() {
   root.classList.toggle('is-inert', cal.inert)
   const bar = q('.cal-progress'); if (bar) bar.hidden = !on
   for (const el of root.querySelectorAll('[data-write="calendar"]')) { if (on || cal.inert) el.setAttribute('aria-disabled', 'true'); else el.removeAttribute('aria-disabled') }
+  A.paintPermissions(root)
 }
 function paintNow() {
   const grid = q('.cal-grid'); if (!grid || !cal.model) return
@@ -1209,8 +1406,8 @@ const view = {
   mount(root) {
     cal.root = root
     root.classList.add('cal-view')
-    root.innerHTML = '<div class="cal-head"></div><div class="cal-banners"></div><div class="cal-wrap"><div class="cal-toolbar-host"></div><div class="cal-body"></div><div class="cal-foot-host"></div></div>'
-    cal.hosts = { head: root.querySelector('.cal-head'), banners: root.querySelector('.cal-banners'), toolbar: root.querySelector('.cal-toolbar-host'), body: root.querySelector('.cal-body'), foot: root.querySelector('.cal-foot-host') }
+    root.innerHTML = '<div class="cal-head"></div><div class="cal-banners"></div><div class="cal-summary-host"></div><div class="cal-wrap workspace-panel"><div class="cal-toolbar-host"></div><div class="cal-body"></div><div class="cal-foot-host"></div></div>'
+    cal.hosts = { head: root.querySelector('.cal-head'), banners: root.querySelector('.cal-banners'), summary: root.querySelector('.cal-summary-host'), toolbar: root.querySelector('.cal-toolbar-host'), body: root.querySelector('.cal-body'), foot: root.querySelector('.cal-foot-host') }
     root.addEventListener('click', (e) => this.onClick(e))
     root.addEventListener('keydown', (e) => {
       if (e.target.closest && e.target.closest('.cal-grid')) { gridKey(e); if (e.defaultPrevented) return }
@@ -1273,12 +1470,15 @@ const view = {
       else if (a === 'today') setParams({ date: cal.model ? cal.model.today : undefined })
       else if (a === 'view-week') setView('week')
       else if (a === 'view-day') setView('day')
+      else if (a === 'goto') goToDate()
+      else if (a === 'settings') openSettings()
       else if (a === 'block') openSheet({ date: cal.model && cal.model.view === 'day' ? cal.model.date : undefined, mode: 'day' })
+      else if (a === 'unit-blocks') { closePopover(false); A.calendarActions.openUnitBlocks({ date: cal.model && cal.model.date }) }
       else if (a === 'more') openMenu(btn)
       else if (a === 'remove-old') removeOld()
       else if (a === 'strip') setParams({ date: btn.dataset.date })
       else if (a === 'agenda-open') openSheet({ date: cal.model.date, mode: 'range', from: btn.dataset.first, to: btn.dataset.last })
-      else if (a === 'agenda-tour') showDetails('tour', itemForSlot(btn.dataset.slot), null)
+      else if (a === 'agenda-tour') showDetails('tour', findItem(btn.dataset.key), null)
       else if (a === 'agenda-band') showDetails('blocked', findItem(btn.dataset.key), null)
       else if (a === 'agenda-day') { const d = cal.model.dayModel(btn.dataset.date); showDetails('blocked', { kind: 'day', key: `dayband:${d.ymd}`, ymd: d.ymd, block: d.dayBlock, slots: [], tours: d.tours.length, reason: reasonOf(d.dayBlock && d.dayBlock.reason) }, null) }
       return
@@ -1293,7 +1493,7 @@ const view = {
   },
   onPointerDown(e) {
     const cell = e.target.closest && e.target.closest('.cal-open')
-    if (!cell || e.button !== 0 || e.pointerType === 'touch' || cal.inert || A.busyNow('calendar')) return
+    if (!A.can('operate') || !cell || e.button !== 0 || e.pointerType === 'touch' || cal.inert || A.busyNow('calendar')) return
     const rect = cell.getBoundingClientRect()
     cal.drag = { id: e.pointerId, date: cell.dataset.date, row: Number(cell.dataset.row), x: e.clientX, y: e.clientY, left: rect.left, right: rect.right, moved: false, cell }
     try { cell.setPointerCapture(e.pointerId) } catch (err) { /* ignore */ }
@@ -1306,7 +1506,7 @@ const view = {
     if (e.clientX < d.left - 2 || e.clientX > d.right + 2) { cal.drag = null; cal.dragEnded = Date.now(); clearSel(); return }
     const grid = q('.cal-grid'); if (!grid) return
     const top = grid.getBoundingClientRect().top + HEAD_H
-    const row = Math.max(0, Math.min(cal.model.rows - 1, Math.floor((e.clientY - top) / ROW_H)))
+    const row = Math.max(0, Math.min(cal.model.rows - 1, Math.floor((e.clientY - top) / cal.model.rowHeight)))
     const ids = runBetween(d.date, d.row, row)
     cal.sel = ids.length ? { date: d.date, slotIds: ids } : null
     paintSelection()
@@ -1322,7 +1522,9 @@ const view = {
   render(s) {
     if (!cal.root) return
     const p = params()
-    const m = buildModel(s, { date: p.date, view: p.view === 'day' || p.view === 'week' ? p.view : cal.view })
+    const opts = { date: p.date, view: p.view === 'day' || p.view === 'week' ? p.view : cal.view }
+    A.setCalendarRange(visibleRange(opts))
+    const m = buildModel(s, opts)
     cal.model = m
     cal.inert = !m.loaded || Boolean(s.notConfigured)
     const loading = !m.loaded && !s.errors.calendar && !s.notConfigured
@@ -1333,14 +1535,14 @@ const view = {
       if (changed && m.loaded) say('Some of those times changed — selection cleared')
     }
     cal.pickedShown = cal.picked && m.view === 'week' && m.days.includes(cal.picked) && cal.picked !== m.today ? cal.picked : null
-    const moreBtn = `<button type="button" class="btn-icon" data-action="more" data-key="more" aria-label="More calendar actions" aria-haspopup="dialog" data-write="calendar"${dis(A.busyNow('calendar') || cal.inert)}>${A.icon('more')}</button>`
-    setPart('head', `<div class="view-head${m.mobile ? ' cal-head-mobile' : ''}"><div class="cal-head-main"><h1 tabindex="-1">Tour calendar</h1>${m.loaded || s.loaded.leads ? stripHtml(s, m) : ''}</div>${m.mobile ? `<div class="cal-head-tools">${moreBtn}</div>` : ''}</div>`)
+    setPart('head', heroHtml(m))
     setPart('banners', bannersHtml(s, m))
+    setPart('summary', summaryHtml(s, m))
     const rt = rangeText(m)
-    if (m.mobile) setPart('toolbar', `<div class="cal-progress"${A.busyNow('calendar') ? '' : ' hidden'}></div>`)
-    else setPart('toolbar', toolbarHtml(m))
+    setPart('toolbar', toolbarHtml(m))
     let body
     if (loading) body = skeletonHtml()
+    else if (!m.loaded) body = unavailableHtml()
     else if (m.mobile) body = agendaHtml(m) + `<button type="button" class="btn btn-primary cal-fab" data-action="block" data-key="fab" data-write="calendar"${dis(cal.inert)}>${ico('plus')}Block time…</button>`
     else if (!m.hasSlots) body = emptyHtml()
     else body = `<div class="cal-scroll">${gridHtml(m)}</div>`
@@ -1349,9 +1551,9 @@ const view = {
     const focusKey = hadFocus ? keyOf(active) : null
     const scrollEl = q('.cal-scroll'), scrollTop = scrollEl ? scrollEl.scrollTop : null
     const bodyChanged = setPart('body', body)
-    setPart('foot', loading ? '' : footHtml(m))
+    setPart('foot', m.loaded ? footHtml(m) : '')
     // the floating Block time… button owns the bottom edge on mobile; toasts stack above it (calendar.css)
-    document.body.classList.toggle('has-cal-fab', Boolean(m.mobile && !loading && !cal.root.hidden))
+    document.body.classList.toggle('has-cal-fab', Boolean(A.can('operate') && m.mobile && m.loaded && !cal.root.hidden))
     if (bodyChanged) {
       const grid = q('.cal-grid')
       if (grid) {
@@ -1361,8 +1563,8 @@ const view = {
           if (!cal.scrolled) {
             const tcol = m.days.indexOf(m.today)
             const firstOpen = tcol >= 0 ? m.dayModels[tcol].open[0] : null
-            const row = firstOpen ? m.rowOf(firstOpen) : Math.max(0, Math.round((600 - m.minM) / 30))
-            sc.scrollTop = row * ROW_H
+            const row = firstOpen ? m.rowOf(firstOpen) : Math.max(0, Math.round((600 - m.minM) / m.stepMin))
+            sc.scrollTop = row * m.rowHeight
             cal.scrolled = true
           } else if (scrollTop != null) sc.scrollTop = scrollTop
         }
@@ -1400,6 +1602,9 @@ const view = {
   openSlot(id) {
     const m = cal.model, sl = m.byId.get(id)
     if (!sl) return
+    // A partly filled slot is still open, but a lead's calendar link is about its tour.
+    const tour = m.dayModels.flatMap((d) => d.items).find((it) => it.kind === 'tour' && it.slots.some((s) => s.id === id))
+    if (tour) { const anchor = byKey(tour.key); showDetails('tour', tour, anchor ? focusable(anchor) : null); return }
     if (sl.status === 'open') { openSheet({ date: sl.date, mode: 'range', from: id, to: id }); return }
     const it = itemForSlot(id)
     if (!it) return

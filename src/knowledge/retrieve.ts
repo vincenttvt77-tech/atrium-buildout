@@ -16,7 +16,7 @@ import type { KnowledgeArticle } from './article.ts'
 const STOP = new Set([
   'a', 'an', 'and', 'are', 'as', 'at', 'be', 'been', 'but', 'by', 'can', 'could', 'did',
   'do', 'does', 'for', 'from', 'get', 'got', 'had', 'has', 'have', 'how', 'i', 'if', 'in',
-  'is', 'it', 'its', 'me', 'my', 'of', 'on', 'or', 'that', 'the', 'their', 'them', 'there',
+  'is', 'it', 'its', 'me', 'my', 'much', 'of', 'on', 'or', 'that', 'the', 'their', 'them', 'there',
   'these', 'they', 'this', 'to', 'was', 'we', 'were', 'what', 'when', 'where', 'which',
   'will', 'with', 'would', 'you', 'your', 'am', 'any', 'about', 'please', 'tell', 'know',
   /*

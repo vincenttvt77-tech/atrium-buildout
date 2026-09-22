@@ -35,12 +35,21 @@ const arr = (v) => (Array.isArray(v) ? v : [])
 const toTime = (v) => { if (v == null || v === '') return null; const t = Date.parse(String(v)); return isNaN(t) ? null : t }
 const profilesOf = (s) => arr(s.leads && s.leads.profiles).filter((p) => p && p.phone != null)
 const followUpsOf = (s) => arr(s.leads && s.leads.followUps).filter((f) => f && f.id != null)
+const anonymousCall = p => p && p.phone === 'unknown' && arr(p.calls).length === 1 ? String(p.calls[0].callId || '') : ''
+// This key selects a local drawer only. Server mutations keep their existing IDs.
+const profileRef = p => p && p.phone !== 'unknown' ? p.phone : anonymousCall(p) ? `call:${anonymousCall(p)}` : null
+const ownsWork = (p, item) => item && item.phone === p.phone && (p.phone !== 'unknown'
+  || arr(p.calls).some(c => c.callId === (item.createdFromCall || item.callId)))
+const profileForWork = (s, item) => {
+  const matches = profilesOf(s).filter(p => ownsWork(p, item))
+  return matches.length === 1 ? matches[0] : null
+}
 const callAt = (profile, callId) => { const c = profile && arr(profile.calls).find((x) => x && x.callId === callId); return c ? c.at : null }
 const byDue = (a, b) => (toTime(a.dueAt) ?? Infinity) - (toTime(b.dueAt) ?? Infinity)
 const byDueDesc = (a, b) => (toTime(b.dueAt) ?? 0) - (toTime(a.dueAt) ?? 0)
-const openItems = (s, phone) => derive.needsPerson(s).filter((n) => n && n.phone === phone)
+const openItems = (s, p) => derive.needsPerson(s).filter(n => ownsWork(p, n && n.fu || n))
 
-const TABS = [['todo', 'To do'], ['all', 'Everyone']]
+const TABS = [['todo', 'Work queue'], ['all', 'Prospects']]
 const STAGES = [['all', 'All'], ['new', 'New'], ['qualified', 'Interested'], ['tour_scheduled', 'Tour booked'], ['toured', 'Toured'], ['lost', "Didn't work out"], ['needs_person', 'Needs a person']]
 const GROUPS = [['overdue', 'Overdue', 'clock'], ['today', 'Today', null], ['week', 'Later this week', null], ['later', 'Later', null]]
 
@@ -51,9 +60,12 @@ const GROUPS = [['overdue', 'Overdue', 'clock'], ['today', 'Today', null], ['wee
 const telLink = (phone) => { const h = href.tel(phone), shown = fmt.phone(phone); return h && shown ? `<a href="${esc(h)}">${esc(shown)}</a>` : esc(shown) }
 const mailLink = (email) => { const h = href.mailto(email); return h ? `<a href="${esc(h)}">${esc(email)}</a>` : esc(email || '') }
 const telBtn = (phone, txt, cls) => { const h = href.tel(phone); return h ? `<a class="${cls || 'btn btn-call'}" href="${esc(h)}">${ico('phone')}${esc(txt || 'Call')}</a>` : '' }
+const callbackOf = p => p && p.callbackPhone && /^\+[1-9]\d{6,14}$/.test(p.callbackPhone.value) ? p.callbackPhone : null
 const link = (name, params, txt, cls) => `<a class="${cls || 'btn btn-quiet'}" href="${esc(A.hashFor(name, params))}">${esc(txt)}</a>`
 const chip = (cls, iconName, txt) => A.html.chip(cls, iconName, txt)
 const countHtml = (n) => `<span class="count">· ${Number(n) || 0}</span>`
+const needsReview = f => f?.reconciliation?.status === 'needs_review' && f.reconciliation.code === 'legacy_followup_identity_ambiguous'
+const reviewSummary = items => items.some(needsReview) ? chip('chip-warn', 'warning', 'Review needed') : ''
 
 /** '2026-09-07T21:49:42.591Z MR: left a voicemail' → { stamp, body }; a note without a stamp is all body. */
 function parseNote(n) {
@@ -64,6 +76,27 @@ function parseNote(n) {
 const nameNote = (body) => { const m = /^name:\s*(.+)$/i.exec(String(body ?? '').trim()); return m ? m[1].trim() : null }
 const bedroomsFact = (v) => { const t = derive.bedroomsText(v); return /or more$/.test(t) ? `${t} bedrooms` : t }
 const nextTour = (p) => arr(p.bookings).filter((b) => b && b.status === 'confirmed' && (toTime(b.startsAt) ?? -1) >= Date.now()).sort((a, b) => toTime(a.startsAt) - toTime(b.startsAt))[0] || null
+const pendingChanges = s => arr(s.leads && s.leads.tourChangeRequests).filter(r => r && r.status === 'pending')
+function leadOverviewHtml(s) {
+  const known = s.loaded.leads
+  const profiles = profilesOf(s)
+  const followUps = followUpsOf(s).filter(f => f.status === 'scheduled')
+  const changes = pendingChanges(s)
+  const overdue = followUps.filter(f => (toTime(f.dueAt) ?? Infinity) <= Date.now()).length
+  const metrics = [['Saved prospects', profiles.length, s.errors.leads ? 'Saved snapshot · refresh needed' : 'Caller profiles in this workspace'],
+    ['Prospects with tours', profiles.filter(p => nextTour(p)).length, 'Upcoming tours recorded on profiles'],
+    ['Open staff tasks', followUps.length + changes.length, `${followUps.length} follow-ups · ${changes.length} tour requests${overdue ? ` · ${overdue} overdue` : ''}`]]
+  return `<div class="page-metrics" aria-label="Loaded prospect records">${metrics.map(([label, value, detail]) => `<div><span class="metric-label">${esc(label)}</span><strong class="metric-value num">${known ? value : '—'}</strong><span class="metric-detail">${known ? esc(detail) : 'Waiting for prospect records'}</span></div>`).join('')}</div>`
+}
+function leadBriefHtml(p, s) {
+  const tour = nextTour(p)
+  const tasks = followUpsOf(s).filter(f => ownsWork(p, f) && f.status === 'scheduled').length + pendingChanges(s).filter(r => ownsWork(p, r)).length
+  const sig = p.signals || {}, budget = sig.budgetRange || sig.budget
+  const facts = [['Budget', budget ? derive.budgetText(budget.value) : 'Not captured'],
+    ['Layout', sig.bedrooms ? bedroomsFact(sig.bedrooms.value) : 'Not captured'],
+    ['Move-in', sig.moveIn ? String(sig.moveIn.excerpt || derive.moveInText(sig.moveIn.value) || 'Not captured') : 'Not captured']]
+  return `<section class="lead-brief"><span class="section-kicker">Prospect at a glance</span><div class="lead-brief-facts">${facts.map(([label, value]) => `<div><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join('')}</div><div class="lead-journey"><span>${ico('calls')}<strong>${arr(p.calls).length}</strong> saved ${arr(p.calls).length === 1 ? 'call' : 'calls'}</span><span>${ico('hand')}<strong>${tasks}</strong> open ${tasks === 1 ? 'task' : 'tasks'}</span></div>${tour ? `<div class="lead-next-tour">${ico('calendar')}<div><span>Next tour recorded on profile</span><strong>${esc(fmt.day(tour.startsAt))} · ${esc(fmt.time(tour.startsAt))}${tour.unitId ? ` · Apartment ${esc(tour.unitId)}` : ''}</strong></div>${link('calendar', { date: fmt.nyDate(tour.startsAt) || undefined, slot: tour.slotId }, 'View tour')}</div>` : '<p class="lead-no-tour">No upcoming tour is recorded on this profile.</p>'}</section>`
+}
 /** The calendar's name for one of this caller's tours, when the profile has none (§9.4.1). */
 function calendarName(p, s) {
   const cal = s.calendar
@@ -88,15 +121,15 @@ function groupOf(fu, now, today, weekEnd) {
 }
 /** One scheduled follow-up as a §6.3 row. o.nameLink: the name opens the person panel. */
 function fuRowHtml(fu, s, o) {
-  const profile = derive.profileByPhone(s, fu.phone)
-  const sen = derive.todoSentence(fu, profile, s)
+  const profile = profileForWork(s, fu)
+  const sen = derive.todoSentence(fu, profile || { phone: fu.phone, name: null }, s)
   const overdue = (toTime(fu.dueAt) ?? Infinity) <= Date.now()
   const channel = String(fu.channel ?? 'call')
   const email = profile && profile.email
   const from = callAt(profile, fu.createdFromCall) || fu.createdAt
   const shown = fmt.phone(fu.phone)
-  const nameHtml = o && o.nameLink
-    ? `<button type="button" class="btn-link name" data-action="open" data-phone="${esc(fu.phone)}" data-key="who:${esc(fu.id)}">${esc(sen.name)}</button>`
+  const nameHtml = o && o.nameLink && profileRef(profile)
+    ? `<button type="button" class="btn-link name" data-action="open" data-phone="${esc(fu.phone)}" data-call="${esc(anonymousCall(profile))}" data-key="who:${esc(fu.id)}">${esc(sen.name)}</button>`
     : `<span class="name">${esc(sen.name)}</span>`
   let primary = ''
   if (channel === 'email' && href.mailto(email)) primary = `<a class="btn btn-quiet btn-call" href="${esc(href.mailto(email))}">${ico('mail')}Email</a>`
@@ -108,6 +141,7 @@ function fuRowHtml(fu, s, o) {
     `<span class="row-lead-icon">${ico(sen.needsPerson ? 'hand' : A.label(labels.channelIcon, channel, 'phone'))}</span></span>` +
     `<span class="row-body"><span class="row-title">${esc(sen.before)}${nameHtml}${esc(sen.after)}</span>` +
     (sen.needsPerson ? `<span class="row-chips">${chip('chip-warn', 'hand', 'Needs a person')}</span>` : '') +
+    A.html.followUpReview(fu) +
     `<span class="row-sub">${sub}</span></span>` +
     `<span class="row-actions">${primary}` +
     `<button type="button" class="btn" data-action="done" data-fu="${esc(fu.id)}" data-key="fu:${esc(fu.id)}:done" data-write="leads">Done</button>` +
@@ -115,21 +149,29 @@ function fuRowHtml(fu, s, o) {
 }
 /** A done / not-needed follow-up with its Put back button (the recovery list). */
 function doneRowHtml(fu, s) {
-  const sen = derive.todoSentence(fu, derive.profileByPhone(s, fu.phone), s)
+  const sen = derive.todoSentence(fu, profileForWork(s, fu) || { phone: fu.phone, name: null }, s)
   const done = String(fu.status) === 'done'
   return `<div class="row done-row" data-key="fu:${esc(fu.id)}"><span class="row-body">` +
     `<span class="row-title">${esc(sen.before)}<span class="name">${esc(sen.name)}</span>${esc(sen.after)}</span>` +
-    `<span class="row-chips">${done ? chip('chip-ok', 'check', 'Done') : chip('chip-neutral', 'x', 'Not needed')}</span></span>` +
+    `<span class="row-chips">${done ? chip('chip-ok', 'check', 'Done') : chip('chip-neutral', 'x', 'Not needed')}</span>` +
+    A.html.followUpReview(fu) + '</span>' +
     `<span class="row-actions"><button type="button" class="btn btn-quiet" data-action="back" data-fu="${esc(fu.id)}" data-key="fu:${esc(fu.id)}:back" data-write="leads">${ico('undo')}Put back</button></span></div>`
 }
 function todoListHtml(s) {
   const now = Date.now(), today = fmt.nyNow().ymd, weekEnd = fmt.addDays(today, 6 - fmt.dayOfWeek(today))
   const all = followUpsOf(s)
   const scheduled = all.filter((f) => f.status === 'scheduled').sort(byDue)
-  const done = all.filter((f) => (f.status === 'done' || f.status === 'skipped') && (fmt.nyDate(f.dueAt) || '9999') <= today).sort(byDueDesc).slice(0, 20)
-  let out = ''
-  if (!scheduled.length) {
-    if (!all.length) out += A.html.empty({ icon: 'check-circle', title: 'Nothing to do yet.', text: "When the assistant thinks someone needs a call — a tour to confirm, a question it couldn't answer — it shows up here." })
+  const done = all.filter((f) => (f.status === 'done' || f.status === 'skipped') && (needsReview(f) || (fmt.nyDate(f.dueAt) || '9999') <= today))
+    .sort((a, b) => Number(needsReview(b)) - Number(needsReview(a)) || byDueDesc(a, b)).slice(0, 20)
+  const changes = arr(s.leads && s.leads.tourChangeRequests)
+  const pending = changes.filter(r => r && r.status === 'pending')
+  const reviewed = changes.filter(r => r && r.status === 'reviewed')
+    .sort((a, b) => String(b.lastUpdatedAt).localeCompare(String(a.lastUpdatedAt)))
+  let out = pending.length ? `<h2 class="group-head" data-key="group:tour-changes" tabindex="-1">Tour-change requests${countHtml(pending.length)}</h2><div class="card rows">${pending.map(r => A.html.tourChangeRequest(r)).join('')}</div>` : ''
+  if (!scheduled.length && !pending.length) {
+    if (!all.length && reviewed.length) out += A.html.empty({ icon: 'check-circle', title: 'No pending requests.', text: 'Reviewed tour-change requests remain below. A review does not confirm that a booking changed or the caller was contacted.' })
+    else if (!all.length) out += A.html.empty({ icon: 'check-circle', title: 'Nothing to do yet.', text: "When the assistant thinks someone needs a call — a tour to confirm, a question it couldn't answer — it shows up here." })
+    else if (done.some(needsReview)) out += A.html.empty({ icon: 'warning', title: 'Review older tasks.', text: 'Some completed or not-needed tasks have an unclear booking match. Check the booking before contacting the caller.', actionHtml: `<button type="button" class="btn-link" data-action="seedone">See completed tasks</button>` })
     else out += A.html.empty({ icon: 'check-circle', title: 'All caught up.', text: 'Everything on the list is done.', actionHtml: done.length ? `<button type="button" class="btn-link" data-action="seedone">See what's done</button>` : '' })
   } else {
     const groups = { overdue: [], today: [], week: [], later: [] }
@@ -141,8 +183,9 @@ function todoListHtml(s) {
         `<div class="card rows">${items.map((f) => fuRowHtml(f, s, { nameLink: true })).join('')}</div>`
     }
   }
+  if (reviewed.length) out += `<details class="done-list" data-key="reviewed-tour-changes"><summary data-key="reviewed-tour-changes-summary">${ico('chevron-down')}<span>Reviewed tour-change requests</span>${countHtml(reviewed.length)}</summary><div class="card rows">${reviewed.map(r => A.html.tourChangeRequest(r)).join('')}</div></details>`
   if (done.length) {
-    out += `<details class="done-list" data-key="done-today"><summary data-key="done-today-summary">${ico('chevron-down')}<span>Done and not needed today</span>${countHtml(done.length)}</summary>` +
+    out += `<details class="done-list" data-key="done-today"><summary data-key="done-today-summary">${ico('chevron-down')}<span>Done and not needed${done.some(needsReview) ? '' : ' today'}</span>${countHtml(done.length)}${reviewSummary(done)}</summary>` +
       `<div class="card rows">${done.map((f) => doneRowHtml(f, s)).join('')}</div></details>`
   }
   return out
@@ -156,19 +199,19 @@ function leadMatches(p, q) {
   if (!q) return true
   const numeric = /^[\d\s()+.-]+$/.test(q)
   const digits = q.replace(/\D/g, '')
-  if (numeric && digits.length >= 2) return String(p.phone ?? '').replace(/\D/g, '').includes(digits)
+  if (numeric && digits.length >= 2) return [p.phone, callbackOf(p)?.value].some(value => String(value ?? '').replace(/\D/g, '').includes(digits))
   const hay = [derive.displayName(p), p.name, p.email, ...arr(p.unitsDiscussed), ...arr(p.bookings).map((b) => b && b.unitId),
     ...arr(p.notes).map((n) => parseNote(n).body)].filter(Boolean).join('\n').toLowerCase()
   return hay.includes(q.toLowerCase())
 }
 function passesStage(p, s, key) {
   if (key === 'all') return true
-  if (key === 'needs_person') return openItems(s, p.phone).length > 0
+  if (key === 'needs_person') return openItems(s, p).length > 0
   return derive.displayStage(p, s).key === key
 }
 /** Open needs-a-person item first (soonest respond-by first), then last call, newest first. */
 function sortLeads(list, s) {
-  const urgency = (p) => { const items = openItems(s, p.phone); return items.length ? Math.min(...items.map((i) => toTime(i.respondBy) ?? i.sortAt ?? 0)) : null }
+  const urgency = (p) => { const items = openItems(s, p); return items.length ? Math.min(...items.map((i) => toTime(i.respondBy) ?? i.sortAt ?? 0)) : null }
   return list.map((p) => ({ p, u: urgency(p), t: toTime(p.lastSeenAt) ?? 0 })).sort((a, b) => {
     if (a.u != null && b.u != null) return a.u - b.u
     if (a.u != null) return -1
@@ -188,30 +231,25 @@ function leadRowHtml(p, s, open, tab) {
   const hidden = p.phone === 'unknown'
   const name = derive.displayName(p)
   const stage = derive.displayStage(p, s)
-  const items = openItems(s, p.phone)
+  const items = openItems(s, p)
   const flag = items.length > 0
   const sig = p.signals || {}
-  const facts = []
-  if (hidden) facts.push(`${text.plural(arr(p.calls).length, 'call')} from numbers that weren't shared`)
-  else if (p.name && fmt.phone(p.phone)) facts.push(fmt.phone(p.phone)) // a nameless row's title is already the number
-  const more = []
-  if (sig.bedrooms) more.push(bedroomsFact(sig.bedrooms.value))
-  if (sig.budget) more.push(`up to ${fmt.money(sig.budget.value)}/mo`)
-  if (sig.moveIn) more.push(String(sig.moveIn.excerpt || derive.moveInText(sig.moveIn.value) || ''))
+  const contact = hidden ? `${text.plural(arr(p.calls).length, 'call')} from numbers that weren't shared` : p.name ? fmt.phone(p.phone) : p.email || 'Name not captured'
+  const budget = sig.budgetRange || sig.budget
+  const facts = [['Budget', budget ? derive.budgetText(budget.value) : 'Not captured'], ['Layout', sig.bedrooms ? bedroomsFact(sig.bedrooms.value) : 'Not captured']]
   const tour = nextTour(p)
   const cb = items.find((i) => i.type === 'callback' && i.question)
   const loss = arr(p.lossReasons).filter(Boolean).slice(-1)[0]
-  if (tour) more.push(`tour ${fmt.dayPhrase(tour.startsAt)} ${fmt.time(tour.startsAt)}${tour.unitId ? ` (${tour.unitId})` : ''}`)
-  else if (cb) more.push(`"${text.truncate(cb.question, 60)}"`)
-  else if (stage.key === 'lost' && loss) more.push(derive.lossText(loss))
-  const line2 = facts.concat(more.filter(Boolean).slice(0, 4))
-  if (!more.filter(Boolean).length) line2.push('no details yet')
-  return `<button type="button" class="row row-click lead-row${flag ? ' row-flag' : ''}" data-key="lead:${esc(p.phone)}" data-phone="${esc(p.phone)}" aria-current="${open ? 'true' : 'false'}" tabindex="${tab ? '0' : '-1'}">` +
+  const change = pendingChanges(s).find(r => ownsWork(p, r))
+  const next = change ? 'Tour change awaiting staff review' : cb ? `Staff follow-up: ${text.truncate(cb.question, 70)}` : tour ? `Tour recorded · ${fmt.dayPhrase(tour.startsAt)} ${fmt.time(tour.startsAt)}${tour.unitId ? ` · ${tour.unitId}` : ''}` : stage.key === 'lost' && loss ? derive.lossText(loss) : 'Open the profile to review the next step'
+  return `<button type="button" class="row row-click lead-row${flag ? ' row-flag' : ''}" data-key="lead:${esc(profileRef(p) || p.phone)}" data-phone="${esc(p.phone)}" data-call="${esc(anonymousCall(p))}" aria-current="${open ? 'true' : 'false'}" tabindex="${tab ? '0' : '-1'}">` +
     `<span class="row-lead"><span class="row-lead-icon">${ico(flag ? 'hand' : 'person')}</span></span>` +
     `<span class="row-body"><span class="row-title"><span class="who">${esc(name)}</span>${chip(stage.chipClass, stage.icon, stage.label)}` +
     (flag && stage.key !== 'escalated' ? chip('chip-warn', 'hand', 'Needs a person') : '') +
-    `<span class="last num">Last call ${esc(fmt.relative(p.lastSeenAt))}</span></span>` +
-    `<span class="row-sub">${line2.map((f) => (f.startsWith('"') ? `<span class="quote">${esc(f)}</span>` : esc(f))).join(' · ')}</span></span></button>`
+    `<span class="last num">Last call ${esc(fmt.relative(p.lastSeenAt))}</span></span><span class="lead-row-contact">${esc(contact)}</span>` +
+    `<span class="lead-row-facts">${facts.map(([label, value]) => `<span><span>${esc(label)}</span><strong>${esc(value)}</strong></span>`).join('')}</span>` +
+    (sig.moveIn ? `<span class="lead-row-move">Move-in · ${esc(String(sig.moveIn.excerpt || derive.moveInText(sig.moveIn.value) || 'Not captured'))}</span>` : '') +
+    `<span class="lead-row-next">${ico(change || cb ? 'hand' : tour ? 'calendar' : 'chevron-right')}<span>${esc(next)}</span></span></span></button>`
 }
 function everyoneListHtml(ev, s, q, stage, openPhone) {
   if (!ev.profiles.length) return A.html.empty({ icon: 'leads', title: 'No callers yet.', text: "When someone calls the leasing line, they'll appear here with what they asked for." })
@@ -220,8 +258,8 @@ function everyoneListHtml(ev, s, q, stage, openPhone) {
     const lbl = (STAGES.find(([k]) => k === stage) || ['', 'that stage'])[1]
     return A.html.empty({ icon: 'leads', title: `No one is at "${lbl}" right now.` })
   }
-  const first = (openPhone && ev.shown.some((p) => p.phone === openPhone)) ? openPhone : ev.shown[0].phone
-  return `<div class="card rows">${ev.shown.map((p) => leadRowHtml(p, s, p.phone === openPhone, p.phone === first)).join('')}</div>`
+  const first = (openPhone && ev.shown.some((p) => profileRef(p) === openPhone)) ? openPhone : profileRef(ev.shown[0])
+  return `<div class="card rows">${ev.shown.map((p) => leadRowHtml(p, s, profileRef(p) === openPhone, profileRef(p) === first)).join('')}</div>`
 }
 
 // ---------------------------------------------------------------------------------------
@@ -233,7 +271,8 @@ function lookingFor(p, s, recById) {
   const sig = p.signals || {}
   const out = []
   const push = (label_, e, value, from) => out.push({ label: label_, value: String(value ?? ''), excerpt: String((e && e.excerpt) ?? ''), unsure: e != null && Number(e.confidence) < 0.7, from: from || null, confidence: e && e.confidence })
-  if (sig.budget) push('Budget', sig.budget, `up to ${fmt.money(sig.budget.value)}/mo`)
+  const budget = sig.budgetRange || sig.budget
+  if (budget) push('Budget', budget, derive.budgetText(budget.value))
   if (sig.bedrooms) push('Bedrooms', sig.bedrooms, derive.bedroomsText(sig.bedrooms.value))
   if (sig.moveIn) push('Move-in', sig.moveIn, derive.moveInText(sig.moveIn.value) || String(sig.moveIn.excerpt ?? ''))
   for (const key of ['pets', 'parking']) {
@@ -255,6 +294,7 @@ function lookingFor(p, s, recById) {
   return out
 }
 function npCardHtml(it, recById) {
+  if (it.type === 'tourChange') return `<div class="card card-warn np-card">${A.html.tourChangeRequest(it.request)}</div>`
   const rec = recById.get(String(it.callId))
   const seeCall = rec && (rec.call || arr(rec.events).length) ? link('calls', { id: it.callId }, 'See the call') : ''
   if (it.type === 'callback') {
@@ -263,6 +303,7 @@ function npCardHtml(it, recById) {
     return `<div class="card card-warn np-card"><div class="np-title"><strong>Call ${esc(derive.personName(it.profile || { phone: it.phone, name: null }))} back</strong> — ${esc(t.headline)}</div>` +
       (t.quote ? `<div class="quote">"${esc(t.quote)}"</div>` : '') +
       `<div class="reassure">${esc(t.reassurance)}</div>` +
+      A.html.followUpReview(it.fu) +
       `<div class="meta">called ${esc(fmt.dateTime(it.calledAt, { inSentence: true }))} · <span class="${overdue ? 'overdue' : ''}">${esc(fmt.respondPhrase(it.respondBy))}</span></div>` +
       `<div class="actions"><button type="button" class="btn" data-action="handled" data-fu="${esc(it.fu.id)}" data-key="fu:${esc(it.fu.id)}:done" data-write="leads">Mark handled</button>${seeCall}</div></div>`
   }
@@ -293,39 +334,43 @@ function leadPanelHtml(p, s) {
   const name = derive.displayName(p)
   const first = text.firstName(p.name) || 'this caller'
   const stage = derive.displayStage(p, s)
-  const items = openItems(s, p.phone)
+  const items = openItems(s, p)
   const records = derive.callRecords(s), recById = new Map(records.map((r) => [String(r.id), r]))
   const shown = fmt.phone(p.phone)
+  const callback = callbackOf(p)
   const setName = hidden ? '' : `<button type="button" class="btn btn-quiet setname" data-action="setname" data-key="setname" data-write="leads">${ico('note')}${p.name ? 'Edit name' : 'Set name'}</button>`
   let out = panelHeadHtml(esc(name), setName) + '<div class="panel-body"><div class="lead-head">'
   // 1. header
   out += `<div class="lead-chips">${chip(stage.chipClass, stage.icon, stage.label)}${items.length && stage.key !== 'escalated' ? chip('chip-warn', 'hand', 'Needs a person') : ''}</div>`
   if (hidden) out += `<div class="lead-meta">${esc(text.plural(arr(p.calls).length, 'call'))} from numbers that weren't shared</div>`
-  else out += `<div class="lead-meta">${shown ? `${telLink(p.phone)} · ` : ''}${p.email ? mailLink(p.email) : 'No email yet'}</div>`
+  else out += `<div class="lead-meta">${shown ? `Caller number: ${telLink(p.phone)} · ` : ''}${p.email ? mailLink(p.email) : 'No email yet'}</div>`
   out += `<div class="lead-meta">First called ${esc(fmt.monthDay(p.firstSeenAt))} · Last call ${esc(fmt.dateTime(p.lastSeenAt, { inSentence: true }))}</div>`
-  if (shown && href.tel(p.phone)) out += `<a class="btn btn-primary lead-call" href="${esc(href.tel(p.phone))}">${ico('phone')}Call ${esc(shown)}</a>`
+  const callPhone = callback ? callback.value : p.phone
+  if (href.tel(callPhone)) out += `<a class="btn btn-primary lead-call" href="${esc(href.tel(callPhone))}">${ico('phone')}${callback ? 'Call requested number' : `Call ${esc(shown)}`}</a><p class="lead-call-hint">Opens your device’s calling app. This action does not place or log a call in Atrium.</p>`
   if (!hidden && !p.name) {
     const sug = calendarName(p, s)
     if (sug) out += `<div class="suggest"><span>The tour was booked under "${esc(sug)}" —</span><button type="button" class="btn-link" data-action="usename" data-name="${esc(sug)}" data-key="usename" data-write="leads">Use this name</button></div>`
   }
   out += '</div>'
+  if (callback) out += `<section class="panel-section"><h3>Requested callback</h3><dl class="facts"><dt>Number</dt><dd>${telLink(callback.value)}</dd><dt>Caller said</dt><dd><span class="quote">"${esc(callback.excerpt || '')}"</span></dd><dt>Recorded</dt><dd>${esc(fmt.dateTime(callback.at))}${callback.callId && recById.has(String(callback.callId)) ? ` · ${link('calls', { id: String(callback.callId) }, 'See the call', 'btn-link')}` : ''}</dd></dl><p class="muted small">Caller-provided contact. This does not verify who owns the number.</p></section>`
+  out += leadBriefHtml(p, s)
   // 2. needs a person (open items, then history)
   const openCallIds = new Set(items.map((i) => String(i.callId)))
   const history = arr(p.escalations).filter((e) => e && !openCallIds.has(String(e.callId)))
   if (items.length || history.length) {
     out += `<section class="panel-section"><h3 data-key="panel-np" tabindex="-1">Needs a person</h3>${items.map((it) => npCardHtml(it, recById)).join('')}`
-    if (history.length) out += `<div class="np-history">${history.map((e) => { const t = derive.escalationText(e); return `<div class="np-hist">Handled — ${esc(t.headline)} · ${esc(fmt.monthDay(e.at))}</div>` }).join('')}</div>`
+    if (history.length) out += `<div class="np-history">${history.map((e) => { const t = derive.escalationText(e); return `<div class="np-hist">Earlier request — ${esc(t.headline)} · ${esc(fmt.monthDay(e.at))}</div>` }).join('')}</div>`
     out += '</section>'
   }
   // 3. to do
-  const mine = followUpsOf(s).filter((f) => f.phone === p.phone)
+  const mine = followUpsOf(s).filter((f) => ownsWork(p, f))
   const scheduled = mine.filter((f) => f.status === 'scheduled').sort(byDue)
   const finished = mine.filter((f) => f.status === 'done' || f.status === 'skipped').sort(byDueDesc)
   if (mine.length) {
     out += `<section class="panel-section"><h3 data-key="panel-todo" tabindex="-1">To do ${countHtml(scheduled.length)}</h3>`
     if (scheduled.length) out += `<div class="card rows">${scheduled.map((f) => fuRowHtml(f, s, { nameLink: false })).join('')}</div>`
     else out += `<p class="muted">Nothing to do for ${esc(first)} right now.</p>`
-    if (finished.length) out += `<details class="done-list" data-key="done-panel"><summary data-key="done-panel-summary">${ico('chevron-down')}<span>Done and not needed</span>${countHtml(finished.length)}</summary><div class="card rows">${finished.map((f) => doneRowHtml(f, s)).join('')}</div></details>`
+    if (finished.length) out += `<details class="done-list" data-key="done-panel"><summary data-key="done-panel-summary">${ico('chevron-down')}<span>Done and not needed</span>${countHtml(finished.length)}${reviewSummary(finished)}</summary><div class="card rows">${finished.map((f) => doneRowHtml(f, s)).join('')}</div></details>`
     out += '</section>'
   }
   // 4. tours
@@ -336,12 +381,12 @@ function leadPanelHtml(p, s) {
       const st = String(b.status ?? '')
       const stuck = st === 'failed' || st === 'arranging'
       const c = st === 'confirmed' && cal && !calIds.has(b.slotId)
-        ? chip('chip-info', 'info', 'No longer on the calendar')
+        ? chip('chip-info', 'info', 'Not in the loaded calendar window')
         : chip(A.label(labels.bookingChip, st, 'chip-neutral'), A.label(labels.bookingIcon, st, 'calendar'), A.label(labels.bookingStatus, st))
       return `<div class="row row-2 tour-row${stuck ? ' row-warn' : ''}" data-key="tour:${esc(b.slotId)}"><span class="row-body">` +
         `<span class="row-title">${esc(fmt.day(b.startsAt))} · ${esc(fmt.time(b.startsAt))} · ${b.unitId ? `apartment ${esc(b.unitId)}` : 'no apartment picked yet'}</span>` +
         `<span class="row-chips">${c}</span>${stuck ? '<span class="row-sub">Call to set a time.</span>' : ''}</span>` +
-        `<span class="row-actions">${link('calendar', { date: fmt.nyDate(b.startsAt) || undefined, slot: b.slotId }, 'See on calendar')}</span></div>`
+        `<span class="row-actions">${b.unitId ? link('units', { unit: b.unitId }, 'View apartment') : ''}${link('calendar', { date: fmt.nyDate(b.startsAt) || undefined, slot: b.slotId }, 'See on calendar')}</span></div>`
     }).join('')}</div></section>`
   }
   // 5. what they're looking for
@@ -355,7 +400,7 @@ function leadPanelHtml(p, s) {
   out += '</section>'
   // 6. apartments they were told about
   const units = arr(p.unitsDiscussed).filter((u) => u != null && String(u).trim())
-  if (units.length) out += `<section class="panel-section"><h3>Apartments they were told about</h3><div class="chips">${units.map((u) => chip('chip-neutral', 'home', String(u))).join('')}</div></section>`
+  if (units.length) out += `<section class="panel-section"><h3>Apartments discussed</h3><p class="muted small">Saved conversation references. Open an apartment to review its current workspace.</p><div class="lead-unit-links">${units.map((u) => link('units', { unit: String(u) }, `Apartment ${u}`)).join('')}</div></section>`
   // 7. why it might not work out
   const losses = arr(p.lossReasons).filter(Boolean)
   if (losses.length) {
@@ -371,7 +416,7 @@ function leadPanelHtml(p, s) {
       const sentence = rich ? derive.callStory(rec, s).sentence : derive.summarySentence(c.outcome)
       const dur = fmt.duration(c.durationSeconds)
       return `<div class="lcall"><div class="when num">${esc(fmt.dateTime((rec && rec.startedAt) || c.at))}${dur !== '—' ? ` · ${esc(dur)}` : ''}</div><div>${esc(sentence)}</div>` +
-        `<div class="see">${rich ? link('calls', { id: String(c.callId) }, 'See the call', 'btn-link') : '<span class="faint">not in the last 20 calls</span>'}</div></div>`
+        `<div class="see">${rich ? link('calls', { id: String(c.callId) }, 'See the call', 'btn-link') : '<span class="faint">Saved summary only</span>'}</div></div>`
     }).join('')}</section>`
   }
   // 9. notes
@@ -385,7 +430,7 @@ function leadPanelHtml(p, s) {
     }).join('')}</ul>`
   } else out += `<p class="muted" style="margin-bottom:12px">No notes yet.</p>`
   if (hidden) out += `<p class="muted small">These callers' numbers were hidden, so there's nowhere to save a note.</p>`
-  else {
+  else if (A.can('operate')) {
     out += `<div class="note-form"><input class="input" type="text" maxlength="500" autocomplete="off" placeholder="${esc(notePlaceholder())}" aria-label="Add a note about ${esc(name)}" data-key="note:${esc(p.phone)}" data-phone="${esc(p.phone)}">` +
       `<button type="button" class="btn" data-action="savenote" data-phone="${esc(p.phone)}" data-key="notebtn:${esc(p.phone)}" data-write="leads" aria-disabled="true">Save note</button></div>` +
       `<p class="field-hint">Start with your initials so the team knows who wrote it.</p>`
@@ -393,6 +438,7 @@ function leadPanelHtml(p, s) {
   out += '</section>'
   // 10. for support
   const pairs = [['Stage', String(p.stage ?? '')], ['Phone as stored', String(p.phone ?? '')], ['Email', String(p.email ?? '—')], ['First call', String(p.firstSeenAt ?? '')], ['Last call', String(p.lastSeenAt ?? '')]]
+  if (callback) pairs.push(['Requested callback source', `${String(callback.callId ?? '')} · ${String(callback.at ?? '')}`])
   for (const [k, e] of Object.entries(p.signals || {})) if (e && typeof e === 'object') pairs.push([`${text.humanise(k)} confidence`, `${Math.round(Number(e.confidence) * 100)}%`])
   for (const e of arr(p.escalations)) if (e) pairs.push(['Escalation', `${String(e.trigger ?? '')} · ${String(e.callId ?? '')} · ${String(e.at ?? '')}`])
   for (const b of bookings) pairs.push(['Booking', `${String(b.slotId)} · ${String(b.status ?? '')} · ${String(b.callId ?? '')}`])
@@ -414,15 +460,16 @@ const view = {
   drafts: {}, saving: null, savedScroll: null, returnKey: null, focusPanel: false, closing: false, typing: null, warnedStale: new Set(),
   mount(root) {
     this.root = root
-    root.innerHTML = `<div class="leads-view" data-tab="todo"><div class="view-head"><h1 tabindex="-1">Leads</h1></div>` +
-      `<div class="leads-top"><div class="tabs" role="tablist" aria-label="Leads">` +
+    root.innerHTML = `<div class="leads-view" data-tab="todo"><header class="page-hero"><div><span class="page-eyebrow">Prospect relationships</span><h1 tabindex="-1">Leads</h1><p>One place for the conversation, the apartment, and the next step.</p></div><div class="page-hero-actions"><a class="btn" href="${esc(A.hashFor('units', {}))}">${ico('home')}Explore apartments</a><a class="btn" href="${esc(A.hashFor('calendar', {}))}">${ico('calendar')}Tour calendar</a></div></header><div class="leads-overview"></div>` +
+      `<div class="leads-top workspace-panel"><div class="leads-workspace-head"><div><span class="section-kicker">Leasing workspace</span><p>Follow through with every prospect.</p></div><div class="tabs" role="tablist" aria-label="Leads">` +
       TABS.map(([k, l], i) => `<button type="button" role="tab" class="tab" id="leads-tab-${k}" data-tab="${k}" data-key="tab:${k}" aria-selected="${i === 0 ? 'true' : 'false'}" aria-controls="leads-list" tabindex="${i === 0 ? '0' : '-1'}">${esc(l)}</button>`).join('') +
-      `</div><div class="leads-banners"></div>` +
-      `<p class="leads-note small muted" hidden>These are for you to do — the assistant doesn't make outgoing calls or send messages yet.</p>` +
+      `</div></div><div class="leads-banners"></div>` +
+      `<p class="leads-note small muted" hidden>${ico('info')}Staff work queue. Calls and messages are not sent automatically.</p>` +
       `<div class="leads-tools" hidden><label class="search"><span class="vh">Search by name, number or apartment</span>${ico('search')}<input type="search" data-key="search" placeholder="${esc(searchPlaceholder())}" aria-label="Search by name, number or apartment" autocomplete="off"></label>` +
       `<div class="chips" role="group" aria-label="Filter callers">${STAGES.map(([k, l]) => `<button type="button" class="chip-filter" data-stage="${k}" data-key="stage:${k}" aria-pressed="${k === 'all' ? 'true' : 'false'}">${ico('check')}<span>${esc(l)}</span></button>`).join('')}</div></div></div>` +
       `<div class="split leads-split"><div class="split-list leads-list" id="leads-list" role="tabpanel" aria-labelledby="leads-tab-todo" data-key="list"></div><div class="panel lead-panel" data-key="panel"></div></div></div>`
     this.wrap = root.querySelector('.leads-view'); this.tabsEl = root.querySelector('.tabs'); this.banners = root.querySelector('.leads-banners')
+    this.overview = root.querySelector('.leads-overview'); this.overviewHtml = null
     this.noteEl = root.querySelector('.leads-note'); this.tools = root.querySelector('.leads-tools'); this.search = root.querySelector('input[data-key="search"]')
     this.chipsEl = root.querySelector('.chips'); this.split = root.querySelector('.split'); this.list = root.querySelector('.leads-list'); this.panel = root.querySelector('.lead-panel')
     // tabs: click, arrows, Home/End
@@ -521,18 +568,20 @@ const view = {
   },
   setTab(tab) {
     if (!TABS.some(([k]) => k === tab)) return
-    try { localStorage.setItem('atrium.leads.tab', tab) } catch (e) { /* a convenience only */ }
+    try { localStorage.setItem(A.preferenceKey('leads.tab'), tab) } catch (e) { /* a convenience only */ }
     this.setParams({ tab }, true)
   },
-  current() { return this.openPhone ? profilesOf(A.state).find((p) => p.phone === this.openPhone) || null : null },
+  current() { const matches = profilesOf(A.state).filter(p => profileRef(p) === this.openPhone); return this.openPhone && matches.length === 1 ? matches[0] : null },
   open(phone, el) {
     if (!phone) return
+    const call = phone === 'unknown' ? String(el && el.dataset && el.dataset.call || '') : ''
+    if (phone === 'unknown' && !call) { A.toast('Choose the individual call from Calls to review this hidden number.', { kind: 'info' }); return }
     this.savedScroll = { list: this.list.scrollTop, page: window.scrollY }
-    this.returnKey = el && el.dataset && el.dataset.key ? el.dataset.key : `lead:${phone}`
+    this.returnKey = el && el.dataset && el.dataset.key ? el.dataset.key : `lead:${call ? `call:${call}` : phone}`
     this.focusPanel = true
-    this.setParams({ phone }, false)
+    this.setParams({ phone, call: call || undefined }, false)
   },
-  close() { this.closing = true; this.setParams({ phone: undefined }, true) },
+  close() { this.closing = true; this.setParams({ phone: undefined, call: undefined }, true) },
   noteInput(phone) { return this.panel.querySelector(`input[data-key="${cssq(`note:${phone}`)}"]`) },
   noteBtn(phone) { return this.panel.querySelector(`[data-key="${cssq(`notebtn:${phone}`)}"]`) },
   /** Save note is disabled until a non-space character is typed; the busy state is the shell's. */
@@ -540,7 +589,7 @@ const view = {
     const btn = this.noteBtn(phone)
     if (!btn) return
     const on = Boolean(String(this.drafts[phone] || '').trim())
-    if (on && !A.busyNow('leads')) btn.removeAttribute('aria-disabled'); else btn.setAttribute('aria-disabled', 'true')
+    if (A.can('operate') && on && !A.busyNow('leads')) btn.removeAttribute('aria-disabled'); else btn.setAttribute('aria-disabled', 'true')
     if (this.saving === phone) { btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true') }
   },
   paintBusy() {
@@ -550,8 +599,10 @@ const view = {
       else if (el.dataset.action === 'savenote') this.paintNote(el.dataset.phone)
       else el.removeAttribute('aria-disabled')
     }
+    A.paintPermissions(this.root)
   },
   fuAction(btn) {
+    if (btn.dataset.action === 'review-tour-change') { A.reviewTourChange(btn.dataset.request); return }
     const a = btn.dataset.action
     const fu = followUpsOf(A.state).find((f) => f.id === btn.dataset.fu)
     if (!fu) return
@@ -564,7 +615,7 @@ const view = {
   async saveNote(phone, btn) {
     const input = this.noteInput(phone)
     const body = String(this.drafts[phone] || (input && input.value) || '').trim()
-    if (!phone || !body || A.busyNow('leads') || this.saving) return
+    if (!phone || phone === 'unknown' || !body || A.busyNow('leads') || this.saving) return
     this.saving = phone
     if (btn && btn.isConnected) { btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true') }
     if (input) input.readOnly = true
@@ -590,13 +641,14 @@ const view = {
     }
   },
   async setName(p, btn) {
+    if (p.phone === 'unknown') return
     const has = Boolean(p.name)
     const v = await A.prompt("What's their name?", { title: has ? 'Edit name' : 'Set name', placeholder: 'e.g. Dana W.', value: p.name || '', confirmLabel: 'Save name', required: true, maxLength: 120 })
     if (v == null || !String(v).trim()) return
     await this.postName(p.phone, String(v).trim(), btn)
   },
   async postName(phone, name, btn) {
-    if (!phone || !name || A.busyNow('leads')) return
+    if (!phone || phone === 'unknown' || !name || A.busyNow('leads')) return
     if (btn && btn.isConnected) { btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true') }
     try {
       const res = await A.busy('leads', A.api.post('/api/leads', { action: 'note', phone, text: `name: ${name}` }, { doing: 'saving a name' }))
@@ -614,27 +666,30 @@ const view = {
     const p = this.params()
     let tab = TABS.some(([k]) => k === p.tab) ? p.tab : null
     if (!tab && (p.stage || p.q)) tab = 'all'
-    if (!tab) { try { const v = localStorage.getItem('atrium.leads.tab'); if (TABS.some(([k]) => k === v)) tab = v } catch (e) { /* default */ } }
+    if (!tab) { try { const v = localStorage.getItem(A.preferenceKey('leads.tab')); if (TABS.some(([k]) => k === v)) tab = v } catch (e) { /* default */ } }
     this.tab = tab || 'todo'
     this.q = String(p.q || '').trim()
     this.stage = STAGES.some(([k]) => k === p.stage) ? p.stage : 'all'
     this.wrap.dataset.tab = this.tab
-    const wantPhone = p.phone ? String(p.phone) : null
+    const wantPhone = p.phone === 'unknown' && p.call ? `call:${String(p.call)}` : p.phone ? String(p.phone) : null
     const loaded = Boolean(s.loaded.leads)
     const profiles = profilesOf(s), fus = followUpsOf(s)
+    const overviewHtml = leadOverviewHtml(s)
+    if (overviewHtml !== this.overviewHtml) { this.overviewHtml = overviewHtml; this.overview.innerHTML = overviewHtml }
     if (document.activeElement !== this.search && this.search.value !== this.q) this.search.value = this.q
     // a phone that is not on the list: a stale link gets a toast; a panel that was open says so in place
     let gone = false
-    if (wantPhone && loaded && !profiles.some((x) => x.phone === wantPhone)) {
+    const matchingProfiles = wantPhone ? profiles.filter(x => profileRef(x) === wantPhone) : []
+    if (wantPhone && loaded && matchingProfiles.length !== 1) {
       if (this.openPhone === wantPhone) gone = true
       else {
-        if (!this.warnedStale.has(wantPhone)) { this.warnedStale.add(wantPhone); A.toast("That item isn't on the list any more.", { kind: 'info' }) }
-        this.setParams({ phone: undefined }, true)
+        if (!this.warnedStale.has(wantPhone)) { this.warnedStale.add(wantPhone); A.toast(p.phone === 'unknown' ? 'Choose an individual prospect or call to review this hidden number.' : "That item isn't on the list any more.", { kind: 'info' }) }
+        this.setParams({ phone: undefined, call: undefined }, true)
         return
       }
     }
     // tabs, note, tools
-    const scheduledN = fus.filter((f) => f.status === 'scheduled').length
+    const scheduledN = fus.filter((f) => f.status === 'scheduled').length + pendingChanges(s).length
     for (const b of this.tabsEl.querySelectorAll('.tab')) {
       const k = b.dataset.tab, lbl = (TABS.find(([x]) => x === k) || [k, k])[1]
       const n = k === 'todo' ? scheduledN : profiles.length
@@ -680,15 +735,15 @@ const view = {
       if (focusKey) { const el = this.list.querySelector(`[data-key="${cssq(focusKey)}"]`); if (el) { try { el.focus({ preventScroll: true }) } catch (e) { /* ignore */ } } }
     }
     // the panel
-    const openRec = wantPhone && !gone ? profiles.find((x) => x.phone === wantPhone) || null : null
+    const openRec = wantPhone && !gone && matchingProfiles.length === 1 ? matchingProfiles[0] : null
     const hasPanel = Boolean(openRec || gone)
     let panelHtml_
     if (gone) panelHtml_ = gonePanelHtml()
     else if (openRec) panelHtml_ = leadPanelHtml(openRec, s)
     else if (isSplit()) {
       // The placeholder names the gesture the tab offers, and says nothing when there is nobody to pick.
-      const anyone = this.tab === 'todo' ? fus.some((f) => f.status === 'scheduled') : Boolean(this.list.querySelector('.lead-row'))
-      panelHtml_ = anyone ? `<div class="panel-empty">${A.html.empty({ icon: 'leads', title: this.tab === 'todo' ? "Click a name to see what they're looking for." : "Pick someone to see what they're looking for." })}</div>` : ''
+      const anyone = profiles.length || scheduledN
+      panelHtml_ = anyone ? `<div class="panel-empty"><div class="lead-empty-guide">${ico('person')}<span class="section-kicker">The prospect story</span><h2>Select a prospect</h2><p>Review what they want, the apartments discussed, and the work still to do.</p><div><span>Preferences</span><span>Conversations</span><span>Tours & follow-ups</span></div><p class="small">${this.tab === 'todo' ? 'Open a name from the work queue. Tour-change requests can be reviewed directly on their cards.' : 'Choose a prospect from the list to see their full record.'}</p></div></div>` : ''
     } else panelHtml_ = ''
     this.split.classList.toggle('has-panel', hasPanel)
     this.wrap.classList.toggle('has-panel', hasPanel)

@@ -3,7 +3,8 @@ import type { LossReason } from '../record/store.ts'
 /**
  * One person, across every call they ever make.
  *
- * Keyed by phone number because that is the one identifier a caller cannot fail to give.
+ * Keyed by the provider's caller number when available; withheld numbers use a
+ * call-specific record. A requested callback is contact information, not identity.
  * A prospect who calls three times over a month is one lead with three calls, not three
  * leads — the second call should start from what the first one learned. SOW 4.2 calls this
  * "one person across a portfolio"; SOW 6.3 calls the contents the prospect intelligence
@@ -22,7 +23,7 @@ export type LeadStage =
   | 'new'            // called, told us little
   | 'qualified'      // two of timing / bedrooms / budget captured
   | 'tour_scheduled' // a confirmed booking exists
-  | 'toured'         // the tour time has passed
+  | 'toured'         // reserved for verified attendance; never inferred from elapsed time
   | 'lost'           // a loss reason was recorded and nothing booked
   | 'escalated'      // waiting on a human
 
@@ -36,6 +37,13 @@ export interface CallSummary {
 }
 
 export interface LeadBooking {
+  /** Stable calendar reservation identity; absent only on older profile records. */
+  externalId?: string
+  rescheduleRevision?: number
+  rescheduledAt?: string
+  endsAt?: string
+  /** Physical aliases prevent a late legacy report from restoring a moved tour. */
+  rescheduledFrom?: { slotId: string; startsAt: string; unitId: string | null }[]
   slotId: string
   startsAt: string
   unitId: string | null
@@ -58,6 +66,8 @@ export function pinnedName(notes: string[]): string | null {
 
 export interface LeadProfile {
   phone: string
+  /** Caller-requested contact only; never used to identify or merge profiles. */
+  callbackPhone?: Evidence<string>
   name: string | null
   email: string | null
   firstSeenAt: string
@@ -66,6 +76,7 @@ export interface LeadProfile {
   calls: CallSummary[]
   signals: {
     budget?: Evidence<number>
+    budgetRange?: Evidence<{ minMonthly: number | null; maxMonthly: number | null }>
     bedrooms?: Evidence<number>
     moveIn?: Evidence<{ earliest: string; latest: string | null; said: string }>
     pets?: Evidence<string>
@@ -91,14 +102,15 @@ export function emptyProfile(phone: string, now: Date): LeadProfile {
 /**
  * Stage is derived, never set by hand, so it cannot drift from the facts underneath it.
  * A profile with a confirmed booking is tour_scheduled whatever anyone typed.
+ * A scheduled time passing is not evidence that the caller attended. The current
+ * booking model records confirmation only, so it cannot derive a toured stage.
  */
-export function deriveStage(p: LeadProfile, now: Date): LeadStage {
+export function deriveStage(p: LeadProfile, _now: Date): LeadStage {
   const confirmed = p.bookings.filter((b) => b.status === 'confirmed')
-  if (confirmed.some((b) => Date.parse(b.startsAt) < now.getTime())) return 'toured'
   if (confirmed.length > 0) return 'tour_scheduled'
   if (p.escalations.length > 0) return 'escalated'
   if (p.lossReasons.length > 0) return 'lost'
-  const core = [p.signals.budget, p.signals.bedrooms, p.signals.moveIn].filter(Boolean).length
+  const core = [p.signals.budgetRange ?? p.signals.budget, p.signals.bedrooms, p.signals.moveIn].filter(Boolean).length
   return core >= 2 ? 'qualified' : 'new'
 }
 
@@ -108,4 +120,11 @@ export function normalisePhone(raw: string): string {
   if (digits.length === 10) return `+1${digits}`
   if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`
   return digits ? `+${digits}` : 'unknown'
+}
+
+/** A contact claim accepts phone notation only and preserves an explicit country code. */
+export function normaliseCallbackPhone(raw: unknown): string | null {
+  if (typeof raw !== 'string' || raw.length > 80 || !/^\+?[\d\s().-]+$/.test(raw.trim())) return null
+  const value = raw.trim().startsWith('+') ? `+${raw.replace(/\D/g, '')}` : normalisePhone(raw)
+  return /^\+[1-9]\d{6,14}$/.test(value) ? value : null
 }

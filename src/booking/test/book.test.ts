@@ -2,6 +2,7 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { bookTour, idempotencyKey, sayableStatus } from '../book.ts'
 import type { CalendarPort, BookingRequest, TourSlot, BookingIntent } from '../types.ts'
+import { BookingConflictError, BookingWriteFailure } from '../types.ts'
 import { propertyId, interactionId } from '../../domain/ids.ts'
 
 const NOW = new Date('2026-09-07T12:00:00Z')
@@ -31,7 +32,7 @@ function fakeCalendar(behaviour: Partial<CalendarPort> & { creates?: BookingInte
   return {
     listSlots: behaviour.listSlots ?? (async () => []),
     createBooking: behaviour.createBooking ?? (async () => ({ externalId: 'ext-1' })),
-    readBooking: behaviour.readBooking ?? (async (id) => ({ externalId: id, slot: SLOT })),
+    readBooking: behaviour.readBooking ?? (async (id) => ({ externalId: id, slot: SLOT, unitId: '12A' })),
   }
 }
 
@@ -54,13 +55,25 @@ describe('a booking is only confirmed after it is read back', () => {
       readBooking: async (id) => ({ externalId: id, slot: wrongSlot }),
       listSlots: async () => [wrongSlot],
     }), opts)
-    assert.equal(b.state.status, 'slot_taken')
+    assert.equal(b.state.status, 'arranging')
+  })
+
+  test('a read-back with a different unit or external id never confirms', async () => {
+    for (const readBack of [
+      { externalId: 'ext-1', slot: SLOT, unitId: '12B' },
+      { externalId: 'some-other-booking', slot: SLOT, unitId: '12A' },
+      { externalId: 'ext-1', slot: SLOT },
+    ]) {
+      const b = await bookTour(req(), fakeCalendar({ readBooking: async () => readBack }), opts)
+      assert.equal(b.state.status, 'arranging')
+    }
   })
 
   test('the prospect is told "arranging", never "confirmed", when unverified', async () => {
     const b = await bookTour(req(), fakeCalendar({ readBooking: async () => null }), opts)
     const said = sayableStatus(b)
-    assert.match(said, /getting that booked/i)
+    assert.match(said, /isn't confirmed/i)
+    assert.doesNotMatch(said, /within the hour|will confirm/i)
     assert.ok(!/all set|confirmed for/i.test(said), `must not claim confirmation: "${said}"`)
   })
 
@@ -73,25 +86,27 @@ describe('a booking is only confirmed after it is read back', () => {
 })
 
 describe('failure never becomes a false promise', () => {
-  test('total calendar failure queues for a human and says so honestly', async () => {
+  test('definitive no-write failures say help is needed without claiming a human was queued', async () => {
     const b = await bookTour(req(), fakeCalendar({
-      createBooking: async () => { throw new Error('ECONNREFUSED') },
+      createBooking: async () => { throw new BookingWriteFailure('ECONNREFUSED before write', 'not_created') },
     }), opts)
     assert.equal(b.state.status, 'failed')
-    assert.equal(b.state.status === 'failed' && b.state.queuedForHuman, true)
+    assert.equal(b.state.status === 'failed' && b.state.attempts, 3)
+    assert.equal(Object.hasOwn(b.state, 'queuedForHuman'), false)
     const said = sayableStatus(b)
-    assert.match(said, /someone will call you back/i)
-    assert.match(said, /don't want to tell you it's booked/i)
+    assert.match(said, /couldn't confirm a tour/i)
+    assert.match(said, /leasing team will need to help/i)
+    assert.doesNotMatch(said, /will call you back|flagged|within the hour/i)
   })
 
   test('a taken slot offers real alternatives rather than insisting', async () => {
     const alt: TourSlot = { slotId: 'slot-sat-1500', startsAt: new Date('2026-09-12T19:00:00Z'), endsAt: new Date('2026-09-12T19:30:00Z') }
     const b = await bookTour(req(), fakeCalendar({
-      createBooking: async () => { throw new Error('slot already booked') },
+      createBooking: async () => { throw new BookingConflictError('slot already booked') },
       listSlots: async () => [alt],
     }), opts)
     assert.equal(b.state.status, 'slot_taken')
-    assert.match(sayableStatus(b), /just went/i)
+    assert.match(sayableStatus(b), /isn't available/i)
     assert.match(sayableStatus(b), /3:00/)
   })
 
@@ -100,11 +115,77 @@ describe('failure never becomes a false promise', () => {
     const b = await bookTour(req(), fakeCalendar({
       readBooking: async (id) => {
         calls++
-        return calls < 2 ? null : { externalId: id, slot: SLOT }
+        return calls < 2 ? null : { externalId: id, slot: SLOT, unitId: '12A' }
       },
     }), opts)
     assert.equal(b.state.status, 'confirmed')
     assert.equal(calls, 2, 'retried the read-back rather than re-creating the booking')
+  })
+
+  test('alternatives request the selected unit and omit the just-conflicted start', async () => {
+    const alt: TourSlot = { ...SLOT, slotId: 'slot-later', startsAt: new Date('2026-09-12T19:00:00Z'), endsAt: new Date('2026-09-12T19:30:00Z') }
+    let selectedUnit: string | null | undefined
+    const b = await bookTour(req(), fakeCalendar({
+      createBooking: async () => { throw new BookingConflictError('booking conflict') },
+      listSlots: async (_property, _from, _to, unitId) => {
+        selectedUnit = unitId
+        return [SLOT, { ...SLOT, slotId: 'duplicate-time' }, alt]
+      },
+    }), opts)
+    assert.equal(selectedUnit, '12A')
+    assert.deepEqual(b.state, { status: 'slot_taken', alternatives: [alt] })
+  })
+
+  test('ordinary provider errors never prove absence or authorize another create', async () => {
+    for (const message of ['ECONNREFUSED', 'calendar unavailable', 'provider conflict', 'slot already booked']) {
+      let creates = 0
+      let reads = 0
+      let alternatives = 0
+      const b = await bookTour(req(), fakeCalendar({
+        createBooking: async () => { creates++; throw new Error(message) },
+        readBooking: async () => { reads++; return null },
+        listSlots: async () => { alternatives++; return [SLOT] },
+      }), opts)
+      assert.equal(b.state.status, 'arranging', message)
+      assert.equal(b.state.status === 'arranging' && b.state.externalId, null)
+      assert.equal(creates, 1)
+      assert.equal(reads, 0, 'an unknown provider identifier cannot be guessed')
+      assert.equal(alternatives, 0, 'the original might exist; do not offer another booking')
+    }
+  })
+
+  test('a proven pre-write error may retry and later confirm', async () => {
+    let creates = 0
+    const b = await bookTour(req(), fakeCalendar({
+      createBooking: async () => {
+        if (++creates === 1) throw new BookingWriteFailure('initial read failed', 'not_created')
+        return { externalId: 'ext-1' }
+      },
+    }), opts)
+    assert.equal(b.state.status, 'confirmed')
+    assert.equal(creates, 2)
+  })
+
+  test('an adapter identifier recovers a lost write response using only read-back', async () => {
+    let creates = 0
+    let reads = 0
+    const b = await bookTour(req(), fakeCalendar({
+      createBooking: async () => { creates++; throw new BookingWriteFailure('lost write response', 'unknown', 'ext-1') },
+      readBooking: async id => { reads++; return { externalId: id, slot: SLOT, unitId: '12A' } },
+    }), opts)
+    assert.equal(b.state.status, 'confirmed')
+    assert.equal(creates, 1)
+    assert.equal(reads, 1)
+  })
+
+  test('a failed verification that says unavailable remains uncertain', async () => {
+    let creates = 0
+    const b = await bookTour(req(), fakeCalendar({
+      createBooking: async () => { creates++; return { externalId: 'ext-1' } },
+      readBooking: async () => { throw new Error('calendar unavailable') },
+    }), opts)
+    assert.equal(b.state.status, 'arranging')
+    assert.equal(creates, 1)
   })
 })
 
@@ -123,7 +204,7 @@ describe('retries cannot double-book', () => {
     let reads = 0
     await bookTour(req(), fakeCalendar({
       createBooking: async () => { creates++; return { externalId: 'ext-1' } },
-      readBooking: async (id) => { reads++; return reads < 3 ? null : { externalId: id, slot: SLOT } },
+      readBooking: async (id) => { reads++; return reads < 3 ? null : { externalId: id, slot: SLOT, unitId: '12A' } },
     }), opts)
     assert.equal(creates, 1, 'must not create a second calendar entry while retrying read-back')
   })

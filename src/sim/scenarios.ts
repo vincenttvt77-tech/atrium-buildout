@@ -11,6 +11,8 @@ export interface Expectation {
   tools?: string[]
   /** The call must end with a confirmed tour. */
   booking?: boolean
+  /** Verify the requested reservation, not merely that some tour was booked. */
+  bookingSlot?: { unitId: string; weekOffset: number; weekday: number; hour: number; minute: number; timeZone: string }
   /** The call must have been escalated (a human handoff or an emergency). */
   escalated?: boolean
   /** Something the assistant must say at some point. */
@@ -34,6 +36,26 @@ export interface Scenario {
 const HOW_TO_TALK = `You are on a phone call with the leasing line of an apartment building. Reply with only the words you say out loud — no narration, no stage directions, no quotation marks, no lists. One or two short sentences, the way people actually talk on the phone. Answer what you are asked; do not volunteer details before they are asked for. If you are asked for something you would not have handy, say so. When you have what you came for, or you have given up, say goodbye and put [HANGS UP] at the very end of that reply.`
 
 export const SCENARIOS: Scenario[] = [
+  {
+    id: 'premium-next-wednesday',
+    title: 'Premium three-bedroom search and next Wednesday at four',
+    goal: 'Identify premium three-bedroom demo residences, explain net effective rent accurately, and confirm a tour next Wednesday at 4 PM without a website contradiction.',
+    persona: `${HOW_TO_TALK}
+
+You are a synthetic demo prospect called Alex Rivera. You want a three-bedroom apartment and say your move timing is "within now to three months". Your monthly budget is "over eight thousand dollars", meaning you want something more expensive, not an eight-thousand-dollar ceiling. Ask for the most expensive option, then ask what exists outside your original move-in window. You saw the West Collection, the C2 floor plan, 29E and 33A on this fictional demo's website: ask about those by name if they are not explained. Ask why the net effective price differs from rent on the lease. Choose 33A for a tour and request Wednesday next week at four in the afternoon. Do not accept an earlier day or a morning appointment when that exact time is available. If it is truly unavailable, accept the nearest available afternoon time on that same Wednesday. Your optional email is alex.rivera@example.com. After a confirmed tour, thank them and hang up.`,
+    expect: {
+      tools: ['check_availability', 'answer_question', 'list_tour_slots', 'book_tour'],
+      booking: true,
+      bookingSlot: { unitId: '33A', weekOffset: 1, weekday: 3, hour: 16, minute: 0, timeZone: 'America/New_York' },
+      maxCallerTurns: 15,
+      mustNotSay: [
+        /(?:can(?:not|'t)|unable to).{0,35}(?:see|check|book).{0,20}next (?:week|Wednesday)/i,
+        /(?:only|just).{0,25}(?:through Friday|next two weeks)/i,
+        /(?:no|don'?t have|doesn'?t exist).{0,30}West Collection/i,
+        /(?:free month|month free).{0,25}upfront/i,
+      ],
+    },
+  },
   {
     id: 'evan',
     title: 'Evan — two bedroom on a four thousand budget',

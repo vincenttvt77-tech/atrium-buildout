@@ -7,9 +7,10 @@ Disallow: /
 
 # The operations routes are named explicitly as well. Not because a crawler that
 # honours the blanket rule above needs telling twice, but because the day someone
-# opens the site to indexing, these two must not come along. robots.txt is a
-# request, never a control — the passcode gate on /api/dashboard and /api/vapi is
-# what actually keeps prospect names and call excerpts private.
+# opens the site to indexing, the staff routes must not come along. robots.txt is a
+# request, never a control — server authentication and property authorization keep
+# prospect names and call excerpts private.
 Disallow: /api/
 Disallow: /api/dashboard
+Disallow: /api/properties
 Disallow: /dashboard.html

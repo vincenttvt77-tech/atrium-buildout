@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { checkEmergency, checkAvailability, answerQuestion, captureSignal, parseBudget } from '../tools.ts'
+import { checkEmergency, checkAvailability, lookupUnit, lookupPlan, answerQuestion, captureSignal, parseBudget } from '../tools.ts'
 import type { ToolContext } from '../tools.ts'
 import type { InventorySnapshot } from '../../inventory/types.ts'
 import type { KnowledgeArticle } from '../../knowledge/article.ts'
@@ -50,6 +50,73 @@ const qualified = (budget: number, beds: number) => {
   return q
 }
 
+test('date-only move-in warnings preserve June 1 after parsing to a midnight timestamp', () => {
+  const now = new Date('2032-01-01T12:00:00Z')
+  const futureInventory = { ...inventory, readAt: now,
+    units: inventory.units.map(unit => ({ ...unit, availableFrom: '2032-08-01' })) }
+  for (const moveIn of ['2032-06-01', 'June 1, 2032']) {
+    const result = checkAvailability(ctx({ now, inventory: futureInventory, jurisdiction: 'CA' }), { unitId: '21A', moveIn })
+    assert.match(result.say, /not free until August 1, which is later than the June 1 they mentioned/)
+    assert.doesNotMatch(result.say, /May 31|July 31/)
+  }
+})
+
+test('stale inventory cannot quote a named residence, floor plan, status or nonexistent-unit conclusion', () => {
+  const stale = { ...inventory, readAt: new Date(NOW.getTime() - 16 * 60000) }
+  const context = ctx({ inventory: stale, qualification: qualified(4500, 1) })
+  const responses = [checkAvailability(context),
+    ...['21A', 'A1', '99Q'].map(unitId => checkAvailability(context, { unitId })),
+    lookupUnit('21A', context), lookupPlan(stale.floorPlans[1]!, context),
+    ...(['pending', 'leased', 'off_market'] as const).map(status => lookupUnit('21A', {
+      ...context, inventory: { ...stale, units: stale.units.map(unit => ({ ...unit, status })) },
+    })),
+  ]
+  for (const result of responses) {
+    assert.equal(result.record.outcome, 'stale')
+    assert.deepEqual(result.record.unitsOffered, [])
+    assert.match(result.say, /cannot verify current rent, concessions, availability, or move-in dates/)
+    assert.doesNotMatch(result.say, /\$|4,200|one month free|November 1|is available|is pending|no residence|open now|pulling up the live list/i)
+  }
+  assert.equal(stale.readAt.toISOString(), '2026-09-07T11:44:00.000Z', 'Lookup must not freshen the source timestamp')
+  const inline = checkAvailability(ctx({ inventory: stale }), { unitId: '21A', budget: 'four thousand two hundred' })
+  assert.equal(inline.record.outcome, 'stale')
+  assert.equal(inline.qualificationPatch?.budget?.value.maxMonthly, 4200, 'Staleness must preserve caller evidence')
+})
+
+test('higher-price and outside-window searches are explicit, preserve preferences, and named lookups bypass filters', () => {
+  const context = ctx({ qualification: qualified(3500, 1) })
+  const named = checkAvailability(context, { unitId: '21A' })
+  assert.equal(named.record.outcome, 'unit_lookup')
+  assert.match(named.say, /\$4,200/)
+  const plan = checkAvailability(context, { unitId: 'A1' })
+  assert.equal(plan.record.outcome, 'plan_lookup')
+  const broader = checkAvailability(context, { sortBy: 'price_desc', ignoreBudget: true, includeOutsideMoveIn: true })
+  assert.equal(broader.record.outcome, 'matches')
+  assert.deepEqual(broader.record.unitsOffered, ['21A'])
+  assert.equal(context.qualification.budget!.value.maxMonthly, 3500)
+  assert.match(broader.say, /caller-requested broader search/)
+  assert.match(broader.say, /Do not claim they are the only residences/)
+})
+
+test('rent explanations and quotes do not invent upfront concession credit', () => {
+  for (const question of ['Why is net effective different from lease rent?', 'Do I get the free month upfront?', 'When is the concession credited?']) {
+    const result = answerQuestion({ question, topic: 'pricing' }, ctx())
+    assert.equal(result.record.concessionScheduleVerified, false)
+    assert.match(result.say, /does not verify when/)
+    assert.match(result.say, /Do not claim it is upfront/)
+  }
+  assert.match(checkAvailability(ctx(), { unitId: '21A' }).say, /No concession-credit schedule was verified/)
+})
+
+test('when every match is later, the spoken guidance never promises the requested move-in date', () => {
+  const q = captureCore(qualified(4500, 1), 'moveInTiming', extracted({ earliest: NOW, latest: new Date('2026-09-15') },
+    0.9, CALL, 'by September 15', NOW))
+  const result = checkAvailability(ctx({ qualification: q }))
+  assert.match(result.say, /Nothing frees up by their date/)
+  assert.match(result.say, /These open after the requested date/)
+  assert.doesNotMatch(result.say, /we've got this by the time you're looking to move/)
+})
+
 describe('emergency pre-empts every other tool', () => {
   test('a gas report returns the fixed safety instruction and escalates', () => {
     const r = checkEmergency('I smell gas in my kitchen', ctx())
@@ -61,6 +128,27 @@ describe('emergency pre-empts every other tool', () => {
 
   test('a leasing question returns null so the normal flow proceeds', () => {
     assert.equal(checkEmergency('what is the rent on the one bedroom', ctx()), null)
+  })
+
+  test('answer_question returns emergency guidance before even reading knowledge', () => {
+    const context = ctx()
+    Object.defineProperty(context, 'articles', { get() { throw new Error('Emergency must bypass knowledge lookup') } })
+    const r = answerQuestion({ question: 'I smell gas in my apartment right now', topic: 'pet_policy' }, context)
+    assert.equal(r.record.kind, 'emergency')
+    assert.equal(r.emergency?.kind, 'gas')
+    assert.equal(r.escalate?.trigger, 'emergency')
+    assert.match(r.say, /outside.*call 911/i)
+    assert.match(r.say, /have not contacted/i)
+    assert.doesNotMatch(r.say, /do not want to guess|take their contact|I.?m alerting|dispatching/i)
+  })
+
+  test('ordinary pet, fire-pit, and smoking questions remain ordinary knowledge questions', () => {
+    for (const question of ['do you allow dogs', 'does the roof have a fire pit', 'can I smoke in my apartment']) {
+      const r = answerQuestion({ question, topic: 'general_property_fact' }, ctx())
+      assert.notEqual(r.record.kind, 'emergency', question)
+      assert.equal(r.emergency, undefined, question)
+      assert.doesNotMatch(r.say, /call 911/i, question)
+    }
   })
 })
 
@@ -208,6 +296,9 @@ describe('a floor plan named as if it were a residence', () => {
     assert.equal(r.record.outcome, 'plan_lookup')
     assert.match(r.say, /One Bedroom with Balcony/)
     assert.match(r.say, /12H/)
+    assert.match(r.say, /Available residences/)
+    assert.match(r.say, /available October 15/)
+    assert.doesNotMatch(r.say, /open now|move in now|available immediately/i, 'Future availability must not sound ready for move-in today')
     assert.doesNotMatch(r.say, /15H/, 'a leased residence is not offered')
     assert.doesNotMatch(r.say, /no residence/i)
   })
@@ -277,7 +368,7 @@ describe('a budget as the transcriber writes it', () => {
     assert.equal(parseBudget('$4. 000', ''), 4000)
     assert.equal(parseBudget('4k', ''), 4000)
     assert.equal(parseBudget('four thousand', ''), 4000)
-    assert.equal(parseBudget('forty-two hundred', 'forty-two hundred a month'), null)
+    assert.equal(parseBudget('forty-two hundred', 'forty-two hundred a month'), 4200)
     assert.equal(parseBudget('4,200', ''), 4200)
     assert.equal(parseBudget('nothing', 'whatever it takes'), null)
   })

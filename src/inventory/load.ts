@@ -1,4 +1,5 @@
 import type { InventorySnapshot, Unit, FloorPlan } from './types.ts'
+import { validateInventoryProvenance } from './source.ts'
 
 export interface LoadProblem {
   where: string
@@ -49,7 +50,7 @@ function validUnit(
     problems.push({ where, problem: 'monthlyRent must be a positive number' })
     return null
   }
-  if (!isStr(u.availableFrom) || Number.isNaN(Date.parse(u.availableFrom))) {
+  if (!isStr(u.availableFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(u.availableFrom) || Number.isNaN(Date.parse(u.availableFrom)) || new Date(u.availableFrom).toISOString().slice(0, 10) !== u.availableFrom) {
     problems.push({ where, problem: 'availableFrom must be an ISO date' })
     return null
   }
@@ -63,6 +64,12 @@ function validUnit(
   // bedroom count in a prospect's ear. Surface it rather than picking a side silently.
   if (beds !== plan.bedrooms) {
     problems.push({ where, problem: `bedrooms ${beds} disagrees with plan ${plan.id} (${plan.bedrooms})` })
+    return null
+  }
+
+  if (u.status !== undefined && !['available', 'pending', 'leased', 'off_market'].includes(u.status)) {
+    problems.push({ where, problem: 'unknown inventory status' })
+    return null
   }
 
   const status: Unit['status'] =
@@ -95,7 +102,9 @@ function validUnit(
  */
 export function loadInventory(
   rawUnits: unknown[], rawPlans: unknown[], readAt: Date, source: string,
+  rawProvenance?: unknown, now = new Date(),
 ): LoadResult {
+  const provenance = validateInventoryProvenance(rawProvenance, readAt, now)
   const problems: LoadProblem[] = []
 
   const floorPlans = rawPlans
@@ -108,5 +117,6 @@ export function loadInventory(
     .map((u, i) => validUnit(u, i, planMap, problems))
     .filter((u): u is Unit => u !== null)
 
-  return { snapshot: { units, floorPlans, readAt, source }, problems }
+  return { snapshot: { units, floorPlans, readAt: new Date(readAt), source,
+    ...(provenance ? { provenance } : {}) }, problems }
 }
