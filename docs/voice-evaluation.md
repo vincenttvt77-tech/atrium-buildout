@@ -48,8 +48,27 @@ Cost per successful case includes the costs of failed cases, and appears only wh
 
 `observedTargetMet` means at least 95% success in this completely reviewed sample and no recorded critical failures. `realHeldOutEvidence` reports the declared labels independently. Neither establishes release acceptance: `productionReadiness` always remains `not_established`. The separate required security, concurrency, live channel, audio quality and delivery gates still apply. A tiny perfect sample is not credible evidence of 95% real-world success.
 
+## Freeze and compare the saved configuration
+
+Use Node 22 and a Vapi **Version History export** kept outside Git:
+
+```sh
+node scripts/inspect-voice-config.mjs --input /private/path/baseline-export.json
+node scripts/inspect-voice-config.mjs --input /private/path/baseline-export.json --compare /private/path/candidate-export.json
+```
+
+The expected envelope has exactly `assistant` and `version` objects; `version.version` is a string such as `v23`. The assistant must contain nonempty model, voice and transcriber objects. This validates the supported export shape, **not** the provider's full API schema or whether that file is actually published. Both facts remain explicitly false in the output flags until separately verified by a reviewer. A successful command does not change those flags.
+
+The offline command prints only fixed report labels, SHA-256 fingerprints and comparison flags. It never prints original prompts, IDs, URLs, credentials, private metadata or input paths, and performs no network requests or writes. Files are limited to 1 MiB, regular-file reads, valid UTF-8 and JSON; canonicalization also bounds depth and node count. Invalid input exits 2 with a fixed error. Exit 0 means inspection succeeded, not that the candidate passed quality or release checks.
+
+Object-key order is normalized; array order and missing/null/empty distinctions are preserved. Export-version metadata is excluded from configuration equality. All assistant fields are included, including unknown provider options and credential changes. Nine component fingerprints distinguish model, prompt, tools, knowledge, voice, transcriber, turn-taking, greeting and remaining settings. A `remaining` change still needs review. Assistant metadata or credential rotation can change a fingerprint without changing spoken behavior. Hashes are comparison evidence, not restorable backups or a general-purpose deidentification tool; keep the original export protected and review any report before sharing.
+
+For a voice-only trial, verify that only the voice component changed; for a model-only trial, verify the intended model change and explicitly review any additional differences. Record how the baseline was obtained separately. The same assistant configuration does not freeze external tool code, property data, phone-number routing, referenced knowledge or provider model behavior: track those separately. Never publish an unrelated pre-existing draft just to obtain a candidate.
+
 ## Vapi integration boundary
 
 Vapi exposes per-turn and average performance fields in call artifacts. Its public model-comparison total omits endpointing and transport. Current SDK type documentation explicitly gives milliseconds for transport averages but does not state units for every turn field. **No automatic Vapi conversion is implemented:** verify actual field units and measurement boundaries before mapping to this contract. In particular, provider turn latency is not automatically the time to the first meaningful response.
 
-Sources checked September 22, 2026: [Vapi latency methodology](https://docs.vapi.ai/assistants/model-intelligence/understanding-latency), [performance metrics](https://raw.githubusercontent.com/VapiAI/server-sdk-typescript/main/src/api/types/PerformanceMetrics.ts), [turn latency schema](https://raw.githubusercontent.com/VapiAI/server-sdk-typescript/main/src/api/types/TurnLatency.ts). No saved assistant or provider settings changed. Live metric access was not established in this increment.
+On September 22, Vapi's Latency Summary for one historical September 10 v22 call explicitly labelled its displayed values as milliseconds. Its six-turn average was 3,646 ms. That confirms the unit for that UI view only; it does not establish SDK field units, first-meaningful-audio boundaries or a current v23 baseline. Do not import the displayed totals as `responseMs`, or interpret zero component values as measured zero without confirming missing-value behavior. See the [baseline evidence report](../reports/2026-09-22-voice-baseline.md).
+
+Sources checked September 22, 2026: [Vapi latency methodology](https://docs.vapi.ai/assistants/model-intelligence/understanding-latency), [performance metrics](https://raw.githubusercontent.com/VapiAI/server-sdk-typescript/main/src/api/types/PerformanceMetrics.ts), [turn latency schema](https://raw.githubusercontent.com/VapiAI/server-sdk-typescript/main/src/api/types/TurnLatency.ts). No saved assistant or provider settings changed.
