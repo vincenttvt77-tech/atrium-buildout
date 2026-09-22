@@ -1049,3 +1049,23 @@ figcaption{
   .masthead,.ribbon,.callbar,.hero__media,.hero__scrim{ display:none; }
   body{ background:#fff; color:#000; }
 }
+
+/* Public residence shortlist; link data is limited to published unit identifiers. */
+.shortlist { margin: 28px 0; padding: clamp(18px, 3vw, 28px); border: 1px solid var(--line-strong); border-radius: 12px; background: var(--paper); }
+.shortlist__heading { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.shortlist h3 { margin: 0 0 8px; font-family: var(--font-display); font-size: 26px; }
+.shortlist p { font-size: 14px; line-height: 1.6; margin: 8px 0; }
+#shortlist-count { white-space: nowrap; font-size: 13px; font-variant-numeric: tabular-nums; }
+.shortlist__items, .shortlist__actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0; }
+.shortlist button, .u-save { min-height: 44px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--paper); color: var(--ink); padding: 10px 14px; font: inherit; font-size: 13px; cursor: pointer; }
+.shortlist button:hover, .u-save:hover { border-color: var(--ink); }
+.shortlist button:disabled { opacity: .5; cursor: default; }
+.shortlist button:focus-visible, .u-save:focus-visible, #shortlist-link:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+#shortlist-copy, .u-save[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.shortlist__copy { display: flex; gap: 10px; margin-top: 8px; }
+#shortlist-link { min-width: 0; flex: 1; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--paper); color: var(--ink); font: inherit; font-size: 16px; padding: 10px; }
+#shortlist-share label { font-size: 13px; }
+#shortlist-status { min-height: 1.6em; }
+.u-actions { display: grid; gap: 8px; }
+.u-save { white-space: nowrap; }
+@media (max-width: 600px) { .shortlist__heading, .shortlist__copy { flex-direction: column; } #shortlist-link { width: 100%; box-sizing: border-box; } .shortlist__copy button { align-self: flex-start; } }

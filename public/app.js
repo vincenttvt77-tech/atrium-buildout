@@ -305,7 +305,55 @@ const Availability = (function () {
   const table = $('#avail-table');
   if (!body) return {};
 
-  const state = { beds: 'all', plan: null, sort: 'rent-asc' };
+  const shortlist = window.AtriumShortlist;
+  const board = shortlist.published(INVENTORY);
+  const initial = shortlist.read(window.location.hash, INVENTORY);
+  const state = { beds: 'all', plan: null, sort: 'rent-asc', selected: initial.ids, shortlistOnly: initial.active };
+  let linkNotice = initial;
+  const status = $('#shortlist-status');
+  const view = $('#shortlist-view');
+  const shareInput = $('#shortlist-link');
+  const esc = (value) => String(value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const shareURL = () => shortlist.link(window.location.origin, state.selected, INVENTORY);
+
+  function renderShortlist() {
+    $('#shortlist-count').textContent = state.selected.length + ' of 5 selected';
+    view.textContent = state.shortlistOnly ? 'Browse all residences' : 'View shortlist';
+    view.setAttribute('aria-pressed', String(state.shortlistOnly));
+    view.disabled = !state.shortlistOnly && !state.selected.length;
+    $('#shortlist-clear').disabled = !state.selected.length && !state.shortlistOnly;
+    $('#shortlist-share').hidden = !state.selected.length;
+    shareInput.value = shareURL();
+    const notice = $('#shortlist-notice');
+    notice.hidden = !linkNotice.invalid && !linkNotice.missing;
+    notice.textContent = linkNotice.invalid ? 'This shortlist link is invalid. Browse all residences to start a new selection.' :
+      linkNotice.missing + ' selected residence' + (linkNotice.missing === 1 ? ' is' : 's are') + ' no longer on the published board. Contact leasing to confirm options.';
+    const items = $('#shortlist-items');
+    items.replaceChildren();
+    state.selected.forEach((id) => {
+      const unit = board.find((u) => u.unitId === id);
+      const b = document.createElement('button');
+      b.type = 'button'; b.dataset.removeUnit = id;
+      b.textContent = id + (unit.status === 'pending' ? ' · Under application' : '') + ' ×';
+      b.setAttribute('aria-label', 'Remove ' + id + ' from shortlist');
+      b.addEventListener('click', () => toggleUnit(id, true));
+      items.appendChild(b);
+    });
+  }
+
+  function toggleUnit(id, fromChip) {
+    if (!board.some((u) => u.unitId === id)) return;
+    const selected = state.selected.includes(id);
+    if (!selected && state.selected.length >= shortlist.limit) {
+      status.textContent = 'Your shortlist is full. Remove a residence before adding another.';
+      return;
+    }
+    state.selected = selected ? state.selected.filter((x) => x !== id) : [...state.selected, id];
+    status.textContent = id + (selected ? ' removed. ' : ' added. ') + state.selected.length + ' of 5 selected.';
+    render();
+    const target = fromChip ? $('[data-remove-unit]', $('#shortlist-items')) : $$('[data-shortlist-unit]', body).find((b) => b.dataset.shortlistUnit === id);
+    (target || view).focus({ preventScroll: true });
+  }
 
   const BED_FILTERS = [
     { key: 'all', label: 'All residences' },
@@ -316,7 +364,7 @@ const Availability = (function () {
   ];
 
   function countFor(key) {
-    return INVENTORY.filter((u) => key === 'all' || u.bedrooms === Number(key)).length;
+    return board.filter((u) => (!state.shortlistOnly || state.selected.includes(u.unitId)) && (key === 'all' || u.bedrooms === Number(key))).length;
   }
 
   function buildPills() {
@@ -338,7 +386,7 @@ const Availability = (function () {
   }
 
   function rows() {
-    let list = INVENTORY.slice();
+    let list = board.filter((u) => !state.shortlistOnly || state.selected.includes(u.unitId));
     if (state.plan) list = list.filter((u) => u.floorPlanId === state.plan);
     else if (state.beds !== 'all') list = list.filter((u) => u.bedrooms === Number(state.beds));
 
@@ -377,27 +425,31 @@ const Availability = (function () {
         '<span class="u-rent">' + money(u.monthlyRent) + ' <small>/mo</small></span>' +
         '<span class="u-conc">' + shortConcession(u.concession) + '</span>' +
       '</span></td>' +
-      '<td><a class="u-call" href="' + PHONE_HREF + '">Ask about ' + u.unitId + '</a></td>' +
+      '<td><div class="u-actions"><a class="u-call" href="' + PHONE_HREF + '">Ask about ' + esc(u.unitId) + '</a>' +
+        '<button type="button" class="u-save" data-shortlist-unit="' + esc(u.unitId) + '" aria-pressed="' + state.selected.includes(u.unitId) + '" aria-label="' + (state.selected.includes(u.unitId) ? 'Remove ' : 'Save ') + esc(u.unitId) + (state.selected.includes(u.unitId) ? ' from' : ' to') + ' shortlist">' + (state.selected.includes(u.unitId) ? 'Saved ✓' : 'Save residence') + '</button></div></td>' +
     '</tr>';
   }
 
   function render() {
     const list = rows();
     body.innerHTML = list.map(rowHTML).join('');
+    renderShortlist();
+    $$('[data-shortlist-unit]', body).forEach((b) => b.addEventListener('click', () => toggleUnit(b.dataset.shortlistUnit, false)));
 
     $$('.pill', pillWrap).forEach((p) => {
       p.setAttribute('aria-pressed', String(!state.plan && p.dataset.beds === state.beds));
+      $('.pill__n', p).textContent = countFor(p.dataset.beds);
     });
 
     const totalAvailable = INVENTORY.filter((u) => u.status === 'available').length;
     const shown = list.length;
-    const scope = state.plan
+    const scope = state.shortlistOnly ? 'your shortlist' : state.plan
       ? 'plan ' + state.plan
       : state.beds === 'all' ? 'the building' : bedLabel(Number(state.beds)).toLowerCase() + ' residences';
 
     countEl.innerHTML = '<b>' + shown + '</b> ' + (shown === 1 ? 'residence' : 'residences') +
       ' showing in ' + scope + '. ' + totalAvailable +
-      ' on the board today, including residences under notice with future move-ins.';
+      ' listed as available across the building, including future move-ins.';
 
     if (chipRow) {
       chipRow.hidden = !state.plan;
@@ -414,14 +466,53 @@ const Availability = (function () {
 
   function filterToPlan(planId) {
     state.plan = planId;
+    state.shortlistOnly = false;
     render();
   }
 
+  view.addEventListener('click', () => {
+    state.shortlistOnly = !state.shortlistOnly;
+    state.beds = 'all'; state.plan = null;
+    status.textContent = state.shortlistOnly ? 'Showing your shortlist.' : 'Showing all published residences.';
+    render();
+  });
+  $('#shortlist-clear').addEventListener('click', () => {
+    state.selected = []; state.shortlistOnly = false; state.beds = 'all'; state.plan = null;
+    linkNotice = { missing: 0, invalid: false };
+    if (window.location.hash.startsWith('#availability?')) window.history.replaceState(null, '', window.location.pathname + window.location.search + '#availability');
+    status.textContent = 'Selection cleared. Showing all published residences.';
+    render();
+    $('[data-shortlist-unit]', body)?.focus({ preventScroll: true });
+  });
+  $('#shortlist-copy').addEventListener('click', async () => {
+    const url = shareURL();
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      status.textContent = url === shareURL() ? 'Link copied. You can paste it into a message.' : 'Previous selection copied. Copy again to share your updated selection.';
+    } catch {
+      if (!shareURL()) return;
+      shareInput.focus(); shareInput.select();
+      status.textContent = 'Copy was unavailable. Select and copy the link above manually.';
+    }
+  });
+  window.addEventListener('hashchange', () => {
+    if (!window.location.hash.startsWith('#availability?')) {
+      if (state.shortlistOnly) { state.shortlistOnly = false; state.plan = null; state.beds = 'all'; render(); }
+      return;
+    }
+    linkNotice = shortlist.read(window.location.hash, INVENTORY);
+    state.selected = linkNotice.ids; state.shortlistOnly = true; state.beds = 'all'; state.plan = null;
+    status.textContent = 'Shortlist link opened.';
+    render();
+    $('#availability').scrollIntoView();
+  });
   buildPills();
   if (sortSel) sortSel.addEventListener('change', () => { state.sort = sortSel.value; render(); });
   if (chipClear) chipClear.addEventListener('click', () => { state.plan = null; render(); });
   render();
 
+  if (initial.active) $('#availability').scrollIntoView();
   return { filterToPlan: filterToPlan };
 })();
 

@@ -202,6 +202,26 @@
       <p class="avail__note">Rents shown are net effective and reflect the concession listed on each residence. Gross rent is higher &mdash; call and we&rsquo;ll quote you both. <span class="avail__stamp">Last updated September 7, 2026.</span></p>
     </div>
 
+    <section class="shortlist" aria-labelledby="shortlist-title">
+      <div class="shortlist__heading">
+        <div><h3 id="shortlist-title">Your residence shortlist</h3>
+          <p>Select up to five residences. Use the link to reopen or share them. Demo inventory; a selection is not a reservation.</p></div>
+        <span id="shortlist-count">0 of 5 selected</span>
+      </div>
+      <p id="shortlist-notice" hidden></p>
+      <div id="shortlist-items" class="shortlist__items" aria-label="Selected residences"></div>
+      <div class="shortlist__actions">
+        <button type="button" id="shortlist-view" aria-pressed="false">View shortlist</button>
+        <button type="button" id="shortlist-clear">Clear selection</button>
+      </div>
+      <div id="shortlist-share" hidden>
+        <label for="shortlist-link">Shareable link · public residence details only</label>
+        <div class="shortlist__copy"><input id="shortlist-link" type="text" readonly spellcheck="false"><button type="button" id="shortlist-copy">Copy link</button></div>
+        <p>No message is sent automatically. Prices and availability may change.</p>
+      </div>
+      <p id="shortlist-status" role="status" aria-live="polite"></p>
+    </section>
+
     <div class="avail__controls reveal">
       <div class="pills" role="group" aria-label="Filter by bedrooms" id="bed-filters"></div>
       <div class="avail__sort">
@@ -541,6 +561,7 @@
 }
 </script>
 
+<script src="/shortlist.js" defer></script>
 <script src="/app.js" defer></script>
 </body>
 </html>
