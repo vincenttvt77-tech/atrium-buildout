@@ -956,6 +956,7 @@ function tourContent(s, m, it) {
   if (t.bookedAt && fmt.dateTime(t.bookedAt) !== '—') body += `<p>Booked by the assistant ${esc(fmt.dateTime(t.bookedAt, { inSentence: true }))}</p>`
   const actions = []
   if (t.booking && t.booking.externalId && A.can('operate')) actions.push(`<button type="button" class="btn btn-primary" data-pop="reschedule" data-write="calendar">Reschedule</button>`)
+  if (A.databaseMode && A.can('operate') && t.booking?.externalId) actions.push('<button type="button" class="btn" data-pop="confirmation">Email confirmation</button>')
   if (tel) actions.push(`<a class="btn" href="${esc(tel)}">Call</a>`)
   if (t.profile) actions.push(`<a class="btn btn-quiet" href="${esc(A.hashFor('leads', { phone: t.profile.phone }))}">Open lead</a>`)
   if (t.callId) actions.push(`<a class="btn btn-quiet" href="${esc(A.hashFor('calls', { id: t.callId }))}">See the call</a>`)
@@ -1003,6 +1004,7 @@ function showDetails(kind, it, anchorEl, seg) {
         body.addEventListener('click', event => {
           const action = event.target.closest('[data-pop]')?.dataset.pop
           const booking = it.slot && it.slot.booking
+          if (action === 'confirmation' && booking && A.can('operate')) { closePopover(false); A.tourConfirmations.open(booking.externalId) }
           if (action === 'reschedule' && booking && A.can('operate')) { closePopover(false); A.calendarActions.openReschedule(booking) }
           if (action === 'reschedule-sync' && booking && A.can('operate')) { closePopover(false); A.calendarActions.retryProjection(booking.externalId) }
         })
@@ -1038,6 +1040,7 @@ function showDetails(kind, it, anchorEl, seg) {
     const b = e.target.closest('[data-pop]'); if (!b) return
     if (b.dataset.pop === 'close') closePopover(true)
     else if (b.dataset.pop === 'reopen' && b.getAttribute('aria-disabled') !== 'true') reopen(findItem(it.key) || it)
+    else if (b.dataset.pop === 'confirmation' && it.slot?.booking && A.can('operate')) { closePopover(false); A.tourConfirmations.open(it.slot.booking.externalId) }
     else if (b.dataset.pop === 'reschedule' && it.slot?.booking && A.can('operate')) { closePopover(false); A.calendarActions.openReschedule(it.slot.booking) }
     else if (b.dataset.pop === 'reschedule-sync' && it.slot?.booking && A.can('operate')) { closePopover(false); A.calendarActions.retryProjection(it.slot.booking.externalId) }
   })

@@ -467,3 +467,9 @@ test('a definite reference-provider rejection keeps its actionable reason withou
   assert.equal(s.repository.action.lastErrorCode, 'email_consent_expired')
   assert.equal(s.calls.verify, 0)
 })
+
+test('a targeted worker rejects a mismatched repository claim before any connector IO', async () => {
+  const s = setup()
+  await assert.rejects(runWorkflowOnce({ ...s.options, actionId: 'different-action' }), /different workflow action/)
+  assert.deepEqual(s.calls, { dispatch: 0, verify: 0 })
+})

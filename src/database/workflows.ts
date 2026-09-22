@@ -9,7 +9,8 @@ import { canonicalJson, hashJson, validateReceiptInput } from '../workflows/vali
 import type { DatabaseConnection, DatabaseContext } from './connection.ts'
 import { assertCurrentPropertyAccess, propertyTransaction, scopeContext } from './scope.ts'
 import type { DocumentStore } from '../store/documents.ts'
-import { createTransactionDocumentStore } from './operations.ts'
+import { createTransactionDocumentStore, readLockedCalendar } from './operations.ts'
+import type { CalendarState } from '../calendar/types.ts'
 import { TransactionQueue } from './transaction-queue.ts'
 
 type Row = Record<string, any>
@@ -17,6 +18,8 @@ export interface WorkflowAttribution { requestId: string; configurationVersion: 
 export interface WorkflowTransaction {
   readonly documents: DocumentStore
   readonly workflows: WorkflowRepository
+  /** Locks the current calendar until the atomic admission finishes. No external IO. */
+  readCalendar(): Promise<CalendarState>
 }
 type TransactionExecutor = <T>(permission: Permission, work: (client: PoolClient) => Promise<T>, admission: boolean) => Promise<T>
 const STATES: WorkflowState[] = ['queued','running','retry_wait','verifying','succeeded','needs_review','cancelled']
@@ -153,7 +156,8 @@ export class PostgresWorkflowRepository implements WorkflowRepository {
         cancel: (id, reason, expectedRevision) => queue.run(() => bound.cancel(id, reason, expectedRevision)),
       })
       try {
-        const result = await work(Object.freeze({ documents, workflows }))
+        const result = await work(Object.freeze({ documents, workflows,
+          readCalendar: () => queue.run(() => readLockedCalendar(client, this.scope)) }))
         await queue.close()
         await documentUnit.close()
         return result
@@ -298,13 +302,14 @@ export class PostgresWorkflowRepository implements WorkflowRepository {
       return (await client.query(`${SELECT} WHERE ${conditions.join(' AND ')} ORDER BY a.created_at DESC,a.id DESC LIMIT $${parameters.length}`, parameters)).rows.map(action)
     })
   }
-  async claim(options: { workerId: string; leaseMs: number }): Promise<WorkflowClaim | null> {
-    if (!ID.test(options.workerId) || !integer(options.leaseMs, 10, 300_000)) invalid()
+  async claim(options: { workerId: string; leaseMs: number; actionId?: string }): Promise<WorkflowClaim | null> {
+    if (!ID.test(options.workerId) || !integer(options.leaseMs, 10, 300_000)
+      || (options.actionId !== undefined && !ID.test(options.actionId))) invalid()
     return this.tx('operate', async client => {
-      const row = (await client.query(`${SELECT} WHERE ${WHERE} AND (
+      const row = (await client.query(`${SELECT} WHERE ${WHERE} AND ($3::text IS NULL OR a.id=$3) AND (
         (o.state IN ('queued','retry_wait','verifying') AND o.available_at<=clock_timestamp())
         OR (o.state='running' AND o.lease_expires_at<=clock_timestamp()))
-        ORDER BY o.available_at,a.id LIMIT 1 FOR UPDATE OF o SKIP LOCKED`, this.ids())).rows[0]
+        ORDER BY o.available_at,a.id LIMIT 1 FOR UPDATE OF o SKIP LOCKED`, [...this.ids(), options.actionId ?? null])).rows[0]
       if (!row) return null
       const phase = row.state === 'running' ? (row.dispatch_started ? 'verify' : 'dispatch') : row.phase
       const token = randomUUID()

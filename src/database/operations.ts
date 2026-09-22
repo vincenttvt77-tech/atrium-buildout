@@ -198,6 +198,14 @@ export class PostgresDocumentStore implements DocumentStore {
   describe = description
 }
 
+/** Owning property transaction only. Shares the normal calendar mutation lock. */
+export async function readLockedCalendar(client: PoolClient, scope: AuthorizedScope): Promise<CalendarState> {
+  await lock(client, scope, 'calendar')
+  const row = (await client.query('SELECT state FROM atrium.calendars WHERE organization_id=$1 AND property_id=$2 FOR UPDATE',
+    [scope.organizationId, scope.propertyId])).rows[0]
+  return validateCalendar(row ? row.state : emptyCalendar())
+}
+
 /** Property-wide lock preserves existing capacity and emergency admission rules atomically. */
 export class PostgresCalendarStore implements CalendarStore {
   private mutationPermission: Permission

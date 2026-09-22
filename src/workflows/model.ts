@@ -92,7 +92,7 @@ export interface WorkflowRepository {
   accept(input: WorkflowReceiptInput): Promise<WorkflowReceiptResult>
   get(id: string): Promise<WorkflowAction | null>
   list(options?: { states?: WorkflowState[]; limit?: number; before?: { createdAt: string; id: string } }): Promise<WorkflowAction[]>
-  claim(options: { workerId: string; leaseMs: number }): Promise<WorkflowClaim | null>
+  claim(options: { workerId: string; leaseMs: number; actionId?: string }): Promise<WorkflowClaim | null>
   /** Recheck authorization, enforce attempt bound, then persist dispatchStarted/verify phase before IO. */
   startDispatch(claim: WorkflowClaim): Promise<ClaimDecision>
   /** Recheck authorization and increment bounded verification attempts before read-back IO. */

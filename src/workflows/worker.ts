@@ -9,6 +9,8 @@ export interface WorkflowWorkerOptions {
   /** Server-owned registry; no connector is enabled by this module. */
   connectors: ReadonlyMap<string, WorkflowConnector>
   workerId: string
+  /** Explicit operator processing must never consume another queued operation. */
+  actionId?: string
   leaseMs?: number
   timeoutMs?: number
   baseBackoffMs?: number
@@ -57,8 +59,15 @@ export async function runWorkflowOnce(options: WorkflowWorkerOptions): Promise<W
   }
   // Validate the clock before taking a lease, so a bad injected clock does not strand work.
   currentTime()
-  let claim = await repository.claim({ workerId: options.workerId, leaseMs })
+  if (options.actionId !== undefined && !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(options.actionId)) {
+    throw new WorkflowError('invalid_worker_configuration', 'Choose a valid workflow action.')
+  }
+  let claim = await repository.claim({ workerId: options.workerId, leaseMs,
+    ...(options.actionId !== undefined ? { actionId: options.actionId } : {}) })
   if (!claim) return { status: 'idle' }
+  if (options.actionId !== undefined && claim.action.id !== options.actionId) {
+    throw new WorkflowError('workflow_claim_changed', 'The repository claimed a different workflow action.')
+  }
   const actionId = claim.action.id
   const stale = (): WorkflowWorkerResult => ({ status: 'stale', actionId })
   const remaining = () => Date.parse(claim!.expiresAt) - currentTime()

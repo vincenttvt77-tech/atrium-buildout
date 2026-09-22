@@ -692,6 +692,13 @@ body.has-dialog { overflow: hidden; }
   .today-mode { font-size: .8125rem; }
   .status-col .status-summary > .btn { align-self: stretch; justify-content: center; }
 }
+
+/* Tour confirmations stay readable within the existing mobile dialog. */
+.tour-email-recipient{display:flex;flex-wrap:wrap;gap:.4rem .8rem;overflow-wrap:anywhere}
+.tour-email-subject{margin:1rem 0 .6rem}
+.tour-email-preview{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;font-size:.9rem;line-height:1.65;padding:1rem;border:1px solid var(--line,#dce3eb);border-radius:12px;background:var(--paper,#f7f9fc);max-width:100%;box-sizing:border-box}
+.tour-email-permission{display:flex;align-items:flex-start;gap:.7rem;margin:1rem 0;line-height:1.5;cursor:pointer}
+.tour-email-permission input{flex:0 0 18px;width:18px;height:18px;margin-top:3px;accent-color:#173d70}
 </style>
 <style>
 /* Tour calendar view (brief §10). Owner: calendar. Uses the shared navy/white workspace palette; the
@@ -2792,7 +2799,7 @@ let serviceSignInPending = false
 let bookingReviewWritesInFlight = 0
 let bookingReviewSignInPending = false
 let scopeEpoch = 0
-const PROPERTY_ENDPOINTS = new Set(['/api/vapi', '/api/calendar', '/api/leads', '/api/vapi-sync', '/api/workflows', '/api/resident-services', '/api/maintenance-plans'])
+const PROPERTY_ENDPOINTS = new Set(['/api/vapi', '/api/calendar', '/api/leads', '/api/vapi-sync', '/api/tour-confirmations', '/api/workflows', '/api/resident-services', '/api/maintenance-plans'])
 const propertyEndpoint = path => PROPERTY_ENDPOINTS.has(String(path).split('?')[0])
 const JSON_HEADERS = { accept: 'application/json' }
 function accessError(message, status = 409) { const error = new Error(message); error.status = status; error.propertyAccess = true; return error }
@@ -6631,6 +6638,7 @@ function tourContent(s, m, it) {
   if (t.bookedAt && fmt.dateTime(t.bookedAt) !== '—') body += `<p>Booked by the assistant ${esc(fmt.dateTime(t.bookedAt, { inSentence: true }))}</p>`
   const actions = []
   if (t.booking && t.booking.externalId && A.can('operate')) actions.push(`<button type="button" class="btn btn-primary" data-pop="reschedule" data-write="calendar">Reschedule</button>`)
+  if (A.databaseMode && A.can('operate') && t.booking?.externalId) actions.push('<button type="button" class="btn" data-pop="confirmation">Email confirmation</button>')
   if (tel) actions.push(`<a class="btn" href="${esc(tel)}">Call</a>`)
   if (t.profile) actions.push(`<a class="btn btn-quiet" href="${esc(A.hashFor('leads', { phone: t.profile.phone }))}">Open lead</a>`)
   if (t.callId) actions.push(`<a class="btn btn-quiet" href="${esc(A.hashFor('calls', { id: t.callId }))}">See the call</a>`)
@@ -6678,6 +6686,7 @@ function showDetails(kind, it, anchorEl, seg) {
         body.addEventListener('click', event => {
           const action = event.target.closest('[data-pop]')?.dataset.pop
           const booking = it.slot && it.slot.booking
+          if (action === 'confirmation' && booking && A.can('operate')) { closePopover(false); A.tourConfirmations.open(booking.externalId) }
           if (action === 'reschedule' && booking && A.can('operate')) { closePopover(false); A.calendarActions.openReschedule(booking) }
           if (action === 'reschedule-sync' && booking && A.can('operate')) { closePopover(false); A.calendarActions.retryProjection(booking.externalId) }
         })
@@ -6713,6 +6722,7 @@ function showDetails(kind, it, anchorEl, seg) {
     const b = e.target.closest('[data-pop]'); if (!b) return
     if (b.dataset.pop === 'close') closePopover(true)
     else if (b.dataset.pop === 'reopen' && b.getAttribute('aria-disabled') !== 'true') reopen(findItem(it.key) || it)
+    else if (b.dataset.pop === 'confirmation' && it.slot?.booking && A.can('operate')) { closePopover(false); A.tourConfirmations.open(it.slot.booking.externalId) }
     else if (b.dataset.pop === 'reschedule' && it.slot?.booking && A.can('operate')) { closePopover(false); A.calendarActions.openReschedule(it.slot.booking) }
     else if (b.dataset.pop === 'reschedule-sync' && it.slot?.booking && A.can('operate')) { closePopover(false); A.calendarActions.retryProjection(it.slot.booking.externalId) }
   })
@@ -7542,6 +7552,84 @@ async function retryProjection(externalId) {
   } catch (error) { if (!error.signedOut) A.toast(error.message, { kind: 'error' }); reload().catch(() => {}) }
 }
 A.calendarActions = { openUnitBlocks, openReschedule, retryProjection }
+})()
+</script>
+<script>
+/* Staff permission and delivery for the exact saved tour; never a fabricated send. */
+(function () {
+'use strict'
+const A = window.Atrium
+if (!A) return
+const esc = A.escapeHtml, endpoint = '/api/tour-confirmations'
+const validConfirmation = (row, id) => row && row.id === id && typeof row.message === 'string'
+  && typeof row.canProcess === 'boolean' && ['queued','running','retry_wait','verifying','succeeded','needs_review','cancelled'].includes(row.state)
+  && ['delivered','not_verified'].includes(row.delivery) && (row.delivery !== 'delivered' || row.state === 'succeeded')
+let active = null
+A.on('route', () => { if (active) active.close() })
+function open(externalId) {
+  if (!A.databaseMode || !A.can('operate') || typeof externalId !== 'string') return
+  if (active) active.close()
+  let closed = false, data = null, reloadRequired = false
+  const show = dialog => {
+    const row = data.confirmation
+    const canSend = data.ready === true && A.can('operate')
+    dialog.body.innerHTML = `<div class="tour-email-recipient"><span class="field-label">To</span><strong>${esc(data.preview.recipient)}</strong></div>` +
+      `<h4 class="tour-email-subject">${esc(data.preview.subject)}</h4><pre class="tour-email-preview">${esc(data.preview.body)}</pre>` +
+      (row ? `<p class="notice" role="status">${esc(row.message)}</p>` : canSend
+        ? '<label class="tour-email-permission"><input type="checkbox" name="emailPermission"><span>The prospect agreed to receive this tour confirmation at the email address above.</span></label>' : '') +
+      (!canSend ? `<p class="notice" role="status">${esc(data.reason || 'Email sending is unavailable for this property.')}</p>` : '')
+    const check = dialog.body.querySelector('[name="emailPermission"]')
+    const sync = () => dialog.setPrimary({ label: row ? row.state === 'queued' ? 'Send saved confirmation' : 'Check delivery' : 'Save permission and send',
+      disabled: !canSend || (row ? !row.canProcess : !check?.checked) })
+    check?.addEventListener('change', sync)
+    sync()
+  }
+  const load = async dialog => {
+    dialog.setBusy('Loading confirmation…'); dialog.setError(null)
+    try {
+      const next = await A.api.get(`${endpoint}?externalId=${encodeURIComponent(externalId)}`)
+      if (closed) return
+      if (!next?.preview || !/^[a-f0-9]{64}$/.test(next.preview.bookingSha256) || next.preview.externalId !== externalId || typeof next.preview.body !== 'string'
+        || typeof next.preview.recipient !== 'string' || typeof next.ready !== 'boolean'
+        || (next.confirmation !== null && !validConfirmation(next.confirmation, next.preview.bookingSha256))) throw new Error('The confirmation could not be verified. Reload before continuing.')
+      data = next; reloadRequired = false; show(dialog)
+    } catch (error) {
+      if (!closed) { reloadRequired = true; dialog.setError(error.message || 'Unable to load the saved tour.'); dialog.setPrimary({ label: 'Reload confirmation', disabled: false }) }
+    } finally { if (!closed) dialog.setBusy(null) }
+  }
+  active = A.dialog({ title: 'Tour confirmation', secondary: { label: 'Close' },
+    build(body, dialog) { body.innerHTML = '<p role="status">Loading the saved reservation…</p>'; void load(dialog) },
+    primary: { label: 'Loading…', disabled: true, async onClick(dialog) {
+      if (reloadRequired || !data) { await load(dialog); return }
+      if (data.ready !== true || !A.can('operate')) return
+      const existing = data.confirmation
+      if (!existing && !dialog.body.querySelector('[name="emailPermission"]')?.checked) return
+      if (existing && !existing.canProcess) return
+      dialog.setBusy(existing ? 'Checking confirmation…' : 'Saving permission…'); dialog.setError(null)
+      try {
+        if (!data.confirmation) {
+          const saved = await A.api.post(endpoint, { action: 'queue', externalId, bookingSha256: data.preview.bookingSha256, permissionConfirmed: true })
+          if (closed) return
+          if (!validConfirmation(saved?.confirmation, data.preview.bookingSha256)) throw new Error('The saved confirmation could not be verified. Reload to check it before retrying.')
+          data.confirmation = saved.confirmation
+        }
+        dialog.setBusy('Checking delivery…')
+        const result = await A.api.post(endpoint, { action: 'process', confirmationId: data.confirmation.id })
+        if (closed) return
+        if (!validConfirmation(result?.confirmation, data.confirmation.id)) throw new Error('The delivery result could not be verified. Reload to check it.')
+        data.confirmation = result.confirmation; show(dialog)
+      } catch (error) {
+        if (!closed) {
+          reloadRequired = true
+          dialog.setError((error.message || 'The result is uncertain.') + ' Reload to check the saved confirmation before trying again.')
+          dialog.setPrimary({ label: 'Reload confirmation', disabled: false })
+        }
+      } finally { if (!closed) dialog.setBusy(null) }
+    } },
+    onClose() { closed = true; active = null },
+  })
+}
+A.tourConfirmations = { open }
 })()
 </script>
 <script>

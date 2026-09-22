@@ -673,3 +673,10 @@ body.has-dialog { overflow: hidden; }
   .today-mode { font-size: .8125rem; }
   .status-col .status-summary > .btn { align-self: stretch; justify-content: center; }
 }
+
+/* Tour confirmations stay readable within the existing mobile dialog. */
+.tour-email-recipient{display:flex;flex-wrap:wrap;gap:.4rem .8rem;overflow-wrap:anywhere}
+.tour-email-subject{margin:1rem 0 .6rem}
+.tour-email-preview{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;font-size:.9rem;line-height:1.65;padding:1rem;border:1px solid var(--line,#dce3eb);border-radius:12px;background:var(--paper,#f7f9fc);max-width:100%;box-sizing:border-box}
+.tour-email-permission{display:flex;align-items:flex-start;gap:.7rem;margin:1rem 0;line-height:1.5;cursor:pointer}
+.tour-email-permission input{flex:0 0 18px;width:18px;height:18px;margin-top:3px;accent-color:#173d70}
