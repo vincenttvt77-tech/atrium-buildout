@@ -1,4 +1,4 @@
-/* Property work queue. Inspection and deliberate recovery; no connector execution. */
+/* Property work queue. Inspection, deliberate recovery and verification-only email checks. */
 (function () {
 'use strict'
 const A = window.Atrium
@@ -14,7 +14,22 @@ const STATES = {
   needs_review: ['Needs review', 'This action is held. Review the recorded issue before deciding what happens next.', 'warn'],
   cancelled: ['Cancelled in queue', 'This queued action was stopped before dispatch. No external booking or work order was cancelled.', 'neutral'],
 }
+const DELIVERY = {
+  not_sent: ['Not sent', 'No email dispatch is recorded. This view cannot send it.'],
+  accepted: ['Accepted by email provider', 'Delivery is not yet verified. Check the existing email; no new message is sent.'],
+  delivered: ['Delivery verified', 'The provider reported delivery for the exact saved email. This does not prove that the recipient read it.'],
+  unknown: ['Submission unconfirmed', 'An email may have been submitted, but its acknowledgement is missing. Do not send another copy.'],
+  needs_review: ['Email needs review', 'Automatic checks are paused. Review the issue before choosing the next step.'],
+}
 const ERRORS = {
+  provider_accepted: 'The email provider accepted this message. Delivery still needs verification.',
+  email_delivery_unverified: 'The provider has not reported verified delivery yet.',
+  email_readback_unavailable: 'The email provider could not return a usable delivery result.',
+  email_acknowledgement_missing: 'The send acknowledgement is missing. Delivery cannot be verified automatically.',
+  email_delivery_failed: 'The provider reported a failed or rejected delivery. Review the address and delivery issue; this control cannot resend.',
+  email_provider_payload_mismatch: 'The provider email did not match the saved message. An administrator must investigate.',
+  email_binding_unavailable: 'The reviewed email sender is unavailable for this property.',
+
   original_authorization_changed: 'The access that originally authorized this action has changed. An administrator must review its authority.',
   original_authorization_revoked: 'The access that originally authorized this action is no longer valid.',
   original_configuration_changed: 'The property configuration has changed since this action was prepared.',
@@ -48,9 +63,14 @@ function readItem(value) {
     || !count(value.dispatchAttempts) || !count(value.verificationAttempts) || !Number.isSafeInteger(value.maxAttempts)
     || value.maxAttempts < 1 || value.maxAttempts > 20 || typeof value.dispatchStarted !== 'boolean'
     || typeof value.canReplay !== 'boolean' || typeof value.canCancel !== 'boolean' || typeof value.revision !== 'string' || !REVISION.test(value.revision)) throw badResponse()
+  if (typeof value.canVerifyEmail !== 'boolean' || !(value.emailDelivery === null || own(DELIVERY, value.emailDelivery))
+    || value.emailDelivery !== null && (value.kind !== 'leasing_email' || value.connector !== 'resend_email_v1')
+    || value.emailDelivery === 'delivered' && value.state !== 'succeeded'
+    || value.emailDelivery === 'needs_review' && value.state !== 'needs_review'
+    || value.canVerifyEmail && (value.emailDelivery === null || !value.dispatchStarted || value.phase !== 'verify' || !FILTER_STATES.active.includes(value.state))) throw badResponse()
   // Keep only the operator projection. Provider bodies and caller data never enter the view.
   return Object.freeze(Object.fromEntries(['id', 'kind', 'connector', 'state', 'phase', 'createdAt', 'updatedAt', 'availableAt',
-    'completedAt', 'lastErrorCode', 'dispatchAttempts', 'verificationAttempts', 'maxAttempts', 'dispatchStarted', 'revision', 'canReplay', 'canCancel']
+    'completedAt', 'lastErrorCode', 'dispatchAttempts', 'verificationAttempts', 'maxAttempts', 'dispatchStarted', 'revision', 'canReplay', 'canCancel', 'emailDelivery', 'canVerifyEmail']
     .map(key => [key, value[key]])))
 }
 function readPage(body, filter) {
@@ -75,7 +95,7 @@ function readReceipt(body, command, previous) {
 }
 const human = value => A.text.capitalise(String(value).replace(/[_.:-]+/g, ' '))
 const icon = name => `<span class="ico">${A.icon(name)}</span>`
-const stateChip = item => A.html.chip(`chip-${STATES[item.state][2]}`, item.state === 'needs_review' ? 'warning' : item.state === 'succeeded' ? 'check' : 'clock', STATES[item.state][0])
+const stateChip = item => A.html.chip(`chip-${STATES[item.state][2]}`, item.state === 'needs_review' ? 'warning' : item.state === 'succeeded' ? 'check' : 'clock', (item.emailDelivery ? DELIVERY[item.emailDelivery] : STATES[item.state])[0])
 function issueText(item) { return item.lastErrorCode ? ERRORS[item.lastErrorCode] || 'The last attempt needs attention. Share the issue code with your administrator if the next step is unclear.' : '' }
 function nextStep(item) {
   if (item.state === 'cancelled') return 'None — this queued action is stopped'
@@ -111,24 +131,28 @@ function listHtml() {
   if (!loaded) return '<div class="wq-empty"><h3>Work queue not loaded</h3><p>Refresh to check this property’s saved actions.</p></div>'
   if (!items.length) return `<div class="wq-empty">${icon(filter === 'attention' ? 'check-circle' : 'clock')}<h3>${filter === 'attention' ? 'No actions need review in this result' : 'No actions in this view'}</h3><p>${filter === 'attention' ? 'Use In progress or All work to inspect other saved actions.' : 'Only actions saved to this property’s work queue appear here.'}</p></div>`
   return '<ul class="wq-list">' + items.map(item => `<li><button type="button" class="wq-row" data-select="${esc(item.id)}" data-key="work:${esc(item.id)}" aria-current="${item.id === selected ? 'true' : 'false'}" aria-controls="wq-detail">` +
-    `<span class="wq-row-top"><strong>${esc(human(item.kind))}</strong>${stateChip(item)}</span><span class="wq-row-context">${esc(human(item.connector))} · ${esc(A.fmt.dateTime(item.createdAt))}</span>` +
+    `<span class="wq-row-top"><strong>${esc(human(item.kind))}</strong>${stateChip(item)}</span><span class="wq-row-context">${esc(item.emailDelivery ? 'Email' : human(item.connector))} · ${esc(A.fmt.dateTime(item.createdAt))}</span>` +
     `<span class="wq-row-note">${esc(item.lastErrorCode ? issueText(item) : STATES[item.state][1])}</span></button></li>`).join('') + '</ul>'
 }
 function detailHtml(item) {
   if (!item) return '<div class="wq-empty wq-detail-empty">' + icon('clock') + '<h2>Select an action</h2><p>See its last recorded result and the next safe step.</p></div>'
   const blocked = uncertain.has(item.id), mayManage = canManage && A.can('configure') && !blocked && !loading && !error
+  const delivery = item.emailDelivery ? DELIVERY[item.emailDelivery] : STATES[item.state]
+  const issue = item.lastErrorCode && !(item.emailDelivery && ['provider_accepted','email_delivery_unverified'].includes(item.lastErrorCode))
+  const mayCheck = item.canVerifyEmail && A.can('operate') && !blocked && !loading && !error
   const replay = mayManage && item.canReplay, cancel = mayManage && item.canCancel && !item.dispatchStarted
-  return `<div class="wq-detail-title">${stateChip(item)}<h2 tabindex="-1" data-key="work-detail-heading">${esc(human(item.kind))}</h2><p>${esc(human(item.connector))}</p></div>` +
-    `<section class="wq-next"><span class="page-eyebrow">LAST RECORDED RESULT</span><h3>${esc(STATES[item.state][0])}</h3><p>${esc(STATES[item.state][1])}</p>` +
-    (item.lastErrorCode ? `<div class="wq-issue"><strong>What needs attention</strong><p>${esc(issueText(item))}</p><span class="small">Issue code: <code>${esc(item.lastErrorCode)}</code></span></div>` : '') + '</section>' +
+  return `<div class="wq-detail-title">${stateChip(item)}<h2 tabindex="-1" data-key="work-detail-heading">${esc(human(item.kind))}</h2><p>${esc(item.emailDelivery ? 'Requested leasing email' : human(item.connector))}</p></div>` +
+    `<section class="wq-next"><span class="page-eyebrow">LAST RECORDED RESULT</span><h3>${esc(delivery[0])}</h3><p>${esc(delivery[1])}</p>` +
+    (issue ? `<div class="wq-issue"><strong>What needs attention</strong><p>${esc(issueText(item))}</p><details class="small"><summary>Technical details</summary><code>${esc(item.lastErrorCode)}</code></details></div>` : '') + '</section>' +
     `<dl class="wq-facts"><div><dt>Saved</dt><dd>${esc(A.fmt.dateTime(item.createdAt))}</dd></div><div><dt>Last changed</dt><dd>${esc(A.fmt.dateTime(item.updatedAt))}</dd></div>` +
     `<div><dt>Next step</dt><dd>${esc(nextStep(item))}</dd></div>` +
-    `<div><dt>Attempts recorded</dt><dd>${item.dispatchAttempts} dispatch · ${item.verificationAttempts} verification</dd></div>` +
-    `<div><dt>Dispatch limit</dt><dd>${item.maxAttempts} attempts</dd></div>` +
+    (item.emailDelivery ? `<div><dt>Delivery checks recorded</dt><dd>${item.verificationAttempts}</dd></div>`
+      : `<div><dt>Attempts recorded</dt><dd>${item.dispatchAttempts} dispatch · ${item.verificationAttempts} verification</dd></div><div><dt>Dispatch limit</dt><dd>${item.maxAttempts} attempts</dd></div>`) +
     (['queued', 'retry_wait', 'verifying'].includes(item.state) ? `<div><dt>Eligible from</dt><dd>${esc(A.fmt.dateTime(item.availableAt))}</dd></div>` : '') + '</dl>' +
     `<p class="wq-timezone small">All times in ${esc(A.property.timeZoneLabel)}.</p>` +
     (blocked ? A.html.banner('warn', 'The last change is unconfirmed. Reload this page and check the saved state before trying another change.', { actionsHtml: '<button type="button" class="btn" data-command="reload" data-key="reload-after-change">Reload page</button>' }) : '') +
-    (!canManage || !A.can('configure') ? '<p class="wq-access">An administrator can review recovery options. Your access here is read only.</p>' : '') +
+    (mayCheck ? `<button type="button" class="btn btn-primary" data-command="verify-email" data-key="email:${esc(item.id)}" data-permission="operate" ${actionBusy ? 'disabled' : ''}>${actionBusy ? 'Checking delivery…' : 'Check email delivery'}</button>` : '') +
+    (!canManage || !A.can('configure') ? '<p class="wq-access">An administrator can review recovery options. Recovery changes require administrator access.</p>' : '') +
     (replay || cancel ? `<section class="wq-recovery"><h3>Recovery options</h3><p>Changes affect this saved action only. They do not run the work or contact anyone.</p><div class="wq-actions">` +
       (replay ? `<button type="button" class="btn btn-primary" data-command="replay" data-key="replay:${esc(item.id)}" data-permission="configure" ${actionBusy ? 'disabled' : ''}>${item.dispatchStarted ? 'Requeue verification' : 'Requeue action'}</button>` : '') +
       (cancel ? `<button type="button" class="btn" data-command="cancel" data-key="cancel:${esc(item.id)}" data-permission="configure" ${actionBusy ? 'disabled' : ''}>Cancel queued action</button>` : '') + '</div></section>' : '') +
@@ -190,6 +214,31 @@ function select(id) {
     heading?.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
   }
 }
+async function verifyEmail() {
+  const original = items.find(item => item.id === selected)
+  if (!visible() || panel || loading || actionBusy || error || !original?.canVerifyEmail || !A.can('operate') || uncertain.has(original.id)) return
+  const turn = generation
+  actionBusy = true; paint({ list: false })
+  try {
+    const body = await bounded(A.api.post('/api/email-reconciliation', { actionId: original.id, expectedRevision: original.revision }, { doing: 'Checking email delivery' }))
+    if (turn !== generation || !visible()) return
+    if (body?.verificationOnly !== true) throw badResponse()
+    const changed = readItem(body.action)
+    if (changed.id !== original.id || changed.kind !== original.kind || changed.connector !== original.connector
+      || changed.createdAt !== original.createdAt || changed.dispatchAttempts !== original.dispatchAttempts
+      || changed.dispatchStarted !== original.dispatchStarted || changed.verificationAttempts < original.verificationAttempts) throw badResponse()
+    items = items.map(item => item.id === changed.id ? changed : item)
+    if (!FILTER_STATES[filter].includes(changed.state)) items = items.filter(item => item.id !== changed.id)
+    selected = items.some(item => item.id === selected) ? selected : items[0]?.id || null
+    A.toast(DELIVERY[changed.emailDelivery]?.[1] || 'Delivery is not yet verified.', { kind: changed.emailDelivery === 'delivered' ? 'success' : 'info' })
+    A.announce(DELIVERY[changed.emailDelivery]?.[0] || 'Delivery check finished')
+  } catch (failure) {
+    if (turn !== generation || !visible() || failure.signedOut || failure.propertyAccess) return
+    if ([400,403,404,409].includes(failure.status) && !failure.badJson) error = 'The delivery check was refused or this action changed. Refresh the queue to review its current state.'
+    else { uncertain.add(original.id); error = 'The check could not be confirmed. No new email was requested. Reload the page to see the saved result.' }
+  } finally { actionBusy = false; paint() }
+}
+
 function recover(kind) {
   const original = items.find(item => item.id === selected)
   if (!visible() || panel || loading || actionBusy || error || !original || !canManage || !A.can('configure') || uncertain.has(original.id)
@@ -201,7 +250,7 @@ function recover(kind) {
   panel = A.dialog({ title: kind === 'cancel' ? 'Cancel this queued action?' : original.dispatchStarted ? 'Requeue verification?' : 'Requeue this action?',
     build(body) {
       body.innerHTML = `<p class="prose">${kind === 'cancel' ? 'This stops the saved action before dispatch. It does not cancel a booking or work order in another system.' : original.dispatchStarted ? 'An earlier attempt may have reached the provider. Only verification will be requeued; the original action will not be blindly repeated.' : 'This prepares the saved action to be picked up again. It does not complete the work.'}</p>` +
-        `<p class="wq-form-note">The automatic runner is not connected. No provider call or notification will be sent by this control.</p>` +
+        `<p class="wq-form-note">This control only changes the queue. Enabled delivery checks may later inspect an existing email; they cannot send another copy.</p>` +
         `<div class="field"><label class="field-label" for="wq-reason">Reason for this change</label><select class="input" id="wq-reason">${choices.map(([key, label]) => `<option value="${key}">${label}</option>`).join('')}</select></div>`
     }, secondary: { label: 'Keep unchanged' },
     primary: { label: kind === 'cancel' ? 'Cancel queued action' : 'Requeue', danger: kind === 'cancel', async onClick(dialog) {
@@ -255,7 +304,7 @@ const view = {
   mount(el) {
     root = el; root.classList.add('wq-view')
     root.innerHTML = `<header class="page-hero wq-hero"><div><span class="page-eyebrow">OPERATIONS · ${esc(A.property.name)}</span><h1 tabindex="-1">Work queue</h1><p>See what is waiting, understand what needs attention, and choose the next safe step.</p></div><div class="page-hero-actions"><button type="button" class="btn" data-command="refresh" data-key="work-refresh">Refresh queue</button></div></header>` +
-      `<div class="wq-runner">${icon('info')}<div><strong>Automatic execution is not connected</strong><p>Saved work can be inspected and prepared here. Requeuing does not run or complete it.</p></div></div>` +
+      `<div class="wq-runner">${icon('info')}<div><strong>Track work and verify email delivery</strong><p>Check an existing email without sending another copy. Saved queue state is not proof of delivery; refresh to see the latest result.</p></div></div>` +
       `<div class="wq-toolbar"><div class="wq-filters" role="group" aria-label="Filter work queue">${FILTERS.map(([key, label]) => `<button type="button" class="btn" data-filter="${key}" data-key="work-filter:${key}" aria-pressed="false">${label}</button>`).join('')}</div><p class="wq-loaded" role="status"></p></div>` +
       '<div class="wq-errors"></div><div class="wq-workspace"><section class="wq-browser" aria-label="Saved actions"><div class="wq-results" aria-busy="false"></div><div class="wq-pagination"><button type="button" class="btn" data-command="more" data-key="work-more" hidden>Load more actions</button></div></section><section class="wq-detail" id="wq-detail" aria-label="Selected action"></section></div>'
     root.addEventListener('click', event => {
@@ -267,6 +316,7 @@ const view = {
       else if (button.dataset.command === 'refresh') load()
       else if (button.dataset.command === 'more') load(true)
       else if (button.dataset.command === 'reload') location.reload()
+      else if (button.dataset.command === 'verify-email') verifyEmail()
       else if (['replay', 'cancel'].includes(button.dataset.command)) recover(button.dataset.command)
     })
     A.on('route', route => { if (route.name !== 'workflows') deactivate() })

@@ -47,9 +47,14 @@ export function recoveryCommand(input: unknown): RecoveryCommand {
 }
 
 /** A deliberately small projection: inputs, caller data, lease tokens and provider bodies stay server-side. */
-export function workflowSummary(action: WorkflowAction & { revision?: string }, canManage: boolean) {
+export function workflowSummary(action: WorkflowAction & { revision?: string }, canManage: boolean, canOperate = false) {
   if (!revision(action.revision)) throw new WorkflowError('workflow_invalid_record', 'The work queue is temporarily unavailable.')
-  return { id: action.id, kind: action.kind, connector: action.connector, state: action.state, phase: action.phase,
+  const email = action.kind === 'leasing_email' && action.connector === 'resend_email_v1'
+  const emailDelivery = !email ? null : action.state === 'succeeded' && action.evidence?.deliveryStatus === 'delivered' ? 'delivered'
+    : action.state === 'needs_review' ? 'needs_review' : !action.dispatchStarted ? 'not_sent'
+    : action.providerReference ? 'accepted' : 'unknown'
+  return { emailDelivery, canVerifyEmail: email && canOperate && action.dispatchStarted && action.phase === 'verify'
+      && ['queued','running','retry_wait','verifying'].includes(action.state), id: action.id, kind: action.kind, connector: action.connector, state: action.state, phase: action.phase,
     createdAt: action.createdAt, updatedAt: action.updatedAt, availableAt: action.availableAt, completedAt: action.completedAt,
     lastErrorCode: action.lastErrorCode, dispatchAttempts: action.dispatchAttempts, verificationAttempts: action.verificationAttempts,
     maxAttempts: action.maxAttempts, dispatchStarted: action.dispatchStarted, revision: action.revision,

@@ -51,7 +51,11 @@ dispatched. Every recovery request includes the displayed row revision, so a
 stale screen cannot change work that has advanced. Requeueing uncertain work
 resumes verification; it does not blindly repeat a provider write. The view omits
 raw inputs, provider responses and execution credentials. It is unavailable in
-legacy mode, and no background runner or real connector is enabled by this UI.
+legacy mode. Staff with `operate` access can check an existing email’s delivery
+without sending another copy. A separately configured property worker can perform
+these checks after a call ends; no unattended schedule is installed by source
+publication. First sends remain outside the Work queue. See
+[email delivery](docs/email-delivery.md) for setup and evidence limits.
 An empty queue is not proof that every business workflow has been integrated.
 
 The PostgreSQL **Service** workspace adds staff-recorded maintenance requests,

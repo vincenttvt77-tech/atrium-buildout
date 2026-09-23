@@ -302,15 +302,28 @@ export class PostgresWorkflowRepository implements WorkflowRepository {
       return (await client.query(`${SELECT} WHERE ${conditions.join(' AND ')} ORDER BY a.created_at DESC,a.id DESC LIMIT $${parameters.length}`, parameters)).rows.map(action)
     })
   }
-  async claim(options: { workerId: string; leaseMs: number; actionId?: string }): Promise<WorkflowClaim | null> {
+  /** Bounded oldest-due selection; first sends and other connectors cannot starve checks. */
+  async dueEmailVerifications(limit = 5): Promise<WorkflowAction[]> {
+    if (!integer(limit, 1, 10)) invalid()
+    return this.tx('operate', async client => (await client.query(`${SELECT} WHERE ${WHERE}
+      AND a.kind='leasing_email' AND a.connector='resend_email_v1' AND o.dispatch_started
+      AND ((o.phase='verify' AND o.state IN ('queued','retry_wait','verifying') AND o.available_at<=clock_timestamp())
+        OR (o.state='running' AND o.lease_expires_at<=clock_timestamp()))
+      ORDER BY o.available_at,a.id LIMIT $3`, [...this.ids(), limit])).rows.map(action))
+  }
+  async claim(options: { workerId: string; leaseMs: number; actionId?: string; verifyOnly?: boolean; expectedRevision?: string }): Promise<WorkflowClaim | null> {
     if (!ID.test(options.workerId) || !integer(options.leaseMs, 10, 300_000)
-      || (options.actionId !== undefined && !ID.test(options.actionId))) invalid()
+      || (options.actionId !== undefined && !ID.test(options.actionId))
+      || (options.verifyOnly !== undefined && typeof options.verifyOnly !== 'boolean')
+      || (options.expectedRevision !== undefined && (!options.actionId || !REVISION.test(options.expectedRevision)))) invalid()
     return this.tx('operate', async client => {
-      const row = (await client.query(`${SELECT} WHERE ${WHERE} AND ($3::text IS NULL OR a.id=$3) AND (
+      const row = (await client.query(`${SELECT} WHERE ${WHERE} AND ($3::text IS NULL OR a.id=$3)
+        AND (NOT $4::boolean OR (o.dispatch_started AND (o.phase='verify' OR o.state='running'))) AND (
         (o.state IN ('queued','retry_wait','verifying') AND o.available_at<=clock_timestamp())
         OR (o.state='running' AND o.lease_expires_at<=clock_timestamp()))
-        ORDER BY o.available_at,a.id LIMIT 1 FOR UPDATE OF o SKIP LOCKED`, [...this.ids(), options.actionId ?? null])).rows[0]
+        ORDER BY o.available_at,a.id LIMIT 1 FOR UPDATE OF o SKIP LOCKED`, [...this.ids(), options.actionId ?? null, options.verifyOnly ?? false])).rows[0]
       if (!row) return null
+      checkRevision(row, options.expectedRevision)
       const phase = row.state === 'running' ? (row.dispatch_started ? 'verify' : 'dispatch') : row.phase
       const token = randomUUID()
       await client.query(`UPDATE atrium.outbox_messages SET state='running',phase=$4,lease_token=$5::uuid,worker_id=$6,

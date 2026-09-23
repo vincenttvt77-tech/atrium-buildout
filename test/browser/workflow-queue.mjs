@@ -7,6 +7,9 @@ import { createServer } from 'node:http'
 import { once } from 'node:events'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { pathToFileURL } from 'node:url'
+import { createEmailReconciliationHandler } from '../../api/email-reconciliation.ts'
+import { emailWorkflowAction, emailMessageDigest } from '../../src/email/workflow.ts'
+import { ResendTransport } from '../../src/email/render.ts'
 import { mkdir } from 'node:fs/promises'
 import { createFoundationTestDatabase, seedFoundationTestDatabase } from '../../scripts/lib/foundation-test.mjs'
 import { createDatabaseRuntime } from '../../src/application/runtime.ts'
@@ -22,7 +25,7 @@ const routes = new Map(await Promise.all(['dashboard', 'mfa', 'account', 'proper
   .map(async name => [`/api/${name}`, (await import(`../../api/${name}.ts`)).default])))
 const originalFetch = globalThis.fetch
 const oldMode = process.env.ATRIUM_RUNTIME_MODE
-let db, server, browser, runtime, origin
+let db, server, browser, runtime, origin, diagnosticPage
 const errors = [], failures = [], checks = []
 const artifacts = process.env.ATRIUM_BROWSER_ARTIFACTS
 if (artifacts) await mkdir(artifacts, { recursive: true })
@@ -31,7 +34,9 @@ try {
   db = await createFoundationTestDatabase()
   const { password } = await seedFoundationTestDatabase(db.admin)
   const bundle = { property: { id: 'property-a1', organizationId: 'organization-a', buildingName: 'Synthetic browser building',
-    timeZone: 'America/New_York', jurisdiction: 'NY', tourSettings: defaultSettings() }, inventory: [], floorplans: [], knowledge: [] }
+    timeZone: 'America/New_York', jurisdiction: 'NY', tourSettings: defaultSettings(), voiceShortlistEmail: {
+      provider:'resend',organizationId:'organization-a',propertyId:'property-a1',from:'Leasing <leasing@example.test>',replyTo:'leasing@example.test',
+      reviewExpiresAt:new Date(Date.now()+86400000).toISOString() } }, inventory: [], floorplans: [], knowledge: [] }
   await db.admin.query(`INSERT INTO atrium.property_configurations(organization_id,property_id,version,status,configuration,inventory_read_at,inventory_source,published_at)
     VALUES('organization-a','property-a1',1,'published',$1,now(),'synthetic-browser',now())`, [JSON.stringify(bundle)])
   await db.admin.query("UPDATE atrium.properties SET published_configuration_version=1 WHERE id='property-a1'")
@@ -77,8 +82,8 @@ try {
   browser = await chromium.launch({ headless: true, ...(process.env.ATRIUM_CHROME_EXECUTABLE ? { executablePath: process.env.ATRIUM_CHROME_EXECUTABLE } : {}) })
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' })
   await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.fulfill({ status: 204, body: '' }))
-  const page = await context.newPage()
-  page.setDefaultTimeout(12000)
+  const page = await context.newPage(); diagnosticPage = page
+  page.setDefaultTimeout(20000) // Longer than the UI’s own 15-second request boundary.
   page.on('pageerror', error => errors.push({ name: error.name, message: error.message }))
   page.on('console', message => { if (message.type() === 'error') errors.push({ console: message.text() }) })
   page.on('response', response => { if (response.url().startsWith(origin) && response.status() >= 500) failures.push(response.status()) })
@@ -96,7 +101,7 @@ try {
   await page.waitForFunction(() => document.querySelectorAll('.wq-view [data-select]').length === 1)
   assert.equal(await rows.first().getAttribute('data-select'), uncertain.id)
   assert.equal(await queue.locator('[data-command="cancel"]').count(), 0)
-  assert.match(await queue.innerText(), /Automatic execution is not connected/)
+  assert.match(await queue.innerText(), /Track work and verify email delivery/)
   assert.doesNotMatch(await queue.innerText(), /do-not-display-private-context/)
   checks.push('Real scoped action state is shown; possibly dispatched work cannot be cancelled; private context is omitted')
   await queue.locator('[data-filter="all"]').click()
@@ -171,9 +176,70 @@ try {
   checks.push('A committed write with a malformed response blocks further recovery until page reload confirms the saved state')
   assert.equal((await repository.get(uncertain.id)).dispatchAttempts, 1)
   assert.equal((await repository.get(cancellable.id)).dispatchStarted, false)
+  // The actual local HTTP endpoint uses an injected synthetic provider readback. Any send is a failure.
+  const emailKey = randomUUID(), message = { to:'synthetic@example.test',from:'Leasing <leasing@example.test>',replyTo:'leasing@example.test',subject:'Your matches',html:'<p>Synthetic matches</p>' }
+  const input = emailWorkflowAction(message, { purpose:'leasing_shortlist',recipient:message.to,contentSha256:emailMessageDigest(message),
+    recordedAt:new Date(Date.now()-1000).toISOString(),expiresAt:new Date(Date.now()+60000).toISOString(),receiptId:emailKey }, emailKey)
+  async function seedEmail() {
+    const marker=randomUUID()
+    const action=(await repository.accept({ source:'synthetic-browser-email',eventId:marker,payload:{synthetic:true},actions:[{...input,operationKey:marker}] })).actions[0]
+    const claimed=await repository.claim({workerId:'synthetic-browser-email',leaseMs:30000,actionId:action.id})
+    const started=await repository.startDispatch(claimed);assert.equal(started.status,'ready')
+    const reference=randomUUID()
+    await repository.settle(started.claim,{state:'verifying',code:'provider_accepted',delayMs:0,providerReference:reference})
+    return {...action,reference}
+  }
+  let providerReads=0, currentEmail=await seedEmail()
+  routes.set('/api/email-reconciliation',createEmailReconciliationHandler({provider:{configured:true,transport:()=>new ResendTransport('synthetic',{fetch:async(url,init)=>{
+    assert.equal(init.method,'GET');assert.equal(String(url),`https://api.resend.com/emails/${currentEmail.reference}`);providerReads++
+    return new Response(JSON.stringify({object:'email',id:currentEmail.reference,from:message.from,to:[message.to],reply_to:[message.replyTo],subject:message.subject,html:message.html,
+      cc:[],bcc:[],last_event:'delivered',tags:[{name:'atrium_operation',value:currentEmail.operationKey},{name:'atrium_input',value:currentEmail.inputSha256}]}),{status:200})
+  }})}}))
+  await queue.locator('[data-command="refresh"]').click()
+  await queue.locator(`[data-select="${currentEmail.id}"]`).click()
+  await queue.locator('[data-command="verify-email"]').waitFor({state:'visible'})
+  let resizeTransients = 0
+  for(const width of [320,390,1280,320,390,1280,320,390,1280]) {
+    await page.setViewportSize({width,height:900})
+    if (await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)) resizeTransients++
+    // Inspect painted responsive layout, not the intermediate viewport update.
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))))
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`Email details fit ${width}px`)
+    await queue.locator('[data-command="verify-email"]').focus()
+    if(artifacts)await page.screenshot({path:`${artifacts}/email-check-${width}.png`})
+  }
+  await queue.locator('[data-command="verify-email"]').press('Enter')
+  await queue.locator('.wq-detail h3').filter({hasText:'Delivery verified'}).waitFor()
+  assert.equal(providerReads,1);assert.equal((await repository.get(currentEmail.id)).dispatchAttempts,1)
+  assert.match(await queue.locator('.wq-detail').innerText(),/does not prove that the recipient read it/)
+  checks.push(`Responsive resize checks: ${resizeTransients} intermediate viewport overflows; zero after two animation frames`)
+  checks.push('Email acceptance, keyboard check and exact delivered result work at 320/390/1280px without another send')
+  currentEmail=await seedEmail()
+  await queue.locator('[data-command="refresh"]').click()
+  await queue.locator(`[data-select="${currentEmail.id}"]`).click()
+  await page.route('**/api/email-reconciliation',async route=>{
+    const result=await route.fetch();assert.equal(result.status(),200)
+    await route.fulfill({status:200,contentType:'application/json',body:'{broken'})
+  })
+  await queue.locator('[data-command="verify-email"]').click()
+  await queue.getByText('The check could not be confirmed.',{exact:false}).waitFor()
+  assert.equal((await repository.get(currentEmail.id)).state,'succeeded');assert.equal(providerReads,2)
+  assert.equal(await queue.locator('[data-command="verify-email"]').count(),0)
+  await page.unroute('**/api/email-reconciliation')
+  await queue.locator('[data-command="reload"]').click()
+  await queue.locator(`[data-select="${currentEmail.id}"]`).click()
+  await queue.locator('.wq-detail h3').filter({hasText:'Delivery verified'}).waitFor()
+  assert.equal(providerReads,2)
+  checks.push('Lost delivery-check response requires reload and recovers the committed result without repeated provider IO')
   assert.deepEqual(failures, [], 'No local HTTP 5xx responses')
   assert.deepEqual(errors, [], 'No browser console/page or server errors')
   console.log(JSON.stringify({ status: 'passed', checks, hostedVerified: false, providerExecuted: false }, null, 2))
+} catch (error) {
+  if (diagnosticPage) {
+    console.error(JSON.stringify({ errors, failures, overflow: await diagnosticPage.evaluate(() => ({ viewport:innerWidth, documentWidth:document.documentElement.scrollWidth, elements:[...document.querySelectorAll('body *')].filter(el=>el.getBoundingClientRect().right>innerWidth+1).slice(-30).map(el=>({tag:el.tagName,css:el.className,right:el.getBoundingClientRect().right,text:el.textContent.slice(0,100)})) })), pageText: await diagnosticPage.locator('body').innerText().catch(() => 'unavailable') }))
+    if (artifacts) await diagnosticPage.screenshot({ path: `${artifacts}/failure.png`, fullPage: true }).catch(() => {})
+  }
+  throw error
 } finally {
   globalThis.fetch = originalFetch
   await browser?.close()

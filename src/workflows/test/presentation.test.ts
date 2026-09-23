@@ -44,3 +44,18 @@ test('queue projection omits provider payloads, actor identities and execution s
   assert.equal(workflowSummary({ ...action, state: 'queued', phase: 'dispatch', dispatchStarted: false }, true).canCancel, true)
   assert.throws(() => workflowSummary({ ...action, revision: '' }, true), { code: 'workflow_invalid_record' })
 })
+
+test('email queue distinguishes no send, missing acknowledgement, acceptance, review and verified delivery', () => {
+  const action = { id: 'email', kind: 'leasing_email', connector: 'resend_email_v1', state: 'verifying', phase: 'verify',
+    dispatchStarted: true, revision: 'f'.repeat(64), providerReference: 'private-reference' } as WorkflowAction
+  assert.equal(workflowSummary(action, false, true).emailDelivery, 'accepted')
+  assert.equal(workflowSummary(action, false, true).canVerifyEmail, true)
+  assert.equal(workflowSummary(action, true, false).canVerifyEmail, false)
+  assert.equal(workflowSummary({ ...action, providerReference: null }, true).emailDelivery, 'unknown')
+  assert.equal(workflowSummary({ ...action, dispatchStarted: false, phase: 'dispatch' }, true, true).canVerifyEmail, false)
+  assert.equal(workflowSummary({ ...action, dispatchStarted: false }, true).emailDelivery, 'not_sent')
+  assert.equal(workflowSummary({ ...action, state: 'needs_review' }, true, true).canVerifyEmail, false)
+  assert.equal(workflowSummary({ ...action, state: 'needs_review' }, true).emailDelivery, 'needs_review')
+  assert.notEqual(workflowSummary({ ...action, state: 'succeeded' }, true).emailDelivery, 'delivered')
+  assert.equal(workflowSummary({ ...action, state: 'succeeded', evidence: { deliveryStatus: 'delivered' } }, true).emailDelivery, 'delivered')
+})

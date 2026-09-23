@@ -28,7 +28,7 @@ export default async function handler(req: any, res: any) {
       const rows = await repository.list({ ...query, limit: query.limit + 1 })
       const visible = rows.slice(0, query.limit)
       const last = visible.at(-1)
-      const actions = visible.map(action => workflowSummary(action, canManage))
+      const actions = visible.map(action => workflowSummary(action, canManage, property.scope.permissions.includes('operate')))
       await property.revalidate()
       send({ actions, canManage, nextCursor: rows.length > query.limit && last ? { createdAt: last.createdAt, id: last.id } : null })
       return
@@ -46,7 +46,7 @@ export default async function handler(req: any, res: any) {
       ? await repository.replay(command.id, command.reason, command.expectedRevision)
       : await repository.cancel(command.id, command.reason, command.expectedRevision)
     await property.revalidate()
-    send({ action: workflowSummary(action, canManage) })
+    send({ action: workflowSummary(action, canManage, property.scope.permissions.includes('operate')) })
   } catch (error) {
     if (error instanceof WorkflowError) {
       const known = ['workflow_invalid_input', 'workflow_not_found', 'workflow_replay_refused', 'workflow_cancel_refused', 'workflow_revision_conflict']

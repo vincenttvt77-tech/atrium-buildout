@@ -1,6 +1,8 @@
 /* Saved-action workspace. Scoped styles; no dashboard state or provider claims. */
 [data-postgres-only][hidden] { display: none !important; }
 .wq-view { min-width: 0; }
+.wq-view .chip { max-width: 100%; white-space: normal; height: auto; min-height: 28px; overflow-wrap: anywhere; }
+.wq-view .chip .ico { flex-shrink: 0; }
 .wq-hero .page-hero-actions { margin: 0; flex-shrink: 0; }
 .wq-runner { display: flex; gap: 13px; padding: 18px 22px; margin-bottom: 24px; color: #2B466A; background: #EDF3FC; border: 1px solid #D6E2F3; border-radius: 12px; }
 .wq-runner > .ico { flex: 0 0 22px; margin-top: 2px; }

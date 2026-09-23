@@ -1,6 +1,6 @@
 # Durable email submission and delivery evidence
 
-The email adapter runs through Atrium's existing property-authorized workflow repository and worker. The managed PostgreSQL calendar includes a staff **Email confirmation** flow for an exact saved tour. The voice handler also implements permissioned apartment-shortlist email. These are **not enabled for customer delivery** by source publication. Reviewed property senders, a secure provider key and managed runtime activation are required; voice also needs tool/prompt publication and channel acceptance. No automatic runner or live sending domain is installed by these changes. SMS remains separate work.
+The email adapter runs through Atrium's existing property-authorized workflow repository and worker. The managed PostgreSQL calendar includes a staff **Email confirmation** flow for an exact saved tour. The voice handler also implements permissioned apartment-shortlist email. These are **not enabled for customer delivery** by source publication. Reviewed property senders, a secure provider key and managed runtime activation are required; voice also needs tool/prompt publication and channel acceptance. The source includes a bounded verification-only runner; no schedule or live sending domain is installed by these changes. SMS remains separate work.
 
 ## Permissioned voice shortlist email
 
@@ -14,7 +14,7 @@ Permission, action, receipt, outbox and the call's single accepted email record 
 
 `send` returns queued, accepted, unconfirmed, review-needed or delivered evidence. `status` can verify an already dispatched email; it cannot initiate a queued first send. `prepare` after an accepted request returns its existing status without processing or replacing it. Verification uses the existing exact provider readback and can continue after the five-minute permission expires. An unknown submission is never blindly resent. Sender review and original channel/configuration authority still gate recovery.
 
-There is no unattended runner yet: the initial send attempts submission during the tool request, and a later same-call status request can verify it. Delivery after the call ends may remain pending in the Work queue until the runner/reconciliation work is completed. A provider acknowledgement is never reported as delivery. No automatic marketing, SMS, tour confirmation, call transfer or website-triggered callback is added by this tool.
+The initial send attempts submission during the tool request, and a later same-call status request can verify it. The post-call reconciliation endpoint below and staff Work queue control can check existing dispatches after hangup. Until a reviewed scheduler is activated, unattended delivery checks do not run. A provider acknowledgement is never reported as delivery. No automatic marketing, SMS, tour confirmation, call transfer or website-triggered callback is added by this tool.
 
 The source tool contract now has eight function tools, and its fingerprint differs from the earlier published assistant. Source changes are **not** Vapi publication. Keep the existing assistant/draft unchanged until the managed backend, reviewed property settings, provider access and exact tool/prompt release have passed a controlled real-channel test. Do not publish these instructions onto an older backend.
 
@@ -94,4 +94,37 @@ The staff flow adds real local HTTP/database tests for authorization, property i
 
 Voice HTTP/database tests also exercise exact permission, corrections, stale/changed source, tenant/channel boundaries, concurrent tools, atomic rollback, lost provider/browser acknowledgements, queued status without dispatch and closed/emergency calls. These are synthetic-provider results, not real Vapi speech or inbox evidence.
 
-Next implement a reviewed scoped runner, delivery-event reconciliation and historical email visibility. Enable integrations only on an approved test property with a verified sender and secure provider key; send only to an owner-approved test recipient and check the real inbox plus stored evidence. Hosted PostgreSQL activation and the separate pending production release are prerequisites for customer rollout, not implied by passing local tests.
+Next activate a reviewed scoped schedule in an approved environment, add authenticated delivery-event history and link email actions directly to their originating call/tour. The Work queue now exposes bounded delivery status and staff checks. Enable integrations only on an approved test property with a verified sender and secure provider key; send only to an owner-approved test recipient and check the real inbox plus stored evidence. Hosted PostgreSQL activation and the separate pending production release are prerequisites for customer rollout, not implied by passing local tests.
+
+
+## Post-call delivery checks (AT-138; not activated)
+
+`GET /api/email-reconciliation?runnerId=<registered-worker>` is a scheduler-facing entry point. It verifies the exact `Authorization: Bearer <CRON_SECRET>` before constructing the runtime or looking up any property. Atrium requires a non-whitespace ASCII secret of 32–256 characters. Configure it once in the deployment secret store, not in a staff login or URL. The runner ID is not a credential: it selects an active `channel_bindings` record whose provider is `email-reconciler`, with `read` and `operate` capabilities and an exact organization/property. No user-supplied tenant, recipient, provider reference, message body or connector override is accepted.
+
+The selected property must separately publish this reviewed opt-in alongside its purpose-specific sender:
+
+```json
+{
+  "emailReconciliation": {
+    "enabled": true,
+    "organizationId": "organization-example",
+    "propertyId": "property-example",
+    "runnerId": "reviewed-property-worker",
+    "reviewExpiresAt": "2026-09-29T12:00:00Z"
+  }
+}
+```
+
+This is an illustrative configuration, not a provisioned account or schedule. The review deadline must be in the future and within 30 days. Publication must precede admitting the emails to be checked: a later configuration version holds older work for review. This increment reuses the existing registered-channel and workflow schema; it adds no database migration or portfolio-wide database privilege. A reviewed provisioning workflow and portfolio scheduling remain separate work.
+
+Each invocation selects at most five oldest due `leasing_email`/`resend_email_v1` actions with a possible prior dispatch. It claims each exact action under a database row lock. First sends, future retries, active leases, held work, completed actions and other connectors stay untouched. Expired leases may resume verification. Each provider read has a two-second bound inside a 15-second lease; database work adds time. Backoff is 30–60 seconds initially, then grows to a one-hour ceiling, with the existing per-generation attempt bound. Overlapping invocations rely on durable claim fences; missing acknowledgements never permit a new send. Original actor authority and the original configuration are checked before and after provider IO. A sender whose review has expired performs no provider lookup and consumes bounded verification attempts, without blocking eligible later emails.
+
+`POST /api/email-reconciliation` is separate staff access. It requires a signed-in operator, same-origin JSON, frozen property/configuration headers and exactly `{actionId, expectedRevision}`. It can inspect/verify one possibly dispatched email and cannot start a queued first send or clear a review hold. The expected revision is checked again under the claim lock. The **Work queue → All work / In progress → Check email delivery** control uses this route. Read-only users see status but cannot check; administrators retain separately audited requeue controls. Unknown responses require reloading saved state. No browser response contains recipients, HTML, provider references or credentials.
+
+The UI distinguishes not sent, provider accepted, submission unconfirmed, delivery verified and review needed. “Delivered” requires exact readback evidence; it never means a human read the message. This is action history in the Work queue, not yet a contact-level correspondence timeline. A returned `inspected` count is the number of candidates examined, not proof of that many network requests or completed deliveries; a concurrent invocation may already own the lease.
+
+Before enabling an unattended schedule, verify managed runtime, exact sender/domain access, provider credential, registered runner, current property publication, schedule cadence, endpoint duration, observability and one permissioned real inbox result. No cron entry has been added to `vercel.json`. Do not enable a schedule against the legacy production runtime or use this work to bypass the pending production release approval.
+
+Vercel sends `CRON_SECRET` as a bearer header. Its schedule delivery can be missed or duplicated, concurrent runs can overlap, and failed invocations are not automatically retried. Durable queue state and subsequent invocations handle recovery here; health/lag alerting still needs operational wiring. [Vercel cron management](https://vercel.com/docs/cron-jobs/manage-cron-jobs) (checked September 23, 2026).
+
+Vercel currently lists daily, imprecise execution on Hobby and minute-level scheduling on Pro/Enterprise, with function usage charges/limits applying. Do not promise prompt post-call checks on the free daily schedule; select a funded cadence or separately reviewed scheduler during activation. [Vercel cron usage and pricing](https://vercel.com/docs/cron-jobs/usage-and-pricing) (checked September 23, 2026).

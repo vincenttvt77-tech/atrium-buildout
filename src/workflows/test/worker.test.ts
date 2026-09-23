@@ -473,3 +473,25 @@ test('a targeted worker rejects a mismatched repository claim before any connect
   await assert.rejects(runWorkflowOnce({ ...s.options, actionId: 'different-action' }), /different workflow action/)
   assert.deepEqual(s.calls, { dispatch: 0, verify: 0 })
 })
+
+test('verification-only worker refuses an adapter that claims a first dispatch', async () => {
+  const s = setup()
+  await assert.rejects(runWorkflowOnce({ ...s.options, verifyOnly: true }), { code: 'workflow_claim_changed' })
+  assert.deepEqual(s.calls, { dispatch: 0, verify: 0 })
+})
+test('verification-only authoritative absence cannot schedule another write, even for idempotent connectors', async () => {
+  const s = setup({ dispatchStarted: true, dispatchAttempts: 1, phase: 'verify', state: 'verifying' })
+  s.connector.idempotentWrites = true
+  const result = await runWorkflowOnce({ ...s.options, verifyOnly: true })
+  assert.equal(result.status, 'settled')
+  assert.equal(s.repository.action.state, 'needs_review')
+  assert.equal(s.repository.action.lastErrorCode, 'verification_absent_no_resend')
+  assert.deepEqual(s.calls, { dispatch: 0, verify: 1 })
+})
+test('verification-only worker rejects malformed constraints before taking a lease', async () => {
+  const s = setup()
+  for (const patch of [{ verifyOnly: 'yes' }, { expectedRevision: 'a'.repeat(64) }, { actionId: 'action-1', expectedRevision: 'bad' }]) {
+    await assert.rejects(runWorkflowOnce({ ...s.options, ...patch } as WorkflowWorkerOptions), { code: 'invalid_worker_configuration' })
+  }
+  assert.deepEqual(s.repository.events, [])
+})

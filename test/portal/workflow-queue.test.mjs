@@ -13,7 +13,7 @@ const result = (body, status = 200) => ({ ok: status >= 200 && status < 300, sta
 const item = (overrides = {}) => ({ id: 'action-one', kind: 'maintenance.dispatch', connector: 'vendor_system', state: 'needs_review', phase: 'dispatch',
   createdAt: '2032-06-01T14:30:00.123456Z', updatedAt: '2032-06-01T14:32:00.123Z', availableAt: '2032-06-01T14:32:00.123Z',
   completedAt: '2032-06-01T14:32:00.123Z', lastErrorCode: 'connector_unavailable', dispatchAttempts: 0,
-  verificationAttempts: 0, maxAttempts: 5, dispatchStarted: false, revision: 'a'.repeat(64), canReplay: true, canCancel: true, ...overrides })
+  verificationAttempts: 0, maxAttempts: 5, dispatchStarted: false, revision: 'a'.repeat(64), canReplay: true, canCancel: true, emailDelivery: null, canVerifyEmail: false, ...overrides })
 
 /** Real app + view scripts and API wrapper; controlled DOM/HTTP/timers, no provider calls. */
 function portal({ legacy = false, permissions = ['read', 'operate', 'configure'], mobile = false, reducedMotion = false } = {}) {
@@ -87,7 +87,7 @@ function portal({ legacy = false, permissions = ['read', 'operate', 'configure']
     options.build(body, dialog); dialogs.push(dialog); return dialog
   }
   runInNewContext(queueSource.replace("A.register('workflows', view)",
-    "window.queueTest = { view, load, select, recover, readItem, readPage, readReceipt, detailHtml, listHtml, paint, state: () => ({ items, cursor, selected, filter, loading, loaded, error, checkedAt, canManage, actionBusy }) }; A.register('workflows', view)"), context)
+    "window.queueTest = { view, load, select, recover, verifyEmail, readItem, readPage, readReceipt, detailHtml, listHtml, paint, state: () => ({ items, cursor, selected, filter, loading, loaded, error, checkedAt, canManage, actionBusy }) }; A.register('workflows', view)"), context)
   const helpers = window.queueTest
   A.navigate = (name, params = {}) => {
     location.hash = A.hashFor(name, params)
@@ -140,8 +140,8 @@ test('only validated projected fields render and local timestamps remain propert
   assert.match(ui.html(), /Maintenance dispatch/); assert.match(ui.html(), /Central Time/)
   assert.match(ui.html(), /9:30 AM/); assert.match(ui.html(), /connection is not available/)
   assert.doesNotMatch(ui.html(), /DO_NOT_DISPLAY|NO_RAW_BODY|NO_REFERENCE/)
-  assert.match(ui.root.innerHTML, /Automatic execution is not connected/)
-  assert.match(ui.root.innerHTML, /Requeuing does not run or complete it/)
+  assert.match(ui.root.innerHTML, /Track work and verify email delivery/)
+  assert.match(ui.root.innerHTML, /Check an existing email without sending another copy/)
   assert.equal(plain(ui.helpers.state()).items[0].input, undefined)
   for (const bad of [item({ state: '__proto__' }), item({ kind: '<img onerror=alert(1)>' }), item({ revision: ['a'.repeat(64)] }), item({ canReplay: 'true' })])
     assert.throws(() => ui.helpers.readItem(bad), /unreadable/)
@@ -320,4 +320,38 @@ test('a mutation does not advance the timestamp for the entire queue snapshot', 
   ui.respond({ scope: ui.scope, executionEnabled: false, action: item({ revision: 'b'.repeat(64), state: 'queued', completedAt: null }) })
   await ui.dialogs.at(-1).click()
   assert.equal(ui.helpers.state().checkedAt, lastRead)
+})
+
+const email = patch => item({ kind: 'leasing_email', connector: 'resend_email_v1', state: 'verifying', phase: 'verify',
+  completedAt: null, lastErrorCode: 'provider_accepted', dispatchStarted: true, dispatchAttempts: 1,
+  canCancel: false, canReplay: false, emailDelivery: 'accepted', canVerifyEmail: true, ...patch })
+test('operating staff verify delivery without recovery permission or a new send', async () => {
+  const ui = portal({ permissions: ['read','operate'] })
+  ui.respond(ui.page([email()], { canManage: false })); ui.location.hash = '#/workflows?state=all'; await ui.mount()
+  assert.match(ui.html(), /Check email delivery/)
+  ui.respond({ scope: ui.scope, verificationOnly: true, action: email({ state: 'succeeded', emailDelivery: 'delivered', canVerifyEmail: false, verificationAttempts: 1, revision: 'b'.repeat(64) }) })
+  await ui.helpers.verifyEmail()
+  assert.equal(ui.requests.at(-1).path, '/api/email-reconciliation')
+  assert.deepEqual(JSON.parse(ui.requests.at(-1).body), { actionId: 'action-one', expectedRevision: 'a'.repeat(64) })
+  assert.match(ui.html(), /Delivery verified/)
+  assert.match(ui.toasts.at(-1).text, /does not prove that the recipient read it/)
+  assert.doesNotMatch(ui.html(), /data-command="verify-email"/)
+})
+test('unconfirmed delivery response blocks repeated checking until reload, never claims delivery', async () => {
+  const ui = portal();ui.respond(ui.page([email()]));ui.location.hash = '#/workflows?state=all';await ui.mount()
+  ui.respond({ scope: ui.scope, verificationOnly: true, action: email({ id: 'wrong-action' }) })
+  await ui.helpers.verifyEmail();const count = ui.requests.length
+  await ui.helpers.verifyEmail();assert.equal(ui.requests.length,count)
+  assert.match(ui.html(), /No new email was requested/);assert.doesNotMatch(ui.html(), /Delivery verified/)
+  assert.equal(ui.toasts.length,0)
+})
+test('delivery check ignores a stale response after navigation and refuses forged cross-property receipts', async () => {
+  const ui = portal();ui.respond(ui.page([email()]));ui.location.hash = '#/workflows?state=all';await ui.mount()
+  let release;ui.setHandler(() => new Promise(resolve => { release=resolve }))
+  const pending=ui.helpers.verifyEmail();ui.A.navigate('today')
+  release(result({ scope: ui.scope, verificationOnly: true, action: email({ state:'succeeded',emailDelivery:'delivered' }) }));await pending
+  assert.equal(ui.toasts.length,0)
+  const other=portal();other.respond(other.page([email()]));other.location.hash='#/workflows?state=all';await other.mount();other.markBooted()
+  other.respond({ scope:{...other.scope,propertyId:'foreign'},verificationOnly:true,action:email({state:'succeeded',emailDelivery:'delivered'}) })
+  await other.helpers.verifyEmail();assert.equal(other.A.can('read'),false);assert.equal(other.toasts.length,0)
 })

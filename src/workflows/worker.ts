@@ -11,6 +11,9 @@ export interface WorkflowWorkerOptions {
   workerId: string
   /** Explicit operator processing must never consume another queued operation. */
   actionId?: string
+  /** Atomically claim only a potentially dispatched action; never arrange a retry write. */
+  verifyOnly?: boolean
+  expectedRevision?: string
   leaseMs?: number
   timeoutMs?: number
   baseBackoffMs?: number
@@ -59,14 +62,22 @@ export async function runWorkflowOnce(options: WorkflowWorkerOptions): Promise<W
   }
   // Validate the clock before taking a lease, so a bad injected clock does not strand work.
   currentTime()
+  if (options.verifyOnly !== undefined && typeof options.verifyOnly !== 'boolean'
+    || options.expectedRevision !== undefined && (!options.actionId || !/^[a-f0-9]{64}$/.test(options.expectedRevision))) {
+    throw new WorkflowError('invalid_worker_configuration', 'Choose a valid workflow revision.')
+  }
   if (options.actionId !== undefined && !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(options.actionId)) {
     throw new WorkflowError('invalid_worker_configuration', 'Choose a valid workflow action.')
   }
-  let claim = await repository.claim({ workerId: options.workerId, leaseMs,
+  let claim = await repository.claim({ workerId: options.workerId, leaseMs, verifyOnly: options.verifyOnly ?? false,
+    ...(options.expectedRevision !== undefined ? { expectedRevision: options.expectedRevision } : {}),
     ...(options.actionId !== undefined ? { actionId: options.actionId } : {}) })
   if (!claim) return { status: 'idle' }
   if (options.actionId !== undefined && claim.action.id !== options.actionId) {
     throw new WorkflowError('workflow_claim_changed', 'The repository claimed a different workflow action.')
+  }
+  if (options.verifyOnly && !dispatchWasPersisted(claim)) {
+    throw new WorkflowError('workflow_claim_changed', 'A delivery check cannot dispatch work.')
   }
   const actionId = claim.action.id
   const stale = (): WorkflowWorkerResult => ({ status: 'stale', actionId })
@@ -159,6 +170,7 @@ export async function runWorkflowOnce(options: WorkflowWorkerOptions): Promise<W
         return review(reason(result.code, 'verification_mismatch'))
       case 'not_found': {
         if (result.authoritative !== true) break
+        if (options.verifyOnly) return review('verification_absent_no_resend')
         if (dispatchResult?.status === 'rejected' && !dispatchResult.retryable) return review(reason(dispatchResult.code, 'connector_rejected'))
         if (claim!.action.dispatchAttempts >= claim!.action.maxAttempts) return review('dispatch_attempts_exhausted')
         // A known no-effect rejection is safe even without provider idempotency.
