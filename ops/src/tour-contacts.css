@@ -1,0 +1,9 @@
+.tour-contact-form { display: grid; gap: 16px; min-width: 0; }
+.tour-contact-form p { margin: 0; overflow-wrap: anywhere; }
+.tour-contact-form .field { min-width: 0; }
+.tour-contact-form input, .tour-contact-form textarea { box-sizing: border-box; width: 100%; }
+.tour-contact-form > .btn { justify-self: start; min-height: 44px; white-space: normal; }
+.tour-contact-history { border-top: 1px solid var(--line, #dce3ed); padding-top: 16px; overflow-wrap: anywhere; }
+.tour-contact-history ol { list-style: none; padding: 0; display: grid; gap: 16px; }
+.tour-contact-history li { border-left: 3px solid #bacce4; padding-left: 12px; display: grid; gap: 5px; }
+.tour-contact-history li p { font-size: 13px; line-height: 1.5; }

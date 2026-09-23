@@ -578,7 +578,7 @@ let serviceSignInPending = false
 let bookingReviewWritesInFlight = 0
 let bookingReviewSignInPending = false
 let scopeEpoch = 0
-const PROPERTY_ENDPOINTS = new Set(['/api/vapi', '/api/calendar', '/api/leads', '/api/vapi-sync', '/api/tour-confirmations', '/api/email-reconciliation', '/api/callbacks', '/api/recordings', '/api/workflows', '/api/resident-services', '/api/maintenance-plans'])
+const PROPERTY_ENDPOINTS = new Set(['/api/vapi', '/api/calendar', '/api/leads', '/api/vapi-sync', '/api/tour-confirmations', '/api/tour-contacts', '/api/email-reconciliation', '/api/callbacks', '/api/recordings', '/api/workflows', '/api/resident-services', '/api/maintenance-plans'])
 const propertyEndpoint = path => PROPERTY_ENDPOINTS.has(String(path).split('?')[0])
 const JSON_HEADERS = { accept: 'application/json' }
 function accessError(message, status = 409) { const error = new Error(message); error.status = status; error.propertyAccess = true; return error }
@@ -1699,8 +1699,8 @@ function toursOn(s, ymd) {
       const linked = leadForBooking(s, b, identities), p = linked && linked.profile
       out.push({ externalId: calendarBooking(s, b, identities) ? b.externalId : null, rowKey: `saved:${index}`,
         slotId: b.slotId, startsAt, endsAt: b.endsAt || (sl && sl.endsAt) || null,
-        name: (p && p.name) || String(b.prospectName ?? '').trim() || 'Tour', phone: p ? p.phone : normalisePhone(b.prospectPhone) || null,
-        email: p ? p.email || null : b.prospectEmail || null, unitId: b.unitId ?? null,
+        name: String(b.prospectName ?? '').trim() || 'Tour', phone: p ? p.phone : normalisePhone(b.prospectPhone) || null,
+        email: b.prospectEmail || null, unitId: b.unitId ?? null,
         callId: linked ? linked.booking.callId || b.interactionId || null : null, source: p ? 'lead' : 'calendar',
         profile: p || null, past: (toTime(startsAt) ?? 0) < now })
     }

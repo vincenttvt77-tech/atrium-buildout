@@ -110,7 +110,7 @@ function nextStep(item) {
 }
 
 // Deliberately separate from the shared Calls/Leads/Calendar polling state.
-let root = null, active = false, generation = 0, filter = 'attention', items = [], cursor = null, selected = null
+let root = null, active = false, generation = 0, filter = 'attention', targetAction = null, items = [], cursor = null, selected = null
 let loaded = false, loading = false, error = '', checkedAt = null, canManage = false, actionBusy = false, panel = null
 const uncertain = new Set()
 const visible = () => Boolean(root && active && A.can('read') && A.route().name === 'workflows')
@@ -174,7 +174,7 @@ function paint({ list = true } = {}) {
   refresh.disabled = loading || actionBusy; refresh.textContent = loading ? 'Refreshing…' : 'Refresh queue'
   const message = loading ? (loaded ? 'Refreshing the saved queue…' : 'Loading the saved queue…')
     : checkedAt ? `${items.length} ${items.length === 1 ? 'action' : 'actions'} shown · checked ${A.fmt.time(checkedAt)} · refresh for current status` : 'No queue data received yet'
-  root.querySelector('.wq-loaded').textContent = message
+  root.querySelector('.wq-loaded').textContent = targetAction !== null ? 'Selected saved action · choose a filter above to return to the queue' : message
   replaceHtml(root.querySelector('.wq-errors'), error ? A.html.banner('warn', error) : '')
   const listEl = root.querySelector('.wq-results')
   listEl.setAttribute('aria-busy', String(loading))
@@ -187,23 +187,26 @@ function paint({ list = true } = {}) {
 }
 async function load(more = false) {
   if (!visible() || actionBusy || more && (!cursor || loading)) return
-  const turn = ++generation, requestedFilter = filter, previousCursor = more ? cursor : null
+  const turn = ++generation, requestedFilter = filter, requestedAction = targetAction, previousCursor = more ? cursor : null
   const focusMore = more && document.activeElement?.dataset?.key === 'work-more'
   loading = true; error = ''; paint({ list: !loaded })
-  const params = new URLSearchParams({ state: requestedFilter, limit: '25' })
+  const params = new URLSearchParams(requestedAction !== null ? { id: requestedAction } : { state: requestedFilter, limit: '25' })
   if (previousCursor) { params.set('beforeCreatedAt', previousCursor.createdAt); params.set('beforeId', previousCursor.id) }
   try {
+    if (requestedAction !== null && !ID.test(requestedAction)) throw badResponse()
     const page = readPage(await bounded(A.api.get(`/api/workflows?${params}`)), requestedFilter)
     if (turn !== generation || !visible()) return
+    if (requestedAction !== null && (page.actions.length !== 1 || page.actions[0].id !== requestedAction || page.nextCursor !== null)) throw badResponse()
     if (previousCursor && page.nextCursor?.id === previousCursor.id && page.nextCursor.createdAt === previousCursor.createdAt) throw badResponse()
     const combined = more ? new Map(items.map(item => [item.id, item])) : new Map()
     for (const item of page.actions) combined.set(item.id, item)
     items = [...combined.values()]; cursor = page.nextCursor; canManage = page.canManage; loaded = true; checkedAt = new Date().toISOString()
-    if (!items.some(item => item.id === selected)) selected = items[0]?.id || null
+    if (!items.some(item => item.id === selected)) selected = requestedAction !== null ? requestedAction : items[0]?.id || null
     A.announce(`${items.length} saved ${items.length === 1 ? 'action' : 'actions'} shown. ${FILTERS.find(([key]) => key === filter)[1]}.`)
   } catch (failure) {
     if (turn !== generation || !visible() || failure.signedOut || failure.propertyAccess) return
-    error = failure.timeout ? 'The queue has not responded yet. The request may still be pending; try Refresh queue to check again.'
+    if (requestedAction !== null) { items = []; selected = null; cursor = null; loaded = false }
+    error = requestedAction !== null ? 'This saved action could not be verified in the current property. No other action has been selected. Refresh to check again.' : failure.timeout ? 'The queue has not responded yet. The request may still be pending; try Refresh queue to check again.'
       : loaded ? 'The queue could not be refreshed. These are the last loaded actions; recovery controls are paused until a successful refresh.'
         : 'The work queue could not be loaded. No current queue status is available. Try Refresh queue.'
   } finally {
@@ -352,8 +355,9 @@ const view = {
   },
   render() {
     if (!A.can('read') || !A.databaseMode || A.route().name !== 'workflows') return
-    const requested = A.route().params.state, next = FILTERS.some(([key]) => key === requested) ? requested : 'attention'
-    if (next !== filter) { filter = next; items = []; cursor = null; selected = null; loaded = false; checkedAt = null; error = ''; if (panel) panel.close(); active = false }
+    const params = A.route().params, nextAction = Object.hasOwn(params, 'action') ? params.action : null
+    const requested = params.state, next = nextAction !== null ? 'all' : FILTERS.some(([key]) => key === requested) ? requested : 'attention'
+    if (next !== filter || nextAction !== targetAction) { generation++; filter = next; targetAction = nextAction; items = []; cursor = null; selected = null; loaded = false; checkedAt = null; error = ''; if (panel) panel.close(); active = false }
     const entered = !active; active = true
     paint()
     if (entered) load()

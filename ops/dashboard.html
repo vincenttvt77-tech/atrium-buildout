@@ -1160,6 +1160,17 @@ button.cal-dayhead:hover { background: var(--paper-3); }
 }
 </style>
 <style>
+.tour-contact-form { display: grid; gap: 16px; min-width: 0; }
+.tour-contact-form p { margin: 0; overflow-wrap: anywhere; }
+.tour-contact-form .field { min-width: 0; }
+.tour-contact-form input, .tour-contact-form textarea { box-sizing: border-box; width: 100%; }
+.tour-contact-form > .btn { justify-self: start; min-height: 44px; white-space: normal; }
+.tour-contact-history { border-top: 1px solid var(--line, #dce3ed); padding-top: 16px; overflow-wrap: anywhere; }
+.tour-contact-history ol { list-style: none; padding: 0; display: grid; gap: 16px; }
+.tour-contact-history li { border-left: 3px solid #bacce4; padding-left: 12px; display: grid; gap: 5px; }
+.tour-contact-history li p { font-size: 13px; line-height: 1.5; }
+</style>
+<style>
 /* Leads view — the To do and Everyone tabs and the person panel (brief §9). Owner: leads.
    Every colour, radius and control size comes from the shell's tokens and shared classes in
    styles.css; this file only lays the view out. */
@@ -2802,7 +2813,7 @@ let serviceSignInPending = false
 let bookingReviewWritesInFlight = 0
 let bookingReviewSignInPending = false
 let scopeEpoch = 0
-const PROPERTY_ENDPOINTS = new Set(['/api/vapi', '/api/calendar', '/api/leads', '/api/vapi-sync', '/api/tour-confirmations', '/api/email-reconciliation', '/api/callbacks', '/api/recordings', '/api/workflows', '/api/resident-services', '/api/maintenance-plans'])
+const PROPERTY_ENDPOINTS = new Set(['/api/vapi', '/api/calendar', '/api/leads', '/api/vapi-sync', '/api/tour-confirmations', '/api/tour-contacts', '/api/email-reconciliation', '/api/callbacks', '/api/recordings', '/api/workflows', '/api/resident-services', '/api/maintenance-plans'])
 const propertyEndpoint = path => PROPERTY_ENDPOINTS.has(String(path).split('?')[0])
 const JSON_HEADERS = { accept: 'application/json' }
 function accessError(message, status = 409) { const error = new Error(message); error.status = status; error.propertyAccess = true; return error }
@@ -3923,8 +3934,8 @@ function toursOn(s, ymd) {
       const linked = leadForBooking(s, b, identities), p = linked && linked.profile
       out.push({ externalId: calendarBooking(s, b, identities) ? b.externalId : null, rowKey: `saved:${index}`,
         slotId: b.slotId, startsAt, endsAt: b.endsAt || (sl && sl.endsAt) || null,
-        name: (p && p.name) || String(b.prospectName ?? '').trim() || 'Tour', phone: p ? p.phone : normalisePhone(b.prospectPhone) || null,
-        email: p ? p.email || null : b.prospectEmail || null, unitId: b.unitId ?? null,
+        name: String(b.prospectName ?? '').trim() || 'Tour', phone: p ? p.phone : normalisePhone(b.prospectPhone) || null,
+        email: b.prospectEmail || null, unitId: b.unitId ?? null,
         callId: linked ? linked.booking.callId || b.interactionId || null : null, source: p ? 'lead' : 'calendar',
         profile: p || null, past: (toTime(startsAt) ?? 0) < now })
     }
@@ -6016,8 +6027,8 @@ function tourInfo(s, m, sl) {
   const rawCallId = (lb && lb.callId) || (booking && booking.interactionId) || null
   const callId = rawCallId && derive.callRecords(s).some((r) => r.id === rawCallId) ? rawCallId : null
   return {
-    name: sl.name || (profile && profile.name) || 'Tour', profile, phone: profile && profile.phone !== 'unknown' ? profile.phone : null,
-    email: (profile && profile.email) || null, unitId: sl.unitId != null ? sl.unitId : (lb && lb.unitId != null ? String(lb.unitId) : null),
+    name: (booking && booking.prospectName) || sl.name || 'Tour', profile, phone: profile && profile.phone !== 'unknown' ? profile.phone : null,
+    email: booking ? booking.prospectEmail || null : null, unitId: sl.unitId != null ? sl.unitId : (lb && lb.unitId != null ? String(lb.unitId) : null),
     bookedAt: booking ? booking.bookedAt : null, booking, callId,
   }
 }
@@ -6732,6 +6743,7 @@ function tourContent(s, m, it) {
   const actions = []
   if (t.booking && t.booking.externalId && A.can('operate')) actions.push(`<button type="button" class="btn btn-primary" data-pop="reschedule" data-write="calendar">Reschedule</button>`)
   if (A.databaseMode && A.can('operate') && t.booking?.externalId) actions.push('<button type="button" class="btn" data-pop="confirmation">Email confirmation</button>')
+  if (A.databaseMode && A.can('operate') && t.booking?.externalId) actions.push('<button type="button" class="btn" data-pop="contact">Edit tour contact</button>')
   if (tel) actions.push(`<a class="btn" href="${esc(tel)}">Call</a>`)
   if (t.profile) actions.push(`<a class="btn btn-quiet" href="${esc(A.hashFor('leads', { phone: t.profile.phone, ...(t.profile.phone === 'unknown' && t.callId ? { call: t.callId } : {}) }))}">Open lead</a>`)
   if (t.callId) actions.push(`<a class="btn btn-quiet" href="${esc(A.hashFor('calls', { id: t.callId }))}">See the call</a>`)
@@ -6779,6 +6791,7 @@ function showDetails(kind, it, anchorEl, seg) {
         body.addEventListener('click', event => {
           const action = event.target.closest('[data-pop]')?.dataset.pop
           const booking = it.slot && it.slot.booking
+          if (action === 'contact' && booking && A.can('operate')) { closePopover(false); A.tourContacts.open(booking.externalId) }
           if (action === 'confirmation' && booking && A.can('operate')) { closePopover(false); A.tourConfirmations.open(booking.externalId) }
           if (action === 'reschedule' && booking && A.can('operate')) { closePopover(false); A.calendarActions.openReschedule(booking) }
           if (action === 'reschedule-sync' && booking && A.can('operate')) { closePopover(false); A.calendarActions.retryProjection(booking.externalId) }
@@ -6815,6 +6828,7 @@ function showDetails(kind, it, anchorEl, seg) {
     const b = e.target.closest('[data-pop]'); if (!b) return
     if (b.dataset.pop === 'close') closePopover(true)
     else if (b.dataset.pop === 'reopen' && b.getAttribute('aria-disabled') !== 'true') reopen(findItem(it.key) || it)
+    else if (b.dataset.pop === 'contact' && it.slot?.booking && A.can('operate')) { closePopover(false); A.tourContacts.open(it.slot.booking.externalId) }
     else if (b.dataset.pop === 'confirmation' && it.slot?.booking && A.can('operate')) { closePopover(false); A.tourConfirmations.open(it.slot.booking.externalId) }
     else if (b.dataset.pop === 'reschedule' && it.slot?.booking && A.can('operate')) { closePopover(false); A.calendarActions.openReschedule(it.slot.booking) }
     else if (b.dataset.pop === 'reschedule-sync' && it.slot?.booking && A.can('operate')) { closePopover(false); A.calendarActions.retryProjection(it.slot.booking.externalId) }
@@ -7684,11 +7698,15 @@ function open(externalId) {
   const show = dialog => {
     const row = data.confirmation
     const canSend = data.ready === true && A.can('operate')
-    dialog.body.innerHTML = `<div class="tour-email-recipient"><span class="field-label">To</span><strong>${esc(data.preview.recipient)}</strong></div>` +
-      `<h4 class="tour-email-subject">${esc(data.preview.subject)}</h4><pre class="tour-email-preview">${esc(data.preview.body)}</pre>` +
+    dialog.body.innerHTML = (data.preview ? `<div class="tour-email-recipient"><span class="field-label">To</span><strong>${esc(data.preview.recipient)}</strong></div>` +
+      `<h4 class="tour-email-subject">${esc(data.preview.subject)}</h4><pre class="tour-email-preview">${esc(data.preview.body)}</pre>` : '') +
       (row ? `<p class="notice" role="status">${esc(row.message)}</p>` : canSend
         ? '<label class="tour-email-permission"><input type="checkbox" name="emailPermission"><span>The prospect agreed to receive this tour confirmation at the email address above.</span></label>' : '') +
+      (data.priorConfirmation ? `<section class="notice" aria-label="Earlier confirmation"><strong>Earlier email · ${esc(data.priorConfirmation.recipient)}</strong><p>${esc(data.priorConfirmation.message)}</p><button type="button" class="btn" data-review-email>Review saved email</button></section>` : '') +
       (!canSend ? `<p class="notice" role="status">${esc(data.reason || 'Email sending is unavailable for this property.')}</p>` : '')
+    dialog.body.querySelector('[data-review-email]')?.addEventListener('click', () => {
+      const id = data.priorConfirmation.actionId; dialog.close(); A.navigate('workflows', { state: 'all', action: id })
+    })
     const check = dialog.body.querySelector('[name="emailPermission"]')
     const sync = () => dialog.setPrimary({ label: row ? row.state === 'queued' ? 'Send saved confirmation' : 'Check delivery' : 'Save permission and send',
       disabled: !canSend || (row ? !row.canProcess : !check?.checked) })
@@ -7700,9 +7718,15 @@ function open(externalId) {
     try {
       const next = await A.api.get(`${endpoint}?externalId=${encodeURIComponent(externalId)}`)
       if (closed) return
-      if (!next?.preview || !/^[a-f0-9]{64}$/.test(next.preview.bookingSha256) || next.preview.externalId !== externalId || typeof next.preview.body !== 'string'
-        || typeof next.preview.recipient !== 'string' || typeof next.ready !== 'boolean'
-        || (next.confirmation !== null && !validConfirmation(next.confirmation, next.preview.bookingSha256))) throw new Error('The confirmation could not be verified. Reload before continuing.')
+      const prior = next?.priorConfirmation
+      if (!next || typeof next.ready !== 'boolean'
+        || (next.preview === null ? next.ready || next.confirmation !== null || !prior : !next.preview
+          || !/^[a-f0-9]{64}$/.test(next.preview.bookingSha256) || next.preview.externalId !== externalId
+          || typeof next.preview.body !== 'string' || typeof next.preview.recipient !== 'string')
+        || (next.confirmation !== null && !validConfirmation(next.confirmation, next.preview?.bookingSha256))
+        || (prior !== null && prior !== undefined && (!/^[a-f0-9]{64}$/.test(prior.id) || !validConfirmation(prior, prior.id)
+          || typeof prior.actionId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(prior.actionId)
+          || typeof prior.recipient !== 'string' || next.ready))) throw new Error('The confirmation could not be verified. Reload before continuing.')
       data = next; reloadRequired = false; show(dialog)
     } catch (error) {
       if (!closed) { reloadRequired = true; dialog.setError(error.message || 'Unable to load the saved tour.'); dialog.setPrimary({ label: 'Reload confirmation', disabled: false }) }
@@ -7741,6 +7765,127 @@ function open(externalId) {
   })
 }
 A.tourConfirmations = { open }
+})()
+</script>
+<script>
+/* Staff-reviewed contact belongs to one reservation, with durable command recovery. */
+(function () {
+'use strict'
+const A = window.Atrium
+if (!A) return
+const esc = A.escapeHtml, endpoint = '/api/tour-contacts', digest = /^[a-f0-9]{64}$/
+const contact = v => v && typeof v.name === 'string' && v.name.length <= 200 && (v.email === null || typeof v.email === 'string' && v.email.length <= 254)
+const change = v => v && typeof v.requestId === 'string' && typeof v.actorId === 'string' && typeof v.reason === 'string'
+  && Number.isSafeInteger(v.revision) && v.revision > 0 && v.revision <= 1000 && Number.isFinite(Date.parse(v.at)) && contact(v.previous) && contact(v.next)
+const invalid = () => new Error('The saved tour contact could not be verified. Reload before editing.')
+function read(value, id) {
+  if (!contact(value) || value.externalId !== id || !digest.test(value.expectedSha256) || typeof value.canEdit !== 'boolean'
+    || typeof value.reviewedByStaff !== 'boolean' || !Number.isSafeInteger(value.contactRevision) || value.contactRevision < 0
+    || value.historyCount !== value.contactRevision || value.reviewedByStaff !== (value.contactRevision > 0)
+    || !(value.reason === null || typeof value.reason === 'string') || !Array.isArray(value.history) || value.history.length > 20
+    || value.history.some((c,i) => !change(c) || c.revision > value.contactRevision || i > 0 && c.revision !== value.history[i-1].revision - 1)
+    || !(value.nextBeforeRevision === null || value.history.length && value.nextBeforeRevision === value.history.at(-1).revision)) throw invalid()
+  return value
+}
+function bounded(promise) {
+  let timer
+  return Promise.race([promise, new Promise((_,reject) => { timer = setTimeout(() => reject(new Error('The save or lookup has not responded yet.')), 15000) })]).finally(() => clearTimeout(timer))
+}
+let active = null
+A.on('route', () => { if (active) active.close() })
+function open(externalId) {
+  if (!A.databaseMode || !A.can('operate') || typeof externalId !== 'string') return
+  if (active) active.close()
+  let closed = false, data = null, pending = null, reload = false, note = '', saving = false
+  const alive = () => !closed && A.can('operate')
+  function show(dialog, focus = false) {
+    if (!data) return
+    dialog.body.innerHTML = `<div class="tour-contact-form"><p>This contact is for the saved tour. Saving sends no email and grants no permission to send one.</p>` +
+      (note ? `<p class="notice" role="status">${esc(note)}</p>` : '') +
+      (data.reason ? `<p class="notice">${esc(data.reason)}</p>` : '') +
+      `<div class="field"><label class="field-label" for="tour-contact-name">Tour contact name</label><input class="input" id="tour-contact-name" autocomplete="off" maxlength="200" value="${esc(pending ? pending.name : data.name)}"></div>` +
+      `<div class="field"><label class="field-label" for="tour-contact-email">Tour email</label><input class="input" id="tour-contact-email" type="email" autocomplete="off" maxlength="254" value="${esc((pending ? pending.email : data.email) || '')}"><p class="small">Leave blank to clear an incorrect address.</p></div>` +
+      `<div class="field"><label class="field-label" for="tour-contact-reason">Reason for correction</label><textarea class="input" id="tour-contact-reason" rows="2" minlength="3" maxlength="500" placeholder="For example, the prospect corrected their email">${esc(pending?.reason || '')}</textarea></div>` +
+      `<p class="small">${data.reviewedByStaff ? 'Staff-reviewed contact. The AI cannot overwrite it.' : 'A staff correction protects these contact details from later AI updates.'} Original caller and call records are retained.</p>` +
+      `<button type="button" class="btn" data-contact-confirmation>Review tour confirmation</button>` +
+      `<section class="tour-contact-history" aria-label="Contact change history"><h3>Contact history${data.historyCount ? ' · ' + data.historyCount : ''}</h3>` +
+      (data.history.length ? '<ol>' + data.history.map(c => `<li><strong>Change ${c.revision} · ${esc(A.fmt.dateTime(c.at))}</strong><p>${esc(c.reason)}</p><p>${esc(c.previous.name)} · ${esc(c.previous.email || 'No email')}<br>Changed to ${esc(c.next.name)} · ${esc(c.next.email || 'No email')}</p></li>`).join('') + '</ol>' : '<p>No staff contact changes recorded.</p>') +
+      (data.nextBeforeRevision !== null ? '<button type="button" class="btn" data-contact-history>Load earlier changes</button>' : '') + '</section></div>'
+    const fields = [...dialog.body.querySelectorAll('input,textarea')]
+    const sync = () => {
+      const [name, email, reason] = fields
+      dialog.setPrimary({ label: pending ? 'Check saved change' : reload ? 'Reload tour contact' : 'Save tour contact',
+        disabled: !pending && !reload && (!data.canEdit || !name.value.trim() || !email.checkValidity() || reason.value.trim().length < 3
+          || name.value.trim() === data.name && (email.value.trim() || null) === data.email) })
+    }
+    fields.forEach(field => { field.disabled = !data.canEdit || !!pending || reload; field.addEventListener('input', sync) })
+    dialog.body.querySelector('[data-contact-confirmation]').addEventListener('click', () => { dialog.close(); A.tourConfirmations.open(externalId) })
+    const more = dialog.body.querySelector('[data-contact-history]')
+    more?.addEventListener('click', async () => {
+      if (saving || pending || reload) return
+      more.disabled = true
+      const expected = data.expectedSha256, cursor = data.nextBeforeRevision
+      try {
+        const next = read((await bounded(A.api.get(`${endpoint}?externalId=${encodeURIComponent(externalId)}&beforeRevision=${cursor}`)))?.current, externalId)
+        if (!alive()) return
+        if (next.expectedSha256 !== expected || next.history.some(c => c.revision >= cursor)) throw invalid()
+        // Add history only; never replace or lose the operator's unsaved form values.
+        const values = fields.map(field => field.value)
+        data = { ...next, history: [...data.history, ...next.history] }; show(dialog)
+        dialog.body.querySelectorAll('input,textarea').forEach((field,i) => { field.value = values[i]; field.dispatchEvent(new Event('input')) })
+        dialog.body.querySelector('[data-contact-history]')?.focus()
+      } catch (error) { if (alive()) { reload = true; dialog.setError(error.message); show(dialog) } }
+    })
+    sync()
+    if (focus) fields[0].focus()
+  }
+  async function load(dialog) {
+    dialog.setBusy('Loading tour contact…'); dialog.setError(null)
+    try {
+      const next = read((await bounded(A.api.get(`${endpoint}?externalId=${encodeURIComponent(externalId)}`)))?.current, externalId)
+      if (!alive()) return
+      data = next; reload = false; pending = null; note = ''; show(dialog, true)
+    } catch (error) {
+      if (alive()) { reload = true; dialog.setError(error.message); dialog.setPrimary({ label: 'Reload tour contact', disabled: false }) }
+    } finally { if (!closed) dialog.setBusy(null) }
+  }
+  active = A.dialog({ title: 'Edit tour contact', secondary: { label: 'Close' },
+    build(body, dialog) { body.innerHTML = '<p role="status">Loading this reservation’s contact…</p>'; void load(dialog) },
+    primary: { label: 'Loading…', disabled: true, async onClick(dialog) {
+      if (!alive() || saving) return
+      if (!pending && (reload || !data)) { await load(dialog); return }
+      if (!pending) {
+        const name = dialog.body.querySelector('#tour-contact-name'), email = dialog.body.querySelector('#tour-contact-email'), reason = dialog.body.querySelector('#tour-contact-reason')
+        if (!data.canEdit || !name.value.trim() || !email.checkValidity() || reason.value.trim().length < 3) return
+        pending = Object.freeze({ action: 'save', externalId, expectedSha256: data.expectedSha256, requestId: crypto.randomUUID(),
+          name: name.value.trim(), email: email.value.trim() || null, reason: reason.value.trim() })
+      }
+      saving = true; dialog.setBusy('Saving tour contact…'); dialog.setError(null)
+      dialog.body.querySelectorAll('input,textarea,button').forEach(el => { el.disabled = true })
+      try {
+        const command = pending, result = await bounded(A.api.post(endpoint, command))
+        if (!alive()) return
+        if (!result || typeof result.replayed !== 'boolean' || !change(result.change) || result.change.requestId !== command.requestId
+          || result.change.next.name !== command.name || result.change.next.email !== command.email || result.change.reason !== command.reason) throw invalid()
+        if (result.current === null) {
+          pending = null; data = null; reload = true
+          dialog.body.innerHTML = '<p role="status">The contact change was saved, but this tour is no longer on the calendar. Its earlier change history is retained.</p>'
+          dialog.setPrimary({ label: 'Tour no longer available', disabled: true }); void A.refresh(); return
+        }
+        data = read(result.current, externalId); pending = null; reload = false
+        note = data.contactRevision === result.change.revision ? 'Tour contact saved. No message was sent.' : 'Your change was saved. Another staff change followed; the current contact is shown below.'
+        show(dialog); A.announce(note); void A.refresh()
+      } catch (error) {
+        if (!alive()) return
+        if ([400,403,404,409].includes(error.status) && !error.badJson) { pending = null; reload = true }
+        // An uncertain response retries exactly the same command, never a new edit.
+        show(dialog)
+        dialog.setError((error.message || 'The change is unconfirmed.') + (pending ? ' It may already be saved. Use Check saved change to verify the same correction.' : ' Reload the current tour before editing.'))
+      } finally { saving = false; if (!closed) dialog.setBusy(null) }
+    } }, onClose() { closed = true; active = null },
+  })
+}
+A.tourContacts = { open }
 })()
 </script>
 <script>
@@ -9056,7 +9201,7 @@ function nextStep(item) {
 }
 
 // Deliberately separate from the shared Calls/Leads/Calendar polling state.
-let root = null, active = false, generation = 0, filter = 'attention', items = [], cursor = null, selected = null
+let root = null, active = false, generation = 0, filter = 'attention', targetAction = null, items = [], cursor = null, selected = null
 let loaded = false, loading = false, error = '', checkedAt = null, canManage = false, actionBusy = false, panel = null
 const uncertain = new Set()
 const visible = () => Boolean(root && active && A.can('read') && A.route().name === 'workflows')
@@ -9120,7 +9265,7 @@ function paint({ list = true } = {}) {
   refresh.disabled = loading || actionBusy; refresh.textContent = loading ? 'Refreshing…' : 'Refresh queue'
   const message = loading ? (loaded ? 'Refreshing the saved queue…' : 'Loading the saved queue…')
     : checkedAt ? `${items.length} ${items.length === 1 ? 'action' : 'actions'} shown · checked ${A.fmt.time(checkedAt)} · refresh for current status` : 'No queue data received yet'
-  root.querySelector('.wq-loaded').textContent = message
+  root.querySelector('.wq-loaded').textContent = targetAction !== null ? 'Selected saved action · choose a filter above to return to the queue' : message
   replaceHtml(root.querySelector('.wq-errors'), error ? A.html.banner('warn', error) : '')
   const listEl = root.querySelector('.wq-results')
   listEl.setAttribute('aria-busy', String(loading))
@@ -9133,23 +9278,26 @@ function paint({ list = true } = {}) {
 }
 async function load(more = false) {
   if (!visible() || actionBusy || more && (!cursor || loading)) return
-  const turn = ++generation, requestedFilter = filter, previousCursor = more ? cursor : null
+  const turn = ++generation, requestedFilter = filter, requestedAction = targetAction, previousCursor = more ? cursor : null
   const focusMore = more && document.activeElement?.dataset?.key === 'work-more'
   loading = true; error = ''; paint({ list: !loaded })
-  const params = new URLSearchParams({ state: requestedFilter, limit: '25' })
+  const params = new URLSearchParams(requestedAction !== null ? { id: requestedAction } : { state: requestedFilter, limit: '25' })
   if (previousCursor) { params.set('beforeCreatedAt', previousCursor.createdAt); params.set('beforeId', previousCursor.id) }
   try {
+    if (requestedAction !== null && !ID.test(requestedAction)) throw badResponse()
     const page = readPage(await bounded(A.api.get(`/api/workflows?${params}`)), requestedFilter)
     if (turn !== generation || !visible()) return
+    if (requestedAction !== null && (page.actions.length !== 1 || page.actions[0].id !== requestedAction || page.nextCursor !== null)) throw badResponse()
     if (previousCursor && page.nextCursor?.id === previousCursor.id && page.nextCursor.createdAt === previousCursor.createdAt) throw badResponse()
     const combined = more ? new Map(items.map(item => [item.id, item])) : new Map()
     for (const item of page.actions) combined.set(item.id, item)
     items = [...combined.values()]; cursor = page.nextCursor; canManage = page.canManage; loaded = true; checkedAt = new Date().toISOString()
-    if (!items.some(item => item.id === selected)) selected = items[0]?.id || null
+    if (!items.some(item => item.id === selected)) selected = requestedAction !== null ? requestedAction : items[0]?.id || null
     A.announce(`${items.length} saved ${items.length === 1 ? 'action' : 'actions'} shown. ${FILTERS.find(([key]) => key === filter)[1]}.`)
   } catch (failure) {
     if (turn !== generation || !visible() || failure.signedOut || failure.propertyAccess) return
-    error = failure.timeout ? 'The queue has not responded yet. The request may still be pending; try Refresh queue to check again.'
+    if (requestedAction !== null) { items = []; selected = null; cursor = null; loaded = false }
+    error = requestedAction !== null ? 'This saved action could not be verified in the current property. No other action has been selected. Refresh to check again.' : failure.timeout ? 'The queue has not responded yet. The request may still be pending; try Refresh queue to check again.'
       : loaded ? 'The queue could not be refreshed. These are the last loaded actions; recovery controls are paused until a successful refresh.'
         : 'The work queue could not be loaded. No current queue status is available. Try Refresh queue.'
   } finally {
@@ -9298,8 +9446,9 @@ const view = {
   },
   render() {
     if (!A.can('read') || !A.databaseMode || A.route().name !== 'workflows') return
-    const requested = A.route().params.state, next = FILTERS.some(([key]) => key === requested) ? requested : 'attention'
-    if (next !== filter) { filter = next; items = []; cursor = null; selected = null; loaded = false; checkedAt = null; error = ''; if (panel) panel.close(); active = false }
+    const params = A.route().params, nextAction = Object.hasOwn(params, 'action') ? params.action : null
+    const requested = params.state, next = nextAction !== null ? 'all' : FILTERS.some(([key]) => key === requested) ? requested : 'attention'
+    if (next !== filter || nextAction !== targetAction) { generation++; filter = next; targetAction = nextAction; items = []; cursor = null; selected = null; loaded = false; checkedAt = null; error = ''; if (panel) panel.close(); active = false }
     const entered = !active; active = true
     paint()
     if (entered) load()

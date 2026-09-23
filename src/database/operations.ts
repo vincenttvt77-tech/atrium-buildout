@@ -243,7 +243,7 @@ export class PostgresCalendarStore implements CalendarStore {
    * transaction. Only scoped ports escape to the callback, and both use one queue.
    * No external connector/network operation belongs inside this callback.
    */
-  transaction<T>(work: (unit: { calendar: CalendarStore; documents: DocumentStore }) => Promise<T>): Promise<T> {
+  transaction<T>(work: (unit: { calendar: CalendarStore; documents: DocumentStore; readCalendar: () => Promise<CalendarState> }) => Promise<T>): Promise<T> {
     if (typeof work !== 'function') throw new Error('A calendar transaction callback is required.')
     return propertyTransaction(this.connection, this.scope, this.mutationPermission, async client => {
       assertAuthorizedScope(this.scope, 'operate')
@@ -276,7 +276,7 @@ export class PostgresCalendarStore implements CalendarStore {
         list: (prefix: string) => queue.run(() => rawDocuments.list(prefix)), describe,
       })
       try {
-        const result = await work({ calendar, documents })
+        const result = await work({ calendar, documents, readCalendar: () => queue.run(() => readLockedCalendar(client, this.scope)) })
         await queue.close()
         return result
       } catch (error) {

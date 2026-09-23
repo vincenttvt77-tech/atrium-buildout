@@ -29,6 +29,9 @@ export interface SlotBooking {
   /** Original caller interaction, retained when staff moves this same reservation. */
   interactionId?: string
   revision?: number
+  /** Staff contact edits are independent of scheduling and never change caller identity. */
+  contactRevision?: number
+  contactReviewedByStaff?: true
   rescheduleHistory?: BookingReschedule[]
   /** Immutable tour and staff occupancy instants, independent of later setting changes. */
   startsAt?: string

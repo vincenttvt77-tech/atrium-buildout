@@ -27,7 +27,8 @@ export async function correctVoiceTourContact(runtime: ResolvedPropertyRuntime, 
     // Same lock order as confirmation admission: calendar, then call document.
     await unit.calendar.mutate(state => {
       const saved = findBooking(state, booking.externalId)
-      if (saved.interactionId !== callId || saved.startsAt !== booking.startsAt
+      if (saved.contactReviewedByStaff !== undefined || saved.contactRevision !== undefined
+        || saved.interactionId !== callId || saved.startsAt !== booking.startsAt
         || saved.endsAt !== booking.endsAt || saved.unitId !== booking.unitId
         || !saved.startsAt || Date.parse(saved.startsAt) <= input.now.getTime()
         || !Number.isFinite(Date.parse(saved.startsAt))

@@ -35,6 +35,11 @@ export function queueQuery(input: unknown): { states: WorkflowState[]; limit: nu
     ...(cursor ? { before: { createdAt: query.beforeCreatedAt as string, id: query.beforeId as string } } : {}) }
 }
 
+export function exactActionQuery(input: Record<string, unknown>): string {
+  if (Object.keys(input).join(',') !== 'id' || !id(input.id)) return invalid()
+  return input.id
+}
+
 export interface RecoveryCommand { action: 'replay' | 'cancel'; id: string; expectedRevision: string; reason: string }
 export function recoveryCommand(input: unknown): RecoveryCommand {
   if (!input || typeof input !== 'object' || Array.isArray(input) || Buffer.isBuffer(input)) return invalid()

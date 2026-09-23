@@ -59,7 +59,7 @@ and `ATRIUM_CHROME_EXECUTABLE` if those are not available through normal default
 `ATRIUM_BROWSER_ARTIFACTS` optionally saves local screenshots.
 
 This work does not repair ambiguous historical records, send notifications,
-change booking capacity rules, or verify a deployed phone call. Post-booking email correction remains a separate review area. Local
+change booking capacity rules, or verify a deployed phone call. Staff contact correction and earlier-email review are described below. Local
 browser acceptance is not hosted portal or production acceptance.
 
 
@@ -113,3 +113,51 @@ claims retain the volunteered contact for staff, with a truthful refusal to clai
 the saved tour was updated. The [confirmation contract](email-delivery.md#contact-corrections-after-booking-at-146)
 separates a corrected address from permission to send, and preserves any earlier
 email's original recipient and delivery evidence.
+
+## Staff corrections for a saved tour (AT-149)
+
+Calendar → a saved tour → **Edit tour contact** lets current property operators
+correct its name/email and record a reason. Clearing the email explicitly removes
+it from that reservation. Calendar and Today display the saved reservation's
+contact; an older lead profile cannot replace it. Original caller identity, call
+records, lead linkage, apartment, time, occupancy and scheduling revision remain
+unchanged. Contact editing does not send anything or grant messaging permission.
+
+The PostgreSQL service locks the property calendar, checks the exact reservation
+and displayed snapshot, and commits the contact, reason/history, command receipt
+and mutation audit together. A separate `contactRevision` and
+`contactReviewedByStaff` marker prevent subsequent AI contact corrections from
+overwriting the staff decision. The original call can still retain later
+volunteered details for staff to review. A different edit from a stale form is
+refused. Retrying the same command returns its original receipt plus the current
+contact, even if a later staff correction has superseded it; a removed tour returns
+the receipt with no current reservation. A command ID cannot authorize a changed
+payload or another operator's command.
+
+History is scoped to the property and reservation, checked for consecutive
+revisions and matching contact transitions, and paged in groups of 20. The bounded
+1,000-change history requires administrator review if exhausted; malformed history
+cannot authorize another correction. Past tours, ambiguous IDs, missing exact
+times, unresolved booking/reschedule projection or emergency holds are unavailable
+for editing. A normal requested tour-change hold does not prevent staff from
+correcting contact details; it still does not change the requested schedule.
+
+The form protects incomplete writes: an uncertain reply offers **Check saved
+change**, retries the same command and freezes its submitted fields. A known
+conflict requires reloading the current reservation. Route changes, revoked
+sessions and property-scope failures close/retire the form; delayed results cannot
+reopen it. Keyboard controls and 320/390/1280-pixel layouts use the shared accessible
+modal and property-bound API client.
+
+Storage uses additive optional calendar metadata and versioned records in the
+existing scoped document store; this increment requires no new SQL migration.
+Existing reservations without staff metadata begin at contact revision zero.
+Retain the metadata and history on rescheduling and rollback. Do not downgrade an
+active managed workspace's voice contact writer below this protection while
+continuing to promise staff edits cannot be overwritten; older writers do not
+understand the new marker. The hosted legacy dashboard does not expose this form.
+
+Regression evidence lives in `test/database/tour-contacts.test.mjs`, the existing
+voice/confirmation/workflow HTTP suites, `test/portal/tour-identity.test.mjs`, and
+`test/browser/tour-confirmations.mjs`. These use synthetic callers and isolated
+PostgreSQL; they do not establish production or actual-phone acceptance.

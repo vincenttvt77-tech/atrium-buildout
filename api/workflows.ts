@@ -3,7 +3,7 @@ import { isPostgresRuntime, resolveOpsRuntime, runtimeForRequest, readRuntimeErr
 import { isSameOriginJsonRequest } from '../src/auth/account-request.ts'
 import { PostgresWorkflowRepository } from '../src/database/workflows.ts'
 import { WorkflowError } from '../src/workflows/model.ts'
-import { queueQuery, recoveryCommand, workflowSummary } from '../src/workflows/presentation.ts'
+import { exactActionQuery, queueQuery, recoveryCommand, workflowSummary } from '../src/workflows/presentation.ts'
 
 /** Operator inspection and recovery only. This endpoint cannot create work or invoke a connector. */
 export default async function handler(req: any, res: any) {
@@ -24,6 +24,14 @@ export default async function handler(req: any, res: any) {
     const canManage = property.scope.permissions.includes('configure')
     const send = (body: Record<string, unknown>) => res.status(200).json({ ...body, scope: property.responseScope, executionEnabled: false })
     if (req.method === 'GET') {
+      if (Object.hasOwn(req.query ?? {}, 'id')) {
+        const id = exactActionQuery(req.query), action = await repository.get(id)
+        if (!action) throw new WorkflowError('workflow_not_found', 'This saved action is not available in this property.')
+        const item = workflowSummary(action, canManage, property.scope.permissions.includes('operate'),
+          action.kind === 'website_callback' ? await property.documents.get('callback-observation:' + action.id) : null)
+        await property.revalidate()
+        send({ actions: [item], canManage, nextCursor: null }); return
+      }
       const query = queueQuery(req.query ?? {})
       const rows = await repository.list({ ...query, limit: query.limit + 1 })
       const visible = rows.slice(0, query.limit)

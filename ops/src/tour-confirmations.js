@@ -16,11 +16,15 @@ function open(externalId) {
   const show = dialog => {
     const row = data.confirmation
     const canSend = data.ready === true && A.can('operate')
-    dialog.body.innerHTML = `<div class="tour-email-recipient"><span class="field-label">To</span><strong>${esc(data.preview.recipient)}</strong></div>` +
-      `<h4 class="tour-email-subject">${esc(data.preview.subject)}</h4><pre class="tour-email-preview">${esc(data.preview.body)}</pre>` +
+    dialog.body.innerHTML = (data.preview ? `<div class="tour-email-recipient"><span class="field-label">To</span><strong>${esc(data.preview.recipient)}</strong></div>` +
+      `<h4 class="tour-email-subject">${esc(data.preview.subject)}</h4><pre class="tour-email-preview">${esc(data.preview.body)}</pre>` : '') +
       (row ? `<p class="notice" role="status">${esc(row.message)}</p>` : canSend
         ? '<label class="tour-email-permission"><input type="checkbox" name="emailPermission"><span>The prospect agreed to receive this tour confirmation at the email address above.</span></label>' : '') +
+      (data.priorConfirmation ? `<section class="notice" aria-label="Earlier confirmation"><strong>Earlier email · ${esc(data.priorConfirmation.recipient)}</strong><p>${esc(data.priorConfirmation.message)}</p><button type="button" class="btn" data-review-email>Review saved email</button></section>` : '') +
       (!canSend ? `<p class="notice" role="status">${esc(data.reason || 'Email sending is unavailable for this property.')}</p>` : '')
+    dialog.body.querySelector('[data-review-email]')?.addEventListener('click', () => {
+      const id = data.priorConfirmation.actionId; dialog.close(); A.navigate('workflows', { state: 'all', action: id })
+    })
     const check = dialog.body.querySelector('[name="emailPermission"]')
     const sync = () => dialog.setPrimary({ label: row ? row.state === 'queued' ? 'Send saved confirmation' : 'Check delivery' : 'Save permission and send',
       disabled: !canSend || (row ? !row.canProcess : !check?.checked) })
@@ -32,9 +36,15 @@ function open(externalId) {
     try {
       const next = await A.api.get(`${endpoint}?externalId=${encodeURIComponent(externalId)}`)
       if (closed) return
-      if (!next?.preview || !/^[a-f0-9]{64}$/.test(next.preview.bookingSha256) || next.preview.externalId !== externalId || typeof next.preview.body !== 'string'
-        || typeof next.preview.recipient !== 'string' || typeof next.ready !== 'boolean'
-        || (next.confirmation !== null && !validConfirmation(next.confirmation, next.preview.bookingSha256))) throw new Error('The confirmation could not be verified. Reload before continuing.')
+      const prior = next?.priorConfirmation
+      if (!next || typeof next.ready !== 'boolean'
+        || (next.preview === null ? next.ready || next.confirmation !== null || !prior : !next.preview
+          || !/^[a-f0-9]{64}$/.test(next.preview.bookingSha256) || next.preview.externalId !== externalId
+          || typeof next.preview.body !== 'string' || typeof next.preview.recipient !== 'string')
+        || (next.confirmation !== null && !validConfirmation(next.confirmation, next.preview?.bookingSha256))
+        || (prior !== null && prior !== undefined && (!/^[a-f0-9]{64}$/.test(prior.id) || !validConfirmation(prior, prior.id)
+          || typeof prior.actionId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(prior.actionId)
+          || typeof prior.recipient !== 'string' || next.ready))) throw new Error('The confirmation could not be verified. Reload before continuing.')
       data = next; reloadRequired = false; show(dialog)
     } catch (error) {
       if (!closed) { reloadRequired = true; dialog.setError(error.message || 'Unable to load the saved tour.'); dialog.setPrimary({ label: 'Reload confirmation', disabled: false }) }

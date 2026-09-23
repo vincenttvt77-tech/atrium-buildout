@@ -177,6 +177,20 @@ test('queue pagination visits every exact-timestamp row once and rejects malform
   }
 })
 
+test('exact saved action bypasses pagination and filters without selecting another property or accepting mixed queries', async () => {
+  const old=await accept('property-a1')
+  for(let i=0;i<28;i++) await accept('property-a1')
+  assert.ok(!(await request('?state=all')).body.actions.some(row=>row.id===old.id))
+  const found=await request('?id='+old.id)
+  assert.equal(found.status,200);assert.deepEqual(found.body.actions.map(row=>row.id),[old.id]);assert.equal(found.body.nextCursor,null)
+  assert.equal(found.body.executionEnabled,false)
+  assert.equal((await request('?id='+old.id,{property:'property-a2'})).status,404)
+  assert.equal((await request('?id='+initial['property-b1'].id)).status,404)
+  for(const query of ['?id=missing-action','?id='+old.id+'&state=all','?id='+old.id+'&id='+old.id,'?id=','?id=bad/id']) {
+    assert.equal((await request(query)).status,query==='?id=missing-action'?404:400)
+  }
+})
+
 test('revoked current membership and session fail before recovery; legacy mode has no fallback queue', async () => {
   const row = await accept('property-a1')
   await db.admin.query("UPDATE atrium.memberships SET status='revoked' WHERE id='member-owner-a'")

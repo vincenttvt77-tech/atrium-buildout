@@ -252,3 +252,21 @@ test('admission waits for the calendar mutation lock and rejects a concurrently 
     assert.equal((await db.admin.query('SELECT count(*)::int n FROM atrium.action_intents')).rows[0].n,0)
   } finally { await db.admin.query('ROLLBACK'); await pending }
 })
+
+
+test('changed or cleared tour email exposes only the exact earlier recipient and safe action reference', async () => {
+  const saved=await admitted()
+  const record=(await db.admin.query("SELECT value FROM atrium.operational_documents WHERE key=$1",['tour-confirmation:'+saved.id])).rows[0].value
+  for(const email of ['new@example.test',null]) {
+    const changed=state();changed.bookings[0].prospectEmail=email;await saveCalendar(changed)
+    const found=await request();assert.equal(found.status,200);assert.equal(found.body.ready,false)
+    assert.equal(found.body.priorConfirmation.recipient,booking.prospectEmail)
+    assert.equal(found.body.priorConfirmation.actionId,record.actionId)
+    assert.equal(found.body.priorConfirmation.id,saved.id);assert.equal(found.body.priorConfirmation.state,'queued')
+    assert.equal(found.body.confirmation,null)
+    if(email===null)assert.equal(found.body.preview,null)
+    else assert.equal(found.body.preview.recipient,email)
+    assert.equal(Object.hasOwn(found.body.priorConfirmation,'input'),false)
+  }
+  assert.equal(requests.length,0)
+})

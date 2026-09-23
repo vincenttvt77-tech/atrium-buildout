@@ -96,7 +96,7 @@ export function validateTourConfirmationAction(runtime: ResolvedPropertyRuntime,
 const confirmationIndexKey = (externalId: string) => 'tour-confirmation-index:' + hashJson(externalId)
 export const priorConfirmationMessage = 'An earlier confirmation exists for this reservation. Its address or details differ. Review it in the Work queue before requesting another email; delivery may already have occurred.'
 export async function tourConfirmationHistory(runtime: ResolvedPropertyRuntime, unit: WorkflowTransaction,
-  draft: ReturnType<typeof prepareTourConfirmation>) {
+  draft: { externalId: string; reservationRevision: number; bookingSha256: string | null }) {
   const index = await unit.documents.get<{ format: string; externalId: string; ids: string[] }>(confirmationIndexKey(draft.externalId))
   if (index && (index.format !== 'tour-confirmation-index-v1' || index.externalId !== draft.externalId
     || !Array.isArray(index.ids) || index.ids.length > 1000 || index.ids.some(id => !digest(id))
@@ -136,11 +136,22 @@ export function createTourConfirmationService(runtime: ResolvedPropertyRuntime, 
   return {
     async preview(externalId: unknown) {
       return workflows.transaction(async unit => {
-        const draft = prepareTourConfirmation(await unit.readCalendar(), runtime.snapshot, externalId, now())
-        const history = await tourConfirmationHistory(runtime, unit, draft)
+        const state = await unit.readCalendar(), booking = findBooking(state, externalId)
+        let draft: ReturnType<typeof prepareTourConfirmation> | null = null, unavailable: CalendarActionError | null = null
+        try { draft = prepareTourConfirmation(state, runtime.snapshot, externalId, now()) }
+        catch (error) { if (!(error instanceof CalendarActionError)) throw error; unavailable = error }
+        const history = await tourConfirmationHistory(runtime, unit, draft ?? {
+          externalId: booking.externalId, reservationRevision: bookingRevision(booking), bookingSha256: null,
+        })
+        if (!draft && !history.conflict) throw unavailable!
         const record = history.exact?.record, action = history.exact?.action
-        return { preview: { externalId: draft.externalId, bookingSha256: draft.bookingSha256, recipient: draft.recipient, subject: draft.subject, body: draft.body },
-          ready: readiness() && !history.conflict, reason: history.conflict ? priorConfirmationMessage : reason(), confirmation: record && action ? summary(record, action) : null }
+        const previous = history.conflict
+        const recipient = previous ? (previous.action.input.message as unknown as EmailMessage).to : null
+        if (previous && !validEmailAddress(recipient)) return fail('confirmation_record_invalid', 'The saved confirmation address needs administrator review.')
+        return { preview: draft ? { externalId: draft.externalId, bookingSha256: draft.bookingSha256, recipient: draft.recipient, subject: draft.subject, body: draft.body } : null,
+          ready: !!draft && readiness() && !previous, reason: previous ? priorConfirmationMessage + (unavailable ? ' ' + unavailable.message : '') : reason(),
+          confirmation: record && action ? summary(record, action) : null,
+          priorConfirmation: previous ? { ...summary(previous.record, previous.action), actionId: previous.action.id, recipient } : null }
       })
     },
     async queue(input: unknown) {

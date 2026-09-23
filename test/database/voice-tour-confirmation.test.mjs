@@ -436,12 +436,13 @@ test('a new scheduling revision can receive its own confirmation after the prior
   assert.equal((await queueStaff(booking)).status,200);assert.equal(await countActions(),2);assert.equal(posts.length,0)
 })
 
-for(const kind of ['foreign_call','changed_time','staff_contact','duplicate','pending'])test(`contact correction refuses a ${kind} reservation and keeps volunteered details for staff`,async()=>{
+for(const kind of ['foreign_call','changed_time','staff_contact','staff_pin','duplicate','pending'])test(`contact correction refuses a ${kind} reservation and keeps volunteered details for staff`,async()=>{
   await book()
   await calendarChange(calendar=>{
     const row=calendar.bookings[0]
     if(kind==='foreign_call')row.interactionId='different-call'
     if(kind==='changed_time')row.startsAt=new Date(Date.parse(row.startsAt)+3600000).toISOString()
+    if(kind==='staff_pin'){row.contactRevision=1;row.contactReviewedByStaff=true}
     if(kind==='staff_contact')row.prospectEmail='staff-reviewed@example.test'
     if(kind==='duplicate')calendar.bookings.push({...row})
     if(kind==='pending')row.rescheduleHistory=[{projection:'pending'}]

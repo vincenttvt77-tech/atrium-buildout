@@ -11,6 +11,18 @@ const profile = (id, call, phone, over = {}) => ({ phone, name: 'Same Name', ema
   stage: 'tour_scheduled', calls: [{ callId: call, at: '2032-06-01T12:00:00Z', toolsCalled: [] }], notes: [], signals: {},
   bookings: [{ externalId: id, callId: call, slotId: slot, startsAt: at, unitId: '4A', status: 'confirmed' }], ...over })
 
+test('Calendar and Today show the reservation contact, including an explicitly cleared email', () => {
+  const old = profile('one', 'call-one', '+13125550101', { name: 'Old Name', email: 'old@example.test' })
+  for (const email of ['corrected@example.test', null]) {
+    const t = ui([booked('one', 'call-one', { prospectName: 'Corrected Name', prospectEmail: email })], [old])
+    assert.equal(t.info('one').email, email)
+    assert.equal(t.info('one').name, 'Corrected Name')
+    const row = t.A.derive.toursOn(t.A.state, '2032-06-01')[0]
+    assert.equal(row.name, 'Corrected Name'); assert.equal(row.email, email)
+    assert.equal(row.profile, old); assert.equal(t.info('one').phone, old.phone)
+  }
+})
+
 function ui(rows, profiles = []) {
   class Clock extends Date { constructor(...args) { super(...(args.length ? args : ['2032-06-01T12:00:00Z'])) } static now() { return Date.parse('2032-06-01T12:00:00Z') } }
   const window = { ATRIUM_RUNTIME_MODE: 'postgres', ATRIUM_ACCOUNT: { userId: 'user-one', username: 'operator' },
@@ -138,7 +150,9 @@ test('tour keys stay attached to reservations when simultaneous rows reorder', (
 test('open tour detail signatures change when only contact or identity evidence changes', () => {
   const p = profile('one', 'call-one', '+13125550101'), t = ui([booked('one', 'call-one')], [p])
   const item = t.tours()[0], before = t.c.popSig(item)
-  p.email = 'corrected@example.test'
+  p.email = 'old-lead-edit@example.test'
+  assert.equal(t.c.popSig(item), before, 'Historical lead email is not the reservation contact')
+  t.A.state.calendar.bookings[0].prospectEmail = 'corrected@example.test'
   const updated = t.c.popSig(item)
   assert.notEqual(updated, before)
   p.bookings[0].externalId = 'different'

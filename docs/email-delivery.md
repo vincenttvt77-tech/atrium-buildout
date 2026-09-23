@@ -235,3 +235,29 @@ staff contact editor. A returning caller's request to alter an older tour remain
 staff review. These changes add no schema migration or live voice publication.
 Local HTTP/PostgreSQL and browser tests use synthetic callers/providers; real
 phone and inbox acceptance remains required during controlled activation.
+
+## Reviewing an earlier tour email after a contact correction (AT-149)
+
+The staff confirmation dialog now shows the **original recipient**, recorded
+status and a **Review saved email** link when a confirmation already exists for
+the same reservation revision with different details. That link opens exactly
+that property-scoped action in the Work queue, even when it is finished or outside
+the first page. Missing, malformed, foreign or mismatched action IDs show a
+failure without selecting another action. Selecting an ordinary filter returns
+to the regular queue. Current authorization, revision-checked recovery and
+verification-only delivery controls still apply.
+
+If the current tour email was cleared, the earlier action remains reviewable
+without constructing a sendable draft. The immutable earlier message keeps its
+original recipient, content, permission and delivery evidence. A staff contact
+edit neither redirects it nor authorizes a replacement. A queued action that has
+not possibly dispatched can be cancelled by an authorized configuration manager;
+only a fresh review of the corrected confirmation and explicit prospect
+permission can authorize the new message. Existing uncertain/sent actions retain
+the duplicate-send guard. Resending after a possibly dispatched message remains a
+separate authority flow, not a button introduced by this increment.
+
+The new exact GET query is `/api/workflows?id=<action-id>` and accepts no list
+filters or cursors alongside it. It returns the same safe operator projection as
+the queue; raw message HTML, provider credentials and execution inputs remain
+server-side. No connector runs from this lookup.
