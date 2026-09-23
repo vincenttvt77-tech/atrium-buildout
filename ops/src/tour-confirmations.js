@@ -3,14 +3,21 @@
 'use strict'
 const A = window.Atrium
 if (!A) return
-const esc = A.escapeHtml, endpoint = '/api/tour-confirmations'
+const esc = A.escapeHtml
 const validConfirmation = (row, id) => row && row.id === id && typeof row.message === 'string'
   && typeof row.canProcess === 'boolean' && ['queued','running','retry_wait','verifying','succeeded','needs_review','cancelled'].includes(row.state)
   && ['delivered','not_verified'].includes(row.delivery) && (row.delivery !== 'delivered' || row.state === 'succeeded')
 let active = null
 A.on('route', () => { if (active) active.close() })
-function open(externalId) {
+function bounded(promise) {
+  let timer
+  return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('The email request has not responded yet.')), 15000) })]).finally(() => clearTimeout(timer))
+}
+function open(externalId, cancellation = false) {
   if (!A.databaseMode || !A.can('operate') || typeof externalId !== 'string') return
+  const endpoint = cancellation ? '/api/tour-cancellation-emails' : '/api/tour-confirmations'
+  const name = cancellation ? 'cancellation email' : 'confirmation'
+  const title = cancellation ? 'Cancellation email' : 'Tour confirmation'
   if (active) active.close()
   let closed = false, data = null, reloadRequired = false
   const show = dialog => {
@@ -19,38 +26,38 @@ function open(externalId) {
     dialog.body.innerHTML = (data.preview ? `<div class="tour-email-recipient"><span class="field-label">To</span><strong>${esc(data.preview.recipient)}</strong></div>` +
       `<h4 class="tour-email-subject">${esc(data.preview.subject)}</h4><pre class="tour-email-preview">${esc(data.preview.body)}</pre>` : '') +
       (row ? `<p class="notice" role="status">${esc(row.message)}</p>` : canSend
-        ? '<label class="tour-email-permission"><input type="checkbox" name="emailPermission"><span>The prospect agreed to receive this tour confirmation at the email address above.</span></label>' : '') +
+        ? `<label class="tour-email-permission"><input type="checkbox" name="emailPermission"><span>The prospect agreed to receive this ${cancellation ? 'cancellation email' : 'tour confirmation'} at the email address above.</span></label>` : '') +
       (data.priorConfirmation ? `<section class="notice" aria-label="Earlier confirmation"><strong>Earlier email · ${esc(data.priorConfirmation.recipient)}</strong><p>${esc(data.priorConfirmation.message)}</p><button type="button" class="btn" data-review-email>Review saved email</button></section>` : '') +
       (!canSend ? `<p class="notice" role="status">${esc(data.reason || 'Email sending is unavailable for this property.')}</p>` : '')
     dialog.body.querySelector('[data-review-email]')?.addEventListener('click', () => {
       const id = data.priorConfirmation.actionId; dialog.close(); A.navigate('workflows', { state: 'all', action: id })
     })
     const check = dialog.body.querySelector('[name="emailPermission"]')
-    const sync = () => dialog.setPrimary({ label: row ? row.state === 'queued' ? 'Send saved confirmation' : 'Check delivery' : 'Save permission and send',
+    const sync = () => dialog.setPrimary({ label: row ? row.state === 'queued' ? `Send saved ${name}` : 'Check delivery' : 'Save permission and send',
       disabled: !canSend || (row ? !row.canProcess : !check?.checked) })
     check?.addEventListener('change', sync)
     sync()
   }
   const load = async dialog => {
-    dialog.setBusy('Loading confirmation…'); dialog.setError(null)
+    dialog.setBusy(`Loading ${name}…`); dialog.setError(null)
     try {
-      const next = await A.api.get(`${endpoint}?externalId=${encodeURIComponent(externalId)}`)
+      const next = await bounded(A.api.get(`${endpoint}?externalId=${encodeURIComponent(externalId)}`))
       if (closed) return
       const prior = next?.priorConfirmation
       if (!next || typeof next.ready !== 'boolean'
         || (next.preview === null ? next.ready || next.confirmation !== null || !prior : !next.preview
           || !/^[a-f0-9]{64}$/.test(next.preview.bookingSha256) || next.preview.externalId !== externalId
-          || typeof next.preview.body !== 'string' || typeof next.preview.recipient !== 'string')
+          || typeof next.preview.body !== 'string' || typeof next.preview.subject !== 'string' || typeof next.preview.recipient !== 'string')
         || (next.confirmation !== null && !validConfirmation(next.confirmation, next.preview?.bookingSha256))
         || (prior !== null && prior !== undefined && (!/^[a-f0-9]{64}$/.test(prior.id) || !validConfirmation(prior, prior.id)
           || typeof prior.actionId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(prior.actionId)
           || typeof prior.recipient !== 'string' || next.ready))) throw new Error('The confirmation could not be verified. Reload before continuing.')
       data = next; reloadRequired = false; show(dialog)
     } catch (error) {
-      if (!closed) { reloadRequired = true; dialog.setError(error.message || 'Unable to load the saved tour.'); dialog.setPrimary({ label: 'Reload confirmation', disabled: false }) }
+      if (!closed) { reloadRequired = true; dialog.setError(error.message || 'Unable to load the saved tour.'); dialog.setPrimary({ label: `Reload ${name}`, disabled: false }) }
     } finally { if (!closed) dialog.setBusy(null) }
   }
-  active = A.dialog({ title: 'Tour confirmation', secondary: { label: 'Close' },
+  active = A.dialog({ title, secondary: { label: 'Close' },
     build(body, dialog) { body.innerHTML = '<p role="status">Loading the saved reservation…</p>'; void load(dialog) },
     primary: { label: 'Loading…', disabled: true, async onClick(dialog) {
       if (reloadRequired || !data) { await load(dialog); return }
@@ -58,24 +65,24 @@ function open(externalId) {
       const existing = data.confirmation
       if (!existing && !dialog.body.querySelector('[name="emailPermission"]')?.checked) return
       if (existing && !existing.canProcess) return
-      dialog.setBusy(existing ? 'Checking confirmation…' : 'Saving permission…'); dialog.setError(null)
+      dialog.setBusy(existing ? `Checking ${name}…` : 'Saving permission…'); dialog.setError(null)
       try {
         if (!data.confirmation) {
-          const saved = await A.api.post(endpoint, { action: 'queue', externalId, bookingSha256: data.preview.bookingSha256, permissionConfirmed: true })
+          const saved = await bounded(A.api.post(endpoint, { action: 'queue', externalId, bookingSha256: data.preview.bookingSha256, permissionConfirmed: true }))
           if (closed) return
           if (!validConfirmation(saved?.confirmation, data.preview.bookingSha256)) throw new Error('The saved confirmation could not be verified. Reload to check it before retrying.')
           data.confirmation = saved.confirmation
         }
         dialog.setBusy('Checking delivery…')
-        const result = await A.api.post(endpoint, { action: 'process', confirmationId: data.confirmation.id })
+        const result = await bounded(A.api.post(endpoint, { action: 'process', confirmationId: data.confirmation.id }))
         if (closed) return
         if (!validConfirmation(result?.confirmation, data.confirmation.id)) throw new Error('The delivery result could not be verified. Reload to check it.')
         data.confirmation = result.confirmation; show(dialog)
       } catch (error) {
         if (!closed) {
           reloadRequired = true
-          dialog.setError((error.message || 'The result is uncertain.') + ' Reload to check the saved confirmation before trying again.')
-          dialog.setPrimary({ label: 'Reload confirmation', disabled: false })
+          dialog.setError((error.message || 'The result is uncertain.') + ` Reload to check the saved ${name} before trying again.`)
+          dialog.setPrimary({ label: `Reload ${name}`, disabled: false })
         }
       } finally { if (!closed) dialog.setBusy(null) }
     } },
@@ -83,4 +90,5 @@ function open(externalId) {
   })
 }
 A.tourConfirmations = { open }
+A.tourCancellationEmails = { open: id => open(id, true) }
 })()

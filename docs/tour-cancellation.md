@@ -6,11 +6,14 @@ and records a reason. Cancellation frees the saved tour's staff/apartment capaci
 and retains its exact contact, interval, apartment, original interaction, staff
 actor and reason. It does not add a building/unit blackout or delete call history.
 
-**Cancellation does not notify the prospect.** The form says no cancellation
-message was sent. Staff must contact the prospect separately. A previously sent
-or in-flight confirmation cannot be recalled. A queued confirmation's dispatch
-check refuses the removed reservation; cancellation does not invent delivery,
-recall or a replacement notification. Work queue history retains the earlier action.
+**Cancelling does not automatically notify the prospect.** After cancellation,
+staff can choose **Review cancellation email** to review the exact saved address
+and message, attest the prospect's permission, and submit it through the separate
+email workflow. Without a reviewed cancellation sender and connected provider,
+the form explains that sending is unavailable. Staff can contact the prospect
+separately. A previously sent or in-flight confirmation cannot be recalled. A
+queued confirmation's dispatch check refuses the removed reservation. Work queue
+history retains the earlier action; a cancellation never invents delivery or recall.
 
 The Calendar's **Cancellations** button lists up to 100 recent cancellations from
 the loaded calendar. Opening one performs an exact, current, authorized lookup.
@@ -69,8 +72,55 @@ scoped documents use the existing transitional stores. Do not downgrade an activ
 workspace below these cancellation-aware writers while continuing to accept old
 call events. Existing property document/calendar size bounds apply; large-history
 pagination/indexed repository work remains part of the platform roadmap. This
-feature does not add caller self-service cancellation, a connected PMS adapter,
-a cancellation notification provider or permission to send a message.
+feature does not add caller self-service cancellation or a connected PMS adapter.
+Cancelling itself supplies no permission to send a message. The archive's
+`notification: not_sent` records that cancellation sent nothing automatically;
+it is not the status of a later separately reviewed email. The email's persisted
+workflow carries its own permission and delivery evidence.
+
+## Cancellation email
+
+The managed staff email form uses `GET /api/tour-cancellation-emails?externalId=…`
+to review an exact archived cancellation. It refuses an active/archived conflict,
+an unknown cancellation, missing saved address or ambiguous archive. Outgoing copy
+contains the saved contact name, property, scheduled time in the property's zone,
+and unit when present. The internal cancellation reason and phone number are never
+included. The message says no replacement tour was reserved.
+
+Only `queue` with the server draft digest and explicit permission attestation, or
+`process` with the existing email ID, is accepted. The client cannot choose another
+recipient, sender, content or property. Staff/current property access, configuration,
+same-origin JSON and exact source review apply. Permission expires after one hour
+for the initial send. Review does not send anything; the primary button clearly
+says **Save permission and send**.
+
+The property calendar lock serializes admission. A scoped cancellation purpose
+index, immutable message record, permission receipt, action and outbox commit
+together. Concurrent operators and retries after lost acknowledgements reuse one
+email for that cancellation. A changed draft after admission shows the earlier
+recipient and an exact Work queue link, and refuses a silent second email.
+The current UI does not offer editing an archived recipient or a second send;
+resolve the existing action/contact the prospect separately.
+
+Before dispatch the service rechecks the cancellation, reviewed sender, current
+authority and frozen content. A provider acceptance only shows **Delivery is not
+yet verified**. A later exact readback can establish provider-reported delivery,
+not a human read. The Work queue and an explicitly activated reconciliation worker
+can verify a possibly sent email; neither starts a first send. Missing provider
+acknowledgements remain verification-only and eventually require staff review.
+The browser offers reload/recovery after lost replies or a 15-second wait; late
+replies cannot automatically progress a retired dialog.
+
+Publish `property.tourCancellationEmail` with the separate reviewed sender shape
+in [email delivery](email-delivery.md#property-setup-not-activated). A tour
+confirmation sender does not enable cancellations. No migration is needed for this
+email slice. Publishing source does not configure a live sender, schedule a worker,
+activate a managed workspace or send a real email.
+
+Evidence: [cancellation email report](../reports/2026-09-23-cancellation-email.md),
+`src/email/test/tour-cancellation.test.ts`, `test/database/tour-cancellation-emails.test.mjs`
+and `test/browser/tour-cancellation-emails.mjs`. Synthetic evidence is separate from
+hosted runtime, provider account, inbox and actual phone acceptance.
 
 Evidence: [implementation report](../reports/2026-09-23-tour-cancellation.md),
 `test/database/tour-cancellations.test.mjs`, the signed voice/confirmation suite,

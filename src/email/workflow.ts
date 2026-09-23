@@ -5,7 +5,7 @@ import { WorkflowError } from '../workflows/model.ts'
 import type { WorkflowAction, WorkflowConnector, NewWorkflowAction, JsonObject, DispatchResult, VerificationResult } from '../workflows/model.ts'
 
 export interface EmailConsent {
-  purpose: 'leasing_shortlist' | 'tour_confirmation'
+  purpose: 'leasing_shortlist' | 'tour_confirmation' | 'tour_cancellation'
   recipient: string
   contentSha256: string
   recordedAt: string
@@ -26,7 +26,7 @@ function parse(input: unknown): { message: EmailMessage; consent: EmailConsent }
   const consent = data.consent as Record<string, unknown>
   const keys = ['purpose','recipient','contentSha256','recordedAt','expiresAt','receiptId']
   if (Object.keys(consent).length !== keys.length || keys.some(key => !Object.hasOwn(consent, key))
-    || !['leasing_shortlist','tour_confirmation'].includes(String(consent.purpose))
+    || !['leasing_shortlist','tour_confirmation','tour_cancellation'].includes(String(consent.purpose))
     || consent.recipient !== data.message.to || consent.contentSha256 !== emailMessageDigest(data.message)
     || !identifier(consent.receiptId)) return invalid()
   const recorded = time(consent.recordedAt), expires = time(consent.expiresAt)

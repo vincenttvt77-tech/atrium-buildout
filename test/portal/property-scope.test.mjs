@@ -122,7 +122,7 @@ test('all scoped endpoints send immutable document identity and successful echoe
   const ui = portal()
   ui.context.window.ATRIUM_PROPERTY.organizationId = 'tampered'
   ui.context.window.ATRIUM_PROPERTY.configurationVersion = 99
-  for (const path of ['/api/vapi', '/api/calendar?from=2032-06-01', '/api/leads', '/api/vapi-sync', '/api/tour-contacts?externalId=one', '/api/tour-cancellations?externalId=one', '/api/workflows?id=one']) {
+  for (const path of ['/api/vapi', '/api/calendar?from=2032-06-01', '/api/leads', '/api/vapi-sync', '/api/tour-contacts?externalId=one', '/api/tour-cancellations?externalId=one', '/api/tour-cancellation-emails?externalId=one', '/api/workflows?id=one']) {
     await ui.app.api.get(path)
     const sent = ui.requests.at(-1)
     assert.equal(sent.headers['x-atrium-organization-id'], 'organization-one')

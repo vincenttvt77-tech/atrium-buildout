@@ -32,16 +32,18 @@ function open(externalId) {
     dialog.body.innerHTML = `<div class="tour-cancel-form"><div class="tour-cancel-summary"><span class="section-kicker">${cancelled ? 'Cancelled reservation' : 'Review this reservation'}</span>` +
       `<h3>${esc(b.prospectName || 'Tour guest')}</h3><p>${esc(A.fmt.dateTime(b.startsAt))} · ${b.unitId ? 'Apartment ' + esc(b.unitId) : 'Building tour'}</p>` +
       `<p>${esc(b.prospectPhone || 'No phone recorded')}${b.prospectEmail ? ' · ' + esc(b.prospectEmail) : ''}</p></div>` +
-      (cancelled ? `<p class="notice" role="status">Tour cancelled. Its capacity is available again. No cancellation message was sent.</p>` +
+      (cancelled ? `<p class="notice" role="status">Tour cancelled. Its capacity is available again. Cancelling does not automatically send a message.</p>` +
+        `<button class="btn" type="button" data-cancel-email>Review cancellation email</button>` +
         `<dl><dt>Reason</dt><dd>${esc(c.reason)}</dd><dt>Cancelled</dt><dd>${esc(A.fmt.dateTime(c.at))}</dd><dt>Staff account</dt><dd>${esc(c.actorId)}</dd></dl>` +
         (projection ? `<p>${projection.retired} scheduled tour follow-up${projection.retired === 1 ? '' : 's'} retired.${projection.review ? ' Older ambiguous tasks need staff review.' : ''}${projection.status === 'awaiting_call' ? ' The original call can still finish saving; it cannot restore this tour.' : ''}</p>` : '')
         : `<p>Cancelling frees this reservation’s capacity and retains its history. It also retires matching tour follow-ups.</p>` +
           (data.reason ? `<p class="notice">${esc(data.reason)}</p>` : '') +
           `<div class="field"><label class="field-label" for="tour-cancel-reason">Cancellation reason</label><textarea class="input" id="tour-cancel-reason" rows="3" minlength="3" maxlength="500" placeholder="For example, the prospect can no longer attend">${esc(pending?.reason || '')}</textarea></div>` +
           `<label class="tour-cancel-check"><input type="checkbox" id="tour-cancel-verified"${pending ? ' checked' : ''}>I verified this is the reservation to cancel.</label>`) +
-      `<p class="small">Contact the prospect separately. An earlier confirmation may already have been sent or be in flight; cancellation cannot recall it.</p>` +
+      `<p class="small">${cancelled ? 'Review the cancellation email for permission and delivery, or contact the prospect separately.' : 'Cancellation does not send a message automatically.'} An earlier confirmation may already have been sent or be in flight; cancellation cannot recall it.</p>` +
       `<button class="btn" type="button" data-cancel-work>Review work queue</button></div>`
     dialog.body.querySelector('[data-cancel-work]').addEventListener('click', () => { if (!saving && !pending) { dialog.close(); A.navigate('workflows') } })
+    dialog.body.querySelector('[data-cancel-email]')?.addEventListener('click', () => { if (!saving && !pending) { dialog.close(); A.tourCancellationEmails?.open(externalId) } })
     const fields = [...dialog.body.querySelectorAll('input,textarea')]
     fields.forEach(f => { f.disabled = !data.canCancel || !!pending || reload })
     const sync = () => dialog.setPrimary({ label: cancelled ? 'Cancellation saved' : pending ? 'Check saved cancellation' : reload ? 'Reload reservation' : 'Cancel tour',

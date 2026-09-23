@@ -95,6 +95,15 @@ The dialog previews the current future reservation. Older versions and confirmat
 
 ## Property setup (not activated)
 
+Staff cancellation emails use **Calendar → Cancellations → saved cancellation →
+Review cancellation email**. They require their own `property.tourCancellationEmail`
+binding, with the exact six-field shape below under that key. Enabling
+`tourConfirmationEmail` or `voiceShortlistEmail` does not enable cancellation email.
+The strict staff API binds one cancellation, saved recipient, immutable copy and
+fresh operator-attested permission to one durable action. It omits the internal
+reason and never reserves a replacement tour. See [cancellation email](tour-cancellation.md#cancellation-email)
+for duplicate prevention, uncertain-result recovery and current limits.
+
 A configuration publisher must review and publish this optional property field with the exact organization/property and authorized sender. No UI for editing this field or automatic domain verification is included. Provider account/domain access must be verified separately; store `RESEND_API_KEY` only in the deployment secret store. This is deployment setup, never a login requirement.
 
 ```json

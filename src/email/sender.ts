@@ -3,7 +3,7 @@ import { validEmailAddress, validEmailMessage } from './render.ts'
 const text = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0 && value.length <= 500 && !/[\u0000-\u001f\u007f]/.test(value)
 export interface PropertyEmailBinding { from: string; replyTo: string; reviewExpiresAt: string }
 /** Published property configuration attests the sending identity; provider still enforces domain access. */
-export function propertyEmailBinding(snapshot: PropertySnapshot, now: Date, purpose: 'tourConfirmationEmail' | 'voiceShortlistEmail'): PropertyEmailBinding | null {
+export function propertyEmailBinding(snapshot: PropertySnapshot, now: Date, purpose: 'tourConfirmationEmail' | 'tourCancellationEmail' | 'voiceShortlistEmail'): PropertyEmailBinding | null {
   const raw = snapshot.property[purpose]
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
   const v = raw as Record<string, unknown>

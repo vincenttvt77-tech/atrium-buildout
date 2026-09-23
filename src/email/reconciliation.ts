@@ -57,7 +57,8 @@ export function createEmailReconciliationService(property: ResolvedPropertyRunti
     if (['succeeded','needs_review','cancelled'].includes(action.state)) return action
     const consent = action.input.consent
     const purpose = consent && typeof consent === 'object' && !Array.isArray(consent)
-      ? consent.purpose === 'leasing_shortlist' ? 'voiceShortlistEmail' : consent.purpose === 'tour_confirmation' ? 'tourConfirmationEmail' : null : null
+      ? consent.purpose === 'leasing_shortlist' ? 'voiceShortlistEmail' : consent.purpose === 'tour_confirmation' ? 'tourConfirmationEmail'
+        : consent.purpose === 'tour_cancellation' ? 'tourCancellationEmail' : null : null
     // A missing/expired sender still consumes bounded verification attempts rather
     // than starving every later email in the property batch. It makes no provider call.
     const readOnly = {
