@@ -1,0 +1,12 @@
+.tour-cancel-form { display: grid; gap: 16px; min-width: 0; overflow-wrap: anywhere; }
+.tour-cancel-form p, .tour-cancel-form h3 { margin: 0; }
+.tour-cancel-form textarea { box-sizing: border-box; width: 100%; }
+.tour-cancel-summary { display: grid; gap: 8px; padding: 16px; background: var(--surface-alt, #f1f5fa); border-radius: 12px; }
+.tour-cancel-check { display: flex; align-items: flex-start; gap: 10px; min-height: 44px; cursor: pointer; }
+.tour-cancel-check input { margin-top: 4px; flex-shrink: 0; width: 18px; height: 18px; }
+.tour-cancel-form dl { display: grid; gap: 6px; margin: 0; }
+.tour-cancel-form dt { font-weight: 600; }
+.tour-cancel-form dd { margin: 0 0 8px; }
+.tour-cancel-form .btn { min-height: 44px; white-space: normal; text-align: left; }
+.tour-cancel-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 16px; }
+.tour-cancel-list li { display: grid; gap: 8px; border-bottom: 1px solid var(--line, #dce3ed); padding-bottom: 12px; }

@@ -437,3 +437,8 @@ cannot remove the last active owner. A lost response offers explicit reconciliat
 of the same change. Invitations and new-account signup remain separate work; this
 screen never sets another person's password. Hosted runtime activation is a
 separate deployment step.
+
+Managed staff can [cancel an exact future tour](docs/tour-cancellation.md) from its
+Calendar details, with a reason, saved history and safe retry. Capacity is released,
+matching reminders are retired and late original-call results cannot restore the
+tour. Cancellation sends no message; staff contact the prospect separately.

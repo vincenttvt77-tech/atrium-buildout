@@ -394,7 +394,7 @@ function leadPanelHtml(p, s) {
       return `<div class="row row-2 tour-row${stuck ? ' row-warn' : ''}" data-key="tour:${esc(b.externalId || `${b.slotId}:${b.callId || ''}`)}"><span class="row-body">` +
         `<span class="row-title">${esc(fmt.day(b.startsAt))} · ${esc(fmt.time(b.startsAt))} · ${b.unitId ? `apartment ${esc(b.unitId)}` : 'no apartment picked yet'}</span>` +
         `<span class="row-chips">${c}</span>${stuck ? '<span class="row-sub">Call to set a time.</span>' : ''}</span>` +
-        `<span class="row-actions">${b.unitId ? link('units', { unit: b.unitId }, 'View apartment') : ''}${link('calendar', tourCalendarParams(s, b), 'See on calendar')}</span></div>`
+        `<span class="row-actions">${b.unitId ? link('units', { unit: b.unitId }, 'View apartment') : ''}${st === 'cancelled' && b.externalId && A.databaseMode && A.can('operate') ? `<button type="button" class="btn-link" data-action="cancellation" data-id="${esc(b.externalId)}">Cancellation history</button>` : st === 'cancelled' ? '' : link('calendar', tourCalendarParams(s, b), 'See on calendar')}</span></div>`
     }).join('')}</div></section>`
   }
   // 5. what they're looking for
@@ -543,6 +543,7 @@ const view = {
       if (a === 'close') this.close()
       else if (a === 'setname') { const p = this.current(); if (p) this.setName(p, btn) }
       else if (a === 'usename') { const p = this.current(); if (p && btn.dataset.name) this.postName(p.phone, btn.dataset.name, btn) }
+      else if (a === 'cancellation') A.tourCancellations.open(btn.dataset.id)
       else if (a === 'savenote') this.saveNote(btn.dataset.phone, btn)
       else this.fuAction(btn)
     })

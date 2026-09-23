@@ -5,6 +5,7 @@ import { once } from 'node:events'
 import { randomUUID } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
 import handler from '../../api/vapi.ts'
+import tourCancellations from '../../api/tour-cancellations.ts'
 import dashboard from '../../api/dashboard.ts'
 import tourConfirmations from '../../api/tour-confirmations.ts'
 import { TEST_AUTH_ORIGIN, verifyMfaCookie } from '../helpers/mfa-session.mjs'
@@ -71,6 +72,7 @@ before(async () => {
       res.status=code=>{res.statusCode=code;return res}
       res.json=value=>{ if(dropToolReply){dropToolReply=false;req.socket.destroy();return res} res.setHeader('content-type','application/json');res.end(JSON.stringify(value));return res }
       if(req.url.startsWith('/api/dashboard'))await dashboard(req,res)
+      else if(req.url.startsWith('/api/tour-cancellations'))await tourCancellations(req,res)
       else if(req.url.startsWith('/api/tour-confirmations'))await tourConfirmations(req,res)
       else await handler(req,res)
     } catch(error) {errors.push(error);res.statusCode=500;res.end('{}')}
@@ -575,4 +577,40 @@ test('an older writer missing from an existing index cannot hide another saved c
   assert.match((await email('prepare')).text,/earlier confirmation/)
   assert.equal((await staff(booking)).body.ready,false)
   assert.equal(await countActions(),2);assert.equal(posts.length,0)
+})
+
+async function cancelTour(booking) {
+  const headers={cookie:staffCookie,'x-atrium-organization-id':'organization-a','x-atrium-property-id':'property-a1','x-atrium-config-version':'1',origin,'content-type':'application/json'}
+  const preview=await originalFetch(origin+'/api/tour-cancellations?externalId='+encodeURIComponent(booking.externalId),{headers})
+  assert.equal(preview.status,200);const {current}=await preview.json()
+  const result=await originalFetch(origin+'/api/tour-cancellations',{method:'POST',headers,body:JSON.stringify({action:'cancel',externalId:booking.externalId,expectedSha256:current.expectedSha256,requestId:randomUUID(),reason:'Prospect requested cancellation',verified:true})})
+  assert.equal(result.status,200,await result.text())
+}
+
+test('cancelled tours fence cached and fresh voice booking/confirmation results and late call completion',async()=>{
+  const booking=await book(), state=await savedCall()
+  const booked=state.work.intents.find(row=>row.name==='book_tour')
+  assert.ok(booked,JSON.stringify(state.work))
+  const offer=JSON.parse((await email('prepare')).text)
+  await cancelTour(booking)
+  const replay=await post([{id:booked.id,function:{name:'book_tour',arguments:JSON.stringify({slotId:booking.slotId,unitId:'4A',prospectName:'Test Visitor',prospectEmail:'visitor@example.test'})}}])
+  assert.equal(replay.status,200,JSON.stringify(replay.body));assert.match(replay.text,/Staff cancelled this tour/)
+  const fresh=await post([tool('book_tour',{slotId:booking.slotId,unitId:'4A',prospectName:'Test Visitor'})])
+  assert.match(fresh.text,/Staff cancelled this tour/)
+  const send=await email('send',offer,{messages:consent(offer)});assert.match(send.text,/Staff cancelled this tour/)
+  assert.equal(posts.length,0);assert.equal((await savedCalendar()).bookings.length,0)
+  await post([],{message:{type:'end-of-call-report'}})
+  const profile=(await db.admin.query("SELECT value FROM atrium.operational_documents WHERE property_id='property-a1' AND key='lead:+12025550101'")).rows[0].value
+  assert.equal(profile.bookings[0].status,'cancelled')
+  const cachedAgain=await post([{id:booked.id,function:{name:'book_tour',arguments:JSON.stringify({slotId:booking.slotId,unitId:'4A',prospectName:'Test Visitor',prospectEmail:'visitor@example.test'})}}])
+  assert.match(cachedAgain.text,/Staff cancelled this tour/)
+})
+
+test('a queued staff confirmation cannot dispatch after its reservation is cancelled',async()=>{
+  const booking=await book(), queued=(await queueStaff(booking)).body.confirmation
+  await cancelTour(booking)
+  const processed=await staff(booking,{action:'process',confirmationId:queued.id})
+  assert.equal(processed.status,200,JSON.stringify(processed.body));assert.equal(posts.length,0)
+  assert.notEqual(processed.body.confirmation.delivery,'delivered')
+  assert.equal((await savedCalendar()).bookings.length,0)
 })

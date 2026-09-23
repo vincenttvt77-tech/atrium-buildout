@@ -1171,6 +1171,20 @@ button.cal-dayhead:hover { background: var(--paper-3); }
 .tour-contact-history li p { font-size: 13px; line-height: 1.5; }
 </style>
 <style>
+.tour-cancel-form { display: grid; gap: 16px; min-width: 0; overflow-wrap: anywhere; }
+.tour-cancel-form p, .tour-cancel-form h3 { margin: 0; }
+.tour-cancel-form textarea { box-sizing: border-box; width: 100%; }
+.tour-cancel-summary { display: grid; gap: 8px; padding: 16px; background: var(--surface-alt, #f1f5fa); border-radius: 12px; }
+.tour-cancel-check { display: flex; align-items: flex-start; gap: 10px; min-height: 44px; cursor: pointer; }
+.tour-cancel-check input { margin-top: 4px; flex-shrink: 0; width: 18px; height: 18px; }
+.tour-cancel-form dl { display: grid; gap: 6px; margin: 0; }
+.tour-cancel-form dt { font-weight: 600; }
+.tour-cancel-form dd { margin: 0 0 8px; }
+.tour-cancel-form .btn { min-height: 44px; white-space: normal; text-align: left; }
+.tour-cancel-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 16px; }
+.tour-cancel-list li { display: grid; gap: 8px; border-bottom: 1px solid var(--line, #dce3ed); padding-bottom: 12px; }
+</style>
+<style>
 /* Leads view — the To do and Everyone tabs and the person panel (brief §9). Owner: leads.
    Every colour, radius and control size comes from the shell's tokens and shared classes in
    styles.css; this file only lays the view out. */
@@ -2658,11 +2672,11 @@ const labels = {
   channelVerb: { call: 'Call', sms: 'Text', email: 'Email' },
   channelIcon: { call: 'phone', sms: 'message', email: 'mail' },
   bookingStatus: {
-    confirmed: 'Confirmed', arranging: 'Being arranged — not confirmed yet',
+    confirmed: 'Confirmed', cancelled: 'Cancelled', arranging: 'Being arranged — not confirmed yet',
     failed: "Couldn't be booked — needs a person", slot_taken: 'Time was taken — offered other times',
   },
-  bookingChip: { confirmed: 'chip-ok', arranging: 'chip-warn', failed: 'chip-warn', slot_taken: 'chip-info' },
-  bookingIcon: { confirmed: 'check', arranging: 'clock', failed: 'hand', slot_taken: 'info' },
+  bookingChip: { cancelled: 'chip-neutral', confirmed: 'chip-ok', arranging: 'chip-warn', failed: 'chip-warn', slot_taken: 'chip-info' },
+  bookingIcon: { cancelled: 'x', confirmed: 'check', arranging: 'clock', failed: 'hand', slot_taken: 'info' },
   lossReason: {
     priced_out: 'Priced out', timing_mismatch: "Timing didn't line up", no_availability: 'Nothing available',
     bedroom_mismatch: 'Wrong number of bedrooms', pets: 'Pet policy', parking: 'Parking', policy: 'A building policy',
@@ -2813,7 +2827,7 @@ let serviceSignInPending = false
 let bookingReviewWritesInFlight = 0
 let bookingReviewSignInPending = false
 let scopeEpoch = 0
-const PROPERTY_ENDPOINTS = new Set(['/api/vapi', '/api/calendar', '/api/leads', '/api/vapi-sync', '/api/tour-confirmations', '/api/tour-contacts', '/api/email-reconciliation', '/api/callbacks', '/api/recordings', '/api/workflows', '/api/resident-services', '/api/maintenance-plans'])
+const PROPERTY_ENDPOINTS = new Set(['/api/vapi', '/api/calendar', '/api/leads', '/api/vapi-sync', '/api/tour-confirmations', '/api/tour-contacts', '/api/tour-cancellations', '/api/email-reconciliation', '/api/callbacks', '/api/recordings', '/api/workflows', '/api/resident-services', '/api/maintenance-plans'])
 const propertyEndpoint = path => PROPERTY_ENDPOINTS.has(String(path).split('?')[0])
 const JSON_HEADERS = { accept: 'application/json' }
 function accessError(message, status = 409) { const error = new Error(message); error.status = status; error.propertyAccess = true; return error }
@@ -2987,7 +3001,7 @@ function snapshot(name, d) {
     return { calls: arr(d.calls), events, callsError: d.callsError ?? null, safetyEventsError: d.safetyEventsError ?? null, bookingReviewsError: d.bookingReviewsError ?? null,
       callsConfigured: typeof d.callsConfigured === 'boolean' ? d.callsConfigured : null }
   }
-  if (name === 'calendar') return { slots: arr(d.slots), blocks: arr(d.blocks), bookings: arr(d.bookings), units: arr(d.units), unitBlocks: arr(d.unitBlocks), store: d.store ?? null,
+  if (name === 'calendar') return { slots: arr(d.slots), blocks: arr(d.blocks), bookings: arr(d.bookings), cancelledBookings: arr(d.cancelledBookings), units: arr(d.units), unitBlocks: arr(d.unitBlocks), store: d.store ?? null,
     rescheduleProjectionPending: arr(d.rescheduleProjectionPending),
     timeZone: d.timeZone ?? LEGACY_TIME_ZONE, range: d.range ?? null, settings: d.settings ?? null, settingsRevision: d.settingsRevision ?? null }
   const heldFollowUps = arr(d.heldFollowUps), heldIds = new Set(heldFollowUps.map(f => f && f.id))
@@ -3102,6 +3116,7 @@ function apply(resource, data) {
     ingest('calendar', {
       scope: d.scope,
       slots: Array.isArray(d.slots) ? d.slots : cur.slots, blocks: Array.isArray(d.blocks) ? d.blocks : cur.blocks,
+      cancelledBookings: Array.isArray(d.cancelledBookings) ? d.cancelledBookings : arr(cur.cancelledBookings),
       bookings: Array.isArray(d.bookings) ? d.bookings : cur.bookings, store: d.store ?? cur.store,
       units: Array.isArray(d.units) ? d.units : arr(cur.units), unitBlocks: Array.isArray(d.unitBlocks) ? d.unitBlocks : arr(cur.unitBlocks),
       rescheduleProjectionPending: Array.isArray(d.rescheduleProjectionPending) ? d.rescheduleProjectionPending : arr(cur.rescheduleProjectionPending),
@@ -6166,7 +6181,7 @@ function toolbarHtml(m) {
   const navigation = m.mobile ? '' : `<div class="cal-nav">${navBtn('prev', `Previous ${unit}`, prevOff)}<button type="button" class="btn" data-action="today" data-key="today">Today</button>${navBtn('next', `Next ${unit}`, nextOff)}</div>`
   const heading = m.mobile ? '<h2 class="cal-schedule-title">Daily schedule</h2>' : `<h2 class="cal-range" aria-live="polite" data-key="range">${rt.when ? `<span class="cal-range-when">${esc(rt.when)} · </span>` : ''}${esc(rt.range)}</h2>`
   const layout = m.mobile ? '<button type="button" class="btn" data-action="today" data-key="today">Today</button>' : `<div class="seg cal-seg" role="radiogroup" aria-label="Layout"><button type="button" class="tab" role="radio" aria-checked="${m.view === 'week' ? 'true' : 'false'}" data-action="view-week" data-key="view-week">Week</button><button type="button" class="tab" role="radio" aria-checked="${m.view === 'day' ? 'true' : 'false'}" data-action="view-day" data-key="view-day">Day</button></div>`
-  return `<div class="cal-schedule-heading"><div><span class="section-kicker">${m.mobile ? 'One day at a time' : 'Schedule overview'}</span>${heading}</div><div class="cal-tools">${layout}<button type="button" class="btn" data-action="goto" data-key="goto">Go to date</button></div></div>` +
+  return `<div class="cal-schedule-heading"><div><span class="section-kicker">${m.mobile ? 'One day at a time' : 'Schedule overview'}</span>${heading}</div><div class="cal-tools">${layout}<button type="button" class="btn" data-action="goto" data-key="goto">Go to date</button>${A.databaseMode && A.can('operate') ? '<button type="button" class="btn" data-action="cancellations">Cancellations</button>' : ''}</div></div>` +
     `<div class="cal-toolbar">${navigation}<p class="cal-window-note">${m.loaded ? `Showing ${esc(fmt.monthDay(m.range.from))}${m.range.to !== m.range.from ? ` – ${esc(fmt.monthDay(m.range.to))}` : ''}` : 'Loading selected dates'} · ${esc(A.property.timeZoneLabel)}</p></div>` +
     `<div class="cal-progress"${A.busyNow('calendar') ? '' : ' hidden'}></div>`
 }
@@ -6751,6 +6766,7 @@ function tourContent(s, m, it) {
     ? t.booking.conflictBlockIds.includes(block.id)
     : block.unitId === t.unitId && Date.parse(block.startsAt) < Date.parse(t.booking?.occupiedEndsAt || sl.endsAt) && Date.parse(block.endsAt) > Date.parse(t.booking?.occupiedStartsAt || sl.startsAt)))
   if (conflicts.length) body += `<p class="cal-unit-conflict">This apartment is blocked during the tour or its reserved preparation time: ${conflicts.map(block => esc(block.reason)).join('; ')}. Contact the prospect and choose another time or apartment.</p>`
+  if (A.databaseMode && A.can('operate') && t.booking?.externalId) actions.push('<button type="button" class="btn" data-pop="cancel-tour">Cancel tour</button>')
   const pending = t.booking && arr(s.calendar && s.calendar.rescheduleProjectionPending).find(item => item.externalId === t.booking.externalId)
   if (pending) {
     body += '<p class="cal-unit-conflict">The tour moved, but its CRM follow-ups still need to sync.</p>'
@@ -6791,6 +6807,7 @@ function showDetails(kind, it, anchorEl, seg) {
         body.addEventListener('click', event => {
           const action = event.target.closest('[data-pop]')?.dataset.pop
           const booking = it.slot && it.slot.booking
+          if (action === 'cancel-tour' && booking && A.can('operate')) { closePopover(false); A.tourCancellations.open(booking.externalId) }
           if (action === 'contact' && booking && A.can('operate')) { closePopover(false); A.tourContacts.open(booking.externalId) }
           if (action === 'confirmation' && booking && A.can('operate')) { closePopover(false); A.tourConfirmations.open(booking.externalId) }
           if (action === 'reschedule' && booking && A.can('operate')) { closePopover(false); A.calendarActions.openReschedule(booking) }
@@ -6828,6 +6845,7 @@ function showDetails(kind, it, anchorEl, seg) {
     const b = e.target.closest('[data-pop]'); if (!b) return
     if (b.dataset.pop === 'close') closePopover(true)
     else if (b.dataset.pop === 'reopen' && b.getAttribute('aria-disabled') !== 'true') reopen(findItem(it.key) || it)
+    else if (b.dataset.pop === 'cancel-tour' && it.slot?.booking && A.can('operate')) { closePopover(false); A.tourCancellations.open(it.slot.booking.externalId) }
     else if (b.dataset.pop === 'contact' && it.slot?.booking && A.can('operate')) { closePopover(false); A.tourContacts.open(it.slot.booking.externalId) }
     else if (b.dataset.pop === 'confirmation' && it.slot?.booking && A.can('operate')) { closePopover(false); A.tourConfirmations.open(it.slot.booking.externalId) }
     else if (b.dataset.pop === 'reschedule' && it.slot?.booking && A.can('operate')) { closePopover(false); A.calendarActions.openReschedule(it.slot.booking) }
@@ -7263,6 +7281,7 @@ const view = {
       else if (a === 'view-week') setView('week')
       else if (a === 'view-day') setView('day')
       else if (a === 'goto') goToDate()
+      else if (a === 'cancellations') A.tourCancellations.history()
       else if (a === 'settings') openSettings()
       else if (a === 'block') openSheet({ date: cal.model && cal.model.view === 'day' ? cal.model.date : undefined, mode: 'day' })
       else if (a === 'unit-blocks') { closePopover(false); A.calendarActions.openUnitBlocks({ date: cal.model && cal.model.date }) }
@@ -7889,6 +7908,111 @@ A.tourContacts = { open }
 })()
 </script>
 <script>
+/* Staff cancellation of one exact reservation. No message delivery is implied. */
+(function () {
+'use strict'
+const A = window.Atrium
+if (!A) return
+const esc = A.escapeHtml, endpoint = '/api/tour-cancellations'
+let active = null
+A.on('route', () => { if (active) active.close() })
+const invalid = () => new Error('The reservation response could not be verified. Reload before making a change.')
+function read(value, id) {
+  if (!value || value.externalId !== id || !['active','cancelled'].includes(value.status)
+    || !value.booking || value.booking.externalId !== id || typeof value.booking.prospectName !== 'string'
+    || typeof value.canCancel !== 'boolean' || value.notification !== 'not_sent'
+    || (value.status === 'active' ? !/^[a-f0-9]{64}$/.test(value.expectedSha256) || value.cancellation !== null
+      : value.canCancel || !value.cancellation || value.cancellation.booking?.externalId !== id
+        || value.cancellation.notification !== 'not_sent' || typeof value.cancellation.reason !== 'string'
+        || !Number.isFinite(Date.parse(value.cancellation.at)))) throw invalid()
+  return value
+}
+function bounded(promise) {
+  let timer
+  return Promise.race([promise, new Promise((_,reject) => { timer = setTimeout(() => reject(new Error('The lookup or cancellation has not responded yet.')), 15000) })]).finally(() => clearTimeout(timer))
+}
+function open(externalId) {
+  if (!A.databaseMode || !A.can('operate') || typeof externalId !== 'string') return
+  if (active) active.close()
+  let closed = false, saving = false, data = null, pending = null, reload = false, projection = null
+  const alive = () => !closed && A.can('operate')
+  function show(dialog) {
+    if (!data) return
+    const b = data.booking, c = data.cancellation, cancelled = data.status === 'cancelled'
+    dialog.body.innerHTML = `<div class="tour-cancel-form"><div class="tour-cancel-summary"><span class="section-kicker">${cancelled ? 'Cancelled reservation' : 'Review this reservation'}</span>` +
+      `<h3>${esc(b.prospectName || 'Tour guest')}</h3><p>${esc(A.fmt.dateTime(b.startsAt))} · ${b.unitId ? 'Apartment ' + esc(b.unitId) : 'Building tour'}</p>` +
+      `<p>${esc(b.prospectPhone || 'No phone recorded')}${b.prospectEmail ? ' · ' + esc(b.prospectEmail) : ''}</p></div>` +
+      (cancelled ? `<p class="notice" role="status">Tour cancelled. Its capacity is available again. No cancellation message was sent.</p>` +
+        `<dl><dt>Reason</dt><dd>${esc(c.reason)}</dd><dt>Cancelled</dt><dd>${esc(A.fmt.dateTime(c.at))}</dd><dt>Staff account</dt><dd>${esc(c.actorId)}</dd></dl>` +
+        (projection ? `<p>${projection.retired} scheduled tour follow-up${projection.retired === 1 ? '' : 's'} retired.${projection.review ? ' Older ambiguous tasks need staff review.' : ''}${projection.status === 'awaiting_call' ? ' The original call can still finish saving; it cannot restore this tour.' : ''}</p>` : '')
+        : `<p>Cancelling frees this reservation’s capacity and retains its history. It also retires matching tour follow-ups.</p>` +
+          (data.reason ? `<p class="notice">${esc(data.reason)}</p>` : '') +
+          `<div class="field"><label class="field-label" for="tour-cancel-reason">Cancellation reason</label><textarea class="input" id="tour-cancel-reason" rows="3" minlength="3" maxlength="500" placeholder="For example, the prospect can no longer attend">${esc(pending?.reason || '')}</textarea></div>` +
+          `<label class="tour-cancel-check"><input type="checkbox" id="tour-cancel-verified"${pending ? ' checked' : ''}>I verified this is the reservation to cancel.</label>`) +
+      `<p class="small">Contact the prospect separately. An earlier confirmation may already have been sent or be in flight; cancellation cannot recall it.</p>` +
+      `<button class="btn" type="button" data-cancel-work>Review work queue</button></div>`
+    dialog.body.querySelector('[data-cancel-work]').addEventListener('click', () => { if (!saving && !pending) { dialog.close(); A.navigate('workflows') } })
+    const fields = [...dialog.body.querySelectorAll('input,textarea')]
+    fields.forEach(f => { f.disabled = !data.canCancel || !!pending || reload })
+    const sync = () => dialog.setPrimary({ label: cancelled ? 'Cancellation saved' : pending ? 'Check saved cancellation' : reload ? 'Reload reservation' : 'Cancel tour',
+      disabled: cancelled || !pending && !reload && (!data.canCancel || dialog.body.querySelector('#tour-cancel-reason').value.trim().length < 3 || !dialog.body.querySelector('#tour-cancel-verified').checked) })
+    fields.forEach(f => f.addEventListener('input', sync)); sync()
+  }
+  async function load(dialog) {
+    dialog.setBusy('Loading reservation…'); dialog.setError(null)
+    try {
+      const next = read((await bounded(A.api.get(`${endpoint}?externalId=${encodeURIComponent(externalId)}`)))?.current, externalId)
+      if (!alive()) return
+      data = next; pending = null; reload = false; show(dialog)
+    } catch (error) { if (alive()) { reload = true; dialog.setError(error.message); dialog.setPrimary({ label: 'Reload reservation', disabled: false }) } }
+    finally { if (!closed) dialog.setBusy(null) }
+  }
+  active = A.dialog({ title: 'Cancel tour', secondary: { label: 'Close' },
+    build(body, dialog) { body.innerHTML = '<p role="status">Loading this reservation…</p>'; void load(dialog) },
+    primary: { label: 'Loading…', disabled: true, async onClick(dialog) {
+      if (!alive() || saving) return
+      if (!pending && (reload || !data)) { await load(dialog); return }
+      if (!pending) {
+        const reason = dialog.body.querySelector('#tour-cancel-reason'), verified = dialog.body.querySelector('#tour-cancel-verified')
+        if (!data.canCancel || !reason || reason.value.trim().length < 3 || !verified?.checked) return
+        pending = Object.freeze({ action: 'cancel', externalId, expectedSha256: data.expectedSha256,
+          requestId: crypto.randomUUID(), reason: reason.value.trim(), verified: true })
+      }
+      saving = true; dialog.setBusy('Cancelling tour…'); dialog.setError(null)
+      dialog.body.querySelectorAll('input,textarea,button').forEach(el => { el.disabled = true })
+      try {
+        const command = pending, result = await bounded(A.api.post(endpoint, command))
+        if (!alive()) return
+        const next = read(result?.current, externalId)
+        if (typeof result.replayed !== 'boolean' || next.status !== 'cancelled' || next.cancellation.requestId !== command.requestId
+          || next.cancellation.reason !== command.reason || !result.projection
+          || !['complete','awaiting_call','needs_review'].includes(result.projection.status)
+          || !Number.isSafeInteger(result.projection.retired) || !Number.isSafeInteger(result.projection.review)) throw invalid()
+        data = next; projection = result.projection; pending = null; reload = false; show(dialog)
+        A.announce('Tour cancelled. No cancellation message was sent.'); void A.refresh()
+      } catch (error) {
+        if (!alive()) return
+        if ([400,403,404,409].includes(error.status) && !error.badJson) { pending = null; reload = true }
+        show(dialog)
+        dialog.setError((error.message || 'Cancellation is unconfirmed.') + (pending ? ' It may already be saved. Check the same cancellation to verify.' : ' Reload the reservation before trying again.'))
+      } finally { saving = false; if (!closed) dialog.setBusy(null) }
+    } }, onClose() { closed = true; active = null },
+  })
+}
+function history() {
+  if (!A.databaseMode || !A.can('operate')) return
+  if (active) active.close()
+  const rows = Array.isArray(A.state.calendar?.cancelledBookings) ? A.state.calendar.cancelledBookings : []
+  active = A.dialog({ title: 'Recent cancellations', secondary: { label: 'Close' }, build(body, dialog) {
+    body.innerHTML = `<div class="tour-cancel-form"><p>Up to 100 recent cancellations from the loaded calendar. Open one to verify its current saved history.</p>` +
+      (rows.length ? `<ol class="tour-cancel-list">${rows.map((c,i) => `<li><button type="button" class="btn" data-cancel-history="${i}">${esc(c.booking.prospectName)} · ${esc(A.fmt.dateTime(c.booking.startsAt))}</button><p>${esc(c.reason)}</p></li>`).join('')}</ol>` : '<p>No cancellations in the loaded calendar.</p>') + '</div>'
+    body.querySelectorAll('[data-cancel-history]').forEach(button => button.addEventListener('click', () => { const id = rows[Number(button.dataset.cancelHistory)]?.booking.externalId; dialog.close(); if (id) open(id) }))
+  }, onClose() { active = null } })
+}
+A.tourCancellations = { open, history }
+})()
+</script>
+<script>
 /*
  * Leads view (brief §9). Owner: leads. Registers 'leads' on window.Atrium and renders into the
  * root the shell hands it: two tabs — To do (scheduled follow-ups grouped Overdue / Today /
@@ -8285,7 +8409,7 @@ function leadPanelHtml(p, s) {
       return `<div class="row row-2 tour-row${stuck ? ' row-warn' : ''}" data-key="tour:${esc(b.externalId || `${b.slotId}:${b.callId || ''}`)}"><span class="row-body">` +
         `<span class="row-title">${esc(fmt.day(b.startsAt))} · ${esc(fmt.time(b.startsAt))} · ${b.unitId ? `apartment ${esc(b.unitId)}` : 'no apartment picked yet'}</span>` +
         `<span class="row-chips">${c}</span>${stuck ? '<span class="row-sub">Call to set a time.</span>' : ''}</span>` +
-        `<span class="row-actions">${b.unitId ? link('units', { unit: b.unitId }, 'View apartment') : ''}${link('calendar', tourCalendarParams(s, b), 'See on calendar')}</span></div>`
+        `<span class="row-actions">${b.unitId ? link('units', { unit: b.unitId }, 'View apartment') : ''}${st === 'cancelled' && b.externalId && A.databaseMode && A.can('operate') ? `<button type="button" class="btn-link" data-action="cancellation" data-id="${esc(b.externalId)}">Cancellation history</button>` : st === 'cancelled' ? '' : link('calendar', tourCalendarParams(s, b), 'See on calendar')}</span></div>`
     }).join('')}</div></section>`
   }
   // 5. what they're looking for
@@ -8434,6 +8558,7 @@ const view = {
       if (a === 'close') this.close()
       else if (a === 'setname') { const p = this.current(); if (p) this.setName(p, btn) }
       else if (a === 'usename') { const p = this.current(); if (p && btn.dataset.name) this.postName(p.phone, btn.dataset.name, btn) }
+      else if (a === 'cancellation') A.tourCancellations.open(btn.dataset.id)
       else if (a === 'savenote') this.saveNote(btn.dataset.phone, btn)
       else this.fuAction(btn)
     })

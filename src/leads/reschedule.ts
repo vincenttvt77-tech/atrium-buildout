@@ -127,12 +127,12 @@ export async function reconcileRescheduledTour(store: DocumentStore, input: Resc
     const candidates = current.bookings.filter(booking => matches(booking, index))
     if (candidates.length !== 1) { accepted = false; return current }
     const target = candidates[0]!
-    if ((target.rescheduleRevision ?? 0) > index.change.revision) return current
+    if (target.status === 'cancelled' || (target.rescheduleRevision ?? 0) > index.change.revision) return current
     return { ...current, bookings: current.bookings.map(booking => booking === target ? { ...moved(booking, index), status: 'confirmed' as const } : booking) }
   })
   if (!accepted) return { status: 'needs_review', profileKey: key, reason: 'booking_identity_ambiguous', updatedFollowUpIds: [] }
   const current = profile.bookings.find(booking => booking.externalId === index.booking.externalId)!
-  if ((current.rescheduleRevision ?? 0) > index.change.revision) return { status: 'complete', profileKey: key, updatedFollowUpIds: [] }
+  if (current.status === 'cancelled' || (current.rescheduleRevision ?? 0) > index.change.revision) return { status: 'complete', profileKey: key, updatedFollowUpIds: [] }
   const updatedFollowUpIds = new Set<string>()
   const newProfile = { ...profile, bookings: [current], escalations: [], lossReasons: [] }
   const derived = deriveFollowUps(newProfile, new Date(index.change.at), current.callId, index.change.timeZone).filter(row => row.source?.kind === 'booking')

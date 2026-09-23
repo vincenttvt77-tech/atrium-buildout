@@ -161,3 +161,11 @@ Regression evidence lives in `test/database/tour-contacts.test.mjs`, the existin
 voice/confirmation/workflow HTTP suites, `test/portal/tour-identity.test.mjs`, and
 `test/browser/tour-confirmations.mjs`. These use synthetic callers and isolated
 PostgreSQL; they do not establish production or actual-phone acceptance.
+
+## Cancellation identity
+
+[Staff cancellation](tour-cancellation.md) archives the exact reservation and its
+original call associations, frees capacity and preserves contact/history. Later
+call completion, reschedule projection or cached booking results cannot restore
+that reservation. A new call can request another tour. Cancellation does not send
+a notification or imply an earlier confirmation was recalled.

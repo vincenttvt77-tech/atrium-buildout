@@ -38,7 +38,7 @@ export interface FollowUp {
   /** Original work is retained when an old hour-based ID cannot be mapped safely. */
   reconciliation?: { status: 'needs_review'; code: 'legacy_followup_identity_ambiguous'; candidateIds: string[] }
   /** Retained history, never an executable reminder for the old tour time. */
-  superseded?: { reason: 'tour_rescheduled'; bookingExternalId: string; revision: number; requestId: string; at: string }
+  superseded?: { reason: 'tour_rescheduled' | 'tour_cancelled'; bookingExternalId: string; revision: number; requestId: string; at: string }
 }
 
 export interface FollowUpSource {

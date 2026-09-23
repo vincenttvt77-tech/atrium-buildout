@@ -47,7 +47,9 @@ export interface LeadBooking {
   slotId: string
   startsAt: string
   unitId: string | null
-  status: 'confirmed' | 'arranging' | 'failed'
+  status: 'confirmed' | 'arranging' | 'failed' | 'cancelled'
+  cancelledAt?: string
+  cancellationRequestId?: string
   callId: string
 }
 

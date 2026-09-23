@@ -95,3 +95,12 @@ IDs/rights/access, establish a successful measured baseline, then compare model
 hosting and voice independently. Do not claim the full leasing goal is complete.
 Leave a reciprocal handoff with source/deployment IDs, actual checks/limitations,
 owner to-dos and next-agent to-dos.
+
+## Later cloud result — September 23, 2026
+
+AT149 run35906639434/job107335862518 ended in failure: application checks passed,
+native651/652 passed, build skipped. The exact saved-action pagination test failed
+when its first-page response lacked actions. AT150 adds a clear status assertion;
+the focused case and full local native suite pass. This does not establish a
+cloud repair. See [the cancellation report](2026-09-23-tour-cancellation.md) for
+the current source/evidence boundary and next release gates.

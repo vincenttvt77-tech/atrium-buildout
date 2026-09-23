@@ -423,11 +423,11 @@ const labels = {
   channelVerb: { call: 'Call', sms: 'Text', email: 'Email' },
   channelIcon: { call: 'phone', sms: 'message', email: 'mail' },
   bookingStatus: {
-    confirmed: 'Confirmed', arranging: 'Being arranged — not confirmed yet',
+    confirmed: 'Confirmed', cancelled: 'Cancelled', arranging: 'Being arranged — not confirmed yet',
     failed: "Couldn't be booked — needs a person", slot_taken: 'Time was taken — offered other times',
   },
-  bookingChip: { confirmed: 'chip-ok', arranging: 'chip-warn', failed: 'chip-warn', slot_taken: 'chip-info' },
-  bookingIcon: { confirmed: 'check', arranging: 'clock', failed: 'hand', slot_taken: 'info' },
+  bookingChip: { cancelled: 'chip-neutral', confirmed: 'chip-ok', arranging: 'chip-warn', failed: 'chip-warn', slot_taken: 'chip-info' },
+  bookingIcon: { cancelled: 'x', confirmed: 'check', arranging: 'clock', failed: 'hand', slot_taken: 'info' },
   lossReason: {
     priced_out: 'Priced out', timing_mismatch: "Timing didn't line up", no_availability: 'Nothing available',
     bedroom_mismatch: 'Wrong number of bedrooms', pets: 'Pet policy', parking: 'Parking', policy: 'A building policy',
@@ -578,7 +578,7 @@ let serviceSignInPending = false
 let bookingReviewWritesInFlight = 0
 let bookingReviewSignInPending = false
 let scopeEpoch = 0
-const PROPERTY_ENDPOINTS = new Set(['/api/vapi', '/api/calendar', '/api/leads', '/api/vapi-sync', '/api/tour-confirmations', '/api/tour-contacts', '/api/email-reconciliation', '/api/callbacks', '/api/recordings', '/api/workflows', '/api/resident-services', '/api/maintenance-plans'])
+const PROPERTY_ENDPOINTS = new Set(['/api/vapi', '/api/calendar', '/api/leads', '/api/vapi-sync', '/api/tour-confirmations', '/api/tour-contacts', '/api/tour-cancellations', '/api/email-reconciliation', '/api/callbacks', '/api/recordings', '/api/workflows', '/api/resident-services', '/api/maintenance-plans'])
 const propertyEndpoint = path => PROPERTY_ENDPOINTS.has(String(path).split('?')[0])
 const JSON_HEADERS = { accept: 'application/json' }
 function accessError(message, status = 409) { const error = new Error(message); error.status = status; error.propertyAccess = true; return error }
@@ -752,7 +752,7 @@ function snapshot(name, d) {
     return { calls: arr(d.calls), events, callsError: d.callsError ?? null, safetyEventsError: d.safetyEventsError ?? null, bookingReviewsError: d.bookingReviewsError ?? null,
       callsConfigured: typeof d.callsConfigured === 'boolean' ? d.callsConfigured : null }
   }
-  if (name === 'calendar') return { slots: arr(d.slots), blocks: arr(d.blocks), bookings: arr(d.bookings), units: arr(d.units), unitBlocks: arr(d.unitBlocks), store: d.store ?? null,
+  if (name === 'calendar') return { slots: arr(d.slots), blocks: arr(d.blocks), bookings: arr(d.bookings), cancelledBookings: arr(d.cancelledBookings), units: arr(d.units), unitBlocks: arr(d.unitBlocks), store: d.store ?? null,
     rescheduleProjectionPending: arr(d.rescheduleProjectionPending),
     timeZone: d.timeZone ?? LEGACY_TIME_ZONE, range: d.range ?? null, settings: d.settings ?? null, settingsRevision: d.settingsRevision ?? null }
   const heldFollowUps = arr(d.heldFollowUps), heldIds = new Set(heldFollowUps.map(f => f && f.id))
@@ -867,6 +867,7 @@ function apply(resource, data) {
     ingest('calendar', {
       scope: d.scope,
       slots: Array.isArray(d.slots) ? d.slots : cur.slots, blocks: Array.isArray(d.blocks) ? d.blocks : cur.blocks,
+      cancelledBookings: Array.isArray(d.cancelledBookings) ? d.cancelledBookings : arr(cur.cancelledBookings),
       bookings: Array.isArray(d.bookings) ? d.bookings : cur.bookings, store: d.store ?? cur.store,
       units: Array.isArray(d.units) ? d.units : arr(cur.units), unitBlocks: Array.isArray(d.unitBlocks) ? d.unitBlocks : arr(cur.unitBlocks),
       rescheduleProjectionPending: Array.isArray(d.rescheduleProjectionPending) ? d.rescheduleProjectionPending : arr(cur.rescheduleProjectionPending),

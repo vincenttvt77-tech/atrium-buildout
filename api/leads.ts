@@ -143,7 +143,7 @@ export default async function handler(req: any, res: any) {
         const existing = await store.get<FollowUp>(followUpKey(id))
         if (!existing) { res.status(404).json({ error: 'no such follow-up' }); return }
         const updated = await store.update<FollowUp>(followUpKey(id), existing, (f) => {
-          if (f.superseded && status === 'scheduled') throw new RuntimeRequestError(409, 'tour_reminder_superseded', 'This reminder belongs to an earlier tour time. Use the current tour’s follow-up instead.')
+          if (f.superseded && status === 'scheduled') throw new RuntimeRequestError(409, 'tour_reminder_superseded', f.superseded.reason === 'tour_cancelled' ? 'This reminder belongs to a cancelled tour and cannot be reopened.' : 'This reminder belongs to an earlier tour time. Use the current tour’s follow-up instead.')
           return { ...f, status: status as FollowUp['status'] }
         })
         res.status(200).json({ followUp: updated })

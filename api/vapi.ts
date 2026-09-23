@@ -13,6 +13,7 @@ import {
 } from '../src/conversation/tools.ts'
 import { authorizeOps, constantTimeEquals } from '../src/ops/session.ts'
 import { fetchCalls } from '../src/ops/vapi-calls.ts'
+import { cancelledTour, CANCELLED_TOUR_RESPONSE } from '../src/calendar/cancellation.ts'
 import { calendarStoreFromEnv } from '../src/calendar/store.ts'
 import { heldEmergency, holdEmergency, CalendarInteractionPausedError } from '../src/calendar/safety.ts'
 import { generateSlots } from '../src/calendar/slots.ts'
@@ -544,6 +545,7 @@ async function runTool(
       catch (error) { if (error instanceof VoiceEmailError) return error.message; throw error }
     }
     case 'email_tour_confirmation': {
+      if (cancelledTour(await calendarStore.read(), callId, state.booking?.externalId ?? state.bookingAttempt?.externalId)) return CANCELLED_TOUR_RESPONSE
       if (!execution?.voiceTourEmail) return 'Tour confirmation email is not configured for this property. Nothing was sent. Offer staff follow-up.'
       try { return JSON.stringify(await execution.voiceTourEmail.command(args, callId, execution.artifactMessages,
         { toolId: execution.toolId, token: execution.token })) }
@@ -670,6 +672,7 @@ async function runTool(
     }
 
     case 'book_tour': {
+      if (cancelledTour(await calendarStore.read(), callId, state.booking?.externalId ?? state.bookingAttempt?.externalId)) return CANCELLED_TOUR_RESPONSE
       if (state.tourChangeRequested) return TOUR_CHANGE_SAVED
       const timeZone = tourTimeZone(property, callId)
       if (!timeZone) return CALENDAR_CONFIGURATION_UNAVAILABLE
@@ -1145,6 +1148,15 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
       }
       const accepted = admission!
       const cached = new Map(accepted.results.map(item => [item.toolId, item.result]))
+      const cancellationSensitive = new Set(prepared.filter(tc => ['book_tour','email_tour_confirmation'].includes(tc.name)).map(tc => tc.toolCallId))
+      const currentResults = async (rows: Array<{ toolCallId: unknown; result: string }>) => {
+        if (!cancellationSensitive.size || state.booking && state.booking.status !== 'confirmed' || state.emergency || state.escalation?.trigger === 'emergency') return rows
+        // A durable tool receipt describes the earlier action, not today's reservation.
+        // Check again immediately before exposing a cached or freshly completed response.
+        const cancelled = cancelledTour(await calendarStore.read(), callId, state.booking?.externalId ?? state.bookingAttempt?.externalId)
+        return cancelled ? rows.map(row => cancellationSensitive.has(row.toolCallId as string) ? { ...row, result: CANCELLED_TOUR_RESPONSE } : row) : rows
+      }
+
       const batchChange = prepared.find(tc => tc.tourChange)?.tourChange
       let tourChangeSaveFailed = false
       const providerPhone = message.call?.customer?.number ?? body.call?.customer?.number
@@ -1167,10 +1179,10 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
         try { await finishEndedCall(callId, state, now, runtime) }
         catch {
           res.setHeader('retry-after', '2')
-          res.status(503).json({ results, code: 'call_projection_pending', retryable: true })
+          res.status(503).json({ results: await currentResults(results), code: 'call_projection_pending', retryable: true })
           return
         }
-        res.status(200).json({ results })
+        res.status(200).json({ results: await currentResults(results) })
         return
       }
       hasAdmittedWork = true
@@ -1316,7 +1328,7 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
         }
       }
       if (unresolved || projectionFailed || tourChangeSaveFailed || bookingReviewFailed) res.setHeader('retry-after', '2')
-      res.status(pauseUnpersisted || unresolved || projectionFailed || tourChangeSaveFailed || bookingReviewFailed ? 503 : 200).json({ results,
+      res.status(pauseUnpersisted || unresolved || projectionFailed || tourChangeSaveFailed || bookingReviewFailed ? 503 : 200).json({ results: await currentResults(results),
         ...(pauseUnpersisted ? { code: 'emergency_persistence_unavailable' }
           : tourChangeSaveFailed ? { code: 'tour_change_persistence_unavailable', retryable: true }
           : bookingReviewFailed ? { code: 'booking_review_persistence_unavailable', retryable: true }

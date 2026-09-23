@@ -383,7 +383,7 @@ function toolbarHtml(m) {
   const navigation = m.mobile ? '' : `<div class="cal-nav">${navBtn('prev', `Previous ${unit}`, prevOff)}<button type="button" class="btn" data-action="today" data-key="today">Today</button>${navBtn('next', `Next ${unit}`, nextOff)}</div>`
   const heading = m.mobile ? '<h2 class="cal-schedule-title">Daily schedule</h2>' : `<h2 class="cal-range" aria-live="polite" data-key="range">${rt.when ? `<span class="cal-range-when">${esc(rt.when)} · </span>` : ''}${esc(rt.range)}</h2>`
   const layout = m.mobile ? '<button type="button" class="btn" data-action="today" data-key="today">Today</button>' : `<div class="seg cal-seg" role="radiogroup" aria-label="Layout"><button type="button" class="tab" role="radio" aria-checked="${m.view === 'week' ? 'true' : 'false'}" data-action="view-week" data-key="view-week">Week</button><button type="button" class="tab" role="radio" aria-checked="${m.view === 'day' ? 'true' : 'false'}" data-action="view-day" data-key="view-day">Day</button></div>`
-  return `<div class="cal-schedule-heading"><div><span class="section-kicker">${m.mobile ? 'One day at a time' : 'Schedule overview'}</span>${heading}</div><div class="cal-tools">${layout}<button type="button" class="btn" data-action="goto" data-key="goto">Go to date</button></div></div>` +
+  return `<div class="cal-schedule-heading"><div><span class="section-kicker">${m.mobile ? 'One day at a time' : 'Schedule overview'}</span>${heading}</div><div class="cal-tools">${layout}<button type="button" class="btn" data-action="goto" data-key="goto">Go to date</button>${A.databaseMode && A.can('operate') ? '<button type="button" class="btn" data-action="cancellations">Cancellations</button>' : ''}</div></div>` +
     `<div class="cal-toolbar">${navigation}<p class="cal-window-note">${m.loaded ? `Showing ${esc(fmt.monthDay(m.range.from))}${m.range.to !== m.range.from ? ` – ${esc(fmt.monthDay(m.range.to))}` : ''}` : 'Loading selected dates'} · ${esc(A.property.timeZoneLabel)}</p></div>` +
     `<div class="cal-progress"${A.busyNow('calendar') ? '' : ' hidden'}></div>`
 }
@@ -968,6 +968,7 @@ function tourContent(s, m, it) {
     ? t.booking.conflictBlockIds.includes(block.id)
     : block.unitId === t.unitId && Date.parse(block.startsAt) < Date.parse(t.booking?.occupiedEndsAt || sl.endsAt) && Date.parse(block.endsAt) > Date.parse(t.booking?.occupiedStartsAt || sl.startsAt)))
   if (conflicts.length) body += `<p class="cal-unit-conflict">This apartment is blocked during the tour or its reserved preparation time: ${conflicts.map(block => esc(block.reason)).join('; ')}. Contact the prospect and choose another time or apartment.</p>`
+  if (A.databaseMode && A.can('operate') && t.booking?.externalId) actions.push('<button type="button" class="btn" data-pop="cancel-tour">Cancel tour</button>')
   const pending = t.booking && arr(s.calendar && s.calendar.rescheduleProjectionPending).find(item => item.externalId === t.booking.externalId)
   if (pending) {
     body += '<p class="cal-unit-conflict">The tour moved, but its CRM follow-ups still need to sync.</p>'
@@ -1008,6 +1009,7 @@ function showDetails(kind, it, anchorEl, seg) {
         body.addEventListener('click', event => {
           const action = event.target.closest('[data-pop]')?.dataset.pop
           const booking = it.slot && it.slot.booking
+          if (action === 'cancel-tour' && booking && A.can('operate')) { closePopover(false); A.tourCancellations.open(booking.externalId) }
           if (action === 'contact' && booking && A.can('operate')) { closePopover(false); A.tourContacts.open(booking.externalId) }
           if (action === 'confirmation' && booking && A.can('operate')) { closePopover(false); A.tourConfirmations.open(booking.externalId) }
           if (action === 'reschedule' && booking && A.can('operate')) { closePopover(false); A.calendarActions.openReschedule(booking) }
@@ -1045,6 +1047,7 @@ function showDetails(kind, it, anchorEl, seg) {
     const b = e.target.closest('[data-pop]'); if (!b) return
     if (b.dataset.pop === 'close') closePopover(true)
     else if (b.dataset.pop === 'reopen' && b.getAttribute('aria-disabled') !== 'true') reopen(findItem(it.key) || it)
+    else if (b.dataset.pop === 'cancel-tour' && it.slot?.booking && A.can('operate')) { closePopover(false); A.tourCancellations.open(it.slot.booking.externalId) }
     else if (b.dataset.pop === 'contact' && it.slot?.booking && A.can('operate')) { closePopover(false); A.tourContacts.open(it.slot.booking.externalId) }
     else if (b.dataset.pop === 'confirmation' && it.slot?.booking && A.can('operate')) { closePopover(false); A.tourConfirmations.open(it.slot.booking.externalId) }
     else if (b.dataset.pop === 'reschedule' && it.slot?.booking && A.can('operate')) { closePopover(false); A.calendarActions.openReschedule(it.slot.booking) }
@@ -1480,6 +1483,7 @@ const view = {
       else if (a === 'view-week') setView('week')
       else if (a === 'view-day') setView('day')
       else if (a === 'goto') goToDate()
+      else if (a === 'cancellations') A.tourCancellations.history()
       else if (a === 'settings') openSettings()
       else if (a === 'block') openSheet({ date: cal.model && cal.model.view === 'day' ? cal.model.date : undefined, mode: 'day' })
       else if (a === 'unit-blocks') { closePopover(false); A.calendarActions.openUnitBlocks({ date: cal.model && cal.model.date }) }

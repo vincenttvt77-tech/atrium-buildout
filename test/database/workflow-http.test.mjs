@@ -180,7 +180,9 @@ test('queue pagination visits every exact-timestamp row once and rejects malform
 test('exact saved action bypasses pagination and filters without selecting another property or accepting mixed queries', async () => {
   const old=await accept('property-a1')
   for(let i=0;i<28;i++) await accept('property-a1')
-  assert.ok(!(await request('?state=all')).body.actions.some(row=>row.id===old.id))
+  const page=await request('?state=all')
+  assert.equal(page.status,200,JSON.stringify(page.body))
+  assert.ok(!page.body.actions.some(row=>row.id===old.id))
   const found=await request('?id='+old.id)
   assert.equal(found.status,200);assert.deepEqual(found.body.actions.map(row=>row.id),[old.id]);assert.equal(found.body.nextCursor,null)
   assert.equal(found.body.executionEnabled,false)

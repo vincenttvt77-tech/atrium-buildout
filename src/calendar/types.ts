@@ -93,6 +93,8 @@ export interface CalendarBookingReviewResolution {
 export interface CalendarState {
   blocks: SlotBlock[]
   bookings: SlotBooking[]
+  /** Staff cancellations retain the exact reservation and fence original-call retries. */
+  cancelledBookings?: TourCancellation[]
   /** Permanent late-create fences; a missing booking alone never proves absence. */
   bookingReviewResolutions?: CalendarBookingReviewResolution[]
   /** Separate from staff/global blocks: one apartment never closes unrelated apartments. */
@@ -103,6 +105,18 @@ export interface CalendarState {
   emergencyHolds?: Array<{ interactionId: string; kind: EmergencyKind; recordedAt: string }>
   /** Caller change request: prevents new voice bookings, never blocks a staff reschedule. */
   tourChangeHolds?: Array<{ interactionId: string; recordedAt: string }>
+}
+
+export interface TourCancellation {
+  format: 'tour-cancellation-v1'
+  booking: SlotBooking
+  requestId: string
+  actorId: string
+  at: string
+  reason: string
+  interactionIds: string[]
+  /** Cancellation never implies that a prospect was contacted. */
+  notification: 'not_sent'
 }
 
 export const emptyCalendar = (): CalendarState => ({ blocks: [], bookings: [] })

@@ -77,6 +77,7 @@ function calendarView(now: Date, state: Awaited<ReturnType<typeof store.read>>, 
       }
     }),
     blocks, bookings: savedBookings, unitBlocks,
+    cancelledBookings: (state.cancelledBookings ?? []).slice().sort((a,b) => b.at.localeCompare(a.at)).slice(0,100),
     units: (inventory?.units ?? []).map(unit => ({ id: unit.unitId, unitId: unit.unitId, label: unit.unitId,
       floorPlanId: unit.floorPlanId, floorPlanName: inventory?.floorPlans.find(plan => plan.id === unit.floorPlanId)?.name ?? unit.floorPlanId,
       bedrooms: unit.bedrooms, bathrooms: unit.bathrooms, sqft: unit.sqft, floor: unit.floor, monthlyRent: unit.monthlyRent, status: unit.status })),

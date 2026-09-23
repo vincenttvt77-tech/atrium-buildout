@@ -6,6 +6,7 @@ import type { LeadProfile, CallSummary, Evidence } from './profile.ts'
 import { bookingIdentity, deriveFollowUps, legacyFollowUpId, initialFollowUpAlias } from './followups.ts'
 import type { FollowUp } from './followups.ts'
 import { DEFAULT_TIME_ZONE, validateTimeZone } from '../calendar/time.ts'
+import { applySavedCancellations } from './cancellation.ts'
 import { resolveRescheduledBooking, reconcileRescheduledTour } from './reschedule.ts'
 import type { RescheduleProjectionInput } from './reschedule.ts'
 
@@ -112,6 +113,7 @@ export async function consolidateCall(
       const existing = p.bookings.find((b) => (b.externalId && o.booking!.externalId ? b.externalId === o.booking!.externalId
         : bookingIdentity(b) === bookingIdentity(o.booking!) || b.rescheduledFrom?.some(prior => bookingIdentity(prior) === bookingIdentity(o.booking!))))
       if (!existing) next.bookings = [...p.bookings, { ...o.booking, callId: o.callId }]
+      else if (existing.status === 'cancelled') { /* A staff cancellation cannot be restored by a delayed call. */ }
       else if ((o.booking.rescheduleRevision ?? 0) > (existing.rescheduleRevision ?? 0)) {
         next.bookings = p.bookings.map(b => b === existing ? { ...existing, ...o.booking!, callId: existing.callId } : b)
       }
@@ -146,6 +148,10 @@ export async function consolidateCall(
     if (result.status !== 'complete') throw new Error('Tour reschedule projection requires staff review')
     profile = (await store.get<LeadProfile>(key))!
   }
+
+  // The profile update above holds the PostgreSQL writer lock through this transaction.
+  // Re-read cancellation decisions now, even if an earlier pre-read saw no decision.
+  profile = (await applySavedCancellations(store, key, profile, zone)).profile
 
   // A retried report may arrive hours or days later. Its work is still due relative to
   // the original call, including retries after a partially failed follow-up write.

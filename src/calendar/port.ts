@@ -5,6 +5,7 @@ import { openSlots, generateSlots, bookingSlot, canBook, unitBlocksFor } from '.
 import { effectiveOptions } from './settings.ts'
 import type { SlotOptions } from './slots.ts'
 import { heldEmergency, CalendarInteractionPausedError } from './safety.ts'
+import { cancelledTour, CANCELLED_TOUR_RESPONSE } from './cancellation.ts'
 import { bookingReviewBlocksCreate } from './booking-review.ts'
 import { tourChangeHold, tourProspectPhone, TourChangeRequiredError } from '../leads/tour-change.ts'
 
@@ -54,6 +55,7 @@ export function storeBackedCalendar(
           if (bookingReviewBlocksCreate(state, String(intent.request.interactionId), intent.idempotencyKey)) {
             throw new BookingConflictError('This booking attempt was reconciled by staff. Contact the leasing team before arranging another tour.')
           }
+          if (cancelledTour(state, String(intent.request.interactionId), intent.idempotencyKey)) throw new BookingConflictError(CANCELLED_TOUR_RESPONSE)
           const existing = state.bookings.find((booking) => booking.externalId === intent.idempotencyKey)
           if (existing) {
             verifyRetry(existing, intent)
@@ -127,6 +129,7 @@ export function storeBackedCalendar(
 
     async readBooking(externalId: string) {
       const state = await store.read()
+      if (cancelledTour(state, '', externalId)) return null
       const booking = state.bookings.find((candidate) => candidate.externalId === externalId)
       if (!booking) return null
       const slot = bookingSlot(booking)
