@@ -5,7 +5,7 @@ import type { DocumentStore } from '../../store/documents.ts'
 import { consolidateCall, followUpKey, listFollowUps, profileKey } from '../consolidate.ts'
 import type { CallOutcome } from '../consolidate.ts'
 import type { FollowUp } from '../followups.ts'
-import { deriveFollowUps, legacyFollowUpId } from '../followups.ts'
+import { deriveFollowUps, legacyFollowUpId, legacyInitialFollowUpId } from '../followups.ts'
 import { emptyProfile } from '../profile.ts'
 import type { LeadProfile } from '../profile.ts'
 import { emptyQualification } from '../../leasing/qualification.ts'
@@ -238,4 +238,42 @@ test('late old call and unrelated old reports do not manufacture overdue pre-tou
   const profile = (await store.get<LeadProfile>(profileKey(phone)))!
   assert.equal(profile.calls[0]!.at, original.at.toISOString())
   assert.equal(profile.bookings[0]!.rescheduledAt, change.at)
+})
+
+
+test('pending reschedule never holds another explicit reservation sharing the old time and caller', () => {
+  const p = {...emptyProfile(phone, original.at), calls:[{callId:original.callId,at:original.at.toISOString(),durationSeconds:60,outcome:'Booked',toolsCalled:[]}],
+    bookings:[{...before,externalId:'another-reservation',callId:original.callId,status:'confirmed' as const}]}
+  const rows = deriveFollowUps(p, original.at, original.callId)
+  const pending = pendingRescheduleVisibility({blocks:[],bookings:[input.booking]}, rows)
+  assert.deepEqual(pending.heldFollowUps, [])
+  assert.deepEqual(pending.followUps, rows)
+})
+
+
+test('a reschedule leaves another reservation’s old physical ID untouched and retires its own old-key retries', async () => {
+  const store=new MemoryDocumentStore(), first=await consolidateCall(store,original)
+  const profile={...first.profile,bookings:[first.profile.bookings[0]!,{...first.profile.bookings[0]!,externalId:'other-reservation',callId:'other-call'}],
+    calls:[...first.profile.calls,{...first.profile.calls[0]!,callId:'other-call'}]}
+  await store.set(profileKey(phone),profile)
+  const other=deriveFollowUps({...profile,bookings:[profile.bookings[1]!] },original.at,'other-call').find(row=>row.kind==='confirm_tour')!
+  const legacyId=legacyInitialFollowUpId(profile,other)!
+  const retained={...other,id:legacyId,source:{...other.source!,key:legacyId.slice(6)}}
+  await store.set(followUpKey(legacyId),retained)
+  await reconcileRescheduledTour(store,input)
+  assert.deepEqual(await store.get(followUpKey(legacyId)),retained)
+  const oldReminder=first.followUps.find(row=>row.kind==='remind_tour')!
+  const priorId=legacyInitialFollowUpId(first.profile,oldReminder)!
+  const tombstone=(await store.get<FollowUp>(followUpKey(priorId)))!
+  assert.equal(tombstone.status,'skipped');assert.equal(tombstone.superseded?.bookingExternalId,externalId)
+  await store.update(followUpKey(priorId),{...oldReminder,id:priorId},row=>row)
+  assert.equal((await store.get<FollowUp>(followUpKey(priorId)))!.status,'skipped')
+})
+
+test('legacy pending reminders require a unique original call instead of another hidden caller’s time', () => {
+  const p={...emptyProfile('unknown',original.at),calls:[{callId:'other-call',at:original.at.toISOString(),durationSeconds:null,outcome:'Booked',toolsCalled:[]}],
+    bookings:[{...before,callId:'other-call',status:'confirmed' as const}]}
+  const rows=deriveFollowUps(p,original.at,'other-call')
+  const state={blocks:[],bookings:[{...input.booking,prospectPhone:'unknown'}]}
+  assert.deepEqual(pendingRescheduleVisibility(state,rows).heldFollowUps,[])
 })

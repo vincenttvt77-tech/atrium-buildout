@@ -59,6 +59,44 @@ and `ATRIUM_CHROME_EXECUTABLE` if those are not available through normal default
 `ATRIUM_BROWSER_ARTIFACTS` optionally saves local screenshots.
 
 This work does not repair ambiguous historical records, send notifications,
-change booking capacity rules, or verify a deployed phone call. Follow-up task
-matching and post-booking email correction remain separate review areas. Local
+change booking capacity rules, or verify a deployed phone call. Post-booking email correction remains a separate review area. Local
 browser acceptance is not hosted portal or production acceptance.
+
+
+## Follow-up identity and preserved staff work
+
+Follow-ups for a saved reservation use its `externalId` and revision, including
+initial revision zero. Different reservations at the same time/apartment for one
+caller therefore have separate confirmation, reminder, attendance-check and
+email-collection work. Reservations without an external identifier retain the
+older physical identity behavior; inventing an identifier would misstate evidence.
+
+Previously persisted initial v2 task IDs are recognized through their original
+physical key, original call and reservation evidence. A unique match gains the
+current source identity **in place**: its stored ID, status, due time, channel,
+reason and creation history remain unchanged. An older source without a reservation
+ID can be upgraded only with an unambiguous original-call/physical match. Multiple
+possible owners retain visible review metadata; the updater neither guesses nor
+creates one new task for every candidate. This is opportunistic reconciliation on
+call projection/replay, not a bulk migration or a deletion of historical work.
+
+Rescheduling preserves retired records at both the current and former initial
+v2 keys, so a delayed older projection encounters retained skipped work rather
+than recreating a scheduled reminder. A physical key already owned by a different
+explicit reservation is preserved. Pending reschedule visibility respects an
+explicit source identifier; older sources additionally require a unique matching
+original call and physical interval before being hidden from the active queue.
+
+The dashboard gives a tour the **Call to confirm** shortcut only when a scheduled
+task uniquely matches that prospect's reservation and revision. Review-held or
+superseded tasks cannot supply the shortcut. Task descriptions use the exact
+source booking, including its actual day, rather than another tour sharing the
+date. Older ambiguous tasks remain generic and retain their review warning.
+An unrelated callback or another confirmed tour cannot hide a failed booking's
+staff-review item merely because the caller or start time matches.
+
+All follow-ups remain staff intentions with `executable: false`. These changes
+place no calls, send no messages and do not record attendance. Explicit backend
+authorization remains unchanged. Regression coverage includes concurrent real
+PostgreSQL projection, property boundaries, transactional rollback and replay,
+legacy compatibility, and real desktop/mobile Today/Leads rendering.

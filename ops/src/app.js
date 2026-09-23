@@ -1607,14 +1607,13 @@ function needsPerson(s) {
   const stuck = []
   for (const p of profilesOf(s)) {
     if (!p) continue
-    const hasCallback = callbacks.some((f) => f.phone === p.phone && (p.phone !== 'unknown' || arr(p.calls).some(c => c.callId === f.createdFromCall)))
-    if (hasCallback) continue
     for (const b of arr(p.bookings)) {
       if (!b || (b.status !== 'failed' && b.status !== 'arranging')) continue
+      if (callbacks.some(f => f.phone === p.phone && f.createdFromCall === b.callId)) continue
       if (reviewMatchesBooking(completedReviews.get(b.callId), b)) continue
       const at = callAt(p, b.callId)
       if (at == null || now - (toTime(at) ?? 0) > 2 * DAY_MS) continue
-      if (arr(p.bookings).some((o) => o && o.status === 'confirmed' && o.slotId === b.slotId)) continue
+      if (arr(p.bookings).some((o) => o && o.status === 'confirmed' && sameBookingAttempt(o, b))) continue
       if (seen.has(b.callId)) continue
       seen.add(b.callId)
       stuck.push({ type: 'stuckTour', booking: b, profile: p, phone: p.phone, name: p.name || null, calledAt: at, callId: b.callId, at, sortAt: toTime(at) ?? 0 })
@@ -2151,21 +2150,35 @@ function callStory(record, s) {
 
 // --- the to-do sentence (§6.3) ---------------------------------------------------------
 
+const sameTourPoint = (a, b) => a && b && a.slotId === b.slotId && toTime(a.startsAt) != null
+  && toTime(a.startsAt) === toTime(b.startsAt) && String(a.unitId ?? '').trim().toUpperCase() === String(b.unitId ?? '').trim().toUpperCase()
+function sameBookingAttempt(a, b) {
+  if (!a || !b) return false
+  if (a.externalId != null && b.externalId != null) return reservationId(a.externalId) && a.externalId === b.externalId
+  return reservationId(a.callId) && a.callId === b.callId && sameTourPoint(a, b)
+}
+/** A task points to one original reservation/revision, never every tour for this phone. */
+function followUpBooking(fu, p) {
+  if (!p || fu.phone !== p.phone || fu.reconciliation?.status === 'needs_review' || fu.superseded) return null
+  const source = fu.source, ref = source?.version === 2 && source.kind === 'booking' ? source.booking : null
+  if (source && !ref) return null
+  const callId = source ? source.callId : fu.createdFromCall
+  if (!reservationId(callId) || (source && fu.createdFromCall && callId !== fu.createdFromCall)) return null
+  const candidates = arr(p.bookings).filter(b => b && b.status === 'confirmed' && b.callId === callId
+    && (!ref || (sameTourPoint(b, ref) && (ref.externalId == null || (reservationId(ref.externalId) && ref.externalId === b.externalId))
+      && (ref.revision ?? 0) === (b.rescheduleRevision ?? 0))))
+  return candidates.length === 1 ? candidates[0] : null
+}
+
 function todoSentence(fu, profile, s) {
   const p = profile || profileByPhone(s || state, fu.phone) || { phone: fu.phone, name: null }
   const name = personName(p)
   const kind = String(fu.kind ?? '')
   const today = nyNow().ymd
   const verbFor = (ch) => label(labels.channelVerb, ch, 'Call')
-  const sourceBooking = fu.source?.version === 2 && fu.source.kind === 'booking' ? fu.source.booking : null
   const hasBookingSource = fu.source?.version === 2
-  const unitKey = value => String(value ?? '').trim().toUpperCase()
-  const exactBooking = sourceBooking && arr(p.bookings).find(b => b && b.status === 'confirmed'
-    && b.slotId === sourceBooking.slotId && toTime(b.startsAt) != null && toTime(b.startsAt) === toTime(sourceBooking.startsAt)
-    && unitKey(b.unitId) === unitKey(sourceBooking.unitId))
-  // A v2 task cannot borrow another tour's details merely because the dates match.
-  const bookingOn = (ymd) => hasBookingSource ? exactBooking || null
-    : arr(p.bookings).find((b) => b && b.status === 'confirmed' && nyDate(b.startsAt) === ymd) || null
+  const exactBooking = followUpBooking(fu, p)
+  const bookingOn = () => exactBooking
   const tourPhrase = (b) => `${fmt.time(b.startsAt)} tour${b.unitId ? ` of apartment ${b.unitId}` : ''}`
   const dayWord = (ymd) => { const d = daysBetween(today, ymd); return d === 0 ? "today's" : d === 1 ? "tomorrow's" : `${WD_LONG[dayOfWeek(ymd)]}'s` }
   const reason = String(fu.reason ?? '')
@@ -2173,17 +2186,16 @@ function todoSentence(fu, profile, s) {
   if (kind === 'confirm_tour') {
     const tour = bookingOn(nyDate(fu.dueAt))
     if (tour) after = ` to confirm ${dayWord(nyDate(tour.startsAt))} ${tourPhrase(tour)}`
-    else if ((m = /still coming at (\d{1,2}:\d{2} [AP]M)(?: to see (\S+?))?\.$/.exec(reason))) after = ` to confirm their ${m[1]} tour${m[2] ? ` of apartment ${m[2]}` : ''}`
+    else if (!hasBookingSource && (m = /still coming at (\d{1,2}:\d{2} [AP]M)(?: to see (\S+?))?\.$/.exec(reason))) after = ` to confirm their ${m[1]} tour${m[2] ? ` of apartment ${m[2]}` : ''}`
     else after = ' to confirm their tour'
   } else if (kind === 'remind_tour') {
     verb = verbFor(fu.channel); before = `${verb} `
     const tour = bookingOn(addDays(nyDate(fu.dueAt) || today, 1))
-    after = ` a reminder about tomorrow's ${tour ? tourPhrase(tour) : 'tour'}`
+    after = tour ? ` a reminder about ${dayWord(nyDate(tour.startsAt))} ${tourPhrase(tour)}` : ' a reminder about their tour'
   } else if (kind === 'post_tour') {
-    const past = hasBookingSource ? (exactBooking ? [exactBooking] : [])
-      : arr(p.bookings).filter((b) => b && b.status === 'confirmed' && (toTime(b.startsAt) ?? Infinity) < Date.now()).sort((a, b) => (toTime(b.startsAt) ?? 0) - (toTime(a.startsAt) ?? 0))
+    const past = exactBooking ? [exactBooking] : []
     let unit = past.length ? past[0].unitId : null
-    if (!unit && (m = /(?:toured|was scheduled to tour)(?: residence (\S+?))? —/.exec(reason))) unit = m[1] || null
+    if (!unit && !hasBookingSource && (m = /(?:toured|was scheduled to tour)(?: residence (\S+?))? —/.exec(reason))) unit = m[1] || null
     after = ` to check whether they attended the tour${unit ? ` of apartment ${unit}` : ''}. If so, ask how it went and whether they want to apply.`
   } else if (kind === 'priced_out_watch') {
     verb = verbFor(fu.channel); before = `${verb} `
@@ -2222,7 +2234,7 @@ const derive = {
     return block && isYmd(block.target) && !block.startsAt && !block.endsAt ? [block.target] : []
   },
   reservationId, reservationIndex, calendarBooking, calendarBookingForLead, leadForBooking, bookingReviewResolution, windowStart, personName, displayName, displayStage, needsPerson, callBackToday, dueTodayCount, toursOn, callRecords, callStory,
-  todoSentence, escalationText, lossText, summarySentence, availabilityText, moveInText, budgetText, profileByPhone, profileForCall, factValue, bedroomsText, emergencyAction,
+  followUpBooking, todoSentence, escalationText, lossText, summarySentence, availabilityText, moveInText, budgetText, profileByPhone, profileForCall, factValue, bedroomsText, emergencyAction,
 }
 
 // ---------------------------------------------------------------------------------------
@@ -2608,7 +2620,11 @@ function followUpRowHtml(fu, s) {
     `<button type="button" class="btn" data-action="skip" data-fu="${esc(fu.id)}" data-key="fu:${esc(fu.id)}:skip" data-write="leads">Not needed</button></span></div>`
 }
 function tourRowHtml(t, s, today) {
-  const confirmPending = t.phone && followUpsOf(s).some((f) => f && f.kind === 'confirm_tour' && f.status === 'scheduled' && f.phone === t.phone)
+  const confirmPending = t.profile && followUpsOf(s).some(f => {
+    if (!f || f.kind !== 'confirm_tour' || f.status !== 'scheduled') return false
+    const booking = followUpBooking(f, t.profile)
+    return booking && sameBookingAttempt(booking, t) && sameTourPoint(booking, t)
+  })
   const actions = []
   if (confirmPending && href.tel(t.phone)) actions.push(telBtn(t.phone, 'Call to confirm', 'btn btn-call'))
   if (t.profile) actions.push(link('leads', { phone: t.phone || 'unknown', ...((!t.phone || t.phone === 'unknown') && t.callId ? { call: t.callId } : {}) }, 'Open lead', 'btn btn-quiet link-action'))

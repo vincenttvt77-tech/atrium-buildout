@@ -75,6 +75,26 @@ export function bookingIdentity(b: { slotId: string; startsAt: string; unitId: s
   return JSON.stringify([b.slotId, new Date(b.startsAt).toISOString(), b.unitId?.trim().toUpperCase() || null])
 }
 
+/** Previous v2 initial-booking ID, retained only to reconcile saved work in place. */
+export function legacyInitialFollowUpId(p: LeadProfile, f: FollowUp): string | null {
+  const source = f.source, b = source?.booking
+  if (source?.kind !== 'booking' || !b?.externalId || (b.revision ?? 0) !== 0) return null
+  const key = createHash('sha256').update(JSON.stringify([identity(p, f.createdFromCall), f.kind, source.kind, bookingIdentity(b)])).digest('hex')
+  return `fu-v2-${key}`
+}
+
+/** Physical v2 identities may be upgraded only with matching original-call evidence. */
+export function initialFollowUpAlias(p: LeadProfile, row: FollowUp, next: FollowUp): boolean {
+  const old = row.source, source = next.source, b = old?.booking, target = source?.booking
+  const legacyId = legacyInitialFollowUpId(p, next)
+  return Boolean(legacyId && old?.version === 2 && old.kind === 'booking' && b && target
+    && row.kind === next.kind && row.phone === next.phone && old.callId === source!.callId
+    && row.createdFromCall === next.createdFromCall && (b.revision ?? 0) === 0
+    && (!b.externalId || b.externalId === target.externalId)
+    && bookingIdentity(b) === bookingIdentity(target)
+    && (row.id === legacyId || `fu-v2-${old.key}` === legacyId))
+}
+
 const validAt = (value: unknown, fallback: Date): Date => {
   const parsed = value instanceof Date ? value : typeof value === 'string' ? new Date(value) : fallback
   return Number.isFinite(parsed.getTime()) ? parsed : fallback
@@ -93,8 +113,8 @@ export function deriveFollowUps(p: LeadProfile, now: Date, fromCall: string, tim
   const mk = (kind: FollowUpKind, channel: FollowUp['channel'], dueAt: Date, reason: string,
     origin: Omit<FollowUpSource, 'version' | 'key'> = callSource): FollowUp => {
     const key = createHash('sha256').update(JSON.stringify([identity(p, fromCall), kind, origin.kind,
-      origin.booking ? (origin.booking.externalId && origin.booking.revision
-        ? JSON.stringify([origin.booking.externalId, origin.booking.revision]) : bookingIdentity(origin.booking)) : origin.callId])).digest('hex')
+      origin.booking ? (origin.booking.externalId
+        ? JSON.stringify([origin.booking.externalId, origin.booking.revision ?? 0]) : bookingIdentity(origin.booking)) : origin.callId])).digest('hex')
     return {
       id: `fu-v2-${key}`, phone: p.phone, kind, channel,
       dueAt: dueAt.toISOString(), reason, status: 'scheduled',

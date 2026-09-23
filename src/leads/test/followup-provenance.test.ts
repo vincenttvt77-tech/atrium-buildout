@@ -1,5 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { consolidateCall, followUpKey, listFollowUps } from '../consolidate.ts'
 import type { CallOutcome } from '../consolidate.ts'
 import { deriveFollowUps, legacyFollowUpId } from '../followups.ts'
@@ -209,4 +210,82 @@ test('partial projection replay retains original booking time and recovers only 
   assert.equal(collection.dueAt, '2026-09-09T16:00:00.000Z')
   assert.equal(collection.createdFromCall, 'first')
   assert.ok(rows.every(f => f.executable === false))
+})
+
+
+test('different saved reservations at the same time and unit retain separate initial follow-up work', async () => {
+  const store = new MemoryDocumentStore()
+  const first = await consolidateCall(store, call({ booking: { ...booking(), externalId: 'reservation-a' } }))
+  const done = first.followUps.find(row => row.kind === 'confirm_tour')!
+  await store.set(followUpKey(done.id), { ...done, status: 'done' })
+  const second = await consolidateCall(store, call({ callId: 'second', at: new Date('2026-09-09T14:10:00Z'), booking: { ...booking(), externalId: 'reservation-b' } }))
+  assert.equal(second.profile.bookings.length, 2)
+  const rows = await listFollowUps(store)
+  for (const kind of ['confirm_tour','remind_tour','collect_email','post_tour']) {
+    assert.equal(rows.filter(row => row.kind === kind).length, 2, kind)
+  }
+  assert.equal(rows.find(row => row.kind === 'confirm_tour' && row.source?.booking?.externalId === 'reservation-a')?.status, 'done')
+  assert.equal(rows.find(row => row.kind === 'confirm_tour' && row.source?.booking?.externalId === 'reservation-b')?.status, 'scheduled')
+})
+
+
+function oldInitial(row: FollowUp, withId = true): FollowUp {
+  const b = row.source!.booking!
+  const key = createHash('sha256').update(JSON.stringify([row.phone.replace(/\D/g,''),row.kind,'booking',
+    JSON.stringify([b.slotId,new Date(b.startsAt).toISOString(),b.unitId?.trim().toUpperCase()||null])])).digest('hex')
+  const {externalId: _id, ...point}=b
+  return {...row,id:'fu-v2-'+key,source:{...row.source!,key,booking:withId?b:point}}
+}
+
+test('saved initial v2 work upgrades provenance in place while retaining all staff decisions', async () => {
+  for (const withId of [true,false]) {
+    const store = new MemoryDocumentStore(), original=call({booking:{...booking(),externalId:'stable-reservation'}})
+    const first=await consolidateCall(store,original)
+    const legacy=first.followUps.map((f,i)=>({...oldInitial(f,withId),status:(['done','skipped','scheduled'] as const)[i%3]!,
+      dueAt:'2026-09-11T15:17:00.000Z',channel:'sms' as const,reason:'Staff reviewed '+i}))
+    for(const f of first.followUps)await store.delete(followUpKey(f.id))
+    for(const f of legacy)await store.set(followUpKey(f.id),f)
+    await consolidateCall(store,original);await consolidateCall(store,original)
+    const rows=await listFollowUps(store);assert.equal(rows.length,legacy.length)
+    for(const old of legacy){const next=rows.find(f=>f.id===old.id)!;assert.ok(next)
+      assert.deepEqual({...next,source:old.source},old)
+      assert.equal(next.source!.key,first.followUps.find(f=>f.kind===old.kind)!.source!.key)
+      assert.equal(next.source!.booking!.externalId,'stable-reservation')
+    }
+  }
+})
+
+test('ambiguous physical v2 provenance remains visible for review without duplicating its tasks', async () => {
+  const store=new MemoryDocumentStore(), original=call({booking:{...booking(),externalId:'one'}})
+  const first=await consolidateCall(store,original)
+  const p={...first.profile,bookings:[first.profile.bookings[0]!,{...first.profile.bookings[0]!,externalId:'two'}]}
+  await store.set('lead:'+p.phone,p)
+  for(const f of first.followUps)await store.delete(followUpKey(f.id))
+  const old=first.followUps.map(f=>oldInitial(f,false))
+  for(const f of old)await store.set(followUpKey(f.id),f)
+  await consolidateCall(store,original);await consolidateCall(store,original)
+  const rows=await listFollowUps(store);assert.equal(rows.length,old.length)
+  assert.ok(rows.every(row=>row.reconciliation?.status==='needs_review'&&row.reconciliation.candidateIds.length===2))
+  assert.ok(rows.every(row=>row.source?.booking?.externalId===undefined))
+})
+
+test('partial initial identity upgrade is replayable and preserves a concurrent staff edit', async () => {
+  const base=new MemoryDocumentStore(), original=call({booking:{...booking(),externalId:'one'}})
+  const first=await consolidateCall(base,original)
+  for(const f of first.followUps)await base.delete(followUpKey(f.id))
+  const old=first.followUps.map(f=>oldInitial(f))
+  for(const f of old)await base.set(followUpKey(f.id),f)
+  let writes=0,fail=true
+  const store:DocumentStore={get:base.get.bind(base),set:base.set.bind(base),delete:base.delete.bind(base),list:base.list.bind(base),describe:base.describe.bind(base),
+    update:async(key,initial,fn)=>{
+      if(key.startsWith('followup:')&&fail&&++writes===2)throw new Error('interrupted upgrade')
+      return base.update(key,initial,fn)
+    }}
+  await assert.rejects(consolidateCall(store,original),/interrupted upgrade/)
+  const edited={...(await base.get<FollowUp>(followUpKey(old[1]!.id)))!,status:'done' as const,reason:'Staff completed after interruption'}
+  await base.set(followUpKey(edited.id),edited);fail=false
+  await consolidateCall(store,original);await consolidateCall(store,original)
+  const rows=await listFollowUps(base);assert.equal(rows.length,old.length)
+  assert.equal(rows.find(row=>row.id===edited.id)!.status,'done')
+  assert.equal(rows.find(row=>row.id===edited.id)!.reason,edited.reason)
 })

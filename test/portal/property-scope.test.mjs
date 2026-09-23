@@ -409,17 +409,17 @@ test('the call detail keeps review guidance visible even when its callback was m
   assert.match(html, /Handled — a person marked this done/)
 })
 
-test('same-day v2 tour tasks name their exact source booking while legacy rows retain date matching', () => {
+test('same-day v2 tour tasks name their exact source booking while ambiguous legacy rows remain generic', () => {
   const { app } = portal()
   const bookings = [
-    { slotId: 'same-slot-label', startsAt: '2032-06-01T15:00:00.000Z', unitId: '4A', status: 'confirmed' },
-    { slotId: 'same-slot-label', startsAt: '2032-06-01T15:30:00.000Z', unitId: '7B', status: 'confirmed' },
+    { slotId: 'same-slot-label', startsAt: '2032-06-01T15:00:00.000Z', unitId: '4A', status: 'confirmed', callId: 'old-call', externalId: 'one' },
+    { slotId: 'same-slot-label', startsAt: '2032-06-01T15:30:00.000Z', unitId: '7B', status: 'confirmed', callId: 'old-call', externalId: 'two' },
   ]
   const profile = { phone: '+13125550101', name: 'Caller', bookings }
   for (const kind of ['confirm_tour', 'remind_tour', 'post_tour']) {
     for (const booking of bookings) {
       const followUp = followUpFixture({ kind, dueAt: kind === 'remind_tour' ? '2032-05-31T15:00:00Z' : '2032-06-01T12:00:00Z',
-        source: { version: 2, kind: 'booking', booking: { ...booking, unitId: booking.unitId.toLowerCase() } } })
+        source: { version: 2, kind: 'booking', callId: 'old-call', booking: { ...booking, unitId: booking.unitId.toLowerCase() } } })
       const sentence = app.derive.todoSentence(followUp, profile, app.state).text
       assert.match(sentence, new RegExp(`apartment ${booking.unitId}`))
       assert.doesNotMatch(sentence, new RegExp(`apartment ${booking.unitId === '4A' ? '7B' : '4A'}`))
@@ -427,11 +427,11 @@ test('same-day v2 tour tasks name their exact source booking while legacy rows r
   }
   for (const changed of [{ slotId: 'missing' }, { startsAt: '2032-06-01T15:45:00Z' }, { unitId: '99Z' }]) {
     const followUp = followUpFixture({ dueAt: '2032-06-01T12:00:00Z',
-      source: { version: 2, kind: 'booking', booking: { ...bookings[1], ...changed } } })
+      source: { version: 2, kind: 'booking', callId: 'old-call', booking: { ...bookings[1], ...changed } } })
     assert.doesNotMatch(app.derive.todoSentence(followUp, profile, app.state).text, /apartment (4A|7B)/)
   }
   const legacy = followUpFixture({ dueAt: '2032-06-01T12:00:00Z' })
-  assert.match(app.derive.todoSentence(legacy, profile, app.state).text, /apartment 4A/)
+  assert.doesNotMatch(app.derive.todoSentence(legacy, profile, app.state).text, /apartment (4A|7B)/)
 })
 
 test('durable late or anonymous safety reports appear in Today and call details without a notification claim', async () => {

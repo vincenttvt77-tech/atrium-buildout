@@ -3,7 +3,7 @@ import type { DocumentStore } from '../store/documents.ts'
 import type { BookingReschedule, CalendarState, SlotBooking } from '../calendar/types.ts'
 import type { LeadBooking, LeadProfile } from './profile.ts'
 import { normalisePhone } from './profile.ts'
-import { bookingIdentity, deriveFollowUps, legacyFollowUpId } from './followups.ts'
+import { bookingIdentity, deriveFollowUps, legacyFollowUpId, legacyInitialFollowUpId } from './followups.ts'
 import type { FollowUp } from './followups.ts'
 import { validateTimeZone } from '../calendar/time.ts'
 
@@ -105,7 +105,7 @@ const followUpKey = (id: string) => `followup:${id}`
 function oldSourceMatches(row: FollowUp, prior: LeadBooking, externalId: string): boolean {
   const source = row.source?.booking
   return source ? (source.externalId ? source.externalId === externalId && (source.revision ?? 0) < (prior.rescheduleRevision ?? 0) + 1
-    : bookingIdentity(source) === bookingIdentity(prior)) : false
+    : row.source?.callId === prior.callId && bookingIdentity(source) === bookingIdentity(prior)) : false
 }
 
 /**
@@ -159,7 +159,11 @@ export async function reconcileRescheduledTour(store: DocumentStore, input: Resc
       for (const row of deriveFollowUps(oldProfile, now, candidate.booking.callId, index.change.timeZone)) {
         if (row.source?.kind !== 'booking') continue
         possible.set(JSON.stringify([row.id, candidate.prior]), { row, prior: candidate.prior })
-        if (candidate.prior && TOUR_REMINDERS.has(row.kind)) oldTemplates.set(row.id, row)
+        if (candidate.prior && TOUR_REMINDERS.has(row.kind)) {
+          oldTemplates.set(row.id, row)
+          const legacyId = legacyInitialFollowUpId(oldProfile, row)
+          if (legacyId) oldTemplates.set(legacyId, { ...row, id: legacyId })
+        }
       }
     }
   }
@@ -187,7 +191,7 @@ export async function reconcileRescheduledTour(store: DocumentStore, input: Resc
   for (const row of rows) if (TOUR_REMINDERS.has(row.kind) && priorRow(row)) oldTemplates.set(row.id, row)
   for (const template of oldTemplates.values()) {
     await store.update<FollowUp>(followUpKey(template.id), { ...template, status: 'skipped', superseded }, latest => {
-      if (latest.status !== 'scheduled') return latest
+      if (latest.status !== 'scheduled' || !priorRow(latest)) return latest
       return { ...latest, status: 'skipped', superseded }
     })
     updatedFollowUpIds.add(template.id)
@@ -220,7 +224,10 @@ export function pendingRescheduleVisibility(state: CalendarState, followUps: Fol
       revision: change.revision, prospectPhone: booking.prospectPhone, unitId: booking.unitId, from: change.from, to: change.to })))
   const heldFollowUps = followUps.filter(row => row.status === 'scheduled' && TOUR_REMINDERS.has(row.kind)
     && rescheduleProjectionPending.some(pending => normalisePhone(row.phone) === normalisePhone(pending.prospectPhone)
-      && row.source?.booking && (row.source.booking.externalId === pending.externalId || bookingIdentity(row.source.booking) === bookingIdentity(pending.from))))
+      && row.source?.booking && (row.source.booking.externalId ? row.source.booking.externalId === pending.externalId
+        : Boolean(row.source.callId && state.bookings.filter(booking => booking.interactionId === row.source!.callId).length === 1
+          && state.bookings.find(booking => booking.externalId === pending.externalId)?.interactionId === row.source.callId
+          && bookingIdentity(row.source.booking) === bookingIdentity(pending.from)))))
   const held = new Set(heldFollowUps.map(row => row.id))
   return { rescheduleProjectionPending, heldFollowUps, followUps: followUps.filter(row => !held.has(row.id)) }
 }

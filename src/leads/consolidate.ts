@@ -3,7 +3,7 @@ import type { QualificationState } from '../leasing/qualification.ts'
 import type { LossReason } from '../record/store.ts'
 import { emptyProfile, deriveStage, normalisePhone, normaliseCallbackPhone, pinnedName } from './profile.ts'
 import type { LeadProfile, CallSummary, Evidence } from './profile.ts'
-import { bookingIdentity, deriveFollowUps, legacyFollowUpId } from './followups.ts'
+import { bookingIdentity, deriveFollowUps, legacyFollowUpId, initialFollowUpAlias } from './followups.ts'
 import type { FollowUp } from './followups.ts'
 import { DEFAULT_TIME_ZONE, validateTimeZone } from '../calendar/time.ts'
 import { resolveRescheduledBooking, reconcileRescheduledTour } from './reschedule.ts'
@@ -173,7 +173,7 @@ async function reconcileFollowUps(store: DocumentStore, profile: LeadProfile, de
     if (current) result.set(current.id, current)
     else missing.push(f)
   }
-  const legacy = existing.filter(row => !row.source && !row.id.startsWith('fu-v2-'))
+  const legacy = existing.filter(row => (!row.source && !row.id.startsWith('fu-v2-')) || derived.some(f => initialFollowUpAlias(profile, row, f)))
   // A replay of an older event must still account for newer known bookings when
   // deciding whether a legacy hour bucket has one possible owner. These candidates
   // are for reconciliation only; the older event cannot create their missing work.
@@ -185,7 +185,7 @@ async function reconcileFollowUps(store: DocumentStore, profile: LeadProfile, de
   const missingIds = new Set(missing.map(f => f.id))
   const matches = new Map<string, FollowUp[]>()
   for (const row of legacy) {
-    const candidates = [...possible.values()].filter(f => row.kind === f.kind && (
+    const candidates = [...possible.values()].filter(f => row.source ? initialFollowUpAlias(profile, row, f) : row.kind === f.kind && (
       row.reconciliation?.candidateIds.includes(f.id)
       || (f.source?.kind === 'call' ? row.createdFromCall === f.source.callId
         : row.id === legacyFollowUpId(profile, f) || row.createdFromCall === f.source?.callId
@@ -203,7 +203,7 @@ async function reconcileFollowUps(store: DocumentStore, profile: LeadProfile, de
     candidates.forEach(f => covered.add(f.id))
     const ambiguous = row.reconciliation?.status === 'needs_review' || candidates.length !== 1 || matchCount(candidates[0]!) !== 1
     const stored = await store.update<FollowUp>(followUpKey(row.id), row, current => {
-      if (current.source) return current
+      if (current.source && !candidates.some(f => initialFollowUpAlias(profile, current, f))) return current
       if (!ambiguous) return { ...current, source: candidates[0]!.source! }
       return { ...current, reconciliation: {
         status: 'needs_review', code: 'legacy_followup_identity_ambiguous',
