@@ -7,10 +7,20 @@ import { createConsentFixture } from '../helpers/resident-consent.mjs'
 import { PostgresResidentConsentRepository } from '../../src/database/resident-consent.ts'
 import { verifyConsentWebAuthn } from '../../src/auth/consent-webauthn.ts'
 
-let f, repo, actor
+let f, repo, waitRepo, actor
 before(async () => {
   f = await createConsentFixture()
   repo = new PostgresResidentConsentRepository(f.db.app, f.db.auth, { origin: f.origin, rpId: 'localhost', rpName: 'Synthetic' })
+  // Only these disposable-fixture race commands may wait longer than production's
+  // 5s lock/10s statement limits. This leaves time for real setup on busy runners;
+  // all role/session checks, SQL functions, signatures and clock reads stay real.
+  waitRepo = new PostgresResidentConsentRepository(f.db.app, {
+    role: f.db.auth.role,
+    transaction: (context, work) => f.db.auth.transaction(context, async client => {
+      await client.query("SELECT set_config('statement_timeout','90000',true),set_config('lock_timeout','90000',true)")
+      return work(client)
+    }),
+  }, repo.configuration)
   actor = await f.consent.enroll(0)
   const job = await f.consent.createJob()
   await f.consent.configure(job.caseId, [actor])
@@ -23,6 +33,7 @@ async function publish(purpose = 'work') {
 }
 async function prepare(requestId, { command, expiresAt = Date.now() + 300000 } = {}) {
   const detail = await repo.getOwn(actor.principal, requestId)
+  assert.ok(detail?.canGrant, 'Race setup must have a currently grantable request before preparing the real assertion')
   command ??= { action: 'grant', commandId: randomUUID(), requestId, requestVersion: detail.requestVersion,
     expectedDecisionVersion: detail.ownDecisionVersion, purpose: detail.purpose, termsDigest: detail.termsDigest, materialDigest: detail.materialDigest }
   const challenge = randomBytes(32).toString('base64url'), challengeId = randomUUID()
@@ -36,12 +47,20 @@ async function prepare(requestId, { command, expiresAt = Date.now() + 300000 } =
 async function snapshot(requestId) {
   const decisions = await f.db.admin.query('SELECT count(*)::integer n FROM atrium.consent_decisions WHERE request_id=$1', [requestId])
   const factor = await f.db.admin.query('SELECT counter,counter_revision FROM atrium.mfa_factors WHERE id=$1', [actor.factorId])
-  return { count: decisions.rows[0].n, ...factor.rows[0] }
+  const receipts = await f.db.admin.query("SELECT count(*)::integer n FROM atrium.consent_commands WHERE receipt->>'requestId'=$1", [requestId])
+  const ceremonies = await f.db.admin.query('SELECT id,attempt_id,consumed_at FROM atrium.consent_ceremonies WHERE request_id=$1 ORDER BY id', [requestId])
+  return { count: decisions.rows[0].n, receipts: receipts.rows[0].n, ceremonies: ceremonies.rows, ...factor.rows[0] }
 }
-async function waitBlocked() {
-  for (let i = 0; i < 200; i++) {
-    const result = await f.db.admin.query("SELECT count(*)::integer n FROM pg_stat_activity WHERE wait_event_type='Lock' AND query LIKE '%atrium.consent_resident%' AND pid<>pg_backend_pid()")
-    if (result.rows[0].n > 0) return
+async function waitBlocked(blocker, { relation = null, mode = null } = {}) {
+  const { rows: [{ pid }] } = await blocker.query('SELECT pg_backend_pid() pid')
+  const deadline = Date.now() + 15000
+  while (Date.now() < deadline) {
+    const result = await f.db.admin.query(`SELECT count(*)::integer n FROM pg_stat_activity a
+      WHERE a.wait_event_type='Lock' AND a.query LIKE '%atrium.consent_resident%'
+      AND $1=ANY(pg_blocking_pids(a.pid)) AND ($2::text IS NULL OR EXISTS(
+        SELECT 1 FROM pg_locks l WHERE l.pid=a.pid AND NOT l.granted
+        AND l.relation=$2::regclass AND l.mode=$3))`, [pid, relation, mode])
+    if (result.rows[0].n === 1) return
     await pause(10)
   }
   assert.fail('The expected consent operation did not reach the real lock barrier')
@@ -73,12 +92,14 @@ test('an ordinary MFA assertion changes the same zero-counter revision and fence
   await assert.rejects(repo.finishGrant(actor.principal, structuredClone(prepared.verified)))
 })
 
-test('a ceremony expiring while blocked on the actual property fence commits neither decision nor factor update', async () => {
-  const job = await publish(), deadline = Date.now() + 1500, prepared = await prepare(job.receipt.id, { expiresAt: deadline }), before = await snapshot(job.receipt.id)
+test('a ceremony expiring while blocked on the actual property fence commits neither decision nor factor update', { timeout: 100000 }, async () => {
+  const job = await publish(), deadline = Date.now() + 30000, prepared = await prepare(job.receipt.id, { expiresAt: deadline }), before = await snapshot(job.receipt.id)
   await lockedProperty(async blocker => {
-    const result = repo.finishGrant(actor.principal, prepared.verified).then(value => ({ value }), error => ({ error }))
-    await waitBlocked(); await pause(Math.max(0, deadline - Date.now()) + 40); await blocker.query('COMMIT')
-    assert.equal((await result).error.code, 'consent_ceremony_used')
+    const result = waitRepo.finishGrant(actor.principal, prepared.verified).then(value => ({ value }), error => ({ error }))
+    await waitBlocked(blocker)
+    assert.ok(Date.now() < deadline, 'The real property fence must be reached before ceremony expiry')
+    await pause(Math.max(0, deadline - Date.now()) + 40); await blocker.query('COMMIT')
+    assert.equal((await result).error?.code, 'consent_ceremony_used', 'An expired assertion must not commit after the property wait')
   })
   assert.deepEqual(await snapshot(job.receipt.id), before)
 })
@@ -118,21 +139,30 @@ test('same-property different-unit roster manifests are refused without changing
   assert.equal(after.roster.version, state.roster.version); assert.deepEqual(after.authorities, state.authorities)
 })
 
-test('source expiry during the final receipt insert wait rolls back a real signed decision and counter update', async () => {
+test('source expiry during the final receipt insert wait rolls back a real signed decision and counter update', { timeout: 100000 }, async () => {
   const job = await publish(), state = (await f.consent.staffState(job.caseId)).state
   const authority = state.authorities.find(a => a.userId === actor.principal.userId && a.purpose === 'work')
-  const until = Date.now() + 2500
+  const until = Date.now() + 60000
   await f.consent.staffSave(job.caseId, { action: 'save_authority', commandId: randomUUID(), id: authority.id, expectedVersion: authority.version, policyVersion: state.policy.version,
     details: { bindingId: authority.bindingId, bindingVersion: authority.bindingVersion, residentId: authority.residentId, residentVersion: authority.residentVersion, purpose: 'work', protocolCompleted: true,
       source: { ...f.consent.source(), validUntil: new Date(until).toISOString() } }, reason: 'Synthetic short current evidence tests expiry after waiting' })
-  const currentRequest = await f.consent.publishRequest(job.caseId, 'work'), prepared = await prepare(currentRequest.receipt.id), before = await snapshot(currentRequest.receipt.id)
+  const currentRequest = await f.consent.publishRequest(job.caseId, 'work')
+  // Reproduce setup slower than the old 2.5s authority lifetime. The expiry itself
+  // must happen at the final INSERT, not during publication or passkey preparation.
+  await pause(3000)
+  const prepared = await prepare(currentRequest.receipt.id), before = await snapshot(currentRequest.receipt.id)
   const blocker = new pg.Client(f.db.admin.connectionParameters)
   await blocker.connect()
   try {
     await blocker.query('BEGIN'); await blocker.query('LOCK TABLE atrium.consent_commands IN ACCESS EXCLUSIVE MODE')
-    const pending = repo.finishGrant(actor.principal, prepared.verified).then(value => ({ value }), error => ({ error }))
-    await waitBlocked(); await pause(Math.max(0, until - Date.now()) + 40); await blocker.query('COMMIT')
-    assert.equal((await pending).error.code, 'consent_changed')
+    const pending = waitRepo.finishGrant(actor.principal, prepared.verified).then(value => ({ value }), error => ({ error }))
+    await waitBlocked(blocker, { relation: 'atrium.consent_commands', mode: 'RowExclusiveLock' })
+    assert.ok(Date.now() < until, 'The final INSERT must be blocked while source evidence is still current')
+    await pause(Math.max(0, until - Date.now()) + 40)
+    const expired = await blocker.query('SELECT clock_timestamp() > to_timestamp($1::double precision/1000) expired', [until])
+    assert.equal(expired.rows[0].expired, true)
+    await blocker.query('COMMIT')
+    assert.equal((await pending).error?.code, 'consent_changed', 'Expired source evidence must roll back after the final receipt wait')
   } finally { await blocker.query('ROLLBACK'); await blocker.end() }
   assert.deepEqual(await snapshot(currentRequest.receipt.id), before)
 })

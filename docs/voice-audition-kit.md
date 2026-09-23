@@ -143,5 +143,5 @@ Finish each session with a reciprocal handoff and owner/agent to-dos.
 
 No GPU rental, audio generation, paid call, Vapi change or measured latency gain is
 claimed by this kit. Staff tour-contact editing and exact confirmation-review
-navigation remain separate upcoming work. The latest source's failed cloud expiry
-test also needs repair before that release is considered ready.
+navigation remain separate upcoming work. The [cloud expiry regression repair](../reports/2026-09-23-expiry-regression.md)
+has local acceptance; its own published cloud result is a separate release gate.
