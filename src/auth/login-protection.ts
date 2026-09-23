@@ -30,7 +30,7 @@ export function requestLoginAddress(req: { headers?: Record<string, unknown>; so
 }
 
 /** Collapse textual aliases and IPv6 address rotation within one network. */
-function networkIdentity(value: unknown): string {
+export function networkIdentity(value: unknown): string {
   if (typeof value !== 'string' || value.length > 45 || value.includes('%')) return 'unknown'
   const family = isIP(value)
   if (family === 4) return `v4:${value}`

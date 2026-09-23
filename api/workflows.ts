@@ -28,7 +28,8 @@ export default async function handler(req: any, res: any) {
       const rows = await repository.list({ ...query, limit: query.limit + 1 })
       const visible = rows.slice(0, query.limit)
       const last = visible.at(-1)
-      const actions = visible.map(action => workflowSummary(action, canManage, property.scope.permissions.includes('operate')))
+      const actions = await Promise.all(visible.map(async action => workflowSummary(action, canManage, property.scope.permissions.includes('operate'),
+        action.kind === 'website_callback' ? await property.documents.get('callback-observation:' + action.id) : null)))
       await property.revalidate()
       send({ actions, canManage, nextCursor: rows.length > query.limit && last ? { createdAt: last.createdAt, id: last.id } : null })
       return

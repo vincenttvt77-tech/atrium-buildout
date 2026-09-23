@@ -87,7 +87,7 @@ function portal({ legacy = false, permissions = ['read', 'operate', 'configure']
     options.build(body, dialog); dialogs.push(dialog); return dialog
   }
   runInNewContext(queueSource.replace("A.register('workflows', view)",
-    "window.queueTest = { view, load, select, recover, verifyEmail, readItem, readPage, readReceipt, detailHtml, listHtml, paint, state: () => ({ items, cursor, selected, filter, loading, loaded, error, checkedAt, canManage, actionBusy }) }; A.register('workflows', view)"), context)
+    "window.queueTest = { view, load, select, recover, verifyEmail, checkCallback, readItem, readPage, readReceipt, detailHtml, listHtml, paint, state: () => ({ items, cursor, selected, filter, loading, loaded, error, checkedAt, canManage, actionBusy }) }; A.register('workflows', view)"), context)
   const helpers = window.queueTest
   A.navigate = (name, params = {}) => {
     location.hash = A.hashFor(name, params)
@@ -140,8 +140,8 @@ test('only validated projected fields render and local timestamps remain propert
   assert.match(ui.html(), /Maintenance dispatch/); assert.match(ui.html(), /Central Time/)
   assert.match(ui.html(), /9:30 AM/); assert.match(ui.html(), /connection is not available/)
   assert.doesNotMatch(ui.html(), /DO_NOT_DISPLAY|NO_RAW_BODY|NO_REFERENCE/)
-  assert.match(ui.root.innerHTML, /Track work and verify email delivery/)
-  assert.match(ui.root.innerHTML, /Check an existing email without sending another copy/)
+  assert.match(ui.root.innerHTML, /Track work, email delivery and callbacks/)
+  assert.match(ui.root.innerHTML, /Check an existing email or requested call without contacting the prospect again/)
   assert.equal(plain(ui.helpers.state()).items[0].input, undefined)
   for (const bad of [item({ state: '__proto__' }), item({ kind: '<img onerror=alert(1)>' }), item({ revision: ['a'.repeat(64)] }), item({ canReplay: 'true' })])
     assert.throws(() => ui.helpers.readItem(bad), /unreadable/)
@@ -354,4 +354,20 @@ test('delivery check ignores a stale response after navigation and refuses forge
   const other=portal();other.respond(other.page([email()]));other.location.hash='#/workflows?state=all';await other.mount();other.markBooted()
   other.respond({ scope:{...other.scope,propertyId:'foreign'},verificationOnly:true,action:email({state:'succeeded',emailDelivery:'delivered'}) })
   await other.helpers.verifyEmail();assert.equal(other.A.can('read'),false);assert.equal(other.toasts.length,0)
+})
+const callback = patch => item({kind:'website_callback',connector:'vapi_callback_v1',state:'succeeded',phase:'verify',dispatchStarted:true,dispatchAttempts:1,
+  canCancel:false,canReplay:false,lastErrorCode:null,callback:{name:'Test Visitor',phone:'+12125550123',stage:'queued',message:'Your call is queued.',observedAt:'2032-06-01T14:32:00.123Z',canCheck:true},...patch})
+test('callback checking carries frozen scope and cannot be invoked by a viewer',async()=>{
+  const ui=portal({permissions:['read','operate']});ui.respond(ui.page([callback()]));ui.location.hash='#/workflows?state=all';await ui.mount()
+  assert.match(ui.html(),/Check call status/);assert.match(ui.html(),/1 of 1 automatic attempt/);assert.doesNotMatch(ui.html(),/Dispatch limit/)
+  ui.respond({scope:ui.scope,action:callback()});await ui.helpers.checkCallback()
+  assert.equal(ui.requests.at(-1).path,'/api/callbacks');assert.equal(ui.requests.at(-1).headers['x-atrium-property-id'],'building-one')
+  const viewer=portal({permissions:['read']});viewer.respond(viewer.page([callback()]));viewer.location.hash='#/workflows?state=all';await viewer.mount()
+  await viewer.helpers.checkCallback();assert.equal(viewer.requests.length,1);assert.doesNotMatch(viewer.html(),/Check call status/)
+})
+test('a mismatched callback check result cannot replace the selected request or claim success',async()=>{
+  const ui=portal();ui.respond(ui.page([callback()]));ui.location.hash='#/workflows?state=all';await ui.mount()
+  ui.respond({scope:ui.scope,action:callback({id:'foreign-action'})});await ui.helpers.checkCallback()
+  assert.equal(ui.toasts.length,0);assert.match(ui.html(),/No new call was requested/)
+  const count=ui.requests.length;await ui.helpers.checkCallback();assert.equal(ui.requests.length,count)
 })

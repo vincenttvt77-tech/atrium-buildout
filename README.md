@@ -56,6 +56,11 @@ without sending another copy. A separately configured property worker can perfor
 these checks after a call ends; no unattended schedule is installed by source
 publication. First sends remain outside the Work queue. See
 [email delivery](docs/email-delivery.md) for setup and evidence limits.
+Managed **website callbacks** add an embeddable consent form, bounded immediate
+Vapi initiation, durable duplicate protection and dated call-state checks in the
+Work queue. Calling requires a reviewed property website/voice binding and server
+challenge configuration; publication alone enables no live dialing. See
+[website callback setup and acceptance](docs/website-callbacks.md).
 An empty queue is not proof that every business workflow has been integrated.
 
 The PostgreSQL **Service** workspace adds staff-recorded maintenance requests,

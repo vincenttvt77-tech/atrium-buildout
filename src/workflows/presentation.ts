@@ -1,3 +1,4 @@
+import { callbackSummary } from '../callbacks/service.ts'
 import { WorkflowError } from './model.ts'
 import type { WorkflowAction, WorkflowState } from './model.ts'
 
@@ -46,14 +47,17 @@ export function recoveryCommand(input: unknown): RecoveryCommand {
   return { action: value.action as RecoveryCommand['action'], id: value.id, expectedRevision: value.expectedRevision, reason: value.reason }
 }
 
-/** A deliberately small projection: inputs, caller data, lease tokens and provider bodies stay server-side. */
-export function workflowSummary(action: WorkflowAction & { revision?: string }, canManage: boolean, canOperate = false) {
+/** Staff projection: only callback name/phone are exposed; raw inputs, receipt tokens and provider bodies stay server-side. */
+export function workflowSummary(action: WorkflowAction & { revision?: string }, canManage: boolean, canOperate = false, callbackObservation?: { status: string; observedAt: string } | null) {
   if (!revision(action.revision)) throw new WorkflowError('workflow_invalid_record', 'The work queue is temporarily unavailable.')
   const email = action.kind === 'leasing_email' && action.connector === 'resend_email_v1'
   const emailDelivery = !email ? null : action.state === 'succeeded' && action.evidence?.deliveryStatus === 'delivered' ? 'delivered'
     : action.state === 'needs_review' ? 'needs_review' : !action.dispatchStarted ? 'not_sent'
     : action.providerReference ? 'accepted' : 'unknown'
-  return { emailDelivery, canVerifyEmail: email && canOperate && action.dispatchStarted && action.phase === 'verify'
+  const callback = action.kind === 'website_callback' && action.connector === 'vapi_callback_v1'
+  return { ...(callback ? { callback: { ...callbackSummary(action, callbackObservation), name: String(action.input.name ?? '').slice(0, 80),
+      phone: /^\+1[2-9]\d{2}[2-9]\d{6}$/.test(String(action.input.phone)) ? action.input.phone : '',
+      canCheck: canOperate && action.dispatchStarted && !['needs_review','cancelled'].includes(action.state) } } : {}), emailDelivery, canVerifyEmail: email && canOperate && action.dispatchStarted && action.phase === 'verify'
       && ['queued','running','retry_wait','verifying'].includes(action.state), id: action.id, kind: action.kind, connector: action.connector, state: action.state, phase: action.phase,
     createdAt: action.createdAt, updatedAt: action.updatedAt, availableAt: action.availableAt, completedAt: action.completedAt,
     lastErrorCode: action.lastErrorCode, dispatchAttempts: action.dispatchAttempts, verificationAttempts: action.verificationAttempts,

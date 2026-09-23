@@ -68,9 +68,14 @@ function readItem(value) {
     || value.emailDelivery === 'delivered' && value.state !== 'succeeded'
     || value.emailDelivery === 'needs_review' && value.state !== 'needs_review'
     || value.canVerifyEmail && (value.emailDelivery === null || !value.dispatchStarted || value.phase !== 'verify' || !FILTER_STATES.active.includes(value.state))) throw badResponse()
-  // Keep only the operator projection. Provider bodies and caller data never enter the view.
+  if (value.callback !== undefined && (!value.callback || value.kind !== 'website_callback' || value.connector !== 'vapi_callback_v1'
+    || typeof value.callback.name !== 'string' || value.callback.name.length > 80
+    || typeof value.callback.phone !== 'string' || !/^\+1[2-9]\d{2}[2-9]\d{6}$/.test(value.callback.phone)
+    || typeof value.callback.canCheck !== 'boolean' || typeof value.callback.message !== 'string' || value.callback.message.length > 500
+    || !instant(value.callback.observedAt) || !['saved','checking','requested','scheduled','queued','ringing','in-progress','forwarding','ended','needs_review','cancelled'].includes(value.callback.stage))) throw badResponse()
+  // Keep only the operator projection, including the explicitly scoped callback contact.
   return Object.freeze(Object.fromEntries(['id', 'kind', 'connector', 'state', 'phase', 'createdAt', 'updatedAt', 'availableAt',
-    'completedAt', 'lastErrorCode', 'dispatchAttempts', 'verificationAttempts', 'maxAttempts', 'dispatchStarted', 'revision', 'canReplay', 'canCancel', 'emailDelivery', 'canVerifyEmail']
+    'completedAt', 'lastErrorCode', 'dispatchAttempts', 'verificationAttempts', 'maxAttempts', 'dispatchStarted', 'revision', 'canReplay', 'canCancel', 'emailDelivery', 'canVerifyEmail', 'callback']
     .map(key => [key, value[key]])))
 }
 function readPage(body, filter) {
@@ -95,7 +100,7 @@ function readReceipt(body, command, previous) {
 }
 const human = value => A.text.capitalise(String(value).replace(/[_.:-]+/g, ' '))
 const icon = name => `<span class="ico">${A.icon(name)}</span>`
-const stateChip = item => A.html.chip(`chip-${STATES[item.state][2]}`, item.state === 'needs_review' ? 'warning' : item.state === 'succeeded' ? 'check' : 'clock', (item.emailDelivery ? DELIVERY[item.emailDelivery] : STATES[item.state])[0])
+const stateChip = item => A.html.chip(`chip-${STATES[item.state][2]}`, item.state === 'needs_review' ? 'warning' : item.state === 'succeeded' ? 'check' : 'clock', (item.callback ? ['Callback · ' + human(item.callback.stage)] : item.emailDelivery ? DELIVERY[item.emailDelivery] : STATES[item.state])[0])
 function issueText(item) { return item.lastErrorCode ? ERRORS[item.lastErrorCode] || 'The last attempt needs attention. Share the issue code with your administrator if the next step is unclear.' : '' }
 function nextStep(item) {
   if (item.state === 'cancelled') return 'None — this queued action is stopped'
@@ -131,26 +136,29 @@ function listHtml() {
   if (!loaded) return '<div class="wq-empty"><h3>Work queue not loaded</h3><p>Refresh to check this property’s saved actions.</p></div>'
   if (!items.length) return `<div class="wq-empty">${icon(filter === 'attention' ? 'check-circle' : 'clock')}<h3>${filter === 'attention' ? 'No actions need review in this result' : 'No actions in this view'}</h3><p>${filter === 'attention' ? 'Use In progress or All work to inspect other saved actions.' : 'Only actions saved to this property’s work queue appear here.'}</p></div>`
   return '<ul class="wq-list">' + items.map(item => `<li><button type="button" class="wq-row" data-select="${esc(item.id)}" data-key="work:${esc(item.id)}" aria-current="${item.id === selected ? 'true' : 'false'}" aria-controls="wq-detail">` +
-    `<span class="wq-row-top"><strong>${esc(human(item.kind))}</strong>${stateChip(item)}</span><span class="wq-row-context">${esc(item.emailDelivery ? 'Email' : human(item.connector))} · ${esc(A.fmt.dateTime(item.createdAt))}</span>` +
-    `<span class="wq-row-note">${esc(item.lastErrorCode ? issueText(item) : STATES[item.state][1])}</span></button></li>`).join('') + '</ul>'
+    `<span class="wq-row-top"><strong>${esc(human(item.kind))}</strong>${stateChip(item)}</span><span class="wq-row-context">${esc(item.callback ? item.callback.name : item.emailDelivery ? 'Email' : human(item.connector))} · ${esc(A.fmt.dateTime(item.createdAt))}</span>` +
+    `<span class="wq-row-note">${esc(item.callback ? item.callback.message.replace('your phone', 'the prospect’s phone') : item.lastErrorCode ? issueText(item) : STATES[item.state][1])}</span></button></li>`).join('') + '</ul>'
 }
 function detailHtml(item) {
   if (!item) return '<div class="wq-empty wq-detail-empty">' + icon('clock') + '<h2>Select an action</h2><p>See its last recorded result and the next safe step.</p></div>'
   const blocked = uncertain.has(item.id), mayManage = canManage && A.can('configure') && !blocked && !loading && !error
-  const delivery = item.emailDelivery ? DELIVERY[item.emailDelivery] : STATES[item.state]
+  const delivery = item.callback ? ['Callback · ' + human(item.callback.stage), item.callback.message.replace('your phone', 'the prospect’s phone')] : item.emailDelivery ? DELIVERY[item.emailDelivery] : STATES[item.state]
   const issue = item.lastErrorCode && !(item.emailDelivery && ['provider_accepted','email_delivery_unverified'].includes(item.lastErrorCode))
+  const mayCheckCallback = item.callback?.canCheck && A.can('operate') && !blocked && !loading && !error
   const mayCheck = item.canVerifyEmail && A.can('operate') && !blocked && !loading && !error
   const replay = mayManage && item.canReplay, cancel = mayManage && item.canCancel && !item.dispatchStarted
-  return `<div class="wq-detail-title">${stateChip(item)}<h2 tabindex="-1" data-key="work-detail-heading">${esc(human(item.kind))}</h2><p>${esc(item.emailDelivery ? 'Requested leasing email' : human(item.connector))}</p></div>` +
+  return `<div class="wq-detail-title">${stateChip(item)}<h2 tabindex="-1" data-key="work-detail-heading">${esc(human(item.kind))}</h2><p>${esc(item.callback ? 'Website-requested call' : item.emailDelivery ? 'Requested leasing email' : human(item.connector))}</p></div>` +
     `<section class="wq-next"><span class="page-eyebrow">LAST RECORDED RESULT</span><h3>${esc(delivery[0])}</h3><p>${esc(delivery[1])}</p>` +
     (issue ? `<div class="wq-issue"><strong>What needs attention</strong><p>${esc(issueText(item))}</p><details class="small"><summary>Technical details</summary><code>${esc(item.lastErrorCode)}</code></details></div>` : '') + '</section>' +
+    (item.callback ? `<section class="wq-next"><h3>${esc(item.callback.name)}</h3><p>${esc(item.callback.phone)}</p><p class="small">One website-requested AI callback. Last provider observation: ${esc(A.fmt.dateTime(item.callback.observedAt))}. Call initiation does not confirm a tour or a conversation.</p></section>` : '') +
     `<dl class="wq-facts"><div><dt>Saved</dt><dd>${esc(A.fmt.dateTime(item.createdAt))}</dd></div><div><dt>Last changed</dt><dd>${esc(A.fmt.dateTime(item.updatedAt))}</dd></div>` +
-    `<div><dt>Next step</dt><dd>${esc(nextStep(item))}</dd></div>` +
-    (item.emailDelivery ? `<div><dt>Delivery checks recorded</dt><dd>${item.verificationAttempts}</dd></div>`
+    `<div><dt>Next step</dt><dd>${esc(item.callback ? 'Review the call status and conversation in Calls; do not redial this request.' : nextStep(item))}</dd></div>` +
+    (item.callback ? `<div><dt>Call attempts</dt><dd>${item.dispatchAttempts} of 1 automatic attempt</dd></div><div><dt>Initiation checks</dt><dd>${item.verificationAttempts}</dd></div>` : item.emailDelivery ? `<div><dt>Delivery checks recorded</dt><dd>${item.verificationAttempts}</dd></div>`
       : `<div><dt>Attempts recorded</dt><dd>${item.dispatchAttempts} dispatch · ${item.verificationAttempts} verification</dd></div><div><dt>Dispatch limit</dt><dd>${item.maxAttempts} attempts</dd></div>`) +
     (['queued', 'retry_wait', 'verifying'].includes(item.state) ? `<div><dt>Eligible from</dt><dd>${esc(A.fmt.dateTime(item.availableAt))}</dd></div>` : '') + '</dl>' +
     `<p class="wq-timezone small">All times in ${esc(A.property.timeZoneLabel)}.</p>` +
     (blocked ? A.html.banner('warn', 'The last change is unconfirmed. Reload this page and check the saved state before trying another change.', { actionsHtml: '<button type="button" class="btn" data-command="reload" data-key="reload-after-change">Reload page</button>' }) : '') +
+    (mayCheckCallback ? `<button type="button" class="btn btn-primary" data-command="check-callback" data-key="callback:${esc(item.id)}" data-permission="operate" ${actionBusy ? 'disabled' : ''}>${actionBusy ? 'Checking call…' : 'Check call status'}</button>` : '') +
     (mayCheck ? `<button type="button" class="btn btn-primary" data-command="verify-email" data-key="email:${esc(item.id)}" data-permission="operate" ${actionBusy ? 'disabled' : ''}>${actionBusy ? 'Checking delivery…' : 'Check email delivery'}</button>` : '') +
     (!canManage || !A.can('configure') ? '<p class="wq-access">An administrator can review recovery options. Recovery changes require administrator access.</p>' : '') +
     (replay || cancel ? `<section class="wq-recovery"><h3>Recovery options</h3><p>Changes affect this saved action only. They do not run the work or contact anyone.</p><div class="wq-actions">` +
@@ -214,6 +222,26 @@ function select(id) {
     heading?.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
   }
 }
+async function checkCallback() {
+  const original = items.find(item => item.id === selected)
+  if (!visible() || panel || loading || actionBusy || error || !original?.callback?.canCheck || !A.can('operate') || uncertain.has(original.id)) return
+  const turn = generation
+  actionBusy = true; paint({ list: false })
+  try {
+    const body = await bounded(A.api.post('/api/callbacks', { actionId: original.id, expectedRevision: original.revision }, { doing: 'Checking requested call' }))
+    if (turn !== generation || !visible()) return
+    const changed = readItem(body.action)
+    if (changed.id !== original.id || changed.kind !== original.kind || changed.connector !== original.connector
+      || changed.createdAt !== original.createdAt || changed.dispatchAttempts !== original.dispatchAttempts || !changed.callback) throw badResponse()
+    items = items.map(item => item.id === changed.id ? changed : item).filter(item => FILTER_STATES[filter].includes(item.state))
+    selected = items.some(item => item.id === selected) ? selected : items[0]?.id || null
+    A.toast(changed.callback.message, { kind: 'info' }); A.announce(changed.callback.message)
+  } catch (failure) {
+    if (turn !== generation || !visible() || failure.signedOut || failure.propertyAccess) return
+    error = 'The call check could not be confirmed. No new call was requested. Refresh the queue to see the saved result.'
+  } finally { actionBusy = false; paint() }
+}
+
 async function verifyEmail() {
   const original = items.find(item => item.id === selected)
   if (!visible() || panel || loading || actionBusy || error || !original?.canVerifyEmail || !A.can('operate') || uncertain.has(original.id)) return
@@ -304,7 +332,7 @@ const view = {
   mount(el) {
     root = el; root.classList.add('wq-view')
     root.innerHTML = `<header class="page-hero wq-hero"><div><span class="page-eyebrow">OPERATIONS · ${esc(A.property.name)}</span><h1 tabindex="-1">Work queue</h1><p>See what is waiting, understand what needs attention, and choose the next safe step.</p></div><div class="page-hero-actions"><button type="button" class="btn" data-command="refresh" data-key="work-refresh">Refresh queue</button></div></header>` +
-      `<div class="wq-runner">${icon('info')}<div><strong>Track work and verify email delivery</strong><p>Check an existing email without sending another copy. Saved queue state is not proof of delivery; refresh to see the latest result.</p></div></div>` +
+      `<div class="wq-runner">${icon('info')}<div><strong>Track work, email delivery and callbacks</strong><p>Check an existing email or requested call without contacting the prospect again. Refresh to see the latest saved result.</p></div></div>` +
       `<div class="wq-toolbar"><div class="wq-filters" role="group" aria-label="Filter work queue">${FILTERS.map(([key, label]) => `<button type="button" class="btn" data-filter="${key}" data-key="work-filter:${key}" aria-pressed="false">${label}</button>`).join('')}</div><p class="wq-loaded" role="status"></p></div>` +
       '<div class="wq-errors"></div><div class="wq-workspace"><section class="wq-browser" aria-label="Saved actions"><div class="wq-results" aria-busy="false"></div><div class="wq-pagination"><button type="button" class="btn" data-command="more" data-key="work-more" hidden>Load more actions</button></div></section><section class="wq-detail" id="wq-detail" aria-label="Selected action"></section></div>'
     root.addEventListener('click', event => {
@@ -316,6 +344,7 @@ const view = {
       else if (button.dataset.command === 'refresh') load()
       else if (button.dataset.command === 'more') load(true)
       else if (button.dataset.command === 'reload') location.reload()
+      else if (button.dataset.command === 'check-callback') checkCallback()
       else if (button.dataset.command === 'verify-email') verifyEmail()
       else if (['replay', 'cancel'].includes(button.dataset.command)) recover(button.dataset.command)
     })
