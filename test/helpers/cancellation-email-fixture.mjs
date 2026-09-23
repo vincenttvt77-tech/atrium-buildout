@@ -11,14 +11,14 @@ import { defaultSettings } from '../../src/calendar/settings.ts'
 import { verifyMfaCookie } from './mfa-session.mjs'
 
 /** Real local HTTP, signed MFA, separate connection pool and synthetic provider. */
-export async function createCancellationEmailFixture() {
+export async function createCancellationEmailFixture({ extraRoutes = [] } = {}) {
   const originalMode = process.env.ATRIUM_RUNTIME_MODE, originalFetch = globalThis.fetch
   process.env.ATRIUM_RUNTIME_MODE = 'postgres'
   const db = await createFoundationTestDatabase(), app = db.createAppConnection()
   let server
   try {
   const { password } = await seedFoundationTestDatabase(db.admin)
-  const routes = new Map(await Promise.all(['dashboard','mfa','account','properties','calendar','leads','vapi','health','workflows','tour-cancellations']
+  const routes = new Map(await Promise.all(['dashboard','mfa','account','properties','calendar','leads','vapi','health','workflows','tour-cancellations',...extraRoutes]
     .map(async name => [`/api/${name}`, (await import(`../../api/${name}.ts`)).default])))
   const configurations = {}, versions = {}, cookies = {}, effects = new Map(), requests = [], errors = []
   const flags = { configured: true, dropQueueReply: false, dropProcessReply: false, dropProviderReply: false,

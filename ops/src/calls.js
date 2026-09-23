@@ -58,7 +58,7 @@ const passes = (filter, story) => filter === 'person' ? story.needsPerson : filt
 
 function callWork(rec, s) {
   const followUps = ((s.leads && s.leads.followUps) || []).filter(f => f && f.createdFromCall === rec.id && f.status === 'scheduled')
-  const requests = ((s.leads && s.leads.tourChangeRequests) || []).filter(r => r && r.callId === rec.id && r.status === 'pending')
+  const requests = ((s.leads && s.leads.tourChangeRequests) || []).filter(r => r && r.callId === rec.id && A.isTourChangeOpen(r))
   return { followUps, requests, count: followUps.length + requests.length }
 }
 function callOverviewHtml(s, records, stories) {

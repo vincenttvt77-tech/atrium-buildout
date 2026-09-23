@@ -578,7 +578,7 @@ let serviceSignInPending = false
 let bookingReviewWritesInFlight = 0
 let bookingReviewSignInPending = false
 let scopeEpoch = 0
-const PROPERTY_ENDPOINTS = new Set(['/api/vapi', '/api/calendar', '/api/leads', '/api/vapi-sync', '/api/tour-confirmations', '/api/tour-cancellation-emails', '/api/tour-contacts', '/api/tour-cancellations', '/api/email-reconciliation', '/api/callbacks', '/api/recordings', '/api/workflows', '/api/resident-services', '/api/maintenance-plans'])
+const PROPERTY_ENDPOINTS = new Set(['/api/vapi', '/api/calendar', '/api/leads', '/api/vapi-sync', '/api/tour-confirmations', '/api/tour-cancellation-emails', '/api/tour-change-resolutions', '/api/tour-contacts', '/api/tour-cancellations', '/api/email-reconciliation', '/api/callbacks', '/api/recordings', '/api/workflows', '/api/resident-services', '/api/maintenance-plans'])
 const propertyEndpoint = path => PROPERTY_ENDPOINTS.has(String(path).split('?')[0])
 const JSON_HEADERS = { accept: 'application/json' }
 function accessError(message, status = 409) { const error = new Error(message); error.status = status; error.propertyAccess = true; return error }
@@ -1589,7 +1589,7 @@ function needsPerson(s) {
     .filter(e => { if (seen.has(e.callId)) return false; seen.add(e.callId); return true })
     .map(review => ({ type: 'bookingReview', review, callId: review.callId,
       phone: review.phone || 'unknown', name: review.name, at: review.at, sortAt: toTime(review.at) ?? 0 }))
-  const tourChanges = arr(s.leads && s.leads.tourChangeRequests).filter(r => r && r.status === 'pending')
+  const tourChanges = arr(s.leads && s.leads.tourChangeRequests).filter(tourChangeOpen)
     .sort((a, b) => (toTime(a.firstRequestedAt) ?? 0) - (toTime(b.firstRequestedAt) ?? 0))
     .map(request => ({ type: 'tourChange', request, callId: request.callId, phone: request.phone || 'unknown',
       name: request.name, at: request.firstRequestedAt, sortAt: toTime(request.firstRequestedAt) ?? 0 }))
@@ -1636,7 +1636,7 @@ function callBackToday(s) {
 function dueTodayCount(s) {
   const today = nyNow().ymd
   return followUpsOf(s).filter((f) => f && f.status === 'scheduled' && (nyDate(f.dueAt) || '9999') <= today).length
-    + arr(s.leads && s.leads.tourChangeRequests).filter(r => r && r.status === 'pending').length
+    + arr(s.leads && s.leads.tourChangeRequests).filter(tourChangeOpen).length
 }
 // A time, apartment, name or phone is not a reservation identity.
 const reservationId = value => typeof value === 'string' && value.length > 0 && value.length <= 1024 && !/[\u0000-\u001f\u007f]/.test(value) ? value : null
@@ -2282,19 +2282,25 @@ function restoreFocus(keys, toastHandle) {
   if (toastHandle && toastHandle.el && tryFocus(toastHandle.el.querySelector('.toast-action'))) return
   if (view) tryFocus(view.querySelector('h1'))
 }
+function tourChangeOpen(request) {
+  return !!request && (request.status === 'pending' || databaseMode && request.status === 'reviewed')
+}
 function tourChangeRequestHtml(request) {
   if (!request) return ''
-  const reviewed = request.status === 'reviewed'
+  const reviewed = request.status === 'reviewed', resolved = request.status === 'resolved'
+  const outcome = arr(request.resolutions).at(-1)
   const contact = [request.name, fmt.phone(request.phone), request.email].filter(Boolean).map(esc).join(' · ')
   return `<div class="row row-stack tour-change-row" data-key="tour-change:${esc(request.id)}"><span class="row-body">` +
-    `<span class="row-title"><strong>Tour-change request</strong> ${html_.chip(reviewed ? 'chip-neutral' : 'chip-warn', reviewed ? 'check' : 'hand', reviewed ? 'Reviewed' : 'Needs review')}</span>` +
+    `<span class="row-title"><strong>Tour-change request</strong> ${html_.chip(resolved ? 'chip-ok' : reviewed && !databaseMode ? 'chip-neutral' : 'chip-warn', resolved ? 'check' : 'hand', resolved ? 'Outcome recorded' : reviewed ? databaseMode ? 'Reviewed · needs outcome' : 'Reviewed' : 'Needs review')}</span>` +
     `<span class="row-sub">${contact || 'Caller details not provided'} · identity unverified</span>` +
     `<span class="meta">Requested ${esc(fmt.dateTime(request.firstRequestedAt))}${request.reason === 'existing_future_tour' ? ' · a possible existing tour needs checking' : ''}</span>` +
     arr(request.excerpts).map(excerpt => `<span class="quote">“${esc(excerpt)}”</span>`).join('') +
     '<span class="reassure">Verify the caller and the correct booking before changing a tour. No tour change or notification is made by reviewing this request.</span>' +
     (reviewed ? `<span class="row-sub">Review recorded ${esc(fmt.dateTime(request.review && request.review.at))}. This does not confirm rescheduling or contact.</span>${request.review && request.review.note ? `<span class="row-sub">Review note: ${esc(request.review.note)}</span>` : ''}` : '') +
+    (outcome ? `<span class="row-sub"><strong>${resolved ? 'Recorded outcome' : 'Previous outcome'}:</strong> ${esc(outcome.outcome === 'no_change' ? 'Closed without a tour change' : outcome.outcome === 'cancelled' ? 'Saved cancellation verified' : 'Saved reschedule verified')} · ${esc(fmt.dateTime(outcome.at))}. ${esc(outcome.note)}</span><span class="reassure">This outcome records staff review of saved evidence. Recording it did not change a tour or send a message.</span>` : '') +
     '</span><span class="row-actions">' +
-    (!reviewed && permissionAllowed('operate') ? `<button type="button" class="btn" data-action="review-tour-change" data-request="${esc(request.id)}" data-key="tour-change:${esc(request.id)}:review" data-write="leads">Review request</button>` : '') +
+    (!reviewed && !resolved && permissionAllowed('operate') ? `<button type="button" class="btn" data-action="review-tour-change" data-request="${esc(request.id)}" data-key="tour-change:${esc(request.id)}:review" data-write="leads">Review request</button>` : '') +
+    (databaseMode && !resolved && permissionAllowed('operate') ? `<button type="button" class="btn" data-action="resolve-tour-change" data-request="${esc(request.id)}" data-key="tour-change:${esc(request.id)}:resolve" data-write="leads">Record outcome</button>` : '') +
     '<a class="btn btn-quiet" href="#/calendar">Open calendar</a></span></div>'
 }
 let bookingReviewDialogOpen = false
@@ -2676,6 +2682,7 @@ const todayView = {
     const btn = e.target.closest('button[data-action]')
     if (!btn || btn.getAttribute('aria-disabled') === 'true') return
     if (btn.dataset.action === 'review-tour-change') { reviewTourChange(btn.dataset.request); return }
+    if (btn.dataset.action === 'resolve-tour-change') { window.Atrium.tourChangeResolutions?.open(btn.dataset.request); return }
     if (btn.dataset.action === 'review-booking') {
       const review = arr(state.events).find(event => event && event.kind === 'booking_review' && event.durable === true && event.callId === btn.dataset.call)
       if (review) reviewBooking(review, btn)
@@ -3111,7 +3118,7 @@ window.Atrium = {
   escapeHtml, fmt, api, gate, toast, confirm, prompt, dialog, register, navigate, route, hashFor, state, on,
   busy, busyNow, apply, refresh, calendarUrl, setCalendarRange, icons, icon, property, normalisePhone, labels, label, derive, hint, text, href,
   can: permissionAllowed, paintPermissions, preferenceKey, propertyUrl, databaseMode,
-  html: html_, announce, escape: escape_, setFollowUpStatus, reviewTourChange, reviewBooking, boot, views: VIEWS.slice(),
+  html: html_, announce, escape: escape_, setFollowUpStatus, reviewTourChange, isTourChangeOpen: tourChangeOpen, reviewBooking, boot, views: VIEWS.slice(),
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot)
 else boot()

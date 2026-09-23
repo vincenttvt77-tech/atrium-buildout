@@ -157,6 +157,9 @@
 .tour-change-row .row-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .tour-change-row .quote { color: var(--ink-2); font-style: italic; }
 .tour-change-row .reassure, .tour-change-row .meta { color: var(--ink-2); font-size: .929rem; }
+/* Tour-change cards have no avatar column; the Today workbench's icon grid must not squeeze their text. */
+.today-workbench .tour-change-row { grid-template-columns: minmax(0, 1fr); }
+.today-workbench .tour-change-row .row-body, .today-workbench .tour-change-row .row-actions { grid-column: 1 / -1; }
 .tour-change-note { width: 100%; min-height: 110px; resize: vertical; }
 
 .lead-call-hint { max-width: 48ch; color: var(--ink-2); font-size: .875rem; line-height: 1.6; margin: 10px 0 0; }

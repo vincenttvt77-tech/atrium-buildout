@@ -76,7 +76,7 @@ function parseNote(n) {
 const nameNote = (body) => { const m = /^name:\s*(.+)$/i.exec(String(body ?? '').trim()); return m ? m[1].trim() : null }
 const bedroomsFact = (v) => { const t = derive.bedroomsText(v); return /or more$/.test(t) ? `${t} bedrooms` : t }
 const nextTour = (p) => arr(p.bookings).filter((b) => b && b.status === 'confirmed' && (toTime(b.startsAt) ?? -1) >= Date.now()).sort((a, b) => toTime(a.startsAt) - toTime(b.startsAt))[0] || null
-const pendingChanges = s => arr(s.leads && s.leads.tourChangeRequests).filter(r => r && r.status === 'pending')
+const pendingChanges = s => arr(s.leads && s.leads.tourChangeRequests).filter(A.isTourChangeOpen)
 function leadOverviewHtml(s) {
   const known = s.loaded.leads
   const profiles = profilesOf(s)
@@ -170,12 +170,12 @@ function todoListHtml(s) {
   const done = all.filter((f) => (f.status === 'done' || f.status === 'skipped') && (needsReview(f) || (fmt.nyDate(f.dueAt) || '9999') <= today))
     .sort((a, b) => Number(needsReview(b)) - Number(needsReview(a)) || byDueDesc(a, b)).slice(0, 20)
   const changes = arr(s.leads && s.leads.tourChangeRequests)
-  const pending = changes.filter(r => r && r.status === 'pending')
-  const reviewed = changes.filter(r => r && r.status === 'reviewed')
+  const pending = changes.filter(A.isTourChangeOpen)
+  const reviewed = changes.filter(r => r && !A.isTourChangeOpen(r))
     .sort((a, b) => String(b.lastUpdatedAt).localeCompare(String(a.lastUpdatedAt)))
   let out = pending.length ? `<h2 class="group-head" data-key="group:tour-changes" tabindex="-1">Tour-change requests${countHtml(pending.length)}</h2><div class="card rows">${pending.map(r => A.html.tourChangeRequest(r)).join('')}</div>` : ''
   if (!scheduled.length && !pending.length) {
-    if (!all.length && reviewed.length) out += A.html.empty({ icon: 'check-circle', title: 'No pending requests.', text: 'Reviewed tour-change requests remain below. A review does not confirm that a booking changed or the caller was contacted.' })
+    if (!all.length && reviewed.length) out += A.html.empty({ icon: 'check-circle', title: 'No pending requests.', text: 'Saved tour-change outcomes remain below. Check each record for its decision and notification status.' })
     else if (!all.length) out += A.html.empty({ icon: 'check-circle', title: 'Nothing to do yet.', text: "When the assistant thinks someone needs a call — a tour to confirm, a question it couldn't answer — it shows up here." })
     else if (done.some(needsReview)) out += A.html.empty({ icon: 'warning', title: 'Review older tasks.', text: 'Some completed or not-needed tasks have an unclear booking match. Check the booking before contacting the caller.', actionHtml: `<button type="button" class="btn-link" data-action="seedone">See completed tasks</button>` })
     else out += A.html.empty({ icon: 'check-circle', title: 'All caught up.', text: 'Everything on the list is done.', actionHtml: done.length ? `<button type="button" class="btn-link" data-action="seedone">See what's done</button>` : '' })
@@ -189,7 +189,7 @@ function todoListHtml(s) {
         `<div class="card rows">${items.map((f) => fuRowHtml(f, s, { nameLink: true })).join('')}</div>`
     }
   }
-  if (reviewed.length) out += `<details class="done-list" data-key="reviewed-tour-changes"><summary data-key="reviewed-tour-changes-summary">${ico('chevron-down')}<span>Reviewed tour-change requests</span>${countHtml(reviewed.length)}</summary><div class="card rows">${reviewed.map(r => A.html.tourChangeRequest(r)).join('')}</div></details>`
+  if (reviewed.length) out += `<details class="done-list" data-key="reviewed-tour-changes"><summary data-key="reviewed-tour-changes-summary">${ico('chevron-down')}<span>${A.databaseMode ? 'Recorded tour-change outcomes' : 'Reviewed tour-change requests'}</span>${countHtml(reviewed.length)}</summary><div class="card rows">${reviewed.map(r => A.html.tourChangeRequest(r)).join('')}</div></details>`
   if (done.length) {
     out += `<details class="done-list" data-key="done-today"><summary data-key="done-today-summary">${ico('chevron-down')}<span>Done and not needed${done.some(needsReview) ? '' : ' today'}</span>${countHtml(done.length)}${reviewSummary(done)}</summary>` +
       `<div class="card rows">${done.map((f) => doneRowHtml(f, s)).join('')}</div></details>`
@@ -612,6 +612,7 @@ const view = {
   },
   fuAction(btn) {
     if (btn.dataset.action === 'review-tour-change') { A.reviewTourChange(btn.dataset.request); return }
+    if (btn.dataset.action === 'resolve-tour-change') { A.tourChangeResolutions?.open(btn.dataset.request); return }
     const a = btn.dataset.action
     const fu = followUpsOf(A.state).find((f) => f.id === btn.dataset.fu)
     if (!fu) return

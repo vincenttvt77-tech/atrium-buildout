@@ -122,7 +122,7 @@ test('all scoped endpoints send immutable document identity and successful echoe
   const ui = portal()
   ui.context.window.ATRIUM_PROPERTY.organizationId = 'tampered'
   ui.context.window.ATRIUM_PROPERTY.configurationVersion = 99
-  for (const path of ['/api/vapi', '/api/calendar?from=2032-06-01', '/api/leads', '/api/vapi-sync', '/api/tour-contacts?externalId=one', '/api/tour-cancellations?externalId=one', '/api/tour-cancellation-emails?externalId=one', '/api/workflows?id=one']) {
+  for (const path of ['/api/vapi', '/api/calendar?from=2032-06-01', '/api/leads', '/api/vapi-sync', '/api/tour-contacts?externalId=one', '/api/tour-cancellations?externalId=one', '/api/tour-cancellation-emails?externalId=one', '/api/tour-change-resolutions?id=one', '/api/workflows?id=one']) {
     await ui.app.api.get(path)
     const sent = ui.requests.at(-1)
     assert.equal(sent.headers['x-atrium-organization-id'], 'organization-one')
@@ -876,11 +876,17 @@ test('anonymous tour-change requests appear in Today and Leads without inventing
   ui.app.apply('leads', {scope: ui.scope, tourChangeRequest: reviewed})
   today.render(ui.app.state)
   assert.doesNotMatch(today.root.innerHTML, /Review request/)
-  assert.equal(ui.app.derive.needsPerson(ui.app.state).length, 0)
+  assert.equal(ui.app.derive.needsPerson(ui.app.state).length, 1)
   const history = renderers.todoListHtml(ui.app.state)
-  assert.match(history, /Reviewed tour-change requests/)
+  assert.match(history, /Reviewed · needs outcome/)
+  assert.match(history, /Record outcome/)
   assert.match(history, /does not confirm rescheduling or contact/)
   assert.doesNotMatch(history, /<img src=x/)
+  const resolved = {...reviewed, status:'resolved', revision:2, resolutions:[{outcome:'no_change', note:'Caller kept the existing tour', at:'2026-09-09T22:00:00Z'}]}
+  ui.app.apply('leads', {scope:ui.scope, tourChangeRequest:resolved})
+  assert.equal(ui.app.derive.needsPerson(ui.app.state).length, 0)
+  assert.match(renderers.todoListHtml(ui.app.state), /Recorded tour-change outcomes/)
+  assert.match(renderers.todoListHtml(ui.app.state), /Caller kept the existing tour/)
 })
 
 test('tour-change render polling uses revised evidence and partial lead mutations preserve queue records', () => {

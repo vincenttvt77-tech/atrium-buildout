@@ -93,7 +93,7 @@ test('overview shows unknown before loading, and counts only saved records with 
   assert.doesNotMatch(saved, /conversion|all-time|last 20|live activity/i)
 })
 
-test('work queue metrics count dedicated requests plus scheduled tasks without counting reviewed or skipped work', () => {
+test('work queue metrics retain reviewed requests until resolved and exclude skipped follow-ups', () => {
   const ui = workspace()
   ui.s.leads.profiles = [prospect({ bookings: [booking()] }), prospect({ phone: '+13125550102', bookings: [booking({ startsAt: '2032-05-01T17:00:00Z' })] })]
   ui.s.leads.followUps = [followUp(), followUp({ id: 'skipped', status: 'skipped' })]
@@ -101,10 +101,10 @@ test('work queue metrics count dedicated requests plus scheduled tasks without c
   const html = ui.leads.leadOverviewHtml(ui.s)
   assert.match(html, /Saved prospects.*?>2</)
   assert.match(html, /Prospects with tours.*?>1</)
-  assert.match(html, /Open staff tasks.*?>2</)
-  assert.match(html, /1 follow-ups · 1 tour requests · 1 overdue/)
+  assert.match(html, /Open staff tasks.*?>3</)
+  assert.match(html, /1 follow-ups · 2 tour requests · 1 overdue/)
   const mounted = ui.mount('leads')
-  assert.equal(mounted.tabs[0].textContent, 'Work queue · 2')
+  assert.equal(mounted.tabs[0].textContent, 'Work queue · 3')
   assert.equal(mounted.tabs[1].textContent, 'Prospects · 2')
   assert.match(mounted.controls.get('.leads-list').innerHTML, /data-action="review-tour-change"/)
 })
