@@ -34,7 +34,9 @@ const invalid = (): never => { throw new WorkflowError('workflow_invalid_input',
 const iso = (value: Date | string): string => new Date(value).toISOString()
 const exactTime = (column: string): string => `to_char(${column} AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`
 const revisionTimes = ['available_at','created_at','updated_at','completed_at','lease_acquired_at','lease_expires_at']
-const SELECT = `SELECT a.id,a.receipt_id,a.organization_id,a.property_id,a.kind,a.connector,a.source_operation_key,
+// Page subqueries carry physical identity as explicit columns. Exclude these
+// from the record JSON so exact reads and page reads produce the same revision.
+const COLUMNS = `SELECT a.id,a.receipt_id,a.organization_id,a.property_id,a.kind,a.connector,a.source_operation_key,
   a.operation_key,a.input,a.input_sha256,a.max_attempts,${exactTime('a.created_at')} AS action_created_at,
   r.configuration_version,r.request_id,r.origin_kind,r.origin_user_id,r.origin_credential_version,
   r.origin_binding_id,r.origin_binding_version,r.origin_provider,r.origin_external_id,
@@ -42,11 +44,20 @@ const SELECT = `SELECT a.id,a.receipt_id,a.organization_id,a.property_id,a.kind,
   o.last_error_code,o.dispatch_started,o.safe_retry_evidence,o.provider_reference,o.evidence,
   o.lease_token,o.worker_id,o.lease_acquired_at,o.lease_expires_at,
   o.xmin::text AS row_transaction,o.ctid::text AS row_location,
-  (to_jsonb(o) || jsonb_build_object(${revisionTimes.map(column => `'${column}',${exactTime(`o.${column}`)}`).join(',')}))::text AS revision_state
-  FROM atrium.action_intents a JOIN atrium.inbox_events r
+  ((to_jsonb(o) - 'xmin' - 'ctid') || jsonb_build_object(${revisionTimes.map(column => `'${column}',${exactTime(`o.${column}`)}`).join(',')}))::text AS revision_state`
+const SELECT = `${COLUMNS} FROM atrium.action_intents a JOIN atrium.inbox_events r
     ON (r.organization_id,r.property_id,r.id)=(a.organization_id,a.property_id,a.receipt_id)
   JOIN atrium.outbox_messages o
     ON (o.organization_id,o.property_id,o.action_id)=(a.organization_id,a.property_id,a.id)`
+// Keep page joins as exact lookups even before auto-analyze has seen new history.
+// Otherwise underestimated RLS selectivity can rescan every receipt/outbox row
+// for every action. OFFSET 0 preserves the parameterized lookup; RLS still applies.
+// Mutation queries retain ordinary table aliases and their FOR UPDATE locks.
+const PAGE_SELECT = `${COLUMNS} FROM atrium.action_intents a
+  JOIN LATERAL (SELECT r.* FROM atrium.inbox_events r
+    WHERE (r.organization_id,r.property_id,r.id)=(a.organization_id,a.property_id,a.receipt_id) OFFSET 0) r ON true
+  JOIN LATERAL (SELECT o.*,o.xmin,o.ctid FROM atrium.outbox_messages o
+    WHERE (o.organization_id,o.property_id,o.action_id)=(a.organization_id,a.property_id,a.id) OFFSET 0) o ON true`
 const WHERE = 'a.organization_id=$1 AND a.property_id=$2'
 const CLEAR_LEASE = 'lease_token=NULL,worker_id=NULL,lease_acquired_at=NULL,lease_expires_at=NULL'
 
@@ -308,7 +319,7 @@ export class PostgresWorkflowRepository implements WorkflowRepository {
         conditions.push(`(a.created_at,a.id)<($${parameters.length - 1}::timestamptz,$${parameters.length}::text)`)
       }
       parameters.push(limit)
-      return (await client.query(`${SELECT} WHERE ${conditions.join(' AND ')} ORDER BY a.created_at DESC,a.id DESC LIMIT $${parameters.length}`, parameters)).rows.map(action)
+      return (await client.query(`${PAGE_SELECT} WHERE ${conditions.join(' AND ')} ORDER BY a.created_at DESC,a.id DESC LIMIT $${parameters.length}`, parameters)).rows.map(action)
     })
   }
   /** Bounded oldest-due selection; first sends and other connectors cannot starve checks. */

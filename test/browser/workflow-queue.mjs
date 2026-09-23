@@ -101,7 +101,7 @@ try {
   await page.waitForFunction(() => document.querySelectorAll('.wq-view [data-select]').length === 1)
   assert.equal(await rows.first().getAttribute('data-select'), uncertain.id)
   assert.equal(await queue.locator('[data-command="cancel"]').count(), 0)
-  assert.match(await queue.innerText(), /Track work and verify email delivery/)
+  assert.match(await queue.innerText(), /Track work, email delivery and callbacks/)
   assert.doesNotMatch(await queue.innerText(), /do-not-display-private-context/)
   checks.push('Real scoped action state is shown; possibly dispatched work cannot be cancelled; private context is omitted')
   await queue.locator('[data-filter="all"]').click()

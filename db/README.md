@@ -28,6 +28,14 @@ command receipts and bounded passkey ceremonies/budgets. The matching maintenanc
 detail/inbox uses this schema even when no requests exist; apply it before updating
 a PostgreSQL runtime. This does not activate hosted features or dispatch work.
 
+Work queue read performance adds `20260923200722_workflow_read_policies.sql`.
+It retains forced RLS and all existing write policies while checking the selected
+property's current read permission once per SQL statement. Explicit organization
+and property equality still constrains every returned row. It adds no role, grant,
+table, data conversion or background action. Apply the additive migration through
+the reviewed maintenance path; source publication does not apply it to a hosted
+database. See [query evidence and rollout](../docs/workflow-query-performance.md).
+
 ## Opt-in runtime
 
 `src/application/runtime.ts` connects the persisted authorization/property repositories
