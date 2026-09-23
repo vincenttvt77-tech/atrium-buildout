@@ -141,7 +141,7 @@ test('late final transcript after call completion is independently saved for sta
 })
 
 test('tool schema and prompt separate staff review from a verified tour move', () => {
-  assert.equal(TOOL_DEFINITIONS.length, 8)
+  assert.equal(TOOL_DEFINITIONS.length, 9)
   const capture = TOOL_DEFINITIONS[0]
   assert.equal(capture.function.name, 'capture_contact')
   assert.deepEqual(capture.function.parameters.properties.requestType.enum, ['tour_change'])

@@ -49,14 +49,15 @@ export function prepareTourConfirmation(state: CalendarState, snapshot: Property
   const bookingSha256 = hashJson({ organizationId: snapshot.organizationId, propertyId: snapshot.propertyId, version: snapshot.version,
     externalId: booking.externalId, revision: bookingRevision(booking), startsAt: slot.startsAt.toISOString(), endsAt: slot.endsAt.toISOString(),
     recipient: booking.prospectEmail, unitId: booking.unitId, subject, body, binding })
-  return { externalId: booking.externalId, bookingSha256, recipient: booking.prospectEmail, subject, body, message, binding }
+  return { externalId: booking.externalId, bookingSha256, recipient: booking.prospectEmail, when, subject, body, message, binding }
 }
 
 export interface TourConfirmationRecord {
   format: 'tour-confirmation-v1'; id: string; externalId: string; bookingSha256: string
-  actionId: string; actorId: string; recordedAt: string; messageSha256: string
+  actionId: string; actorId: string; actorKind?: 'user' | 'channel'; recordedAt: string; messageSha256: string
 }
-const key = (id: string) => 'tour-confirmation:' + id
+export const tourConfirmationKey = (id: string) => 'tour-confirmation:' + id
+const key = tourConfirmationKey
 const summary = (record: TourConfirmationRecord, action: WorkflowAction) => ({ id: record.id, state: action.state,
   permissionRecordedAt: record.recordedAt, updatedAt: action.updatedAt, code: action.lastErrorCode,
   delivery: action.state === 'succeeded' && action.evidence?.deliveryStatus === 'delivered' ? 'delivered' : 'not_verified',
@@ -66,35 +67,37 @@ const summary = (record: TourConfirmationRecord, action: WorkflowAction) => ({ i
     : action.state === 'needs_review' ? 'Delivery needs staff review. Do not create a duplicate send.'
       : action.state === 'cancelled' ? 'This confirmation was cancelled before dispatch.'
         : action.dispatchStarted ? 'Delivery is not yet verified. Check again to reconcile this same email.' : 'Saved with permission. This email has not been sent yet.' })
-function validateRecord(value: unknown, id: string): TourConfirmationRecord {
+export function validateTourConfirmationRecord(value: unknown, id: string): TourConfirmationRecord {
   const v = value as TourConfirmationRecord | null
   if (!v || v.format !== 'tour-confirmation-v1' || v.id !== id || v.bookingSha256 !== id || !text(v.actionId, 128)
     || !text(v.externalId, 1024) || !text(v.actorId, 128) || !text(v.recordedAt, 50) || !Number.isFinite(Date.parse(v.recordedAt))
-    || !digest(v.messageSha256)) return fail('confirmation_record_invalid', 'The saved confirmation needs administrator review.')
+    || (v.actorKind !== undefined && !['user','channel'].includes(v.actorKind)) || !digest(v.messageSha256)) return fail('confirmation_record_invalid', 'The saved confirmation needs administrator review.')
   return v
+}
+export function validateTourConfirmationAction(runtime: ResolvedPropertyRuntime, record: TourConfirmationRecord, action: WorkflowAction | null): WorkflowAction {
+  const message = action?.input.message as EmailMessage | undefined
+  const consent = action?.input.consent as { receiptId?: unknown; recordedAt?: unknown } | undefined
+  if (!action || action.id !== record.actionId || action.kind !== 'leasing_email' || action.connector !== 'resend_email_v1'
+    || action.organizationId !== runtime.scope.organizationId || action.propertyId !== runtime.scope.propertyId
+    || (record.actorKind === 'channel' ? action.origin.kind !== 'channel' || action.origin.bindingId !== record.actorId
+      : action.origin.kind !== 'user' || action.origin.userId !== record.actorId)
+    || hashJson(action.input) !== action.inputSha256 || !message || emailMessageDigest(message) !== record.messageSha256
+    || consent?.receiptId !== 'tour-' + record.id || consent.recordedAt !== record.recordedAt) {
+    return fail('confirmation_record_invalid', 'The confirmation workflow needs administrator review.')
+  }
+  return action
 }
 export function createTourConfirmationService(runtime: ResolvedPropertyRuntime, workflows: PostgresWorkflowRepository,
   provider: { configured: boolean; transport: () => ResendTransport }, now: () => Date = () => new Date()) {
   const readiness = () => provider.configured && !!tourEmailBinding(runtime.snapshot, now())
   const reason = () => readiness() ? null : 'Email sending is not configured for this property. No email will be queued or sent.'
-  const validateAction = (record: TourConfirmationRecord, action: WorkflowAction | null): WorkflowAction => {
-    const message = action?.input.message as EmailMessage | undefined
-    const consent = action?.input.consent as { receiptId?: unknown; recordedAt?: unknown } | undefined
-    if (!action || action.id !== record.actionId || action.kind !== 'leasing_email' || action.connector !== 'resend_email_v1'
-      || action.organizationId !== runtime.scope.organizationId || action.propertyId !== runtime.scope.propertyId
-      || action.origin.kind !== 'user' || action.origin.userId !== record.actorId
-      || hashJson(action.input) !== action.inputSha256 || !message || emailMessageDigest(message) !== record.messageSha256
-      || consent?.receiptId !== 'tour-' + record.id || consent.recordedAt !== record.recordedAt) {
-      return fail('confirmation_record_invalid', 'The confirmation workflow needs administrator review.')
-    }
-    return action
-  }
+  const validateAction = (record: TourConfirmationRecord, action: WorkflowAction | null) => validateTourConfirmationAction(runtime, record, action)
   return {
     async preview(externalId: unknown) {
       return workflows.transaction(async unit => {
         const draft = prepareTourConfirmation(await unit.readCalendar(), runtime.snapshot, externalId, now())
         const saved = await unit.documents.get<TourConfirmationRecord>(key(draft.bookingSha256))
-        const record = saved ? validateRecord(saved, draft.bookingSha256) : null
+        const record = saved ? validateTourConfirmationRecord(saved, draft.bookingSha256) : null
         const action = record ? validateAction(record, await unit.workflows.get(record.actionId)) : null
         return { preview: { externalId: draft.externalId, bookingSha256: draft.bookingSha256, recipient: draft.recipient, subject: draft.subject, body: draft.body },
           ready: readiness(), reason: reason(), confirmation: record && action ? summary(record, action) : null }
@@ -112,7 +115,7 @@ export function createTourConfirmationService(runtime: ResolvedPropertyRuntime, 
         if (draft.bookingSha256 !== v.bookingSha256 || !draft.message) return fail('confirmation_tour_changed', 'The tour changed. Review the new details before recording permission.')
         const prior = await unit.documents.get<TourConfirmationRecord>(key(draft.bookingSha256))
         if (prior) {
-          const record = validateRecord(prior, draft.bookingSha256)
+          const record = validateTourConfirmationRecord(prior, draft.bookingSha256)
           return summary(record, validateAction(record, await unit.workflows.get(record.actionId)))
         }
         const recordedAt = now().toISOString(), messageSha256 = emailMessageDigest(draft.message)
@@ -133,7 +136,7 @@ export function createTourConfirmationService(runtime: ResolvedPropertyRuntime, 
       if (!readiness()) return fail('confirmation_not_configured', reason()!, 503)
       const raw = await runtime.documents.get<TourConfirmationRecord>(key(id))
       if (!raw) return fail('confirmation_missing', 'This confirmation is not available in this property.', 404)
-      const record = validateRecord(raw, id)
+      const record = validateTourConfirmationRecord(raw, id)
       validateAction(record, await workflows.get(record.actionId))
       const binding = tourEmailBinding(runtime.snapshot, now())!
       const connector = createResendEmailConnector({ organizationId: runtime.scope.organizationId, propertyId: runtime.scope.propertyId,

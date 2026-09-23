@@ -34,6 +34,17 @@ export const TOOL_DEFINITIONS = [
   {
     type: 'function',
     function: {
+      name: 'email_tour_confirmation',
+      description: 'Email the saved tour confirmation only after this call has a confirmed booking with a saved matching email and the property supports sending. Use prepare, ask the exact returned permission question and wait for clear agreement; then send with the offerId. Use status for that same offer. Staff and voice share one confirmation; never replace an uncertain send. Does not book, reschedule, cancel or send SMS.',
+      parameters: { type: 'object', additionalProperties: false, properties: {
+        action: { type: 'string', enum: ['prepare','send','status'] },
+        offerId: { type: 'string', description: 'Exact ID returned by prepare. Required for send/status; omit for prepare. Never read aloud.' },
+      }, required: ['action'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'capture_signal',
       description: 'Save a volunteered preference while gathering information, or pets/parking evidence. When checking residences now, pass timing, bedrooms and budget directly to check_availability instead of duplicating capture calls.',
       parameters: {
@@ -179,6 +190,7 @@ export interface AssistantConfigOptions extends PromptContext {
  * only the delayed message, so it is not announced every time.
  */
 export const TOOL_MESSAGES: Record<string, Array<Record<string, unknown>>> = {
+  email_tour_confirmation: [{ type: 'request-response-delayed', content: 'I’m checking that request.', timingMilliseconds: 1500 }],
   email_shortlist: [{ type: 'request-response-delayed', content: 'I’m checking that request.', timingMilliseconds: 1500 }],
   check_availability: [
     { type: 'request-start', content: 'Let me pull that up.' },

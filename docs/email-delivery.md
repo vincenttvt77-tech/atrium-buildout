@@ -1,6 +1,6 @@
 # Durable email submission and delivery evidence
 
-The email adapter runs through Atrium's existing property-authorized workflow repository and worker. The managed PostgreSQL calendar includes a staff **Email confirmation** flow for an exact saved tour. The voice handler also implements permissioned apartment-shortlist email. These are **not enabled for customer delivery** by source publication. Reviewed property senders, a secure provider key and managed runtime activation are required; voice also needs tool/prompt publication and channel acceptance. The source includes a bounded verification-only runner; no schedule or live sending domain is installed by these changes. SMS remains separate work.
+The email adapter runs through Atrium's existing property-authorized workflow repository and worker. The managed PostgreSQL calendar includes a staff **Email confirmation** flow for an exact saved tour. The voice handler also implements permissioned apartment-shortlist and saved-tour confirmation emails. These are **not enabled for customer delivery** by source publication. Reviewed property senders, a secure provider key and managed runtime activation are required; voice also needs tool/prompt publication and channel acceptance. The source includes a bounded verification-only runner; no schedule or live sending domain is installed by these changes. SMS remains separate work.
 
 ## Permissioned voice shortlist email
 
@@ -16,9 +16,68 @@ Permission, action, receipt, outbox and the call's single accepted email record 
 
 The initial send attempts submission during the tool request, and a later same-call status request can verify it. The post-call reconciliation endpoint below and staff Work queue control can check existing dispatches after hangup. Until a reviewed scheduler is activated, unattended delivery checks do not run. A provider acknowledgement is never reported as delivery. No automatic marketing, SMS, tour confirmation, call transfer or website-triggered callback is added by this tool.
 
-The source tool contract now has eight function tools, and its fingerprint differs from the earlier published assistant. Source changes are **not** Vapi publication. Keep the existing assistant/draft unchanged until the managed backend, reviewed property settings, provider access and exact tool/prompt release have passed a controlled real-channel test. Do not publish these instructions onto an older backend.
+The source tool contract now has nine function tools, including the separate tour confirmation capability below, and its fingerprint differs from the earlier published assistant. Source changes are **not** Vapi publication. Keep the existing assistant/draft unchanged until the managed backend, reviewed property settings, provider access and exact tool/prompt release have passed a controlled real-channel test. Do not publish these instructions onto an older backend.
 
 Protocol sources checked September 22, 2026: Vapi's [tool-call server message](https://raw.githubusercontent.com/VapiAI/server-sdk-typescript/main/src/api/types/ServerMessageToolCalls.ts) provides a live artifact; its [artifact schema](https://raw.githubusercontent.com/VapiAI/server-sdk-typescript/main/src/api/types/Artifact.ts) exposes spoken message history. Native [user](https://raw.githubusercontent.com/VapiAI/server-sdk-typescript/main/src/api/types/UserMessage.ts) and [bot](https://raw.githubusercontent.com/VapiAI/server-sdk-typescript/main/src/api/types/BotMessage.ts) message contracts are used for the permission comparison. No network lookup occurs inside the permission decision.
+
+## Permissioned voice tour confirmation
+
+After a successful booking read-back, `email_tour_confirmation` supports `prepare`,
+`send` and `status`. The backend selects the current call's confirmed reservation;
+the model supplies no booking ID, recipient, message, property or permission flag.
+The saved calendar reservation must belong to this call and match its selected time,
+unit and saved email. Missing or corrected email details after booking require staff
+review; do not create another reservation to change contact details. Booking remains
+possible without an email. An unconfirmed, cancelled, past, blocked or review-held
+tour cannot receive a confirmation through this command.
+
+Preparation binds the exact rendered confirmation, recipient, booking revision,
+property version, five-minute expiry and conversation-history boundary. The caller
+must hear the returned date/time/address question and clearly agree in a new
+question/reply pair, using the same authenticated artifact checks as shortlist email.
+This is evidence of a spoken request, not caller identity or email-account ownership.
+Only the public tour information saved in this call is eligible; it cannot retrieve
+an arbitrary previous caller's booking.
+
+Voice requires the ordinary reviewed `tourConfirmationEmail` sender plus this
+separate published opt-in, with an exact property match and review at most 30 days
+in the future. Enabling staff email alone does not enable voice sending:
+
+```json
+{
+  "voiceTourConfirmation": {
+    "enabled": true,
+    "organizationId": "organization-example",
+    "propertyId": "property-example",
+    "reviewExpiresAt": "2026-09-29T12:00:00Z"
+  }
+}
+```
+
+These are synthetic IDs/dates, not deployment configuration. No new credentials or
+migration are required beyond the existing managed email setup. The opt-in is not a
+substitute for domain verification, tool/prompt publication or a real phone test.
+
+Voice and staff admission serialize under the same property calendar lock and share
+one confirmation record for the exact booking/content/configuration revision. Consent,
+receipt, action, outbox and that record commit atomically. Existing staff records
+remain compatible; new voice records identify their original channel authority.
+The Calendar confirmation dialog reads/processes that same action, and the Work queue
+and post-call reconciler can inspect its existing provider dispatch.
+
+Only the newly accepted voice request attempts first dispatch. Replayed sends,
+status checks and new preparation cannot start a saved-but-unstarted request or create
+a replacement. Staff may explicitly process the same queued confirmation. The call,
+tour, sender and permission are checked again before the bounded provider write.
+These checks cannot atomically cover a later caller change and an external send.
+
+Provider acceptance remains different from delivery. Lost acknowledgements remain
+unconfirmed; matching provider readback is required for a delivered claim. After
+hangup, staff or an activated reconciliation worker can verify an already dispatched
+email; a delayed voice tool cannot grant new permission. Changed tour content needs
+a new reviewed confirmation/permission rather than repurposing the previous action.
+The new tool does not reschedule/cancel, send SMS, enable marketing or prove faster
+voice responses. [AT-141 evidence and remaining work](../reports/2026-09-23-voice-tour-confirmation.md).
 
 ## Staff tour confirmations
 
@@ -70,7 +129,7 @@ This is a synthetic example, not a usable sending identity. The review must be f
 
 `emailWorkflowAction` validates a single-recipient message plus a receipt reference binding purpose, recipient, exact content digest, recording time and expiry. It returns a new action for `PostgresWorkflowRepository.accept`; it does not enqueue anything itself. The existing repository supplies tenant-scoped operation hashing, deduplication, original authority/configuration checks, leases and durable records.
 
-The receipt structure is **not independent proof that a person consented**. The staff tour handler persists an authenticated operator's permission attestation. The voice shortlist handler independently checks the authenticated question/reply history described above. Both bind exact content and scope. Never accept arbitrary HTML, sender identities, model-generated consent evidence or browser-supplied property ownership. The adapter checks immutable intent and receipt binding; current booking/shortlist validation belongs to the command/connector wrapper.
+The receipt structure is **not independent proof that a person consented**. The staff tour handler persists an authenticated operator's permission attestation. The voice shortlist and tour confirmation handlers independently check the authenticated question/reply history described above. Both bind exact content and scope. Never accept arbitrary HTML, sender identities, model-generated consent evidence or browser-supplied property ownership. The adapter checks immutable intent and receipt binding; current booking/shortlist validation belongs to the command/connector wrapper.
 
 `createResendEmailConnector` binds one organization/property and exact sender/reply address. An action from another scope or with different content/sender is rejected before network IO. Construct the registry server-side for the claimed property. Keep credentials outside persisted intent/input. Permission must be current at dispatch, recorded no later than action creation, and cover an interval of at most 24 hours. Subsequent delivery observation may continue after permission expires; it does not authorize a new dispatch.
 

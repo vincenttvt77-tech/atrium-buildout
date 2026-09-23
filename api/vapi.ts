@@ -29,6 +29,7 @@ import { randomUUID } from 'node:crypto'
 import { PostgresWorkflowRepository } from '../src/database/workflows.ts'
 import { ResendTransport } from '../src/email/render.ts'
 import { createVoiceShortlistEmailService, VoiceEmailError } from '../src/email/voice-shortlist.ts'
+import { createVoiceTourConfirmationService } from '../src/email/voice-tour-confirmation.ts'
 import type { LossReason } from '../src/record/store.ts'
 import { bookTour, idempotencyKey } from '../src/booking/book.ts'
 import type { BookingReviewAttempt } from '../src/calendar/types.ts'
@@ -511,7 +512,8 @@ async function runTool(
   name: string, args: Record<string, unknown>, callId: string, now: Date, state: CallState,
   runtime?: ResolvedPropertyRuntime,
   execution?: { beforeBooking(attempt: BookingReviewAttempt): Promise<void>; bookingUncertain: boolean;
-    voiceEmail: ReturnType<typeof createVoiceShortlistEmailService> | null; artifactMessages: unknown; toolId: string; token: string },
+    voiceEmail: ReturnType<typeof createVoiceShortlistEmailService> | null;
+    voiceTourEmail: ReturnType<typeof createVoiceTourConfirmationService> | null; artifactMessages: unknown; toolId: string; token: string },
 ): Promise<string> {
   const { inventory, articles, property } = load(now, runtime)
   const unitIds = runtime ? inventory.units.map(unit => unit.unitId) : rawUnits.map(unit => unit.unitId)
@@ -535,6 +537,12 @@ async function runTool(
     case 'email_shortlist': {
       if (!execution?.voiceEmail) return 'Apartment email is not configured for this property. Nothing was sent. Offer to save contact details for staff.'
       try { return JSON.stringify(await execution.voiceEmail.command(args, callId, execution.artifactMessages,
+        { toolId: execution.toolId, token: execution.token })) }
+      catch (error) { if (error instanceof VoiceEmailError) return error.message; throw error }
+    }
+    case 'email_tour_confirmation': {
+      if (!execution?.voiceTourEmail) return 'Tour confirmation email is not configured for this property. Nothing was sent. Offer staff follow-up.'
+      try { return JSON.stringify(await execution.voiceTourEmail.command(args, callId, execution.artifactMessages,
         { toolId: execution.toolId, token: execution.token })) }
       catch (error) { if (error instanceof VoiceEmailError) return error.message; throw error }
     }
@@ -692,7 +700,8 @@ async function runTool(
         status: booking.state.status === 'confirmed' ? 'confirmed'
           : booking.state.status === 'arranging' ? 'arranging' : 'failed',
       }
-      return sayableStatus(booking, timeZone)
+      return sayableStatus(booking, timeZone) + (state.booking.status === 'confirmed' && state.email && execution?.voiceTourEmail?.ready()
+        ? ' Tour confirmation email is available: prepare the saved confirmation, ask its exact permission question, and wait for agreement before sending. Nothing has been sent yet.' : '')
     }
 
     case 'capture_loss_reason': {
@@ -1171,6 +1180,10 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
             new PostgresWorkflowRepository(runtimeForRequest(req).app, runtime.scope,
               { requestId: runtime.requestId, configurationVersion: runtime.snapshot.version }),
             { configured: !!process.env.RESEND_API_KEY?.trim(), transport: () => new ResendTransport(process.env.RESEND_API_KEY ?? '') }) : null,
+          voiceTourEmail: runtime ? createVoiceTourConfirmationService(runtime,
+            new PostgresWorkflowRepository(runtimeForRequest(req).app, runtime.scope,
+              { requestId: runtime.requestId, configurationVersion: runtime.snapshot.version }),
+            { configured: !!process.env.RESEND_API_KEY?.trim(), transport: () => new ResendTransport(process.env.RESEND_API_KEY ?? '') }) : null,
           artifactMessages: message.artifact?.messages,
           toolId: tc.toolCallId as string,
           token,
@@ -1227,7 +1240,7 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
             } catch { result = TOUR_CHANGE_UNSAVED; tourChangeSaveFailed = true }
           } else if (error instanceof TourChangePersistenceError) {
             result = TOUR_CHANGE_UNSAVED; tourChangeSaveFailed = true; outcome = 'blocked'
-          } else if (name === 'email_shortlist') {
+          } else if (name === 'email_shortlist' || name === 'email_tour_confirmation') {
             // The email workflow has its own durable admission/dispatch evidence. An
             // exception here must not label a possibly submitted email as no effect.
             result = 'The email request could not be verified. Do not send a replacement. Check status for this same offer or ask staff to review it.'

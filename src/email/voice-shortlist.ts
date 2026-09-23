@@ -26,7 +26,7 @@ const fail = (message: string): never => { throw new VoiceEmailError(message) }
 const identifier = (s: unknown): s is string => typeof s === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,255}$/.test(s)
 const escape = (s: string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')
 const normalize = (s: string) => s.toLowerCase().replace(/[.,!?;:]/g,' ').replace(/\s+/g,' ').trim()
-const spokenEmail = (s: string) => s.replace(/@/g,' at ').replace(/\./g,' dot ').replace(/_/g,' underscore ').replace(/-/g,' dash ').replace(/\+/g,' plus ')
+export const spokenEmail = (s: string) => s.replace(/@/g,' at ').replace(/\./g,' dot ').replace(/_/g,' underscore ').replace(/-/g,' dash ').replace(/\+/g,' plus ')
 
 /** Only provider artifact.messages from an authenticated webhook belongs here.
  * This is evidence of a spoken request, never identity/email-ownership verification. */

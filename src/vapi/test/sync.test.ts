@@ -23,13 +23,13 @@ describe('which assistant is updated', () => {
 })
 
 describe('what the update writes and what it leaves alone', () => {
-  test('preserves a configured vault credential and unrelated headers on all eight explicit tool routes', () => {
+  test('preserves a configured vault credential and unrelated headers on all nine explicit tool routes', () => {
     const patch = assistantPatch({ server: { url: 'https://old.example/api/vapi', credentialId: 'credential-existing', headers: { 'x-custom': 'value' } } }, generated)
     assert.equal(patch.server.credentialId, 'credential-existing')
     assert.deepEqual(patch.server.headers, { 'x-custom': 'value' })
     assert.equal(patch.server.url, config.server.url)
     const tools = patch.model.tools as Array<{ server: Record<string, unknown>; function: unknown; messages?: unknown }>
-    assert.equal(tools.length, 8)
+    assert.equal(tools.length, 9)
     for (const [index, tool] of tools.entries()) {
       assert.deepEqual(tool.server, patch.server)
       assert.notEqual(tool.server, patch.server)
@@ -70,7 +70,7 @@ describe('what the update writes and what it leaves alone', () => {
     assert.equal(patch.model.maxTokens, 300)
     assert.deepEqual(patch.model.toolIds, [], 'separately attached tools are detached')
     assert.match(String((patch.model.messages as Array<{ content: string }>)[0]!.content), /You answer the leasing line at The Larkin/)
-    assert.equal((patch.model.tools as unknown[]).length, 8)
+    assert.equal((patch.model.tools as unknown[]).length, 9)
     assert.equal(patch.server.url, 'https://example.vercel.app/api/vapi')
   })
 })
@@ -129,7 +129,7 @@ describe('the round trip to Vapi', () => {
     assert.deepEqual(calls.map((c) => `${c.method} ${c.url}`), ['GET https://api.vapi.ai/assistant', 'GET https://api.vapi.ai/assistant/a1', 'PATCH https://api.vapi.ai/assistant/a1', 'GET https://api.vapi.ai/assistant/a1'])
     assert.equal(calls[2]!.auth, 'Bearer sk-test')
     assert.equal((calls[2]!.body as { model: { temperature: number } }).model.temperature, 0.4)
-    assert.match(r.updated!.join(' '), /8 tools/)
+    assert.match(r.updated!.join(' '), /9 tools/)
   })
   test('a refused key is said plainly', async () => {
     const fetchImpl = (async () => new Response('', { status: 401 })) as unknown as typeof fetch

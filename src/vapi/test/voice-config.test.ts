@@ -3,6 +3,16 @@ import assert from 'node:assert/strict'
 import { demoAssistantConfig } from '../config.ts'
 import { TOOL_DEFINITIONS, TOOL_MESSAGES } from '../assistant.ts'
 
+test('tour email uses only prepared offer identity and separates booking from delivery', () => {
+  const tool = TOOL_DEFINITIONS.find(t => t.function.name === 'email_tour_confirmation')!
+  assert.deepEqual(Object.keys(tool.function.parameters.properties).sort(), ['action','offerId'])
+  assert.equal('additionalProperties' in tool.function.parameters && tool.function.parameters.additionalProperties,false)
+  assert.match(tool.function.description,/confirmed booking.*wait for clear agreement/)
+  assert.match(tool.function.description,/never replace an uncertain send/)
+  assert.doesNotMatch(String(TOOL_MESSAGES.email_tour_confirmation?.[0]?.content),/sent|delivered|confirmed/)
+  assert.match(demoAssistantConfig({},'https://example.test').model.messages[0]!.content,/Booking alone sends no message/)
+})
+
 test('shortlist email accepts only action/offer identity and avoids invented permission fields', () => {
   const tool = TOOL_DEFINITIONS.find(t => t.function.name === 'email_shortlist')!
   assert.deepEqual(Object.keys(tool.function.parameters.properties).sort(), ['action','offerId'])

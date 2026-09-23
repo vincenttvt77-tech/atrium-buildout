@@ -60,7 +60,7 @@ describe('updating the phone assistant from the dashboard', () => {
     assert.equal(patches[0]!.body.server.url, 'https://ghost-building.vercel.app/api/vapi')
     assert.equal(patches[0]!.body.server.credentialId, 'test-webhook-credential')
     assert.ok(!JSON.stringify(patches).includes('test-only-webhook-secret'), 'webhook secret stays in credentials, not the assistant payload')
-    assert.equal(patches[0]!.body.model.tools.length, 8)
+    assert.equal(patches[0]!.body.model.tools.length, 9)
   })
 
   test('preview environments cannot reroute an assistant', async () => {
