@@ -73,6 +73,7 @@ function buildModel(s, opts) {
   const rawSlots = c ? arr(c.slots) : []
   const blocks = c ? arr(c.blocks).filter((b) => b && b.target != null) : []
   const bookings = c ? arr(c.bookings).filter((b) => b && b.slotId != null) : []
+  const identities = derive.reservationIndex(s)
   const slots = [], byId = new Map(), byDate = new Map(), seenTours = new Set()
   let lo = Infinity, hi = -Infinity, lastDate = null
   for (const raw of rawSlots) {
@@ -84,19 +85,23 @@ function buildModel(s, opts) {
     let endMin = pe ? pe.minutes + (pe.ymd !== ps.ymd ? 1440 : 0) : startMin + 30
     if (endMin <= startMin) endMin = startMin + 30
     const status = ['open', 'booked', 'blocked', 'unavailable'].includes(raw.status) ? raw.status : 'unavailable'
-    // Every tour on this time — two callers can tour at once as long as it is not the same
-    // apartment — so a time with one of two places taken is still open and still shows the tour.
+    // Every reservation remains separate, including shared tours of one apartment.
     const onSlot = arr(raw.bookings).length ? arr(raw.bookings) : (raw.booking ? [raw.booking] : [])
     const tours = onSlot.filter((b) => {
       if (!b || (b.startsAt && Date.parse(b.startsAt) !== Date.parse(raw.startsAt))) return false
-      const key = b.externalId || `${raw.slotId}|${b.prospectName || ''}|${b.unitId || ''}`
+      const key = derive.reservationId(b.externalId)
+      if (!key) return true
       if (seenTours.has(key)) return false
       seenTours.add(key); return true
     }).map((b, i) => ({
       i, name: String(b.prospectName ?? '').trim(),
       unitId: b.unitId != null && b.unitId !== '' ? String(b.unitId) : null,
       startsAt: b.startsAt || raw.startsAt, endsAt: b.endsAt || raw.endsAt,
-      booking: bookings.find((x) => b.externalId ? x.externalId === b.externalId : String(x.slotId) === String(raw.slotId) && String(x.prospectName ?? '').trim() === String(b.prospectName ?? '').trim()) || null,
+      booking: (() => {
+        const saved = derive.calendarBooking(s, b, identities)
+        return saved && saved.slotId === raw.slotId && (!saved.startsAt || Date.parse(saved.startsAt) === Date.parse(b.startsAt || raw.startsAt))
+          && (saved.unitId ?? null) === (b.unitId ?? null) ? saved : null
+      })(),
     }))
     const sl = {
       id: String(raw.slotId), date, startsAt: raw.startsAt, endsAt: raw.endsAt, startMin, endMin, status,
@@ -136,15 +141,14 @@ function buildModel(s, opts) {
   const days = view === 'week' ? [0, 1, 2, 3, 4, 5, 6].map((i) => fmt.addDays(ws, i)) : [date]
   const dayBlocks = new Map()
   for (const b of blocks) for (const date of derive.wholeDayBlockDates(b)) if (!dayBlocks.has(date)) dayBlocks.set(date, b)
-  const bookingBySlot = new Map()
-  for (const b of bookings) if (!bookingBySlot.has(String(b.slotId))) bookingBySlot.set(String(b.slotId), b)
 
   /** One item per tour. The item's slot is a copy carrying that tour's name and apartment. */
   const tourItems = (sl) => sl.tours.map((t) => {
     const end = fmt.nyParts(t.endsAt)
     const actual = { ...sl, startsAt: t.startsAt, endsAt: t.endsAt, endMin: end ? end.minutes + (end.ymd !== sl.date ? 1440 : 0) : sl.endMin,
       name: t.name, unitId: t.unitId, booking: t.booking, tourIndex: t.i, shared: sl.tours.length > 1 || sl.status === 'open' }
-    return { kind: 'tour', key: `tour:${sl.id}:${t.i}`, ymd: sl.date, slot: actual, slots: [sl], row: rowOf(actual), span: spanOf(actual) }
+    return { kind: 'tour', key: t.booking ? `tour:reservation:${encodeURIComponent(t.booking.externalId)}` : `tour:${sl.id}:${t.i}`,
+      ymd: sl.date, slot: actual, slots: [sl], row: rowOf(actual), span: spanOf(actual) }
   })
   /** Consecutive own-block slots with one reason inside a day band are one labelled segment (presentation only). */
   function mergeSegs(own, first) {
@@ -226,26 +230,18 @@ function buildModel(s, opts) {
   const dayModels = days.map(dayModel)
   const old = blocks.filter((b) => (isYmd(b.target) ? b.target < today : /^slot-(\d{4}-\d{2}-\d{2})T/.exec(String(b.target))?.[1] < today))
   return {
-    loaded: Boolean(c), range, settings: c && c.settings, today, slots, byId, byDate, blocks, bookings, bookingBySlot, dayBlocks, minM, maxM, rows, stepMin, rowHeight, rowOf, spanOf,
+    loaded: Boolean(c), range, settings: c && c.settings, today, slots, byId, byDate, blocks, bookings, dayBlocks, minM, maxM, rows, stepMin, rowHeight, rowOf, spanOf,
     lastSlotDate, hasSlots: slots.length > 0, firstWeek, lastWeek, lastDay, mobile, view, date, weekStart: ws, days, dayModels, dayModel, old,
     nowMin: fmt.nyNow().minutes,
   }
 }
 
-/** The lead join for a booked slot (never prospectPhone — contract §5.4). */
+/** Join only this reservation, never another tour sharing its time/name/apartment. */
 function tourInfo(s, m, sl) {
-  const booking = sl.booking || m.bookingBySlot.get(sl.id) || null
-  let profile = null, lb = null
-  // Several tours can share a time: match the lead by slot AND by the name or apartment on this tour.
-  const candidates = []
-  for (const p of arr(s.leads && s.leads.profiles)) {
-    const b = arr(p && p.bookings).find((x) => x && x.slotId === sl.id)
-    if (b) candidates.push({ p, b })
-  }
-  const pick = candidates.find(({ p, b }) => (sl.unitId && b.unitId && String(b.unitId) === String(sl.unitId)) || (sl.name && p.name && p.name.trim() === sl.name))
-    || (candidates.length === 1 ? candidates[0] : null)
-  if (pick) { profile = pick.p; lb = pick.b }
-  const rawCallId = (lb && lb.callId) || (booking && String(booking.externalId ?? '').split('|')[1]) || null
+  const identities = derive.reservationIndex(s)
+  const booking = sl.booking ? derive.calendarBooking(s, sl.booking, identities) : null
+  const linked = derive.leadForBooking(s, booking, identities), profile = linked?.profile || null, lb = linked?.booking || null
+  const rawCallId = (lb && lb.callId) || (booking && booking.interactionId) || null
   const callId = rawCallId && derive.callRecords(s).some((r) => r.id === rawCallId) ? rawCallId : null
   return {
     name: sl.name || (profile && profile.name) || 'Tour', profile, phone: profile && profile.phone !== 'unknown' ? profile.phone : null,
@@ -917,8 +913,13 @@ function showEl(el) { if (el && el.scrollIntoView) { try { el.scrollIntoView({ b
 
 let popSeq = 0
 const popSig = (it) => JSON.stringify([it.kind, it.slots.map((x) => [x.id, x.status, x.blockTarget, x.rawReason, x.name, x.unitId]), it.reason || '', it.kind === 'dayband' && it.block ? it.block.blockedAt : '',
-  arr(A.state.calendar?.bookings).map(booking => [booking.externalId, booking.revision, booking.conflictBlockIds]),
-  A.state.calendar?.rescheduleProjectionPending])
+  arr(A.state.calendar?.bookings).map(booking => [booking.externalId, booking.revision, booking.conflictBlockIds]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+  A.state.calendar?.rescheduleProjectionPending,
+  it.kind === 'tour' ? (() => {
+    const t = tourInfo(A.state, cal.model, it.slot)
+    return [t.booking?.externalId, t.booking?.startsAt, t.booking?.endsAt, t.booking?.unitId,
+      t.name, t.phone, t.email, t.callId, t.profile?.phone]
+  })() : null])
 
 function closePopover(returnFocus) {
   const p = cal.pop
@@ -953,18 +954,20 @@ function tourContent(s, m, it) {
   if (tel) contact.push(`<a href="${esc(tel)}">${esc(fmt.phone(t.phone))}</a>`)
   if (mail) contact.push(`<a href="${esc(mail)}">${esc(t.email)}</a>`)
   let body = `<p>${esc(dayLabel(sl.date))} · ${esc(fmt.timeRange(sl.startsAt, sl.endsAt))}</p><p>${t.unitId ? `Apartment ${esc(t.unitId)}` : 'No apartment picked yet'}</p><p>${contact.length ? contact.join(' · ') : 'No phone on file'}</p>`
+  if (!t.booking) body += '<p class="cal-unit-conflict">This reservation could not be matched to one saved record. Reload the calendar before changing it.</p>'
+  else if (!t.profile) body += '<p class="muted-line">No linked prospect record for this reservation.</p>'
   if (t.bookedAt && fmt.dateTime(t.bookedAt) !== '—') body += `<p>Booked by the assistant ${esc(fmt.dateTime(t.bookedAt, { inSentence: true }))}</p>`
   const actions = []
   if (t.booking && t.booking.externalId && A.can('operate')) actions.push(`<button type="button" class="btn btn-primary" data-pop="reschedule" data-write="calendar">Reschedule</button>`)
   if (A.databaseMode && A.can('operate') && t.booking?.externalId) actions.push('<button type="button" class="btn" data-pop="confirmation">Email confirmation</button>')
   if (tel) actions.push(`<a class="btn" href="${esc(tel)}">Call</a>`)
-  if (t.profile) actions.push(`<a class="btn btn-quiet" href="${esc(A.hashFor('leads', { phone: t.profile.phone }))}">Open lead</a>`)
+  if (t.profile) actions.push(`<a class="btn btn-quiet" href="${esc(A.hashFor('leads', { phone: t.profile.phone, ...(t.profile.phone === 'unknown' && t.callId ? { call: t.callId } : {}) }))}">Open lead</a>`)
   if (t.callId) actions.push(`<a class="btn btn-quiet" href="${esc(A.hashFor('calls', { id: t.callId }))}">See the call</a>`)
   const conflicts = arr(s.calendar && s.calendar.unitBlocks).filter(block => !block.removedAt && (Array.isArray(t.booking?.conflictBlockIds)
     ? t.booking.conflictBlockIds.includes(block.id)
     : block.unitId === t.unitId && Date.parse(block.startsAt) < Date.parse(t.booking?.occupiedEndsAt || sl.endsAt) && Date.parse(block.endsAt) > Date.parse(t.booking?.occupiedStartsAt || sl.startsAt)))
   if (conflicts.length) body += `<p class="cal-unit-conflict">This apartment is blocked during the tour or its reserved preparation time: ${conflicts.map(block => esc(block.reason)).join('; ')}. Contact the prospect and choose another time or apartment.</p>`
-  const pending = arr(s.calendar && s.calendar.rescheduleProjectionPending).find(item => item.externalId === t.booking?.externalId)
+  const pending = t.booking && arr(s.calendar && s.calendar.rescheduleProjectionPending).find(item => item.externalId === t.booking.externalId)
   if (pending) {
     body += '<p class="cal-unit-conflict">The tour moved, but its CRM follow-ups still need to sync.</p>'
     if (A.can('operate')) actions.unshift('<button type="button" class="btn btn-primary" data-pop="reschedule-sync" data-write="calendar">Retry follow-up sync</button>')
@@ -1585,15 +1588,25 @@ const view = {
       } else if (hadFocus && focusKey) {
         const el = byKey(focusKey); if (el) focusEl(el)
       }
-      refreshPopover()
     }
+    refreshPopover()
     paintBusy()
     if (cal.sheet) cal.sheet.refresh()
     const rangeKey = `${m.view}:${m.view === 'week' ? m.weekStart : m.date}`
     if (cal.lastRange && cal.lastRange !== rangeKey) say(rt.live)
     cal.lastRange = rangeKey
-    // ?slot= is consumed once: open that slot, then take it out of the hash
-    if (p.slot && m.loaded) {
+    // Reservation links must never open the first other tour at a shared time.
+    if (p.booking && m.loaded) {
+      const id = String(p.booking), booking = derive.calendarBooking(s, { externalId: id })
+      if (!booking) {
+        setParams({ booking: undefined, slot: undefined })
+        A.toast('That reservation is not uniquely available in the saved calendar.', { kind: 'info' }); return
+      }
+      const date = fmt.nyDate(booking.startsAt)
+      if (date && !m.days.includes(date)) { setParams({ date, slot: undefined }); return }
+      setParams({ booking: undefined, slot: undefined })
+      this.openBooking(id)
+    } else if (p.slot && m.loaded) {
       const id = String(p.slot)
       setParams({ slot: undefined })
       const sl = m.byId.get(id)
@@ -1602,11 +1615,19 @@ const view = {
       this.openSlot(id)
     } else if (cal.pendingSlot && m.loaded) { const id = cal.pendingSlot; cal.pendingSlot = null; this.openSlot(id) }
   },
+  openBooking(id) {
+    const tours = cal.model.dayModels.flatMap(d => d.items).filter(it => it.kind === 'tour' && it.slot.booking?.externalId === id)
+    if (tours.length !== 1) { A.toast('That reservation is not uniquely available in this calendar view.', { kind: 'info' }); return }
+    const tour = tours[0], anchor = byKey(tour.key)
+    showDetails('tour', tour, anchor ? focusable(anchor) : null)
+  },
   openSlot(id) {
     const m = cal.model, sl = m.byId.get(id)
     if (!sl) return
     // A partly filled slot is still open, but a lead's calendar link is about its tour.
-    const tour = m.dayModels.flatMap((d) => d.items).find((it) => it.kind === 'tour' && it.slots.some((s) => s.id === id))
+    const tours = m.dayModels.flatMap((d) => d.items).filter((it) => it.kind === 'tour' && it.slots.some((s) => s.id === id))
+    if (tours.length > 1) { A.toast('Several tours share that time. Choose the reservation you want.', { kind: 'info' }); return }
+    const tour = tours[0]
     if (tour) { const anchor = byKey(tour.key); showDetails('tour', tour, anchor ? focusable(anchor) : null); return }
     if (sl.status === 'open') { openSheet({ date: sl.date, mode: 'range', from: id, to: id }); return }
     const it = itemForSlot(id)

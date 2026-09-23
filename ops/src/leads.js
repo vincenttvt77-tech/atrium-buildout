@@ -95,15 +95,21 @@ function leadBriefHtml(p, s) {
   const facts = [['Budget', budget ? derive.budgetText(budget.value) : 'Not captured'],
     ['Layout', sig.bedrooms ? bedroomsFact(sig.bedrooms.value) : 'Not captured'],
     ['Move-in', sig.moveIn ? String(sig.moveIn.excerpt || derive.moveInText(sig.moveIn.value) || 'Not captured') : 'Not captured']]
-  return `<section class="lead-brief"><span class="section-kicker">Prospect at a glance</span><div class="lead-brief-facts">${facts.map(([label, value]) => `<div><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join('')}</div><div class="lead-journey"><span>${ico('calls')}<strong>${arr(p.calls).length}</strong> saved ${arr(p.calls).length === 1 ? 'call' : 'calls'}</span><span>${ico('hand')}<strong>${tasks}</strong> open ${tasks === 1 ? 'task' : 'tasks'}</span></div>${tour ? `<div class="lead-next-tour">${ico('calendar')}<div><span>Next tour recorded on profile</span><strong>${esc(fmt.day(tour.startsAt))} · ${esc(fmt.time(tour.startsAt))}${tour.unitId ? ` · Apartment ${esc(tour.unitId)}` : ''}</strong></div>${link('calendar', { date: fmt.nyDate(tour.startsAt) || undefined, slot: tour.slotId }, 'View tour')}</div>` : '<p class="lead-no-tour">No upcoming tour is recorded on this profile.</p>'}</section>`
+  return `<section class="lead-brief"><span class="section-kicker">Prospect at a glance</span><div class="lead-brief-facts">${facts.map(([label, value]) => `<div><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join('')}</div><div class="lead-journey"><span>${ico('calls')}<strong>${arr(p.calls).length}</strong> saved ${arr(p.calls).length === 1 ? 'call' : 'calls'}</span><span>${ico('hand')}<strong>${tasks}</strong> open ${tasks === 1 ? 'task' : 'tasks'}</span></div>${tour ? `<div class="lead-next-tour">${ico('calendar')}<div><span>Next tour recorded on profile</span><strong>${esc(fmt.day(tour.startsAt))} · ${esc(fmt.time(tour.startsAt))}${tour.unitId ? ` · Apartment ${esc(tour.unitId)}` : ''}</strong></div>${link('calendar', tourCalendarParams(s, tour), 'View tour')}</div>` : '<p class="lead-no-tour">No upcoming tour is recorded on this profile.</p>'}</section>`
+}
+/** Missing identity opens the day, never an unrelated tour at the same time. */
+function tourCalendarParams(s, reference) {
+  const id = derive.reservationId(reference.externalId) || derive.calendarBookingForLead(s, reference)?.externalId
+  return { date: fmt.nyDate(reference.startsAt) || undefined, slot: id ? reference.slotId : undefined, booking: id || undefined }
 }
 /** The calendar's name for one of this caller's tours, when the profile has none (§9.4.1). */
 function calendarName(p, s) {
   const cal = s.calendar
   if (!cal) return null
-  const ids = new Set(arr(p.bookings).map((b) => b && b.slotId))
-  const hit = arr(cal.bookings).find((b) => b && ids.has(b.slotId) && String(b.prospectName ?? '').trim())
-  return hit ? String(hit.prospectName).trim() : null
+  const identities = derive.reservationIndex(s)
+  const names = new Set(arr(p.bookings).map(b => derive.calendarBookingForLead(s, b, identities))
+    .filter(b => b && derive.leadForBooking(s, b, identities)?.profile === p).map(b => String(b.prospectName ?? '').trim()).filter(Boolean))
+  return names.size === 1 ? [...names][0] : null
 }
 
 // ---------------------------------------------------------------------------------------
@@ -376,17 +382,19 @@ function leadPanelHtml(p, s) {
   // 4. tours
   const bookings = arr(p.bookings).filter((b) => b && b.slotId).sort((a, b) => (toTime(b.startsAt) ?? 0) - (toTime(a.startsAt) ?? 0))
   if (bookings.length) {
-    const cal = s.calendar, calIds = new Set(arr(cal && cal.bookings).map((b) => b && b.slotId))
+    const cal = s.calendar, identities = derive.reservationIndex(s)
     out += `<section class="panel-section"><h3>Tours</h3><div class="card rows">${bookings.map((b) => {
       const st = String(b.status ?? '')
       const stuck = st === 'failed' || st === 'arranging'
-      const c = st === 'confirmed' && cal && !calIds.has(b.slotId)
-        ? chip('chip-info', 'info', 'Not in the loaded calendar window')
+      const saved = derive.calendarBookingForLead(s, b, identities)
+      const linked = derive.leadForBooking(s, saved, identities)
+      const c = st === 'confirmed' && cal && (!saved || linked?.profile !== p || linked?.booking !== b)
+        ? chip('chip-info', 'info', 'Not matched to a saved reservation')
         : chip(A.label(labels.bookingChip, st, 'chip-neutral'), A.label(labels.bookingIcon, st, 'calendar'), A.label(labels.bookingStatus, st))
-      return `<div class="row row-2 tour-row${stuck ? ' row-warn' : ''}" data-key="tour:${esc(b.slotId)}"><span class="row-body">` +
+      return `<div class="row row-2 tour-row${stuck ? ' row-warn' : ''}" data-key="tour:${esc(b.externalId || `${b.slotId}:${b.callId || ''}`)}"><span class="row-body">` +
         `<span class="row-title">${esc(fmt.day(b.startsAt))} · ${esc(fmt.time(b.startsAt))} · ${b.unitId ? `apartment ${esc(b.unitId)}` : 'no apartment picked yet'}</span>` +
         `<span class="row-chips">${c}</span>${stuck ? '<span class="row-sub">Call to set a time.</span>' : ''}</span>` +
-        `<span class="row-actions">${b.unitId ? link('units', { unit: b.unitId }, 'View apartment') : ''}${link('calendar', { date: fmt.nyDate(b.startsAt) || undefined, slot: b.slotId }, 'See on calendar')}</span></div>`
+        `<span class="row-actions">${b.unitId ? link('units', { unit: b.unitId }, 'View apartment') : ''}${link('calendar', tourCalendarParams(s, b), 'See on calendar')}</span></div>`
     }).join('')}</div></section>`
   }
   // 5. what they're looking for
