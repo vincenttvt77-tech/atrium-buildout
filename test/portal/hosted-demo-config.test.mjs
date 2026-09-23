@@ -38,6 +38,29 @@ test('direct connections retain the exact project host without enabling a paid I
   assert.equal(new URL(prepared.env.ATRIUM_DATABASE_URL).port, '5432')
 })
 
+test('an explicit preview has no provider bindings and keeps independent database role credentials', () => {
+  const input = { ...fixture(), purpose: 'preview', bindings: [] }
+  const prepared = hostedDemoConfiguration(input)
+  assert.equal(prepared.input.purpose, 'preview')
+  assert.deepEqual(prepared.input.bindings, [])
+  assert.deepEqual(Object.keys(prepared.env).sort(), ['ATRIUM_AUTH_DATABASE_URL', 'ATRIUM_AUTH_ORIGIN',
+    'ATRIUM_DATABASE_URL', 'ATRIUM_RUNTIME_MODE', 'OPS_SESSION_SECRET'].sort())
+  assert.equal(new URL(prepared.env.ATRIUM_DATABASE_URL).hostname, prepared.maintenance.host)
+  assert.equal(prepared.maintenance.ssl.rejectUnauthorized, true)
+  assert.notEqual(new URL(prepared.env.ATRIUM_DATABASE_URL).password,
+    new URL(prepared.env.ATRIUM_AUTH_DATABASE_URL).password)
+})
+
+test('preview cannot carry a provider binding and an unknown purpose cannot weaken normal setup', () => {
+  for (const input of [
+    { ...fixture(), purpose: 'preview' },
+    { ...fixture(), purpose: 'production', bindings: [] },
+    { ...fixture(), purpose: null, bindings: [] },
+    { ...fixture(), purpose: 'demo', bindings: [] },
+  ]) assert.throws(() => hostedDemoConfiguration(input), /Invalid private hosted-demo/)
+  assert.equal(hostedDemoConfiguration({ ...fixture(), purpose: 'demo' }).input.purpose, 'demo')
+})
+
 test('maintenance credentials cannot be reused for an application role or the session signer', () => {
   for (const field of ['appPassword', 'authPassword', 'sessionSecret']) {
     const input = fixture()

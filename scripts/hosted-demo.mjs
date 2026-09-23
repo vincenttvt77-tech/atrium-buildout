@@ -67,7 +67,7 @@ export async function provisionHostedDemo(configuration) {
   try {
     await client.connect()
     const result = await bootstrapHostedDemoDatabase({ client, connectionMode: configuration.connectionMode, appPassword: input.appPassword,
-      authPassword: input.authPassword, account: input.account, bindings: input.bindings })
+      authPassword: input.authPassword, account: input.account, bindings: input.bindings, purpose: input.purpose })
     app = new DatabaseConnection(databasePoolConfig('atrium_app', { ...env, VERCEL: '1' }), 'atrium_app')
     auth = new DatabaseConnection(databasePoolConfig('atrium_authenticator', { ...env, VERCEL: '1' }), 'atrium_authenticator')
     const runtime = createDatabaseRuntime({ app, auth, sessionSecret: input.sessionSecret, authOrigin: input.origin })
@@ -107,13 +107,14 @@ async function main(args) {
   catch (error) { if (error.code !== 'ENOENT') throw error }
   if (args[0] === '--check') {
     console.log(JSON.stringify({ configuration: 'valid', projectRef: configuration.projectRef,
-      origin: configuration.origin, applied: false }))
+      origin: configuration.origin, purpose: configuration.input.purpose ?? 'demo', applied: false }))
     return
   }
   const { result, env } = await provisionHostedDemo(configuration)
   await writeFile(output, JSON.stringify(env, null, 2) + '\n', { flag: 'wx', mode: 0o600 })
   console.log(JSON.stringify({ provisioned: true, projectRef: configuration.projectRef,
-    origin: configuration.origin, runtimeRolesVerified: true, voiceBindingsVerified: true,
+    origin: configuration.origin, purpose: result.purpose, runtimeRolesVerified: true,
+    voiceBindingsVerified: result.bindingIds.length > 0,
     environmentFile: output, seeded: result.seeded }))
 }
 

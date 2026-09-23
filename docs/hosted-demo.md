@@ -12,6 +12,10 @@ preserves existing account passwords, roles and operational data. An incompatibl
 existing Atrium schema or bootstrap manifest causes refusal instead of a reset.
 This finite fixture is not a general customer-onboarding or backup system.
 
+For a separate database with no voice connection, use the explicit
+[isolated preview procedure](hosted-preview.md). Do not enable a preview login
+against production storage or copy production provider credentials into previews.
+
 ## Free provider setup
 
 Select a Supabase organization on the **Free** plan and create a dedicated Atrium
@@ -46,12 +50,13 @@ The JSON configuration has these fields:
 | Field | Value |
 | --- | --- |
 | `version` | `1` |
+| `purpose` | Optional `"demo"` (the existing default), or `"preview"` for the isolated procedure |
 | `projectRef` | The exact 20-letter project reference shown by Supabase |
 | `maintenanceUrl` | The copied direct/session PostgreSQL URL, with the maintenance password percent-encoded; `/postgres`, port 5432, no query or fragment |
 | `origin` | Exact canonical HTTPS portal origin, such as `https://ghost-building.vercel.app`; no path or trailing slash |
 | `appPassword`, `authPassword`, `sessionSecret` | Three distinct cryptographically random base64url strings, 32–128 characters each |
 | `account` | Object containing `username: "larkin"`, `displayName`, and an existing supported `scrypt` `passwordHash`; no raw password |
-| `bindings` | Array of `{id, externalId}` objects. `externalId` is the existing Vapi assistant UUID, not its phone number |
+| `bindings` | In demo mode, 1–10 `{id, externalId}` objects. `externalId` is the existing Vapi assistant UUID, not its phone number. Preview mode requires exactly `[]`. |
 | `ca` | Optional trusted PEM certificate chain |
 
 Generate account hashes with the repository's `hashPassword` function using a
@@ -70,7 +75,7 @@ node scripts/hosted-demo.mjs --apply /private/operator/setup.json /private/opera
 Use actual absolute paths in a private operator directory. `--check` validates
 configuration only; it does not contact a database or prove readiness. `--apply`
 requires a direct/session maintenance connection whose actual login can create
-roles and schemas. The provisioner creates the seven restricted Atrium roles,
+roles and schemas. The provisioner creates the restricted Atrium roles,
 applies the ordered checksum-verified migrations, and atomically seeds the demo
 account, grants, assistant bindings and published fictional property bundle.
 It validates the seed with the same published-property loader used by the runtime.

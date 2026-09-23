@@ -42,15 +42,18 @@ function accountInput(value) {
 export function validateHostedDemoInput(input) {
   try {
     check(input && password(input.appPassword) && password(input.authPassword) && input.appPassword !== input.authPassword)
+    const purpose = input.purpose === undefined ? 'demo' : input.purpose
+    check(purpose === 'demo' || purpose === 'preview')
     const account = accountInput(input.account)
-    check(Array.isArray(input.bindings) && input.bindings.length >= 1 && input.bindings.length <= 10)
+    check(Array.isArray(input.bindings) && (purpose === 'preview'
+      ? input.bindings.length === 0 : input.bindings.length >= 1 && input.bindings.length <= 10))
     const bindings = input.bindings.map(value => {
       check(value && Object.keys(value).sort().join(',') === 'externalId,id')
       return validateChannelBinding({ ...value, provider: 'vapi', organizationId: HOSTED_DEMO.organizationId,
         propertyId: HOSTED_DEMO.propertyId, status: 'active', capabilities: ['read', 'operate'], permissionVersion: 1 })
     }).sort((a,b) => a.id.localeCompare(b.id))
     check(new Set(bindings.map(b => b.id)).size === bindings.length && new Set(bindings.map(b => b.externalId)).size === bindings.length)
-    return { account, bindings }
+    return { account, bindings, purpose }
   } catch { throw new HostedDemoBootstrapError('invalid_input') }
 }
 async function template(root, bindings) {
@@ -66,12 +69,17 @@ async function template(root, bindings) {
     inventorySource: 'Bundled fictional demo inventory; no PMS connection', bundle }
   // This maintenance-only proposed-record repository issues a scope solely for the
   // existing content validator. It is never returned, bound or used for runtime IO.
+  // A channel-free preview still validates the same property schema. This
+  // proposed in-memory actor is never seeded, returned or used for database IO.
+  const validationBinding = bindings[0] ?? validateChannelBinding({ id: 'preview-content-validator',
+    externalId: 'preview-content-validator', provider: 'vapi', organizationId: HOSTED_DEMO.organizationId,
+    propertyId: HOSTED_DEMO.propertyId, status: 'active', capabilities: ['read'], permissionVersion: 1 })
   const scope = await createAuthorizationService({
-    findChannelBinding: async () => bindings[0],
+    findChannelBinding: async () => validationBinding,
     getOrganization: async () => ({ id: HOSTED_DEMO.organizationId, name: HOSTED_DEMO.name, status: 'active', permissionVersion: 1 }),
     getProperty: async () => ({ id: HOSTED_DEMO.propertyId, organizationId: HOSTED_DEMO.organizationId,
       name: HOSTED_DEMO.name, timeZone: property.timeZone, status: 'active', permissionVersion: 1 }),
-  }).authorizeChannel('vapi', bindings[0].externalId, 'read')
+  }).authorizeChannel('vapi', validationBinding.externalId, 'read')
   validatePublishedProperty({ ...source, publishedAt: new Date().toISOString() }, scope)
   return source
 }
@@ -149,6 +157,8 @@ async function prepareRoles(client, manifest, secrets, directory) {
       // Refuse corrupt/unknown history before committing a new executor role.
       await client.query("SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('atrium-schema-migrations', 0))")
       const schema = (await client.query("SELECT to_regclass('atrium_migrations.history') history,to_regnamespace('atrium') application_schema")).rows[0]
+      if (manifest.purpose === 'preview' && schema.application_schema
+        && (await client.query('SELECT 1 FROM atrium.channel_bindings LIMIT 1')).rowCount) failState()
       if (schema.history) {
         try { await verifyDatabaseMigrationHistory(client, directory) } catch { failState() }
       } else if (prior.complete || schema.application_schema) failState()
@@ -215,7 +225,7 @@ async function seed(client, account, bindings, source) {
     return true
   })
 }
-async function verifySeed(client, bindings) {
+async function verifySeed(client, bindings, purpose) {
   return transaction(client, async () => {
     await client.query('SET LOCAL ROLE atrium_admin')
     const row = (await client.query(`SELECT p.published_configuration_version version FROM atrium.properties p
@@ -231,6 +241,9 @@ async function verifySeed(client, bindings) {
     [HOSTED_DEMO.propertyId, HOSTED_DEMO.organizationId, HOSTED_DEMO.membershipId, HOSTED_DEMO.userId])).rows[0]
     const version = Number(row?.version)
     if (!Number.isSafeInteger(version) || version < 1) failState()
+    // Do not adopt a preview that somebody has subsequently connected to a
+    // provider. Activation needs its own reviewed workflow, not a setup rerun.
+    if (purpose === 'preview' && (await client.query('SELECT 1 FROM atrium.channel_bindings LIMIT 1')).rowCount) failState()
     for (const binding of bindings) {
       const actual = (await client.query(`SELECT 1 FROM atrium.channel_bindings WHERE id=$1 AND provider='vapi' AND external_id=$2
         AND organization_id=$3 AND property_id=$4 AND status='active' AND capabilities=ARRAY['read','operate']::text[]`,
@@ -248,25 +261,28 @@ async function verifySeed(client, bindings) {
  * helper is used. Passwords provision new roles only; reruns never rotate them.
  * The durable nonsecret manifest permits safe resumption after a failed phase.
  */
-export async function bootstrapHostedDemoDatabase({ client, appPassword, authPassword, account, bindings, root = ROOT, connectionMode }) {
+export async function bootstrapHostedDemoDatabase({ client, appPassword, authPassword, account, bindings, purpose, root = ROOT, connectionMode }) {
   let stage = 'validate', locked = false
   try {
     check(client && typeof client.query === 'function' && ['direct', 'session'].includes(connectionMode))
-    const validated = validateHostedDemoInput({ appPassword, authPassword, account, bindings })
-    account = validated.account; bindings = validated.bindings
+    const validated = validateHostedDemoInput({ appPassword, authPassword, account, bindings, purpose })
+    account = validated.account; bindings = validated.bindings; purpose = validated.purpose
     const source = await template(root, bindings)
     const manifest = { version: 1, organizationId: HOSTED_DEMO.organizationId, propertyId: HOSTED_DEMO.propertyId,
       userId: HOSTED_DEMO.userId, username: account.username, displayName: account.displayName,
-      bindings: bindings.map(({id,externalId}) => ({id,externalId})), sourceSha256: createHash('sha256').update(JSON.stringify(source)).digest('hex') }
+      bindings: bindings.map(({id,externalId}) => ({id,externalId})), sourceSha256: createHash('sha256').update(JSON.stringify(source)).digest('hex'),
+      // Preserve existing demo manifests byte-for-byte; only the new purpose
+      // carries a marker, so either direction of conversion fails closed.
+      ...(purpose === 'preview' ? { purpose: 'preview' } : {}) }
     stage = 'lock'
     await client.query('SELECT pg_catalog.pg_advisory_lock(pg_catalog.hashtextextended($1,0))', [LOCK]); locked = true
     stage = 'roles'; const rolesCreated = await prepareRoles(client, manifest, { appPassword, authPassword }, join(root, 'supabase', 'migrations'))
     stage = 'migrations'; const migrations = await applyDatabaseMigrations(client, join(root, 'supabase', 'migrations'))
     stage = 'seed'; const seeded = await seed(client, account, bindings, source)
     stage = 'verify'; await roleSafety(client)
-    const configurationVersion = await verifySeed(client, bindings)
+    const configurationVersion = await verifySeed(client, bindings, purpose)
     return Object.freeze({ rolesCreated, seeded, migrations, ...HOSTED_DEMO, configurationVersion,
-      bindingIds: bindings.map(binding => binding.id), sourceMode: 'demo', credentialsPreserved: !rolesCreated })
+      bindingIds: bindings.map(binding => binding.id), sourceMode: 'demo', purpose, credentialsPreserved: !rolesCreated })
   } catch (error) {
     if (error instanceof HostedDemoBootstrapError) throw error
     throw new HostedDemoBootstrapError(stage === 'validate' ? 'invalid_input' : 'bootstrap_failed', stage)
