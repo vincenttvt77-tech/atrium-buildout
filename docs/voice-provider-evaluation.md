@@ -12,6 +12,11 @@ Vast exposes active-capacity and queue controls. Its documented setup defaults i
 
 ## Audition leads
 
+The [September 23 audition kit](voice-audition-kit.md) adds identical synthetic
+clips, an owner listening scorecard and a four-configuration hosting/voice trial.
+It also flags Vast's documented default worker counts for review before spending.
+This is preparation, not generated audio, a selected voice or a performance result.
+
 September 22 account inspection: Vapi's ElevenLabs list displayed 21 default voices; searching for Zoe returned no results and Leoni was not in the displayed list. Neither candidate is therefore account-verified yet. This does not establish that the provider cannot supply them. The Vapi v2 library also offered female voices, but the displayed metadata did not verify the requested Black American/Latina presentation. No voice was inferred from a name, auditioned, added or selected.
 
 | Candidate | Verified public description | Still to verify |
