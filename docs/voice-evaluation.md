@@ -48,6 +48,28 @@ Cost per successful case includes the costs of failed cases, and appears only wh
 
 `observedTargetMet` means at least 95% success in this completely reviewed sample and no recorded critical failures. `realHeldOutEvidence` reports the declared labels independently. Neither establishes release acceptance: `productionReadiness` always remains `not_established`. The separate required security, concurrency, live channel, audio quality and delivery gates still apply. A tiny perfect sample is not credible evidence of 95% real-world success.
 
+## Compare matched trials
+
+Use Node 22 on macOS or Linux with two evaluation files following the contract above, kept outside Git:
+
+```sh
+node scripts/compare-voice.mjs --baseline /private/path/baseline.json --candidate /private/path/candidate.json
+```
+
+The command refuses different dataset fingerprints, evidence/split/measurement labels, case sets, workflows or containment eligibility. It matches cases by their pseudonymous IDs regardless of array order. Freeze those identities and labels before reviewing results; changing both input files can defeat a structural check, so preserve the original dataset and review history separately. The same configuration fingerprint is allowed for repeatability trials. Timing units must be explicit milliseconds in both inputs.
+
+Output contains both aggregate reports and matched outcome transitions, with no individual case IDs. Net success can conceal one improved case and one regression; the transition counts expose both. Critical categories show newly recorded failures on previously reviewed versus unreviewed cases separately. A missing critical label on an unreviewed candidate is **not** counted as resolved. The complete case and eligible-case denominators retain failures and unreviewed outcomes.
+
+All deltas mean **candidate minus baseline**. Rate deltas are fractions, so `0.05` is five percentage points. Latency P50/P95 deltas are emitted only when each matched case has at least one recorded turn and every recorded turn has that metric on both sides. Otherwise the delta is null, and coverage counts identify cases without turns or with missing metrics. Original aggregate distributions and their missing counts remain visible. Zero is an observed value; component timings never manufacture response time.
+
+These are differences between **turn-weighted distributions**, not paired-turn measurements or proof of causality. Different turn counts are reported, not rejected; conversations can legitimately have different lengths. Failed calls' recorded turns remain included. Complete recorded coverage cannot prove that all real turns were captured, that measurement boundaries were consistent, or that conditions were equivalent. Review unsuccessful and unreviewed outcomes alongside speed: a fast failed booking is not an improvement.
+
+Cost deltas require costs and reviewed outcomes for every case on both sides; cost per successful case additionally requires at least one success on each side. Costs include failed cases. Charge allocations for shared or idle GPU capacity must be documented consistently outside the aggregate file. No confidence interval, voice-quality score, licensing verdict, rollout recommendation or production readiness is inferred.
+
+The command performs no network requests or writes and prints no input paths, raw calls or credentials. Each input is bounded to 10 MiB with a bounded read, valid UTF-8 and JSON, and the existing case/turn limits. It requires a regular file, refuses final-component symlinks and opens nonblocking so a named pipe cannot hang waiting for a writer. Parent-directory links are not a filesystem sandbox. Unsupported file-opening guarantees fail closed. All failures use a fixed redacted error and exit 2. Exit 0 means a valid comparison was produced, **even if the candidate failed every case**; it is not a CI quality gate or release approval. Fingerprints still require review before sharing.
+
+No real trial results are bundled. Synthetic regression tests verify this calculator; actual phone baseline and candidate measurements remain separate work.
+
 ## Freeze and compare the saved configuration
 
 Use Node 22 and a Vapi **Version History export** kept outside Git:
