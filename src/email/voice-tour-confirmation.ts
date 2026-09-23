@@ -10,11 +10,11 @@ import type { PropertySnapshot } from '../properties/model.ts'
 import type { WorkflowAction } from '../workflows/model.ts'
 import { hashJson } from '../workflows/validation.ts'
 import { runWorkflowOnce } from '../workflows/worker.ts'
-import { ResendTransport } from './render.ts'
+import { ResendTransport, type EmailMessage } from './render.ts'
 import { createResendEmailConnector, emailMessageDigest, emailWorkflowAction } from './workflow.ts'
 import { spokenEmail, voiceEmailHistory, voiceEmailPermission, VoiceEmailError } from './voice-shortlist.ts'
 import { prepareTourConfirmation, tourEmailBinding, tourConfirmationKey,
-  validateTourConfirmationRecord, validateTourConfirmationAction, type TourConfirmationRecord } from './tour-confirmation.ts'
+  validateTourConfirmationRecord, validateTourConfirmationAction, tourConfirmationHistory, saveTourConfirmation, priorConfirmationMessage, type TourConfirmationRecord } from './tour-confirmation.ts'
 
 const id = (v: unknown): v is string => typeof v === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,255}$/.test(v)
 const digest = (v: unknown): v is string => typeof v === 'string' && /^[a-f0-9]{64}$/.test(v)
@@ -34,7 +34,7 @@ export function voiceTourEmailEnabled(snapshot: PropertySnapshot, now: Date): bo
     && typeof v.reviewExpiresAt === 'string' && Date.parse(v.reviewExpiresAt) > now.getTime()
     && Date.parse(v.reviewExpiresAt) - now.getTime() <= 30 * 86400000
 }
-const result = (offer: Offer, action: WorkflowAction) => ({ offerId: offer.id,
+const result = (offer: Offer, action: WorkflowAction) => ({ offerId: offer.id, recipient: (action.input.message as unknown as EmailMessage).to,
   status: action.state === 'succeeded' && action.evidence?.deliveryStatus === 'delivered' ? 'delivered'
     : ['needs_review','cancelled','succeeded'].includes(action.state) ? 'needs_review'
       : action.providerReference ? 'accepted' : action.dispatchStarted ? 'unconfirmed' : 'queued',
@@ -125,9 +125,25 @@ export function createVoiceTourConfirmationService(runtime: ResolvedPropertyRunt
             }
             return raw
           })
+          if (v.action === 'status') {
+            // Observation of the original saved action remains possible after a contact correction.
+            // The admitted call and binding still own this exact offer; no new dispatch is allowed.
+            if (!current || current.completedAt || current.work?.phase !== 'open'
+              || current.routing?.organizationId !== scope.organizationId || current.routing.propertyId !== scope.propertyId
+              || current.routing.channelBindingId !== actor().bindingId) return fail('This confirmation is unavailable for this call.')
+            const offer = saved(await unit.documents.get<Offer>(key(callId)), callId, v.offerId)
+            const raw = await unit.documents.get<TourConfirmationRecord>(tourConfirmationKey(offer.bookingSha256))
+            if (!raw) return fail('No confirmation email has been saved for this offer.')
+            const record = validateTourConfirmationRecord(raw, offer.bookingSha256)
+            if (record.externalId !== offer.externalId || record.messageSha256 !== offer.messageSha256) return fail('This confirmation needs staff review.')
+            actionFor(record, await unit.workflows.get(record.actionId))
+            return { offer, record, dispatch: false }
+          }
           const draft = currentDraft(calendar, current, callId)
+          const prior = await tourConfirmationHistory(runtime, unit, draft)
+          if (prior.conflict) return fail(priorConfirmationMessage)
           if (!draft.message) return fail('Tour confirmation email is not configured. Nothing new was sent.')
-          const history = v.action === 'prepare' || v.action === 'send' ? voiceEmailHistory(artifactMessages) : []
+          const history = voiceEmailHistory(artifactMessages)
           let offer: Offer
           if (v.action === 'prepare') {
             const stamp = now()
@@ -146,14 +162,8 @@ export function createVoiceTourConfirmationService(runtime: ResolvedPropertyRunt
           }
           // Same property lock and record as staff admission: voice and staff race
           // to inspect/create one confirmation, never two separate provider actions.
-          const prior = await unit.documents.get<TourConfirmationRecord>(tourConfirmationKey(draft.bookingSha256))
-          if (prior) {
-            const record = validateTourConfirmationRecord(prior, draft.bookingSha256)
-            actionFor(record, await unit.workflows.get(record.actionId))
-            return { offer, record, dispatch: false }
-          }
+          if (prior.exact) return { offer, record: prior.exact.record, dispatch: false }
           if (v.action === 'prepare') return { offer, record: null, dispatch: false }
-          if (v.action === 'status') return fail('No confirmation email has been saved for this offer.')
           if (Date.parse(offer.expiresAt) <= now().getTime() || Date.parse(offer.preparedAt) > now().getTime()) {
             return fail('The confirmation offer expired. Prepare it again and ask permission again.')
           }
@@ -164,14 +174,16 @@ export function createVoiceTourConfirmationService(runtime: ResolvedPropertyRunt
               contentSha256: offer.messageSha256, receiptId: 'tour-' + draft.bookingSha256, recordedAt,
               expiresAt: offer.expiresAt }, 'tour-' + draft.bookingSha256)] })
           const record: TourConfirmationRecord = { format: 'tour-confirmation-v1', id: draft.bookingSha256,
-            externalId: draft.externalId, bookingSha256: draft.bookingSha256, actionId: accepted.actions[0]!.id,
+            externalId: draft.externalId, bookingSha256: draft.bookingSha256, reservationRevision: draft.reservationRevision, actionId: accepted.actions[0]!.id,
             actorId: actor().bindingId, actorKind: 'channel', recordedAt, messageSha256: offer.messageSha256 }
-          await unit.documents.set(tourConfirmationKey(record.id), record)
+          await saveTourConfirmation(unit, record, prior.ids)
           return { offer, record, dispatch: true }
         })
         if (!admitted.record) return { status: 'permission_required', offerId: admitted.offer.id, question: admitted.offer.question,
           say: 'Nothing has been sent. Ask this exact question alone, then wait for clear agreement. Do not read the offer ID aloud.' }
-        return process(admitted.offer, admitted.record, admitted.dispatch)
+        const observed = await process(admitted.offer, admitted.record, admitted.dispatch)
+        return v.action === 'status' ? { ...observed, say: observed.say
+          + ` This status is for the original saved email to ${spokenEmail(observed.recipient)}. A contact correction does not redirect it.` } : observed
       } catch (error) {
         if (error instanceof CalendarActionError) return fail(error.message)
         throw error

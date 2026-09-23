@@ -127,7 +127,13 @@ test('two operators and double clicks share one immutable confirmation and permi
   const replies = await Promise.all(['owner-a','staff-a','owner-a'].map(user => request({ user,body:queue(draft) })))
   assert.ok(replies.every(r => r.status === 200)); assert.equal(new Set(replies.map(r => r.body.confirmation.id)).size,1)
   assert.equal((await db.admin.query('SELECT count(*)::int n FROM atrium.action_intents')).rows[0].n,1)
-  assert.equal((await db.admin.query('SELECT count(*)::int n FROM atrium.operational_documents')).rows[0].n,1)
+  const records=(await db.admin.query("SELECT value FROM atrium.operational_documents WHERE key LIKE 'tour-confirmation:%'")).rows
+  const indexes=(await db.admin.query("SELECT value FROM atrium.operational_documents WHERE key LIKE 'tour-confirmation-index:%'")).rows
+  assert.equal(records.length,1);assert.equal(indexes.length,1)
+  assert.equal(records[0].value.id,replies[0].body.confirmation.id)
+  assert.equal(indexes[0].value.externalId,booking.externalId)
+  assert.deepEqual(indexes[0].value.ids,[records[0].value.id])
+  assert.equal((await db.admin.query('SELECT count(*)::int n FROM atrium.inbox_events')).rows[0].n,1)
   assert.equal(requests.length,0)
 })
 

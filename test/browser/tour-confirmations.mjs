@@ -143,6 +143,20 @@ try {
     assert.equal(sends,[320,390,1280].indexOf(width)+1)
     checks.push(`${width}: reopening retains delivery evidence and cannot duplicate the send`)
     await dialog.locator('.dlg-secondary').click()
+    booking.prospectEmail='corrected@example.test';await seedBooking();await page.reload()
+    dialog=await openConfirmation()
+    assert.match(await dialog.innerText(),/corrected@example.test/)
+    await dialog.getByText('An earlier confirmation exists',{exact:false}).waitFor()
+    assert.equal(await dialog.locator('[name="emailPermission"]').count(),0)
+    assert.equal(await dialog.locator('.dlg-primary').getAttribute('aria-disabled'),'true')
+    assert.ok(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth+1))
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1))
+    assert.equal(sends,[320,390,1280].indexOf(width)+1)
+    if(artifacts) await page.screenshot({path:`${artifacts}/corrected-contact-${width}.png`})
+    checks.push(`${width}: corrected recipient shows prior-send review, no new permission/send and no overflow`)
+    await dialog.locator('.dlg-secondary').click()
+    booking.prospectEmail='visitor@example.test'
+
   }
   for (const action of ['queue', 'process']) {
     booking.revision++; await seedBooking()

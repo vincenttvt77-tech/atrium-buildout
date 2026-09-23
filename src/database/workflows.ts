@@ -20,6 +20,8 @@ export interface WorkflowTransaction {
   readonly workflows: WorkflowRepository
   /** Locks the current calendar until the atomic admission finishes. No external IO. */
   readCalendar(): Promise<CalendarState>
+  /** Scoped legacy lookup; never enumerate unrelated callers' confirmation records. */
+  tourConfirmationKeys(externalId: string): Promise<string[]>
 }
 type TransactionExecutor = <T>(permission: Permission, work: (client: PoolClient) => Promise<T>, admission: boolean) => Promise<T>
 const STATES: WorkflowState[] = ['queued','running','retry_wait','verifying','succeeded','needs_review','cancelled']
@@ -157,7 +159,14 @@ export class PostgresWorkflowRepository implements WorkflowRepository {
       })
       try {
         const result = await work(Object.freeze({ documents, workflows,
-          readCalendar: () => queue.run(() => readLockedCalendar(client, this.scope)) }))
+          readCalendar: () => queue.run(() => readLockedCalendar(client, this.scope)),
+          tourConfirmationKeys: (externalId: string) => queue.run(async () => {
+            if (typeof externalId !== 'string' || !externalId || externalId.length > 1024) invalid()
+            const rows = await client.query<{ key: string }>(`SELECT key FROM atrium.operational_documents
+              WHERE organization_id=$1 AND property_id=$2 AND key LIKE 'tour-confirmation:%'
+                AND value->>'externalId'=$3 ORDER BY key LIMIT 1001`, [...this.ids(), externalId])
+            return rows.rows.map(row => row.key)
+          }) }))
         await queue.close()
         await documentUnit.close()
         return result

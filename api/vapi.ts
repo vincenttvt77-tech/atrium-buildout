@@ -29,6 +29,9 @@ import { randomUUID } from 'node:crypto'
 import { PostgresWorkflowRepository } from '../src/database/workflows.ts'
 import { ResendTransport } from '../src/email/render.ts'
 import { createVoiceShortlistEmailService, VoiceEmailError } from '../src/email/voice-shortlist.ts'
+import { correctVoiceTourContact } from '../src/calls/tour-contact.ts'
+import { CalendarActionError } from '../src/calendar/unit-blocks.ts'
+import { validEmailAddress } from '../src/email/render.ts'
 import { createVoiceTourConfirmationService } from '../src/email/voice-tour-confirmation.ts'
 import type { LossReason } from '../src/record/store.ts'
 import { bookTour, idempotencyKey } from '../src/booking/book.ts'
@@ -550,10 +553,23 @@ async function runTool(
       const callbackPhone = normaliseCallbackPhone(args.phone)
       if (args.requestType !== undefined && args.requestType !== 'tour_change') return 'Invalid request type. Use tour_change only for an actual request to change an existing tour.'
       if (typeof args.excerpt !== 'string' || !args.excerpt.trim()) return 'Ask for the caller’s contact details before recording them.'
-      if (args.email !== undefined && (typeof args.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(args.email))) return 'That email address is incomplete. Ask them to spell it once.'
+      if (args.email !== undefined && !validEmailAddress(args.email)) return 'That email address is incomplete. Ask them to spell it once.'
       if (args.phone !== undefined && !callbackPhone) return 'That callback number is incomplete. Ask them to repeat it once.'
-      if (typeof args.name === 'string' && args.name.trim()) state.name = args.name.trim().slice(0, 120)
-      if (typeof args.email === 'string') state.email = args.email.trim().slice(0, 254)
+      const nextContact = { name: typeof args.name === 'string' && args.name.trim() ? args.name.trim().slice(0, 120) : state.name,
+        email: typeof args.email === 'string' ? args.email.trim() : state.email }
+      let contactReview = false, tourContactSaved = false
+      if (runtime && execution && state.booking?.status === 'confirmed' && !state.tourChangeRequested
+        && args.requestType !== 'tour_change' && (args.name !== undefined || args.email !== undefined)) {
+        try {
+          await correctVoiceTourContact(runtime, { callId, toolId: execution.toolId, token: execution.token, now,
+            booking: state.booking, previous: { name: state.name, email: state.email }, next: nextContact })
+          tourContactSaved = true
+        } catch (error) {
+          if (!(error instanceof CalendarActionError)) throw error
+          contactReview = true
+        }
+      }
+      state.name = nextContact.name; state.email = nextContact.email
       if (typeof args.phone === 'string') state.callbackPhone = { value: callbackPhone!,
         excerpt: args.excerpt.trim().slice(0, 1000), callId, at: now.toISOString(), confidence: 1 }
       logEvent(callId, { kind: 'contact_captured', name: state.name, email: state.email, excerpt: args.excerpt.slice(0, 1000) })
@@ -563,6 +579,8 @@ async function runTool(
         state.escalation = saved.escalation
         return TOUR_CHANGE_SAVED
       }
+      if (contactReview) return 'The contact details are saved for staff, but the reservation could not be updated safely. Staff must review it before sending a confirmation. This update sent no message.'
+      if (tourContactSaved) return 'Contact details saved on this call’s existing reservation. Its time and apartment are unchanged. This update sent no message and does not recall or redirect an earlier email. Prepare the tour confirmation again and ask its exact permission question; if an earlier email exists, follow its review instructions.'
       return 'Contact details saved for the leasing team. This contact update did not send a message. Continue helping them.'
     }
     case 'capture_signal': {

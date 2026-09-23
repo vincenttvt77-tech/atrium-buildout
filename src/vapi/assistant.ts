@@ -6,7 +6,7 @@ export const TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'capture_contact',
-      description: 'Save volunteered contact details or a staff request to change an existing tour. For a reschedule or cancellation, set requestType to tour_change and include the caller’s words even without contact details. Does not change a tour or send messages.',
+      description: 'Save volunteered contact details or a staff request to change an existing tour. For a reschedule or cancellation, set requestType to tour_change and include the caller’s words even without contact details. Can update the name/email on a verified reservation made during this call when supported. Does not move or cancel a tour or send messages. Follow review instructions if an earlier confirmation exists.',
       parameters: {
         type: 'object',
         properties: {

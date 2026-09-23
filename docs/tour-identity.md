@@ -100,3 +100,16 @@ place no calls, send no messages and do not record attendance. Explicit backend
 authorization remains unchanged. Regression coverage includes concurrent real
 PostgreSQL projection, property boundaries, transactional rollback and replay,
 legacy compatibility, and real desktop/mobile Today/Leads rendering.
+
+
+## Contact changes preserve reservation identity
+
+The managed voice contact correction uses the exact confirmed original-call
+reservation, not a phone/name/slot join. Calendar and call contact fields commit
+together. Contact edits retain the scheduling revision, so they do not fabricate a
+reschedule or derive new follow-up identities. After call completion the existing
+lead projection receives the corrected details. Stale or ambiguous reservation
+claims retain the volunteered contact for staff, with a truthful refusal to claim
+the saved tour was updated. The [confirmation contract](email-delivery.md#contact-corrections-after-booking-at-146)
+separates a corrected address from permission to send, and preserves any earlier
+email's original recipient and delivery evidence.

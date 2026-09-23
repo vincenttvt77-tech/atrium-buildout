@@ -11,6 +11,7 @@ import { TEST_AUTH_ORIGIN, verifyMfaCookie } from '../helpers/mfa-session.mjs'
 import { createDatabaseRuntime } from '../../src/application/runtime.ts'
 import { createFoundationTestDatabase, seedFoundationTestDatabase } from '../../scripts/lib/foundation-test.mjs'
 import { defaultSettings } from '../../src/calendar/settings.ts'
+import { PostgresCalendarStore } from '../../src/database/operations.ts'
 import { PostgresWorkflowRepository } from '../../src/database/workflows.ts'
 import { prepareUnitBlock } from '../../src/calendar/unit-blocks.ts'
 import { localDate } from '../../src/calendar/time.ts'
@@ -33,7 +34,7 @@ function bundle(org,property) {
     floorplans:[{ id:'one',bedrooms:1,bathrooms:1,sqft:700 }],knowledge:[] }
 }
 before(async () => {
-  db = await createFoundationTestDatabase(); const {password}=await seedFoundationTestDatabase(db.admin)
+  db = await createFoundationTestDatabase(); db.app.pool.options.max=3; const {password}=await seedFoundationTestDatabase(db.admin)
   runtime = createDatabaseRuntime({ app:db.app,auth:db.auth,sessionSecret:'synthetic-voice-email-session-secret-long-enough',authOrigin:TEST_AUTH_ORIGIN })
   await db.admin.query("INSERT INTO atrium.channel_bindings(id,provider,external_id,organization_id,property_id,status,capabilities) VALUES('channel-b','vapi','synthetic-assistant-b','organization-b','property-b1','active',ARRAY['read','operate'])")
   for (const [org,property] of scopes) {
@@ -329,4 +330,248 @@ test('a tour changed between dispatch admission and provider IO is rejected with
     assert.equal(JSON.parse((await email('send',offer,{messages:consent(offer)})).text).status,'needs_review')
     assert.equal(posts.length,0);assert.equal(await countActions(),1)
   } finally {PostgresWorkflowRepository.prototype.startDispatch=original}
+})
+
+
+test('an email supplied after booking updates the same reservation and requires new permission',async()=>{
+  const slots=await post([tool('list_tour_slots',{unitId:'4A',preferredDate:new Date(Date.now()+2*86400000).toISOString().slice(0,10)})])
+  const slotId=slots.text.match(/slot-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/)[0]
+  await post([tool('book_tour',{slotId,unitId:'4A',prospectName:'Test Visitor'})])
+  const before=(await db.admin.query("SELECT state FROM atrium.calendars WHERE property_id='property-a1'")).rows[0].state.bookings[0]
+  const capture=await post([tool('capture_contact',{email:'late@example.test',excerpt:'Email me at late@example.test'})])
+  assert.equal(capture.status,200)
+  const after=(await db.admin.query("SELECT state FROM atrium.calendars WHERE property_id='property-a1'")).rows[0].state.bookings
+  assert.equal(after.length,1);assert.equal(after[0].externalId,before.externalId)
+  assert.equal(after[0].prospectEmail,'late@example.test')
+  assert.equal(after[0].startsAt,before.startsAt);assert.equal(after[0].revision,before.revision)
+  const offer=JSON.parse((await email('prepare')).text)
+  assert.equal(offer.status,'permission_required');assert.match(offer.question,/late at example dot test/)
+  assert.equal(posts.length,0)
+  assert.equal(JSON.parse((await email('send',offer,{messages:consent(offer)})).text).status,'accepted')
+  assert.deepEqual(posts[0].value.to,['late@example.test']);assert.equal(posts.length,1)
+})
+
+test('changing the saved recipient cannot create a second confirmation for the same reservation revision',async()=>{
+  const booking=await book(), offer=JSON.parse((await email('prepare')).text)
+  await email('send',offer,{messages:consent(offer)})
+  await calendarChange(calendar=>{calendar.bookings[0].prospectEmail='corrected@example.test'})
+  const preview=await staff(booking)
+  assert.equal(preview.status,200);assert.equal(preview.body.ready,false)
+  assert.match(preview.body.reason,/earlier confirmation/i)
+  assert.equal(posts.length,1);assert.equal(await countActions(),1)
+})
+
+
+const correct=(emailAddress='corrected@example.test',extra={})=>post([tool('capture_contact',{email:emailAddress,excerpt:'Use '+emailAddress+' instead',...extra})])
+const savedCalendar=async(property='property-a1')=>(await db.admin.query('SELECT state FROM atrium.calendars WHERE property_id=$1',[property])).rows[0].state
+const savedCall=async()=>(await db.admin.query("SELECT value FROM atrium.operational_documents WHERE property_id='property-a1' AND key='call:email-call'")).rows[0].value
+async function queueStaff(booking){const preview=(await staff(booking)).body.preview;return staff(booking,{action:'queue',externalId:booking.externalId,bookingSha256:preview.bookingSha256,permissionConfirmed:true})}
+
+test('correcting contact invalidates old permission and retains original caller identity',async()=>{
+  const old=await prepare(), before=await savedCall()
+  assert.match((await correct('corrected@example.test',{name:'Corrected Visitor',phone:'+12025550199'})).text,/existing reservation/)
+  const saved=await savedCall(), booking=(await savedCalendar()).bookings[0]
+  assert.equal(saved.phone,before.phone);assert.equal(booking.prospectPhone,before.phone)
+  assert.equal(saved.callbackPhone.value,'+12025550199');assert.equal(booking.prospectName,'Corrected Visitor')
+  assert.equal(booking.prospectEmail,saved.email);assert.equal(saved.email,'corrected@example.test')
+  assert.match((await email('send',old,{messages:consent(old)})).text,/changed/)
+  const fresh=JSON.parse((await email('prepare')).text)
+  assert.match((await email('send',fresh,{messages:consent(old)})).text,/permission|question/i)
+  assert.equal(posts.length,0)
+  assert.equal(JSON.parse((await email('send',fresh,{messages:consent(fresh)})).text).status,'accepted')
+  assert.equal(await countActions(),1);assert.equal(posts.length,1)
+})
+
+for(const mode of ['accepted','unknown','queued'])test(`a contact correction preserves ${mode} email evidence without a replacement`,async()=>{
+  const booking=await book(), offer=JSON.parse((await email('prepare')).text)
+  if(mode==='queued')await queueStaff(booking)
+  else {dropProviderReply=mode==='unknown';await email('send',offer,{messages:consent(offer)})}
+  const sent=posts.length
+  assert.match((await correct()).text,/existing reservation/)
+  assert.equal((await savedCalendar()).bookings[0].prospectEmail,'corrected@example.test')
+  assert.match((await email('prepare')).text,/earlier confirmation/)
+  const current=await staff(booking);assert.equal(current.body.ready,false)
+  const attempt=await staff(booking,{action:'queue',externalId:booking.externalId,bookingSha256:current.body.preview.bookingSha256,permissionConfirmed:true})
+  assert.equal(attempt.status,409);assert.equal(await countActions(),1)
+  if(mode!=='queued')await db.admin.query("UPDATE atrium.outbox_messages SET available_at=clock_timestamp() WHERE state='verifying'")
+  const status=JSON.parse((await email('status',offer)).text)
+  if(mode==='unknown'){assert.ok(['unconfirmed','needs_review'].includes(status.status));assert.match(status.say,/unconfirmed|not confirmed/)}
+  else assert.equal(status.status,mode==='accepted'?'delivered':'queued')
+  assert.equal(posts.length,sent)
+  assert.match(status.say,/original saved email to visitor at example dot test/)
+  assert.doesNotMatch(status.say,/corrected at/)
+  if(mode==='queued'){
+    const id=(await db.admin.query("SELECT value FROM atrium.operational_documents WHERE key LIKE 'tour-confirmation:%'")).rows[0].value.id
+    await staff(booking,{action:'process',confirmationId:id})
+    assert.equal(posts.length,0)
+  }
+})
+
+test('authorized cancellation before dispatch permits a fresh corrected confirmation with new permission',async()=>{
+  const booking=await book();await queueStaff(booking)
+  const user=await runtime.authenticate({cookie:staffCookie},new Date())
+  const scoped=await runtime.loadUserProperty(user,{organizationId:'organization-a',propertyId:'property-a1'},'configure')
+  const repo=new PostgresWorkflowRepository(db.app,scoped.scope,{requestId:randomUUID(),configurationVersion:1})
+  const [action]=await repo.list();await repo.cancel(action.id,'correct_recipient',action.revision)
+  await correct()
+  const offer=JSON.parse((await email('prepare')).text);assert.equal(offer.status,'permission_required')
+  assert.equal(JSON.parse((await email('send',offer,{messages:consent(offer)})).text).status,'accepted')
+  assert.equal(await countActions(),2);assert.equal(posts.length,1);assert.deepEqual(posts[0].value.to,['corrected@example.test'])
+})
+
+test('legacy confirmation history without an index or scheduling revision still prevents a replacement',async()=>{
+  const booking=await book();await queueStaff(booking)
+  await db.admin.query("DELETE FROM atrium.operational_documents WHERE key LIKE 'tour-confirmation-index:%'")
+  await db.admin.query("UPDATE atrium.operational_documents SET value=value-'reservationRevision' WHERE key LIKE 'tour-confirmation:%'")
+  await correct()
+  assert.equal((await staff(booking)).body.ready,false)
+  assert.match((await email('prepare')).text,/earlier confirmation/)
+  assert.equal(await countActions(),1);assert.equal(posts.length,0)
+})
+
+test('a new scheduling revision can receive its own confirmation after the prior revision',async()=>{
+  const booking=await book();await queueStaff(booking)
+  await calendarChange(calendar=>{calendar.bookings[0].revision=1})
+  const preview=await staff(booking);assert.equal(preview.body.ready,true)
+  assert.equal((await queueStaff(booking)).status,200);assert.equal(await countActions(),2);assert.equal(posts.length,0)
+})
+
+for(const kind of ['foreign_call','changed_time','staff_contact','duplicate','pending'])test(`contact correction refuses a ${kind} reservation and keeps volunteered details for staff`,async()=>{
+  await book()
+  await calendarChange(calendar=>{
+    const row=calendar.bookings[0]
+    if(kind==='foreign_call')row.interactionId='different-call'
+    if(kind==='changed_time')row.startsAt=new Date(Date.parse(row.startsAt)+3600000).toISOString()
+    if(kind==='staff_contact')row.prospectEmail='staff-reviewed@example.test'
+    if(kind==='duplicate')calendar.bookings.push({...row})
+    if(kind==='pending')row.rescheduleHistory=[{projection:'pending'}]
+  })
+  const before=await savedCalendar()
+  assert.match((await correct()).text,/reservation could not be updated safely/)
+  assert.deepEqual(await savedCalendar(),before);assert.equal((await savedCall()).email,'corrected@example.test')
+  assert.equal(posts.length,0)
+})
+
+test('a failed call-contact write rolls back the calendar and its audit, then a new request can succeed',async()=>{
+  await book();const before=await savedCalendar()
+  const audit=()=>db.admin.query("SELECT count(*)::int n FROM atrium.audit_events WHERE operation='calendar.update'")
+  const n=(await audit()).rows[0].n
+  await db.admin.query(`CREATE FUNCTION atrium.test_fail_contact() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+    IF NEW.value->>'email'='rollback@example.test' THEN RAISE EXCEPTION 'synthetic contact failure'; END IF; RETURN NEW; END $$;
+    CREATE TRIGGER test_fail_contact BEFORE UPDATE ON atrium.operational_documents FOR EACH ROW EXECUTE FUNCTION atrium.test_fail_contact()`)
+  try{
+    assert.match((await correct('rollback@example.test')).text,/could not verify/)
+    assert.deepEqual(await savedCalendar(),before);assert.equal((await savedCall()).email,'visitor@example.test')
+    assert.equal((await audit()).rows[0].n,n)
+  }finally{await db.admin.query('DROP TRIGGER test_fail_contact ON atrium.operational_documents; DROP FUNCTION atrium.test_fail_contact()')}
+  assert.match((await correct('rollback@example.test')).text,/existing reservation/)
+  assert.equal((await savedCalendar()).bookings[0].prospectEmail,'rollback@example.test')
+})
+
+test('lost contact acknowledgement replays once and cannot overwrite a subsequent correction',async()=>{
+  await book();const command=tool('capture_contact',{email:'first@example.test',excerpt:'Use first@example.test'})
+  dropToolReply=true;await assert.rejects(post([command]))
+  assert.match((await post([command])).text,/existing reservation/)
+  await correct('latest@example.test')
+  assert.match((await post([command])).text,/existing reservation/)
+  assert.equal((await savedCalendar()).bookings[0].prospectEmail,'latest@example.test');assert.equal((await savedCall()).email,'latest@example.test')
+  assert.equal(posts.length,0)
+})
+
+test('staff queue racing a correction cannot authorize either a stale send or two emails',async()=>{
+  const booking=await book(), preview=(await staff(booking)).body.preview
+  const [capture,queued]=await Promise.all([correct(),staff(booking,{action:'queue',externalId:booking.externalId,bookingSha256:preview.bookingSha256,permissionConfirmed:true})])
+  assert.match(capture.text,/existing reservation/);assert.ok([200,409].includes(queued.status))
+  assert.ok(db.app.pool.totalCount>=2)
+  const next=await email('prepare')
+  if(queued.status===200){assert.match(next.text,/earlier confirmation/);assert.equal(await countActions(),1)}
+  else{const offer=JSON.parse(next.text);await email('send',offer,{messages:consent(offer)});assert.equal(posts.length,1);assert.equal(await countActions(),1)}
+})
+
+test('identical call and caller IDs in another organization never receive the correction',async()=>{
+  await book();await book({assistant:'synthetic-assistant-b'})
+  const other=await savedCalendar('property-b1');await correct()
+  assert.deepEqual(await savedCalendar('property-b1'),other)
+  assert.equal((await savedCalendar()).bookings[0].prospectEmail,'corrected@example.test')
+  const unrelated=await correct('unrelated@example.test')
+  assert.match(unrelated.text,/existing reservation/);assert.equal(posts.length,0)
+})
+
+test('a previously admitted correction completes before a racing call end projects its lead',async()=>{
+  await book();const original=PostgresCalendarStore.prototype.transaction;let ending
+  PostgresCalendarStore.prototype.transaction=async function(work){
+    PostgresCalendarStore.prototype.transaction=original
+    ending=await post([],{message:{type:'end-of-call-report',endedAt:new Date().toISOString(),durationSeconds:30}})
+    return original.call(this,work)
+  }
+  try{assert.match((await correct()).text,/existing reservation/)}finally{PostgresCalendarStore.prototype.transaction=original}
+  assert.equal(ending.status,503);assert.equal(ending.body.code,'call_work_unresolved')
+  assert.ok((await savedCall()).completedAt)
+  const lead=(await db.admin.query("SELECT value FROM atrium.operational_documents WHERE property_id='property-a1' AND key='lead:+12025550101'")).rows[0].value
+  assert.equal(lead.email,'corrected@example.test')
+  assert.equal((await savedCalendar()).bookings[0].prospectEmail,'corrected@example.test')
+})
+
+test('booking and then capturing a missing email in the same admitted batch preserves read-back',async()=>{
+  const slots=await post([tool('list_tour_slots',{unitId:'4A'})])
+  const slotId=slots.text.match(/slot-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/)[0]
+  const response=await post([tool('book_tour',{slotId,unitId:'4A',prospectName:'Test Visitor'}),tool('capture_contact',{email:'same-batch@example.test',excerpt:'Use same-batch@example.test'})])
+  assert.match(response.body.results[1].result,/existing reservation/)
+  assert.equal((await savedCalendar()).bookings[0].prospectEmail,'same-batch@example.test')
+  assert.equal((await savedCall()).booking.status,'confirmed')
+  assert.equal(JSON.parse((await email('prepare')).text).status,'permission_required')
+})
+
+
+test('confirmation index failure rolls permission, action and confirmation back together',async()=>{
+  const offer=await prepare()
+  await db.admin.query(`CREATE FUNCTION atrium.test_fail_confirmation_index() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+    IF NEW.key LIKE 'tour-confirmation-index:%' THEN RAISE EXCEPTION 'synthetic index failure'; END IF; RETURN NEW; END $$;
+    CREATE TRIGGER test_fail_confirmation_index BEFORE INSERT ON atrium.operational_documents FOR EACH ROW EXECUTE FUNCTION atrium.test_fail_confirmation_index()`)
+  try{
+    assert.match((await email('send',offer,{messages:consent(offer)})).text,/could not be verified/)
+    assert.equal(await countActions(),0);assert.equal(posts.length,0)
+    assert.equal((await db.admin.query("SELECT count(*)::int n FROM atrium.operational_documents WHERE key LIKE 'tour-confirmation:%'")).rows[0].n,0)
+  }finally{await db.admin.query('DROP TRIGGER test_fail_confirmation_index ON atrium.operational_documents; DROP FUNCTION atrium.test_fail_confirmation_index()')}
+  assert.equal(JSON.parse((await email('send',offer,{messages:consent(offer)})).text).status,'accepted')
+  assert.equal(posts.length,1)
+})
+
+test('invalid confirmation index cannot hide an earlier confirmation and enable sending',async()=>{
+  const booking=await book();await queueStaff(booking);await correct()
+  await db.admin.query("UPDATE atrium.operational_documents SET value=jsonb_set(value,'{externalId}','\"foreign-reservation\"') WHERE key LIKE 'tour-confirmation-index:%'")
+  assert.match((await email('prepare')).text,/history needs administrator review/)
+  assert.equal((await staff(booking)).status,409);assert.equal(posts.length,0);assert.equal(await countActions(),1)
+})
+
+
+test('legacy lookup is exact, property-scoped, and expires with its owning transaction',async()=>{
+  const booking=await book();await queueStaff(booking)
+  const own=(await db.admin.query("SELECT key FROM atrium.operational_documents WHERE property_id='property-a1' AND key LIKE 'tour-confirmation:%'")).rows[0].key
+  await db.admin.query("INSERT INTO atrium.operational_documents(organization_id,property_id,key,value) VALUES('organization-b','property-b1','tour-confirmation:foreign',$1),('organization-a','property-a1','tour-confirmation:unrelated',$2)",
+    [JSON.stringify({externalId:booking.externalId}),JSON.stringify({externalId:'another-reservation'})])
+  const scoped=await runtime.loadChannel('vapi','synthetic-assistant-a')
+  const repo=new PostgresWorkflowRepository(db.app,scoped.scope,{requestId:randomUUID(),configurationVersion:1})
+  let retained
+  await repo.transaction(async unit=>{
+    retained=unit
+    assert.deepEqual(await unit.tourConfirmationKeys(booking.externalId),[own])
+    assert.deepEqual(await unit.tourConfirmationKeys("% OR '1'='1"),[])
+  })
+  await assert.rejects(retained.tourConfirmationKeys(booking.externalId),/closed/)
+})
+
+
+test('an older writer missing from an existing index cannot hide another saved confirmation',async()=>{
+  const booking=await book();const first=(await queueStaff(booking)).body.confirmation
+  const user=await runtime.authenticate({cookie:staffCookie},new Date())
+  const scoped=await runtime.loadUserProperty(user,{organizationId:'organization-a',propertyId:'property-a1'},'configure')
+  const repo=new PostgresWorkflowRepository(db.app,scoped.scope,{requestId:randomUUID(),configurationVersion:1})
+  const [action]=await repo.list();await repo.cancel(action.id,'correct_recipient',action.revision)
+  await correct('second@example.test');await queueStaff(booking)
+  await db.admin.query("UPDATE atrium.operational_documents SET value=jsonb_set(value,'{ids}',$1::jsonb) WHERE key LIKE 'tour-confirmation-index:%'",[JSON.stringify([first.id])])
+  await correct('third@example.test')
+  assert.match((await email('prepare')).text,/earlier confirmation/)
+  assert.equal((await staff(booking)).body.ready,false)
+  assert.equal(await countActions(),2);assert.equal(posts.length,0)
 })

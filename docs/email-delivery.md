@@ -187,3 +187,51 @@ Before enabling an unattended schedule, verify managed runtime, exact sender/dom
 Vercel sends `CRON_SECRET` as a bearer header. Its schedule delivery can be missed or duplicated, concurrent runs can overlap, and failed invocations are not automatically retried. Durable queue state and subsequent invocations handle recovery here; health/lag alerting still needs operational wiring. [Vercel cron management](https://vercel.com/docs/cron-jobs/manage-cron-jobs) (checked September 23, 2026).
 
 Vercel currently lists daily, imprecise execution on Hobby and minute-level scheduling on Pro/Enterprise, with function usage charges/limits applying. Do not promise prompt post-call checks on the free daily schedule; select a funded cadence or separately reviewed scheduler during activation. [Vercel cron usage and pricing](https://vercel.com/docs/cron-jobs/usage-and-pricing) (checked September 23, 2026).
+
+
+## Contact corrections after booking (AT-146)
+
+For a managed PostgreSQL voice call, `capture_contact` can add or correct the name
+and email on the future confirmed reservation created by that call. It commits
+the calendar contact and call contact in one authorized property transaction.
+It preserves the reservation ID, scheduling revision, time, unit, occupancy and
+original caller identity. A volunteered callback number remains separate evidence;
+it does not replace the caller or calendar identity. No contact update sends a
+message or recalls/redirects one already submitted.
+
+The update requires exact original-call and reservation evidence, admitted work,
+unchanged prior contacts and matching saved times/unit. A concurrent human correction,
+reschedule, duplicate ID, review/safety hold, closed call or wrong tenant/channel
+cannot be overwritten. An already admitted correction can finish while the call is
+ending; its corrected details then project into the lead. A failed atomic save
+cannot leave only one of the calendar/call updated. Same-tool replay cannot undo
+a newer correction. Legacy KV calls retain contact capture only; this synchronized
+write depends on PostgreSQL transactions.
+
+After a correction, prepare a new email offer and ask its exact permission question
+again. Old permission cannot authorize the new recipient/content. One reservation
+scheduling revision remains one confirmation purpose, even if its recipient, name,
+property configuration or message content changes. Staff and voice admission share
+an indexed history under the calendar lock. An earlier queued, dispatched, unknown,
+delivered or review-held confirmation blocks an automatic replacement. The staff
+preview explains this and removes the new-send permission control. Voice can still
+check the original offer; its response explicitly names the original saved email
+recipient. Changes to contact details never retarget its immutable workflow input.
+
+A configuration-authorized operator can cancel an undispatched action through the
+existing Work queue. After such a cancellation, changed details may receive a fresh
+permissioned confirmation. Possibly dispatched actions cannot use this cancellation
+path. An explicit resend after dispatch, with its own reviewed authority and recovery
+contract, is future work; do not bypass the hold by inventing another reservation.
+A genuinely changed scheduling revision may have its own confirmation. Legacy email
+records without a known scheduling revision conservatively require review before
+a different confirmation; they are not relabeled or silently deleted. The per-tour
+index is written atomically with the record, receipt and action. Exact-reservation, property-scoped database discovery also checks older records
+that have no index entry, including delayed writes from an older release; unrelated
+history is not loaded one document at a time.
+
+This is original-call contact correction, not caller identity verification or a
+staff contact editor. A returning caller's request to alter an older tour remains
+staff review. These changes add no schema migration or live voice publication.
+Local HTTP/PostgreSQL and browser tests use synthetic callers/providers; real
+phone and inbox acceptance remains required during controlled activation.
