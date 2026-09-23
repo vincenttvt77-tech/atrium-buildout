@@ -2,7 +2,7 @@
  * Calls view (brief §8). Owner: shell. Registers 'calls' on window.Atrium and renders into the
  * root the shell hands it: search + filter chips, the list grouped by New York day, and the
  * detail panel (split ≥ 1200 px, a full page with "‹ Calls" below). The story, steps, facts and
- * chips come from Atrium.derive.callStory; nothing here calls fetch.
+ * chips come from Atrium.derive.callStory; recording access uses the scoped Atrium API.
  */
 (function () {
 'use strict'
@@ -18,6 +18,42 @@ const isDesktop = () => matchMedia('(min-width: 960px)').matches
 /* A shorter placeholder on a phone so it is not cut off at 390 px. */
 const searchPlaceholder = () => (isDesktop() ? 'Search calls by name, number or apartment' : 'Search name, number or apartment')
 const hasChip = (story, name) => story.chips.some((c) => c.text === name)
+const hasAudio = rec => rec?.call?.recordingAvailable === true && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(rec.id)
+function playableUrl(value) {
+  if (typeof value !== 'string' || value.length > 16384 || /[\s\\]/.test(value)) return false
+  try { const url = new URL(value)
+    return url.protocol === 'https:' && !url.username && !url.password && !url.port && !url.hash
+      && /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i.test(url.hostname)
+      && !/(?:^|\.)(?:localhost|local|internal|test|invalid|example)$/.test(url.hostname)
+      && !/(?:^|\.)example\.(?:com|org|net)$/.test(url.hostname)
+  } catch { return false }
+}
+function listenToRecording(callId) {
+  let closed = false, loading = false, unsubscribe = () => {}, body
+  const stop = () => { const audio = body?.querySelector('audio'); if (audio) { audio.pause(); audio.removeAttribute('src'); audio.load() } }
+  const dialog = A.dialog({ title: 'Call recording', secondary: { label: 'Close' },
+    build(el) { body = el }, onClose() { closed = true; unsubscribe(); stop() } })
+  // Polling can repaint the call behind this modal without restarting the audio.
+  unsubscribe = A.on('route', () => dialog.close())
+  async function load() {
+    if (closed || loading) return
+    loading = true; stop(); body.innerHTML = '<p role="status">Opening the saved recording…</p>'
+    try {
+      const result = await A.api.get('/api/recordings?callId=' + encodeURIComponent(callId))
+      if (closed) return
+      if (result.callId !== callId || !playableUrl(result.url)) throw new Error('Recording access could not be verified.')
+      body.innerHTML = '<p>Saved call audio. This player does not place a call.</p><audio class="call-recording-audio" controls preload="none" aria-label="Saved call recording" tabindex="0"></audio><p class="small muted">If playback expires, open a fresh recording link.</p><p role="status" data-recording-notice></p><button type="button" class="btn" data-recording-retry>Refresh recording access</button>'
+      const audio = body.querySelector('audio'); audio.src = result.url
+      audio.addEventListener('error', () => { if (!closed) { stop(); body.querySelector('[data-recording-notice]').textContent = 'The audio could not be loaded. Refresh recording access to try again.' } })
+      body.querySelector('[data-recording-retry]').addEventListener('click', load)
+    } catch (error) {
+      if (closed || error.signedOut || error.propertyAccess) return
+      body.innerHTML = '<p role="alert">The recording is unavailable. It may have expired or been removed, or the connection may need attention. The saved conversation remains available.</p><button type="button" class="btn" data-recording-retry>Try again</button>'
+      body.querySelector('[data-recording-retry]').addEventListener('click', load)
+    } finally { loading = false }
+  }
+  void load()
+}
 const passes = (filter, story) => filter === 'person' ? story.needsPerson : filter === 'booked' ? hasChip(story, 'Tour booked') : filter === 'priced' ? hasChip(story, 'Priced out') : filter === 'emergency' ? story.emergency : true
 
 function callWork(rec, s) {
@@ -113,7 +149,7 @@ function rowHtml(rec, story, open, tab, isNew) {
     `<span class="row-body"><span class="row-title"><span class="who">${esc(rec.displayName)}</span>${phone ? `<span class="phone">· ${esc(phone)}</span>` : ''}` +
     `<span class="when when-desk num">${esc(whenDesk)}</span><span class="when when-mobile num">${esc(whenMobile)}</span></span>` +
     `<span class="row-sub">${esc(story.sentence)}</span>` +
-    `<span class="call-row-foot"><span class="row-chips">${story.chips.slice(0, 2).map((c) => A.html.chip(c.cls, c.icon, c.text)).join('')}</span><span class="call-evidence">${rec.call && rec.call.transcript ? 'Transcript' : 'Saved summary'}${rec.call && href.recording(rec.call.recordingUrl) ? ' · Audio' : ''}</span></span>` +
+    `<span class="call-row-foot"><span class="row-chips">${story.chips.slice(0, 2).map((c) => A.html.chip(c.cls, c.icon, c.text)).join('')}</span><span class="call-evidence">${rec.call && rec.call.transcript ? 'Transcript' : 'Saved summary'}${hasAudio(rec) ? ' · Audio' : ''}</span></span>` +
     `</span></button>`
 }
 function bubbleRuns(transcript) {
@@ -162,9 +198,8 @@ function panelHtml(rec, story, s) {
     out += A.html.banner('danger', '', { raw: `<strong>Emergency — ${esc(em.phrase)}</strong> reported by ${phone ? esc(phone) : 'a caller with a hidden number'}${rec.startedAt ? ` ${esc(fmt.whenPhrase(rec.startedAt))}` : ''}.${em.matched ? ` They said "${esc(em.matched)}".` : ''} ${esc(em.action)}`, icon: 'siren' }) + '<div style="height:12px"></div>'
   }
   out += `<div class="panel-meta">${meta}</div>`
-  const rec_ = call ? href.recording(call.recordingUrl) : null
   const actions = []
-  if (rec_) actions.push(`<a class="btn" href="${esc(rec_)}" target="_blank" rel="noopener noreferrer">${ico('play')}Listen to the recording <span class="vh">(opens in a new tab)</span>${ico('external')}</a>`)
+  if (hasAudio(rec)) actions.push(`<button type="button" class="btn" data-action="recording" data-key="recording:${esc(rec.id)}">${ico('play')}Listen to the recording</button>`)
   if (call && call.transcript) actions.push(`<button type="button" class="btn btn-quiet" data-action="read">Read the conversation ${ico('chevron-down')}</button>`)
   if (s.callsConfigured === false) actions.push(`<span class="faint small">Recordings aren't connected.</span>`)
   if (actions.length) out += `<div class="panel-actions">${actions.join('')}</div>`
@@ -252,6 +287,7 @@ const view = {
       const btn = e.target.closest('button[data-action]')
       if (!btn) return
       if (btn.dataset.action === 'close') this.close()
+      else if (btn.dataset.action === 'recording') { if (this.openId) listenToRecording(this.openId) }
       else if (btn.dataset.action === 'read') {
         const d = this.panel.querySelector('.convo')
         if (d) { d.open = true; d.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }) }

@@ -1,3 +1,5 @@
+import { hasRecording } from './vapi-recording.ts'
+
 /**
  * Reads call history from Vapi rather than from this process's memory.
  *
@@ -26,6 +28,7 @@ export interface VapiCall {
   customerNumber: string | null
   transcript: string | null
   recordingUrl: string | null
+  recordingAvailable?: boolean
   toolCalls: VapiToolCall[]
   cost: number | null
 }
@@ -89,7 +92,8 @@ export function normaliseCall(raw: unknown): VapiCall {
     endedReason: c.endedReason ? String(c.endedReason) : null,
     customerNumber: (asRecord(c.customer).number as string) ?? null,
     transcript: c.transcript ? String(c.transcript) : null,
-    recordingUrl: c.recordingUrl ? String(c.recordingUrl) : null,
+    recordingUrl: null,
+    recordingAvailable: hasRecording(c),
     toolCalls: extractToolCalls(messages),
     cost: typeof c.cost === 'number' ? c.cost : null,
   }

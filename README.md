@@ -63,6 +63,12 @@ challenge configuration; publication alone enables no live dialing. See
 [website callback setup and acceptance](docs/website-callbacks.md).
 An empty queue is not proof that every business workflow has been integrated.
 
+**Calls → Listen to the recording** checks current workspace access and the call's
+Vapi assistant ownership before requesting a fresh, short-lived recording link.
+The audio player survives dashboard polling and can refresh expired access. The
+provider key stays on the server; call-history responses omit raw recording URLs.
+See [recording access](docs/recording-access.md) for deployment and verification limits.
+
 The PostgreSQL **Service** workspace adds staff-recorded maintenance requests,
 triage, notes and history alongside reviewed property resident records. It accepts
 unknown reporters and locations without inventing identity or access permission.

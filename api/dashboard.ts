@@ -43,7 +43,7 @@ const HTML_HEADERS: Array<[string, string]> = [
     "default-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; " +
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
     "font-src https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; " +
-    "connect-src 'self'"],
+    "connect-src 'self'; media-src https:"],
 ]
 
 function send(res: any, status: number, html: string, cookie?: string) {

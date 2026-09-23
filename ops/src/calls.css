@@ -132,3 +132,4 @@
 @media (prefers-reduced-motion: reduce) {
   .calls-view .call-row, .calls-view .panel, .calls-view .convo summary .ico { animation: none; transition: none; }
 }
+.call-recording-audio { display: block; width: 100%; max-width: 100%; min-width: 0; margin-block: 16px; }

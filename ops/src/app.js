@@ -578,7 +578,7 @@ let serviceSignInPending = false
 let bookingReviewWritesInFlight = 0
 let bookingReviewSignInPending = false
 let scopeEpoch = 0
-const PROPERTY_ENDPOINTS = new Set(['/api/vapi', '/api/calendar', '/api/leads', '/api/vapi-sync', '/api/tour-confirmations', '/api/email-reconciliation', '/api/callbacks', '/api/workflows', '/api/resident-services', '/api/maintenance-plans'])
+const PROPERTY_ENDPOINTS = new Set(['/api/vapi', '/api/calendar', '/api/leads', '/api/vapi-sync', '/api/tour-confirmations', '/api/email-reconciliation', '/api/callbacks', '/api/recordings', '/api/workflows', '/api/resident-services', '/api/maintenance-plans'])
 const propertyEndpoint = path => PROPERTY_ENDPOINTS.has(String(path).split('?')[0])
 const JSON_HEADERS = { accept: 'application/json' }
 function accessError(message, status = 409) { const error = new Error(message); error.status = status; error.propertyAccess = true; return error }

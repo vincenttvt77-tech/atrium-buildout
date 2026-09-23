@@ -124,16 +124,16 @@ test('call-to-request handoff preserves the original words and never reports res
 })
 
 test('call detail keeps safe audio, escaped transcript, keyboard actions and truthful missing evidence', () => {
-  const ui = workspace(), rec = record({ call: { toolCalls: [], transcript: 'User: <img src=x onerror=alert(1)>\nAI: Hello.', recordingUrl: 'https://storage.vapi.ai/recording.wav' } })
+  const ui = workspace(), rec = record({ id: '11111111-1111-4111-8111-111111111111', call: { toolCalls: [], transcript: 'User: <img src=x onerror=alert(1)>\nAI: Hello.', recordingAvailable: true, recordingUrl: null } })
   const story = ui.A.derive.callStory(rec, ui.s), html = ui.calls.panelHtml(rec, story, ui.s)
-  assert.match(html, /href="https:\/\/storage.vapi.ai\/recording.wav" target="_blank" rel="noopener noreferrer"/)
+  assert.match(html, /data-action="recording"/); assert.doesNotMatch(html, /storage\.vapi|target="_blank"/)
   assert.match(html, /data-action="read"/)
   assert.match(html, /data-key="convo"/)
   assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/)
   assert.doesNotMatch(html, /<img/)
   assert.match(html, /No structured requirements were saved/)
   assert.match(html, /No completed tool actions/)
-  rec.call.recordingUrl = 'javascript:alert(1)'
+  rec.call.recordingAvailable = false; rec.call.recordingUrl = 'javascript:alert(1)'
   const unsafe = ui.calls.panelHtml(rec, story, ui.s)
   assert.doesNotMatch(unsafe, /href="javascript:|Listen to the recording/)
   const row = ui.calls.rowHtml(rec, story, true, true, false)
