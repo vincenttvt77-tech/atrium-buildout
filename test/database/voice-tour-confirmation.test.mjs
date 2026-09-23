@@ -219,7 +219,16 @@ test('staff and voice admission racing on one confirmed tour create one durable 
   const stored=(await staff(booking)).body.confirmation
   await staff(booking,{action:'process',confirmationId:stored.id})
   assert.equal(posts.length,1)
-  const repeat=JSON.parse((await email('prepare')).text);assert.ok(['accepted','queued'].includes(repeat.status))
+  // A slower runner may already have reached verification on the previous query.
+  // Make that boundary deterministic instead of assuming delivery is still pending.
+  await db.admin.query("UPDATE atrium.outbox_messages SET available_at=clock_timestamp() WHERE state='verifying'")
+  const repeat=JSON.parse((await email('prepare')).text);assert.equal(repeat.status,'delivered',JSON.stringify(repeat))
+  const finalView=await staff(booking)
+  assert.equal(finalView.status,200);assert.equal(finalView.body.confirmation.id,stored.id)
+  assert.equal(finalView.body.confirmation.delivery,'delivered')
+  const action=(await db.admin.query('SELECT state,dispatch_attempts,verification_attempts,evidence FROM atrium.outbox_messages')).rows[0]
+  assert.equal(action.state,'succeeded');assert.equal(action.dispatch_attempts,1)
+  assert.equal(Number(action.verification_attempts),1);assert.equal(action.evidence.deliveryStatus,'delivered')
   assert.equal(posts.length,1);assert.equal(await countActions(),1)
 })
 
