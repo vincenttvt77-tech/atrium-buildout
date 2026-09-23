@@ -41,10 +41,11 @@ prospect's budget, timing or other preferences.
 The bundled page remains a single-property public-demo experience. PostgreSQL
 voice availability tools can prepare a property-bound link after an explicit
 website binding is published (below). No deployed property has been enabled by
-this code change. This is not connected to Vapi delivery or a staff sending UI.
-Before enabling a binding, verify the property website and its inventory feed. Use the existing tenant authority and
-notification workflow, record permission to send, and distinguish pending/sent/
-failed delivery. Do not hard-code the Larkin public origin for other tenants.
+this code change. A separate opt-in [voice email flow](email-delivery.md#permissioned-voice-shortlist-email)
+now connects the latest shortlist to a permissioned durable email action in managed
+workspaces. It requires a reviewed sender, provider setup and separately published
+Vapi tool/prompt. Before enabling either binding, verify the property website and
+its inventory feed. Do not hard-code the Larkin public origin for other tenants.
 
 ## Verification
 
@@ -103,14 +104,15 @@ original criteria. Pending/leased/unknown units do not become voice offers.
 
 `availability_checked.publicShortlist` records `status: prepared`,
 `delivery: not_sent`, URL, public IDs, preparation time and review expiration.
-The response explicitly prohibits claiming delivery, offering to text/email from
-this tool, or reading the URL aloud. It may offer staff follow-up if requested.
+The availability response never claims delivery or reads the URL aloud. When the
+server confirms email capability, it offers the separate permission flow; otherwise
+it prohibits offering delivery and can offer staff follow-up.
 This is a historical prepared link, not a durable delivery request, live website
 verification, saved consent, or proof of staff action. Never dispatch from this
 record later without rechecking current property binding and permission/consent.
 
-The next delivery slice must use a supported native/provider messaging capability,
-record exact consent and destination, persist an idempotent intent, and reconcile
-provider acceptance/delivery before showing sent/delivered. A tool invocation or
-prepared link must not be reported as a successful message. No SMS tool, provider
-account, sender number or credentials were created by this implementation.
+The voice email path records the caller's explicit reply to the prepared address
+read-back, binds the exact message and scope, and reconciles provider acceptance
+and delivery separately. A tool invocation or prepared link is not a delivered
+message. SMS and public-page contact submission remain separate work. No provider
+account, sending domain or credentials were created by this implementation.

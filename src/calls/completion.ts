@@ -9,6 +9,7 @@ import type { BookingReviewAttempt } from '../calendar/types.ts'
 import { validateBookingReviewAttempt } from '../calendar/booking-review.ts'
 import { requestIdentity } from '../calendar/unit-blocks.ts'
 import { canonicalJson } from '../workflows/validation.ts'
+import type { VoiceShortlist } from '../email/voice-shortlist.ts'
 
 export interface BookingReviewWork {
   requestId: string
@@ -30,6 +31,8 @@ export interface CallState {
   name: string | null
   email: string | null
   unitsDiscussed: string[]
+  /** Latest server-produced public shortlist, cleared by a subsequent unsuccessful search. */
+  emailShortlist?: VoiceShortlist | null
   booking: { slotId: string; startsAt: string; endsAt?: string; unitId: string | null;
     status: 'confirmed' | 'arranging' | 'failed'; externalId?: string } | null
   /** Saved with dispatch admission before any calendar create is attempted. */

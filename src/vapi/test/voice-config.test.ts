@@ -2,6 +2,17 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { demoAssistantConfig } from '../config.ts'
 import { TOOL_DEFINITIONS, TOOL_MESSAGES } from '../assistant.ts'
+
+test('shortlist email accepts only action/offer identity and avoids invented permission fields', () => {
+  const tool = TOOL_DEFINITIONS.find(t => t.function.name === 'email_shortlist')!
+  assert.deepEqual(Object.keys(tool.function.parameters.properties).sort(), ['action','offerId'])
+  assert.ok('additionalProperties' in tool.function.parameters)
+  assert.equal(tool.function.parameters.additionalProperties,false)
+  assert.ok('action' in tool.function.parameters.properties)
+  assert.deepEqual(tool.function.parameters.properties.action.enum,['prepare','send','status'])
+  assert.match(tool.function.description,/wait for explicit agreement/)
+  assert.doesNotMatch(String(TOOL_MESSAGES.email_shortlist?.[0]?.content), /sent|delivered|confirmed/i)
+})
 import property from '../../../data/property.json' with { type: 'json' }
 
 const config = demoAssistantConfig(property, 'https://example.test')

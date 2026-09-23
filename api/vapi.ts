@@ -26,6 +26,9 @@ import { normalisePhone, normaliseCallbackPhone } from '../src/leads/profile.ts'
 import { reconcile } from '../src/leasing/captured.ts'
 import type { CallReceiptScope } from '../src/leads/inbox.ts'
 import { randomUUID } from 'node:crypto'
+import { PostgresWorkflowRepository } from '../src/database/workflows.ts'
+import { ResendTransport } from '../src/email/render.ts'
+import { createVoiceShortlistEmailService, VoiceEmailError } from '../src/email/voice-shortlist.ts'
 import type { LossReason } from '../src/record/store.ts'
 import { bookTour, idempotencyKey } from '../src/booking/book.ts'
 import type { BookingReviewAttempt } from '../src/calendar/types.ts'
@@ -202,7 +205,7 @@ async function saveCall(callId: string, state: CallState, before: CallState,
       toolsCalled: [...current.toolsCalled, ...state.toolsCalled.slice(before.toolsCalled.length)],
     }
     if (current.tourChangeRequested || state.tourChangeRequested) next.tourChangeRequested = true
-    for (const key of ['name', 'email', 'phone', 'booking', 'lossReason'] as const) {
+    for (const key of ['name', 'email', 'phone', 'booking', 'lossReason', 'emailShortlist'] as const) {
       if (JSON.stringify(state[key]) !== JSON.stringify(before[key])) Object.assign(next, { [key]: state[key] })
     }
     if (state.callbackPhone && (!current.callbackPhone || state.callbackPhone.at >= current.callbackPhone.at)) {
@@ -507,7 +510,8 @@ function emergencyToolResponse(signal: EmergencySignal | null, name: string): st
 async function runTool(
   name: string, args: Record<string, unknown>, callId: string, now: Date, state: CallState,
   runtime?: ResolvedPropertyRuntime,
-  execution?: { beforeBooking(attempt: BookingReviewAttempt): Promise<void>; bookingUncertain: boolean },
+  execution?: { beforeBooking(attempt: BookingReviewAttempt): Promise<void>; bookingUncertain: boolean;
+    voiceEmail: ReturnType<typeof createVoiceShortlistEmailService> | null; artifactMessages: unknown; toolId: string; token: string },
 ): Promise<string> {
   const { inventory, articles, property } = load(now, runtime)
   const unitIds = runtime ? inventory.units.map(unit => unit.unitId) : rawUnits.map(unit => unit.unitId)
@@ -519,6 +523,7 @@ async function runTool(
     inventory,
     articles,
     qualification: state.qualification,
+    shortlistEmailAvailable: execution?.voiceEmail?.ready() ?? false,
     ...(runtime ? { organizationId: runtime.scope.organizationId,
       ...(runtime.snapshot.publicShortlistWebsite ? { publicShortlistWebsite: runtime.snapshot.publicShortlistWebsite } : {}) } : {}),
     jurisdiction: runtime ? runtime.snapshot.jurisdiction : 'NY',
@@ -527,6 +532,12 @@ async function runTool(
   }
 
   switch (name) {
+    case 'email_shortlist': {
+      if (!execution?.voiceEmail) return 'Apartment email is not configured for this property. Nothing was sent. Offer to save contact details for staff.'
+      try { return JSON.stringify(await execution.voiceEmail.command(args, callId, execution.artifactMessages,
+        { toolId: execution.toolId, token: execution.token })) }
+      catch (error) { if (error instanceof VoiceEmailError) return error.message; throw error }
+    }
     case 'capture_contact': {
       const callbackPhone = normaliseCallbackPhone(args.phone)
       if (args.requestType !== undefined && args.requestType !== 'tour_change') return 'Invalid request type. Use tour_change only for an actual request to change an existing tour.'
@@ -544,7 +555,7 @@ async function runTool(
         state.escalation = saved.escalation
         return TOUR_CHANGE_SAVED
       }
-      return 'Contact details saved for the leasing team. Nothing has been sent. Continue helping them.'
+      return 'Contact details saved for the leasing team. This contact update did not send a message. Continue helping them.'
     }
     case 'capture_signal': {
       const r = captureSignal(args as never, ctx)
@@ -575,6 +586,9 @@ async function runTool(
       logEvent(callId, r.record)
       const offered = (r.record.unitsOffered as string[] | undefined) ?? []
       state.unitsDiscussed = [...new Set([...state.unitsDiscussed, ...offered])]
+      const shortlist = r.record.publicShortlist as { unitIds: string[]; preparedAt: string } | undefined
+      state.emailShortlist = runtime && shortlist ? { unitIds: shortlist.unitIds, preparedAt: shortlist.preparedAt,
+        configurationVersion: runtime.snapshot.version } : null
       return r.say
     }
 
@@ -1153,6 +1167,13 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
         let errorCode: string | null = null
         let outcome: CallToolResult['outcome'] = 'complete'
         const execution = {
+          voiceEmail: runtime ? createVoiceShortlistEmailService(runtime,
+            new PostgresWorkflowRepository(runtimeForRequest(req).app, runtime.scope,
+              { requestId: runtime.requestId, configurationVersion: runtime.snapshot.version }),
+            { configured: !!process.env.RESEND_API_KEY?.trim(), transport: () => new ResendTransport(process.env.RESEND_API_KEY ?? '') }) : null,
+          artifactMessages: message.artifact?.messages,
+          toolId: tc.toolCallId as string,
+          token,
           bookingUncertain: false,
           dispatchStarted: false,
           beforeBooking: async (attempt: BookingReviewAttempt) => {
@@ -1206,6 +1227,11 @@ async function scopedHandler(req: any, res: any, runtime?: ResolvedPropertyRunti
             } catch { result = TOUR_CHANGE_UNSAVED; tourChangeSaveFailed = true }
           } else if (error instanceof TourChangePersistenceError) {
             result = TOUR_CHANGE_UNSAVED; tourChangeSaveFailed = true; outcome = 'blocked'
+          } else if (name === 'email_shortlist') {
+            // The email workflow has its own durable admission/dispatch evidence. An
+            // exception here must not label a possibly submitted email as no effect.
+            result = 'The email request could not be verified. Do not send a replacement. Check status for this same offer or ask staff to review it.'
+            outcome = 'complete'
           } else if (error instanceof Error && error.message === 'CALENDAR_INTERACTION_PAUSED') {
             state.booking = beforeToolBooking
             state.emergency = error instanceof CalendarInteractionPausedError ? error.signal : callEmergency(state)

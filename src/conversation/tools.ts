@@ -30,6 +30,7 @@ export interface ToolContext {
   propertyId: PropertyId
   organizationId?: string
   publicShortlistWebsite?: PublicShortlistWebsite
+  shortlistEmailAvailable?: boolean
   interactionId: InteractionId
   inventory: InventorySnapshot
   articles: KnowledgeArticle[]
@@ -351,7 +352,10 @@ export function checkAvailability(ctx: ToolContext, args: AvailabilityArgs = {})
     propertyId: ctx.propertyId, inventorySource: ctx.inventory.source }, candidates as string[], ctx.now)
   if (!url) return result
   return { ...result, say: result.say + '\n\nPublic review link prepared: ' + url +
-    '\nNo message was sent. Delivery is not connected by this tool: do not offer to text or email it, read the URL aloud, or claim it was sent. If the caller wants the link, offer to save their details for staff follow-up. The page may include the explicitly discussed price, size or timing alternatives; it is not a reservation.',
+    (ctx.shortlistEmailAvailable
+      ? '\nNo message was sent. If the caller wants an email, save their address and prepare the shortlist email, ask its exact permission question, then wait for their answer before submitting. Do not read the URL aloud or promise delivery.'
+      : '\nNo message was sent. Delivery is not connected by this tool: do not offer to text or email it, read the URL aloud, or claim it was sent. If the caller wants the link, offer to save their details for staff follow-up.') +
+    ' The page may include the explicitly discussed price, size or timing alternatives; it is not a reservation.',
     record: { ...result.record, publicShortlist: { status: 'prepared', delivery: 'not_sent', url, unitIds: candidates,
       preparedAt: ctx.now.toISOString(), reviewExpiresAt: ctx.publicShortlistWebsite.reviewExpiresAt } } }
 }

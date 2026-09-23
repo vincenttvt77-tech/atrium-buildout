@@ -198,3 +198,13 @@ test('fictional catalogue links retain the demo disclosure instead of implying l
   assert.match(result.say, /fictional demo catalogue/)
   assert.match(result.say, /never live\/PMS data/)
 })
+
+test('only an enabled server capability offers the permissioned email path', () => {
+  const ctx = linkedContext([unit('19A')])
+  assert.match(checkAvailability(ctx, { unitId:'19A' }).say, /Delivery is not connected/)
+  ctx.shortlistEmailAvailable = true
+  const result = checkAvailability(ctx, { unitId:'19A' })
+  assert.match(result.say, /ask its exact permission question/)
+  assert.match(result.say, /No message was sent/)
+  assert.doesNotMatch(result.say, /Delivery is not connected/)
+})

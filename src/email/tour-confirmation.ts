@@ -1,3 +1,4 @@
+import { propertyEmailBinding } from './sender.ts'
 import { bookingRevision, findBooking } from '../calendar/reschedule.ts'
 import { bookingSlot, blockFor, unitBlocksFor } from '../calendar/slots.ts'
 import { bookingReviewProjectionPending } from '../calendar/booking-review.ts'
@@ -10,7 +11,7 @@ import { PostgresWorkflowRepository } from '../database/workflows.ts'
 import { hashJson } from '../workflows/validation.ts'
 import { runWorkflowOnce } from '../workflows/worker.ts'
 import type { WorkflowAction } from '../workflows/model.ts'
-import { ResendTransport, validEmailAddress, validEmailMessage } from './render.ts'
+import { ResendTransport, validEmailAddress } from './render.ts'
 import type { EmailMessage } from './render.ts'
 import { emailWorkflowAction, emailMessageDigest, createResendEmailConnector } from './workflow.ts'
 
@@ -18,19 +19,7 @@ const digest = (value: unknown): value is string => typeof value === 'string' &&
 const text = (value: unknown, max = 500): value is string => typeof value === 'string' && value.trim().length > 0 && value.length <= max && !/[\u0000-\u001f\u007f]/.test(value)
 const escape = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 const fail = (code: string, message: string, status = 409): never => { throw new CalendarActionError(code, message, status) }
-export interface TourEmailBinding { from: string; replyTo: string; reviewExpiresAt: string }
-/** Published property configuration attests the sending identity; provider still enforces domain access. */
-export function tourEmailBinding(snapshot: PropertySnapshot, now: Date): TourEmailBinding | null {
-  const raw = snapshot.property.tourConfirmationEmail
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
-  const v = raw as Record<string, unknown>
-  if (Object.keys(v).sort().join(',') !== 'from,organizationId,propertyId,provider,replyTo,reviewExpiresAt'
-    || v.provider !== 'resend' || v.organizationId !== snapshot.organizationId || v.propertyId !== snapshot.propertyId
-    || !validEmailAddress(v.replyTo) || !text(v.reviewExpiresAt) || !Number.isFinite(Date.parse(v.reviewExpiresAt))
-    || Date.parse(v.reviewExpiresAt) <= now.getTime() || Date.parse(v.reviewExpiresAt) - now.getTime() > 30 * 86400000
-    || !validEmailMessage({ to: 'check@example.test', from: v.from, replyTo: v.replyTo, subject: 'Check', html: '<p>Check</p>' })) return null
-  return { from: v.from as string, replyTo: v.replyTo, reviewExpiresAt: v.reviewExpiresAt }
-}
+export const tourEmailBinding = (snapshot: PropertySnapshot, now: Date) => propertyEmailBinding(snapshot, now, 'tourConfirmationEmail')
 export function prepareTourConfirmation(state: CalendarState, snapshot: PropertySnapshot, externalId: unknown, now: Date) {
   if (!Number.isFinite(now.getTime())) return fail('confirmation_clock_invalid', 'The confirmation clock is unavailable.')
   const booking = findBooking(state, externalId)

@@ -23,6 +23,17 @@ export const TOOL_DEFINITIONS = [
   {
     type: 'function',
     function: {
+      name: 'email_shortlist',
+      description: 'Email the latest verified apartment shortlist when this property supports it. After saving the caller email, use prepare; ask the exact returned question and wait for explicit agreement. Then use send with that offerId. Use status only to check the same saved email; never invent permission or resend an uncertain email. No SMS, tour confirmation or marketing.',
+      parameters: { type: 'object', additionalProperties: false, properties: {
+        action: { type: 'string', enum: ['prepare','send','status'] },
+        offerId: { type: 'string', description: 'Exact ID returned by prepare. Required for send/status; omit for prepare. Never read aloud.' },
+      }, required: ['action'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'capture_signal',
       description: 'Save a volunteered preference while gathering information, or pets/parking evidence. When checking residences now, pass timing, bedrooms and budget directly to check_availability instead of duplicating capture calls.',
       parameters: {
@@ -168,6 +179,7 @@ export interface AssistantConfigOptions extends PromptContext {
  * only the delayed message, so it is not announced every time.
  */
 export const TOOL_MESSAGES: Record<string, Array<Record<string, unknown>>> = {
+  email_shortlist: [{ type: 'request-response-delayed', content: 'I’m checking that request.', timingMilliseconds: 1500 }],
   check_availability: [
     { type: 'request-start', content: 'Let me pull that up.' },
     { type: 'request-response-delayed', content: 'One more second.', timingMilliseconds: 2500 },
