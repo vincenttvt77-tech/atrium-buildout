@@ -36,6 +36,11 @@ jobs:
         env:
           ATRIUM_PLAYWRIGHT_MODULE: ${{ runner.temp }}/atrium-browser-tools/node_modules/playwright/index.mjs
           ATRIUM_BROWSER_ARTIFACTS: ${{ runner.temp }}/atrium-followup-browser
+      - name: Verify managed voice releases in Chromium
+        run: node test/browser/voice-releases.mjs
+        env:
+          ATRIUM_PLAYWRIGHT_MODULE: ${{ runner.temp }}/atrium-browser-tools/node_modules/playwright/index.mjs
+          ATRIUM_BROWSER_ARTIFACTS: ${{ runner.temp }}/atrium-followup-browser/voice
       - uses: actions/upload-artifact@v5
         if: ${{ !cancelled() }}
         with:
