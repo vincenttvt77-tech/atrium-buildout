@@ -25,7 +25,7 @@ after(() => {
 })
 async function request(account = 0, body?: Record<string, unknown>, authenticated = true, selectedTenant: string | null = accounts[account]!.tenantId) {
   const res: any = { code: 0, body: null, setHeader() {}, status(code: number) { this.code = code; return this }, json(value: unknown) { this.body = value; return this } }
-  await leads({ method: body ? 'POST' : 'GET', headers: authenticated ? { cookie: `${OPS_COOKIE}=${mintAccountSession(new Date(), accounts[account]!)}`,
+  await leads({ method: body ? 'POST' : 'GET', headers: authenticated ? { origin:'https://portal.example.test',host:'portal.example.test','content-type':'application/json', cookie: `${OPS_COOKIE}=${mintAccountSession(new Date(), accounts[account]!)}`,
     ...(selectedTenant === null ? {} : { 'x-atrium-tenant-id': selectedTenant }) } : {}, body }, res)
   return res
 }

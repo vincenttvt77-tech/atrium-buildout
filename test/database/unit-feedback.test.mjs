@@ -58,7 +58,7 @@ after(async () => {
   original === undefined ? delete process.env.ATRIUM_RUNTIME_MODE : process.env.ATRIUM_RUNTIME_MODE = original
 })
 async function request({ user = 'owner-a', property = 'property-a1', org = 'organization-a', version = 1, body } = {}) {
-  const response = await fetch(origin + '/api/leads', { method: body ? 'POST' : 'GET', headers: { cookie: cookies[user],
+  const response = await fetch(origin + '/api/leads', { method: body ? 'POST' : 'GET', headers: { cookie: cookies[user], origin,
     'x-atrium-organization-id': org, 'x-atrium-property-id': property, 'x-atrium-config-version': String(version), 'content-type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) })
   return { status: response.status, body: await response.json(), requestId: response.headers.get('x-request-id') }
 }

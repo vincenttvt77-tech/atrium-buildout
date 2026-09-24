@@ -22,7 +22,7 @@ function ui(rows, profiles = []) {
     URLSearchParams, structuredClone, console, setTimeout, clearTimeout, setInterval, clearInterval, matchMedia: () => ({ matches: false }) }
   runInNewContext(app.replace('window.Atrium = {', 'window.identityToday = { tourRowHtml }; window.Atrium = {'), context)
   runInNewContext(calendar.replace("A.register('calendar', view)", 'window.identityCalendar = { buildModel, tourInfo, tourContent, popSig, view, cal }; A.register(\'calendar\', view)'), context)
-  runInNewContext(leads.replace("A.register('leads', view)", 'window.identityLeads = { calendarName, leadPanelHtml, leadBriefHtml }; A.register(\'leads\', view)'), context)
+  runInNewContext(leads.replace("A.register('leads', view)", 'window.identityLeads = { calendarName, leadPanelHtml, leadBriefHtml, todoListHtml }; A.register(\'leads\', view)'), context)
   const A = window.Atrium
   Object.assign(A.state, { calls: [], loaded: { calls: true, leads: true, calendar: true },
     leads: { profiles, followUps: [], tourChangeRequests: [] },
@@ -88,4 +88,16 @@ test('unrelated callback does not hide an unresolved booking for the same caller
   p.calls.push({callId:'other-call',at:'2032-06-01T11:45:00Z',toolsCalled:[]})
   const t=ui([],[p]);t.A.state.leads.followUps=[{id:'callback',phone:p.phone,kind:'callback',status:'scheduled',createdFromCall:'other-call',reason:'General question',createdAt:at,dueAt:at}]
   assert.ok(t.A.derive.needsPerson(t.A.state).some(row=>row.type==='stuckTour'&&row.callId==='failed-call'))
+})
+
+
+test('completed future tasks remain recoverable and older completed work is explicitly loadable',()=>{
+  const t=ui([])
+  t.A.state.leads.followUps=Array.from({length:25},(_,i)=>({id:'fu-'+i,phone:'unknown',kind:'callback',status:'done',
+    dueAt:'2032-07-01T14:00:00Z',createdAt:at,createdFromCall:'call-'+i,reason:'Synthetic follow-up',
+    staffDecisions:[{requestId:'decision-'+i,to:'done',actorLabel:'Staff <script>',at:'2032-06-01T12:00:00Z'}]}))
+  const html=t.leads.todoListHtml(t.A.state)
+  assert.match(html,/Showing 20 of 25 completed tasks/);assert.match(html,/Show more completed tasks/)
+  assert.equal((html.match(/data-action="back"/g)||[]).length,20)
+  assert.match(html,/Staff &lt;script&gt;/);assert.doesNotMatch(html,/Staff <script>/)
 })

@@ -70,7 +70,7 @@ after(async()=>{
 async function request(path,{user='owner-a',property='property-a1',org='organization-a',version=1,body,headers={}}={}){
   const response=await fetch(origin+path,{method:body===undefined?'GET':'POST',headers:{cookie:cookies[user],
     'x-atrium-organization-id':org,'x-atrium-property-id':property,'x-atrium-config-version':String(version),
-    ...(body!==undefined?{'content-type':'application/json'}:{}),...headers},...(body!==undefined?{body:JSON.stringify(body)}:{})})
+    ...(body!==undefined?{'content-type':'application/json',origin}:{}),...headers},...(body!==undefined?{body:JSON.stringify(body)}:{})})
   return {status:response.status,body:await response.json()}
 }
 const range='/api/calendar?from=2032-01-01&to=2032-01-07'

@@ -4,6 +4,10 @@ AI leasing and resident operations for multifamily buildings.
 
 ## Where this is
 
+Staff follow-up decisions now have checked saves, actor/time history and safe recovery
+after a lost response. See [staff follow-up decisions](docs/followup-decisions.md).
+They remain manual work records; changing status does not send a call or message.
+
 A voice leasing workflow and staff portal, with an opt-in PostgreSQL runtime for
 persisted users, organizations, property memberships, scoped operations and atomic
 mutation audits. **The Larkin** is a fictional 318-residence building used for local

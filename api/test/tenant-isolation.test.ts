@@ -33,7 +33,7 @@ after(() => {
 })
 
 function headers(index: number) {
-  return { cookie: `${OPS_COOKIE}=${mintAccountSession(new Date(), accounts[index]!)}` }
+  return { origin:'https://portal.example.test',host:'portal.example.test','content-type':'application/json', cookie: `${OPS_COOKIE}=${mintAccountSession(new Date(), accounts[index]!)}` }
 }
 async function invoke(handler: (req: any, res: any) => unknown, req: any) {
   if (handler === calendar && req.method === 'POST' && req.body && typeof req.body === 'object') req = {
@@ -140,8 +140,8 @@ test('tour settings and Vapi availability use each account’s own capacity', as
 
 test('a known follow-up ID in a different account does not grant mutation access', async () => {
   await withTenant(accounts[1]!.tenantId, () => docs.set('followup:fu-bravo-private', { id: 'fu-bravo-private', status: 'scheduled' }))
-  const result = await invoke(leads, { method: 'POST', headers: headers(0), body: {
-    action: 'followup_status', id: 'fu-bravo-private', status: 'done', tenantId: accounts[1]!.tenantId,
+  const result = await invoke(leads, { method: 'POST', headers: {...headers(0),'x-atrium-tenant-id':accounts[0]!.tenantId}, body: {
+    action: 'followup_status', id: 'fu-bravo-private', status: 'done', requestId:'foreign-attempt', expectedSha256:'0'.repeat(64),
   } })
   assert.equal(result.code, 404)
   assert.deepEqual(await withTenant(accounts[1]!.tenantId, () => docs.get('followup:fu-bravo-private')), { id: 'fu-bravo-private', status: 'scheduled' })

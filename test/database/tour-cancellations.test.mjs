@@ -114,7 +114,7 @@ test('cancellation frees capacity, retains exact history/contact and retires onl
   const slot=bookingSlot(booking);assert.equal(occupancyPeak(slot,before,settings),1);assert.equal(occupancyPeak(slot,after,settings),0)
   assert.equal((await lead()).bookings[0].status,'cancelled');assert.deepEqual((await lead()).calls,originalProfile.calls)
   for(const row of await followups()) assert.equal(row.status,row.id===done.id?'done':row.id==='manual-callback'?'scheduled':'skipped')
-  const reopened=await fetch(origin+'/api/leads',{method:'POST',headers:{cookie:cookies['owner-a'],'x-atrium-organization-id':'organization-a','x-atrium-property-id':'property-a1','x-atrium-config-version':'1',origin,'content-type':'application/json'},body:JSON.stringify({action:'followup_status',id:done.id,status:'scheduled'})})
+  const reopened=await fetch(origin+'/api/leads',{method:'POST',headers:{cookie:cookies['owner-a'],'x-atrium-organization-id':'organization-a','x-atrium-property-id':'property-a1','x-atrium-config-version':'1',origin,'content-type':'application/json'},body:JSON.stringify({action:'followup_status',id:done.id,status:'scheduled',requestId:'reopen-cancelled',expectedSha256:hashJson((await followups()).find(r=>r.id===done.id))})})
   assert.equal(reopened.status,409);assert.match((await reopened.json()).error,/cancelled tour/)
   assert.equal((await db.admin.query('SELECT count(*)::int n FROM atrium.action_intents')).rows[0].n,0)
   assert.equal((await request({user:'owner-b',org:'organization-b',property:'property-b1'})).body.current.status,'active')

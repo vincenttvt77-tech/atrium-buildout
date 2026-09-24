@@ -17,3 +17,28 @@ jobs:
       - run: npm run check
       - run: npm run test:database
       - run: npm run build
+  followup-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Install isolated browser test tools
+        run: |
+          npm install --prefix "$RUNNER_TEMP/atrium-browser-tools" --no-save --package-lock=false --no-audit --no-fund playwright@1.62.1
+          node "$RUNNER_TEMP/atrium-browser-tools/node_modules/playwright/cli.js" install --with-deps chromium
+      - name: Verify staff follow-up decisions in Chromium
+        run: node test/browser/followup-decisions.mjs
+        env:
+          ATRIUM_PLAYWRIGHT_MODULE: ${{ runner.temp }}/atrium-browser-tools/node_modules/playwright/index.mjs
+          ATRIUM_BROWSER_ARTIFACTS: ${{ runner.temp }}/atrium-followup-browser
+      - uses: actions/upload-artifact@v5
+        if: ${{ !cancelled() }}
+        with:
+          name: followup-browser
+          path: ${{ runner.temp }}/atrium-followup-browser
+          retention-days: 7

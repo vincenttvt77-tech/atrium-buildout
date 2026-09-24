@@ -2420,33 +2420,72 @@ function reviewTourChange(id) {
     } }, onClose() { closed = true },
   })
 }
+let followUpDialog = null
+on('route', () => followUpDialog?.close())
 async function setFollowUpStatus(fu, status, opts) {
-  const o = opts || {}
-  if (!fu || !fu.id || busyNow('leads')) return false
-  const btn = o.button || null
-  const row = btn ? btn.closest('.row') : null
-  const verb = o.verb || (status === 'done' ? 'done' : status === 'skipped' ? 'not needed' : 'back')
-  const fallbacks = focusFallbacks(btn)
-  if (btn) { btn.classList.add('is-busy'); btn.setAttribute('aria-busy', 'true') }
-  if (row) row.classList.add('row-busy')
-  try {
-    const res = await busy('leads', api.post('/api/leads', { action: 'followup_status', id: fu.id, status }, { doing: `marking a to-do ${verb}` }))
-    if (row && row.isConnected && status !== 'scheduled') { row.classList.add('row-leaving'); await new Promise((r) => setTimeout(r, 120)) }
-    apply('leads', res)
-    let h
-    if (status === 'scheduled') h = toast('Put back on the list', { kind: 'ok', key: `fu:${fu.id}` })
-    else h = toast(`Marked ${verb}`, { kind: 'ok', key: `fu:${fu.id}`, actions: [{ label: 'Undo', fn: () => busy('leads', api.post('/api/leads', { action: 'followup_status', id: fu.id, status: 'scheduled' }, { doing: 'undoing a to-do change' })).then((r) => { apply('leads', r) }) }] })
-    restoreFocus(fallbacks, h)
-    return true
-  } catch (e) {
-    if (e.signedOut) return false
-    if (btn && btn.isConnected) { btn.classList.remove('is-busy'); btn.removeAttribute('aria-busy') }
-    if (row && row.isConnected) row.classList.remove('row-busy', 'row-leaving')
-    if (e.status === 404) toast('That to-do was removed by someone else. The list has been refreshed.', { kind: 'warn' })
-    else toast("Couldn't update that to-do. Nothing changed — try again.", { kind: 'error', actions: [{ label: 'Try again', fn: () => { setFollowUpStatus(fu, status, { verb }) } }] })
-    reread('leads')
-    return false
+  if (!fu?.id || !['scheduled','done','skipped'].includes(status) || !permissionAllowed('operate')) return false
+  if (followUpDialog) followUpDialog.close()
+  let current = fu, pending = null, closed = false, saving = false, reload = false
+  const epoch = scopeEpoch, verb = status === 'scheduled' ? 'Put back' : status === 'done' ? 'Mark handled' : 'Mark not needed'
+  const alive = () => !closed && !gated && !documentAccessIssue && epoch === scopeEpoch && permissionAllowed('operate')
+  const validDigest = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value)
+  const statusText = value => ({scheduled:'Open',done:'Handled',skipped:'Not needed'}[value] || 'Unknown')
+  const history = row => {
+    const records = row.staffDecisions || []
+    return records.length ? '<h3>Staff decisions</h3><ol>' + records.slice().reverse().map(d => `<li>${esc(statusText(d.to))} · ${esc(d.actorLabel)} · ${esc(fmt.dateTime(d.at))}</li>`).join('') + '</ol>' : '<p class="small">No staff decision history was recorded for this task.</p>'
   }
+  function bounded(promise) {
+    let timer
+    return Promise.race([promise, new Promise((_,reject) => { timer = setTimeout(() => reject(new Error('The save has not responded yet.')),15000) })]).finally(() => clearTimeout(timer))
+  }
+  function show(d) {
+    d.body.innerHTML = `<p>${esc(current.reason || 'Review this follow-up before changing its status.')}</p><p>Current status: <strong>${esc(statusText(current.status))}</strong></p>` +
+      '<p>This records your staff decision. It does not place a call, send a message or verify tour attendance.</p>' + history(current)
+    const unavailable = !validDigest(current.expectedSha256)
+    reload = unavailable
+    d.setPrimary({label:unavailable ? 'Reload follow-up' : current.status === status ? 'Already ' + statusText(status).toLowerCase() : verb,disabled:!unavailable && current.status === status})
+  }
+  async function refreshCurrent(d) {
+    d.setBusy('Loading follow-up…'); d.setError(null)
+    try {
+      const result = await bounded(api.get('/api/leads'))
+      if (!alive()) return
+      const next = (result.followUps || []).find(row => row.id === fu.id)
+      if (!next || !validDigest(next.expectedSha256)) throw new Error('This follow-up is unavailable or held for review. Close this form and check the current list.')
+      apply('leads', result); current = next; pending = null; reload = false; show(d)
+    } catch (error) { if (alive()) { reload = true; d.setError(error.message); d.setPrimary({label:'Reload follow-up',disabled:false}) } }
+    finally { if (!closed) d.setBusy(null) }
+  }
+  followUpDialog = dialog({title:'Update follow-up',secondary:{label:'Close'},build(body,d){show(d)},
+    primary:{label:verb,async onClick(d) {
+      if (!alive() || saving) return
+      if (reload) { await refreshCurrent(d); return }
+      if (!pending) pending = Object.freeze({action:'followup_status',id:fu.id,status,expectedSha256:current.expectedSha256,requestId:crypto.randomUUID()})
+      saving = true; d.setBusy('Saving staff decision…'); d.setError(null)
+      try {
+        const command = pending, result = await busy('leads', bounded(api.post('/api/leads', command, {doing:'recording a follow-up decision'})))
+        if (!alive()) return
+        const saved = result.decision, latest = result.followUp
+        if (typeof result.replayed !== 'boolean' || latest?.id !== command.id || !validDigest(latest.expectedSha256)
+          || !['scheduled','done','skipped'].includes(latest.status) || saved?.requestId !== command.requestId
+          || saved.expectedSha256 !== command.expectedSha256 || saved.to !== command.status
+          || !Array.isArray(latest.staffDecisions) || !latest.staffDecisions.some(row => row.requestId === saved.requestId)) throw new Error('The saved decision could not be verified.')
+        apply('leads', result); current = latest; pending = null
+        const newer = latest.staffDecisions.at(-1)?.requestId !== saved.requestId || latest.status !== saved.to
+        d.body.innerHTML = `<p class="notice" role="status">Your decision is saved.${newer ? ' A newer change is also on record; it has been preserved.' : ''} Current status: ${esc(statusText(latest.status))}. No call or message was sent.</p>` + history(latest)
+        d.setPrimary({label:'Decision saved',disabled:true})
+        if (!newer && status !== 'scheduled' && !latest.superseded) toast('Follow-up decision saved', {kind:'ok',key:`fu:${fu.id}`,
+          actions:[{label:'Undo',fn:()=>{if(!gated && !documentAccessIssue && epoch === scopeEpoch && permissionAllowed('operate')) setFollowUpStatus(latest,'scheduled')}}]})
+        void reread('leads')
+      } catch (error) {
+        if (!alive()) return
+        if ([400,404,409,428].includes(error.status) && !error.badJson) { pending = null; reload = true }
+        d.setError((error.message || 'The save could not be confirmed.') + (pending ? ' It may already be saved. Check this same decision before making another change.' : ' Reload and review the latest follow-up.'))
+        d.setPrimary({label:pending ? 'Check saved decision' : 'Reload follow-up',disabled:false})
+      } finally { saving = false; if (!closed) d.setBusy(null) }
+    }},onClose(){closed=true;followUpDialog=null},
+  })
+  return true
 }
 
 // ---------------------------------------------------------------------------------------

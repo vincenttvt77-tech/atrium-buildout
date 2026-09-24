@@ -64,6 +64,7 @@ const callbackOf = p => p && p.callbackPhone && /^\+[1-9]\d{6,14}$/.test(p.callb
 const link = (name, params, txt, cls) => `<a class="${cls || 'btn btn-quiet'}" href="${esc(A.hashFor(name, params))}">${esc(txt)}</a>`
 const chip = (cls, iconName, txt) => A.html.chip(cls, iconName, txt)
 const countHtml = (n) => `<span class="count">· ${Number(n) || 0}</span>`
+let completedLimit = 20
 const needsReview = f => f?.reconciliation?.status === 'needs_review' && f.reconciliation.code === 'legacy_followup_identity_ambiguous'
 const reviewSummary = items => items.some(needsReview) ? chip('chip-warn', 'warning', 'Review needed') : ''
 
@@ -160,15 +161,17 @@ function doneRowHtml(fu, s) {
   return `<div class="row done-row" data-key="fu:${esc(fu.id)}"><span class="row-body">` +
     `<span class="row-title">${esc(sen.before)}<span class="name">${esc(sen.name)}</span>${esc(sen.after)}</span>` +
     `<span class="row-chips">${done ? chip('chip-ok', 'check', 'Done') : chip('chip-neutral', 'x', 'Not needed')}</span>` +
-    A.html.followUpReview(fu) + '</span>' +
+    A.html.followUpReview(fu) + (fu.staffDecisions?.length ? `<span class="row-sub">Last recorded by ${esc(fu.staffDecisions.at(-1).actorLabel)} · ${esc(fmt.dateTime(fu.staffDecisions.at(-1).at))}</span>` : '') + '</span>' +
     `<span class="row-actions"><button type="button" class="btn btn-quiet" data-action="back" data-fu="${esc(fu.id)}" data-key="fu:${esc(fu.id)}:back" data-write="leads">${ico('undo')}Put back</button></span></div>`
 }
 function todoListHtml(s) {
   const now = Date.now(), today = fmt.nyNow().ymd, weekEnd = fmt.addDays(today, 6 - fmt.dayOfWeek(today))
   const all = followUpsOf(s)
   const scheduled = all.filter((f) => f.status === 'scheduled').sort(byDue)
-  const done = all.filter((f) => (f.status === 'done' || f.status === 'skipped') && (needsReview(f) || (fmt.nyDate(f.dueAt) || '9999') <= today))
-    .sort((a, b) => Number(needsReview(b)) - Number(needsReview(a)) || byDueDesc(a, b)).slice(0, 20)
+  const completed = all.filter(f => f.status === 'done' || f.status === 'skipped')
+    .sort((a,b) => Number(needsReview(b)) - Number(needsReview(a))
+      || (toTime(b.staffDecisions?.at(-1)?.at) || 0) - (toTime(a.staffDecisions?.at(-1)?.at) || 0) || byDueDesc(a,b))
+  const done = completed.slice(0, completedLimit)
   const changes = arr(s.leads && s.leads.tourChangeRequests)
   const pending = changes.filter(A.isTourChangeOpen)
   const reviewed = changes.filter(r => r && !A.isTourChangeOpen(r))
@@ -191,8 +194,8 @@ function todoListHtml(s) {
   }
   if (reviewed.length) out += `<details class="done-list" data-key="reviewed-tour-changes"><summary data-key="reviewed-tour-changes-summary">${ico('chevron-down')}<span>${A.databaseMode ? 'Recorded tour-change outcomes' : 'Reviewed tour-change requests'}</span>${countHtml(reviewed.length)}</summary><div class="card rows">${reviewed.map(r => A.html.tourChangeRequest(r)).join('')}</div></details>`
   if (done.length) {
-    out += `<details class="done-list" data-key="done-today"><summary data-key="done-today-summary">${ico('chevron-down')}<span>Done and not needed${done.some(needsReview) ? '' : ' today'}</span>${countHtml(done.length)}${reviewSummary(done)}</summary>` +
-      `<div class="card rows">${done.map((f) => doneRowHtml(f, s)).join('')}</div></details>`
+    out += `<details class="done-list" data-key="done-today"><summary data-key="done-today-summary">${ico('chevron-down')}<span>Handled and not needed</span>${countHtml(completed.length)}${reviewSummary(completed)}</summary>` +
+      `<p class="small">Showing ${done.length} of ${completed.length} completed tasks. These are staff decisions, not delivery receipts.</p><div class="card rows">${done.map((f) => doneRowHtml(f, s)).join('')}</div>` + (done.length < completed.length ? '<button type="button" class="btn" data-action="more-done" data-key="more-done">Show more completed tasks</button>' : '') + '</details>'
   }
   return out
 }
@@ -513,7 +516,8 @@ const view = {
         if (act.getAttribute('aria-disabled') === 'true' || act.classList.contains('is-busy')) return
         const a = act.dataset.action
         if (a === 'open') this.open(act.dataset.phone, act)
-        else if (a === 'seedone') { const d = this.list.querySelector('.done-list'); if (d) { d.open = true; const sm = d.querySelector('summary'); if (sm) { sm.setAttribute('tabindex', '0'); sm.focus() } } }
+        else if (a === 'more-done') { completedLimit += 20; this.render(A.state) }
+        else if (a === 'seedone') { const d = this.list.querySelector('[data-key="done-today"]'); if (d) { d.open = true; const sm = d.querySelector('summary'); if (sm) { sm.setAttribute('tabindex', '0'); sm.focus() } } }
         else this.fuAction(act)
         return
       }

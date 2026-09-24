@@ -4,6 +4,7 @@ import health from '../health.ts'
 import leads from '../leads.ts'
 import { documentStoreFromEnv } from '../../src/store/documents.ts'
 import { withTenant } from '../../src/tenancy/context.ts'
+import { followUpFingerprint } from '../../src/leads/followup-decisions.ts'
 import { VOICE_CONTRACT } from '../../src/vapi/contract.ts'
 
 const originalEnv = { ...process.env }
@@ -25,7 +26,7 @@ async function invoke(handler: (req: any, res: any) => unknown, body?: unknown) 
     setHeader(key: string, value: string) { this.headers[key] = value; return this },
     status(code: number) { this.code = code; return this },
     json(value: unknown) { this.body = value; return this } }
-  await handler({ method: body ? 'POST' : 'GET', body, headers: { 'x-ops-passcode': passcode } }, response)
+  await handler({ method: body ? 'POST' : 'GET', body, headers: { origin:'https://portal.example.test',host:'portal.example.test','content-type':'application/json', 'x-ops-passcode': passcode, 'x-atrium-tenant-id':'legacy' } }, response)
   return response
 }
 
@@ -109,14 +110,14 @@ test('local bulk lead reset still clears only lead and follow-up records', async
 
 test('production staff follow-up updates remain available with durable storage', async () => {
   Object.assign(process.env, { NODE_ENV: 'production', KV_REST_API_URL: 'https://kv.test', KV_REST_API_TOKEN: 'test' })
-  const existing = { id: 'fu-guard-test', status: 'scheduled' }
+  const existing = { id: 'fu-guard-test', status: 'scheduled' } as const
   const commands: string[][] = []
   globalThis.fetch = async (_url, init) => {
     const command = JSON.parse(String(init?.body)) as string[]
     commands.push(command)
     return new Response(JSON.stringify({ result: command[0] === 'GET' ? JSON.stringify(existing) : 1 }))
   }
-  const response = await invoke(leads, { action: 'followup_status', id: existing.id, status: 'done' })
+  const response = await invoke(leads, { action: 'followup_status', id: existing.id, status: 'done', requestId:'guard-request', expectedSha256:followUpFingerprint(existing as any) })
   assert.equal(response.code, 200)
   assert.equal(response.body.followUp.status, 'done')
   assert.ok(commands.some(command => command[0] === 'EVAL'))

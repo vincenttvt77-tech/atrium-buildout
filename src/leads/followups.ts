@@ -5,8 +5,8 @@ import { DEFAULT_TIME_ZONE, localInstant, validateTimeZone, wallTime } from '../
 /**
  * What the building should do next about this person, and when.
  *
- * These are scheduled intentions, not actions. Outbound calling is not enabled — it needs
- * A2P registration and a TCPA review that have not happened — so every follow-up carries
+ * These are scheduled intentions, not actions. Automated follow-up calling has no
+ * activated sender, permission or dispatch workflow, so every follow-up carries
  * executable: false and the dashboard says so. The point for now is that the system shows
  * it knows what to do: a tour booked for tomorrow at five produces a confirmation call at
  * two, without anyone asking it to. SOW 6.2 calls this condition-based follow-up.
@@ -39,6 +39,18 @@ export interface FollowUp {
   reconciliation?: { status: 'needs_review'; code: 'legacy_followup_identity_ambiguous'; candidateIds: string[] }
   /** Retained history, never an executable reminder for the old tour time. */
   superseded?: { reason: 'tour_rescheduled' | 'tour_cancelled'; bookingExternalId: string; revision: number; requestId: string; at: string }
+  /** Staff decisions only; never proof that a call or message was delivered. */
+  staffDecisions?: FollowUpDecision[]
+}
+
+export interface FollowUpDecision {
+  requestId: string
+  expectedSha256: string
+  from: FollowUp['status']
+  to: FollowUp['status']
+  actorId: string
+  actorLabel: string
+  at: string
 }
 
 export interface FollowUpSource {

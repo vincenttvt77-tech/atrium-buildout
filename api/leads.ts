@@ -1,7 +1,7 @@
 import { authorizeOps } from '../src/ops/session.ts'
 import { documentStoreFromEnv } from '../src/store/documents.ts'
 import { isHostedRuntime } from '../src/store/config.ts'
-import { listProfiles, listFollowUps, profileKey, followUpKey } from '../src/leads/consolidate.ts'
+import { listProfiles, listFollowUps, profileKey } from '../src/leads/consolidate.ts'
 import type { LeadProfile } from '../src/leads/profile.ts'
 import type { FollowUp } from '../src/leads/followups.ts'
 import { normalisePhone, pinnedName } from '../src/leads/profile.ts'
@@ -19,6 +19,8 @@ import type { FeedbackActor } from '../src/leads/unit-feedback.ts'
 import { calendarStoreFromEnv } from '../src/calendar/store.ts'
 import { pendingRescheduleVisibility } from '../src/leads/reschedule.ts'
 import { listTourChangeRequests, reviewTourChangeRequest, TourChangeRequestError } from '../src/leads/tour-change.ts'
+import { decideFollowUp, presentFollowUp, FollowUpDecisionError } from '../src/leads/followup-decisions.ts'
+import { isSameOriginJsonRequest } from '../src/auth/account-request.ts'
 
 /**
  * Lead profiles and the follow-up queue, for the operations dashboard.
@@ -82,7 +84,7 @@ export default async function handler(req: any, res: any) {
       res.status(200).json({
         profiles,
         tourChangeRequests,
-        ...pendingRescheduleVisibility(calendarState, followUps),
+        ...pendingRescheduleVisibility(calendarState, followUps.map(presentFollowUp)),
         ...feedback,
         ...descriptors,
         // Outbound is not enabled. The dashboard shows follow-ups as scheduled intentions,
@@ -95,6 +97,9 @@ export default async function handler(req: any, res: any) {
     }
 
     if (req.method === 'POST') {
+      if (!isSameOriginJsonRequest(req.headers ?? {})) {
+        res.status(403).json({error:'Reload the workspace before saving.',code:'staff_request_invalid'}); return
+      }
       let body: any
       try { body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body ?? {}) }
       catch { res.status(400).json({error:'Invalid JSON request.'}); return }
@@ -134,19 +139,15 @@ export default async function handler(req: any, res: any) {
       }
 
       if (action === 'followup_status') {
-        const id = String(body.id ?? '')
-        const status = String(body.status ?? '')
-        if (!/^fu-/.test(id) || !['scheduled', 'done', 'skipped'].includes(status)) {
-          res.status(400).json({ error: 'id must be a follow-up id and status one of scheduled|done|skipped' })
-          return
+        if (!runtime && req.headers?.['x-atrium-tenant-id'] === undefined) {
+          res.status(428).json({error:'Reload the workspace before updating follow-ups.',code:'portal_tenant_required'}); return
         }
-        const existing = await store.get<FollowUp>(followUpKey(id))
-        if (!existing) { res.status(404).json({ error: 'no such follow-up' }); return }
-        const updated = await store.update<FollowUp>(followUpKey(id), existing, (f) => {
-          if (f.superseded && status === 'scheduled') throw new RuntimeRequestError(409, 'tour_reminder_superseded', f.superseded.reason === 'tour_cancelled' ? 'This reminder belongs to a cancelled tour and cannot be reopened.' : 'This reminder belongs to an earlier tour time. Use the current tour’s follow-up instead.')
-          return { ...f, status: status as FollowUp['status'] }
-        })
-        res.status(200).json({ followUp: updated })
+        if (Object.keys(body).some(key => !['action','id','status','requestId','expectedSha256'].includes(key))) {
+          throw new FollowUpDecisionError(400, 'followup_command_invalid', 'Unexpected follow-up command fields.')
+        }
+        const result = await decideFollowUp(store, {id:body.id,status:body.status,requestId:body.requestId,expectedSha256:body.expectedSha256}, feedbackActor, now)
+        if (runtime) await runtime.revalidate()
+        res.status(200).json(result)
         return
       }
 
@@ -182,6 +183,7 @@ export default async function handler(req: any, res: any) {
 
     res.status(405).json({ error: 'GET or POST only' })
   } catch (err) {
+    if (err instanceof FollowUpDecisionError) { res.status(err.status).json({error:err.message,code:err.code}); return }
     if (err instanceof TourChangeRequestError) {
       const status = err.code === 'tour_change_not_found' ? 404 : err.code === 'tour_change_conflict' ? 409 : 400
       const error = status === 404 ? 'This tour-change request is no longer available.' : status === 409
