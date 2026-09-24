@@ -1,9 +1,14 @@
 import rawProperty from '../data/property.json' with { type: 'json' }
 import { authorizeOps } from '../src/ops/session.ts'
-import { demoAssistantConfig } from '../src/vapi/config.ts'
+import { demoAssistantConfig, managedAssistantConfig } from '../src/vapi/config.ts'
 import { syncAssistant } from '../src/vapi/sync.ts'
-import { isPostgresRuntime, resolveOpsRuntime, readRuntimeError } from '../src/application/runtime.ts'
+import { isPostgresRuntime, resolveOpsRuntime, readRuntimeError, runtimeForRequest } from '../src/application/runtime.ts'
 import { verifyVoiceBackend } from '../src/vapi/contract.ts'
+import { randomUUID } from 'node:crypto'
+import { isSameOriginJsonRequest } from '../src/auth/account-request.ts'
+import { voiceReleaseStore } from '../src/database/voice-releases.ts'
+import { createManagedVoiceRelease, VoiceReleaseError } from '../src/vapi/managed-release.ts'
+import { vapiReleaseProvider } from '../src/vapi/release-provider.ts'
 
 /**
  * "Update the phone assistant" — pushes the repository's script and tools to Vapi.
@@ -14,7 +19,7 @@ import { verifyVoiceBackend } from '../src/vapi/contract.ts'
 export default async function handler(req: any, res: any) {
   res.setHeader('cache-control', 'no-store')
   res.setHeader('x-robots-tag', 'noindex, nofollow')
-  if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return }
+  if (!['GET', 'POST'].includes(req.method)) { res.status(405).json({ error: 'GET or POST only' }); return }
 
   let databaseMode: boolean
   try { databaseMode = isPostgresRuntime() }
@@ -24,6 +29,8 @@ export default async function handler(req: any, res: any) {
     return
   }
   if (databaseMode) {
+    req.atriumRequestId = randomUUID()
+    res.setHeader('x-request-id', req.atriumRequestId)
     try {
       const runtime = await resolveOpsRuntime(req, 'configure', new Date())
       if (runtime.assistantIds.length !== 1) {
@@ -32,17 +39,61 @@ export default async function handler(req: any, res: any) {
           : 'This property has no active voice assistant connected.', scope: runtime.responseScope })
         return
       }
-      // The existing publisher builds a bundled Larkin assistant. It cannot publish a
-      // customer property until a versioned configuration/action rollout is available.
-      res.status(409).json({ ok: false, code: 'property_assistant_publish_unavailable',
-        error: 'Property assistant publishing requires a coordinated configuration and webhook rollout. No changes were sent to Vapi.',
-        scope: runtime.responseScope })
+      if (process.env.VERCEL_ENV === 'preview') throw new VoiceReleaseError(409, 'voice_preview_disabled',
+        'Live assistant updates are disabled on preview deployments.')
+      let body = req.body
+      if (req.method === 'POST') {
+        if (!isSameOriginJsonRequest(req.headers ?? {}) || Object.keys(req.query ?? {}).length) {
+          throw new VoiceReleaseError(403, 'staff_request_invalid', 'Reload the property workspace before recording a voice release.')
+        }
+        if (typeof body === 'string' && Buffer.byteLength(body) <= 2048) { try { body = JSON.parse(body) } catch { body = null } }
+        const fields = body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body).sort().join(',') : ''
+        if (!body || !['prepare', 'publish', 'verify', 'cancel'].includes(body.action)
+          || fields !== (body.action === 'prepare' ? 'action,requestId' : body.action === 'verify' ? 'action,id' : 'action,id,reviewHash')
+          || typeof (body.action === 'prepare' ? body.requestId : body.id) !== 'string'
+          || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(body.action === 'prepare' ? body.requestId : body.id)
+          || (['publish', 'cancel'].includes(body.action) && (typeof body.reviewHash !== 'string' || !/^[a-f0-9]{64}$/.test(body.reviewHash)))) {
+          throw new VoiceReleaseError(400, 'voice_release_command', 'Choose a reviewed assistant release and its exact action.')
+        }
+      } else if (Object.keys(req.query ?? {}).some(k => k !== 'id')
+        || (req.query?.id !== undefined && (typeof req.query.id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(req.query.id)))) {
+        throw new VoiceReleaseError(400, 'voice_release_command', 'Choose a saved assistant release.')
+      }
+      const origin = configuredServerOrigin(), apiKey = process.env.VAPI_PRIVATE_KEY ?? process.env.VAPI_API_KEY
+      const credentialId = process.env.VAPI_WEBHOOK_CREDENTIAL_ID?.trim(), providerOrganizationId = process.env.VAPI_ORGANIZATION_ID?.trim()
+      if (!origin || !apiKey?.trim() || !process.env.VAPI_WEBHOOK_SECRET?.trim() || !credentialId
+        || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(credentialId) || !providerOrganizationId
+        || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(providerOrganizationId)) {
+        throw new VoiceReleaseError(503, 'voice_release_configuration', 'The production voice destination, provider account and saved webhook credential need administrator configuration.')
+      }
+      let generated
+      try { generated = managedAssistantConfig(runtime.snapshot, runtime.scope, origin) }
+      catch { throw new VoiceReleaseError(409, 'voice_property_configuration', 'Review the published property name, address and timezone before preparing its assistant.') }
+      const service = createManagedVoiceRelease({
+        store: voiceReleaseStore(runtimeForRequest(req).app, runtime),
+        context: { organizationId: runtime.scope.organizationId, propertyId: runtime.scope.propertyId,
+          configurationVersion: runtime.snapshot.version, bindingFingerprint: runtime.bindingFingerprint,
+          assistantId: runtime.assistantIds[0]!, providerOrganizationId },
+        config: { ...generated, server: { ...generated.server, credentialId } },
+        actorId: runtime.scope.actor.kind === 'user' ? runtime.scope.actor.userId : '',
+        provider: vapiReleaseProvider(apiKey), authorize: () => runtime.revalidate(),
+        backendReady: () => verifyVoiceBackend(origin),
+      })
+      const result = req.method === 'GET' ? req.query?.id ? await service.read(req.query.id) : await service.list()
+        : body.action === 'prepare' ? await service.prepare(body.requestId)
+          : body.action === 'publish' ? await service.publish(body.id, body.reviewHash)
+            : body.action === 'cancel' ? await service.cancel(body.id, body.reviewHash) : await service.verify(body.id)
+      await runtime.revalidate()
+      res.status(200).json({ ...result, scope: runtime.responseScope })
     } catch (error) {
+      if (error instanceof VoiceReleaseError) { res.status(error.status).json({ error: error.message, code: error.code }); return }
       const result = readRuntimeError(error)
       res.status(result.status).json(result.body)
     }
     return
   }
+
+  if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return }
 
   const auth = authorizeOps(req.headers ?? {}, new Date())
   if (!auth.ok) {

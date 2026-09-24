@@ -371,8 +371,8 @@ test('database assistant sync checks configure permission and never publishes th
   const before = upstreamRequests.length
   assert.equal((await http('POST', '/api/vapi-sync', {}, headers('viewer-a'))).status, 403)
   const response = await http('POST', '/api/vapi-sync', {}, headers('owner-b', 'property-b1', 'organization-b'))
-  assert.equal(response.status, 409)
-  assert.equal(response.body.code, 'property_assistant_publish_unavailable')
+  assert.equal(response.status, 403)
+  assert.equal(response.body.code, 'staff_request_invalid')
   assert.equal(upstreamRequests.length, before)
 })
 

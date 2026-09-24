@@ -1,0 +1,10 @@
+.voice-release{display:grid;gap:16px;min-width:0;overflow-wrap:anywhere}
+.voice-release p{margin:0 0 8px;line-height:1.55}
+.voice-release-summary{padding:16px;border:1px solid var(--border);border-radius:12px;background:var(--surface-alt,#f4f7fb)}
+.voice-release details{min-width:0;border-top:1px solid var(--border);padding-top:12px}
+.voice-release summary{cursor:pointer;padding:8px 0;font-weight:600}
+.voice-release pre{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;max-height:280px;overflow:auto;font-size:12px;line-height:1.6;padding:12px;background:#f4f7fb;color:#182b49;border-radius:8px}
+.voice-release-check{display:flex;align-items:flex-start;gap:10px;line-height:1.5}
+.voice-release-check input{flex:0 0 auto;margin-top:4px;min-width:18px;min-height:18px}
+.voice-release-history ol{display:grid;gap:10px;padding-left:20px}
+.voice-release .btn{white-space:normal;text-align:left;min-height:44px;max-width:100%}

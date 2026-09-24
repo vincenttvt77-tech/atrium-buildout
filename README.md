@@ -66,6 +66,12 @@ Work queue. Calling requires a reviewed property website/voice binding and serve
 challenge configuration; publication alone enables no live dialing. See
 [website callback setup and acceptance](docs/website-callbacks.md).
 An empty queue is not proof that every business workflow has been integrated.
+Managed **Status → Review phone assistant** prepares a property-specific script/tool
+release, preserves selected voice/model settings and checks saved provider state
+after publication. Uncertain updates stay visible and cannot be blindly repeated.
+This requires a verified production connection and current configure permission;
+it does not create an assistant or change its phone routing. See
+[managed voice releases](docs/managed-voice-releases.md) for rollout limits.
 
 **Calls → Listen to the recording** checks current workspace access and the call's
 Vapi assistant ownership before requesting a fresh, short-lived recording link.

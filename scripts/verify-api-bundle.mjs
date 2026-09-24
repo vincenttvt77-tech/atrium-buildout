@@ -26,7 +26,7 @@ const probe = String.raw`
       status(code) { this.code = code; return this; },
       json(body) { this.body = body; }, send(body) { this.body = body; }, end(body) { this.body = body; } };
     await loaded.default({ method: 'GET', headers: {}, query: {}, body: undefined }, res);
-    const expected = file === 'vapi-sync.mjs' || process.env.ATRIUM_RUNTIME_MODE && ['website-callbacks.mjs', 'callbacks.mjs'].includes(file) ? 405
+    const expected = file === 'vapi-sync.mjs' && !process.env.ATRIUM_RUNTIME_MODE || process.env.ATRIUM_RUNTIME_MODE && ['website-callbacks.mjs', 'callbacks.mjs'].includes(file) ? 405
       : ['properties.mjs', 'account.mjs', 'mfa.mjs', 'tour-confirmations.mjs', 'tour-cancellation-emails.mjs', 'tour-change-resolutions.mjs', 'tour-contacts.mjs', 'tour-cancellations.mjs', 'email-reconciliation.mjs', 'website-callbacks.mjs', 'callbacks.mjs', 'workflows.mjs', 'organizations.mjs', 'resident-services.mjs', 'maintenance-plans.mjs', 'resident-access.mjs', 'resident.mjs', 'resident-consent.mjs', 'maintenance-consent.mjs'].includes(file) && !process.env.ATRIUM_RUNTIME_MODE ? 404 : 503;
     assert.equal(res.code, expected, file + ': incomplete runtime must refuse without contacting a service');
     assert.match(String(res.headers['cache-control']), /no-store/, file + ': private response must not be cached');

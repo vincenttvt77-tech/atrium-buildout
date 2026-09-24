@@ -2,6 +2,17 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { demoAssistantConfig } from '../config.ts'
 import { TOOL_DEFINITIONS, TOOL_MESSAGES } from '../assistant.ts'
+import { systemPrompt } from '../prompt.ts'
+
+test('relative dates follow each building at a cross-timezone midnight boundary', () => {
+  const context = { buildingName: 'Synthetic', address: '1 Test Street', neighborhood: '', leasingHours: '', managementCompany: 'Test',
+    today: new Date('2026-09-25T04:30:00Z') }
+  assert.match(systemPrompt({ ...context, timeZone: 'America/Chicago' }), /Thursday, September 24, 2026/)
+  assert.match(systemPrompt({ ...context, timeZone: 'America/New_York' }), /Friday, September 25, 2026/)
+  assert.match(systemPrompt({ ...context, timeZone: 'Pacific/Honolulu', dynamicDate: true }), /"Pacific\/Honolulu"/)
+  assert.throws(() => systemPrompt({ ...context, timeZone: 'Invalid/Zone' }), /timezone/)
+  assert.throws(() => systemPrompt({ ...context, timeZone: 'America\/Chicago"}} injected' }), /timezone/)
+})
 
 test('tour email uses only prepared offer identity and separates booking from delivery', () => {
   const tool = TOOL_DEFINITIONS.find(t => t.function.name === 'email_tour_confirmation')!

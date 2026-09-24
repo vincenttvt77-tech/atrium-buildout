@@ -133,7 +133,7 @@ export class DatabaseRuntime {
     let tourSettings: TourSettings
     try { tourSettings = validateSettings(snapshot.property.tourSettings) }
     catch { throw new PropertyConfigurationError('property_configuration_invalid', 'property.tourSettings') }
-    const readBindings = () => propertyTransaction(this.app, scope, 'read', async client => {
+    const readBindings = () => propertyTransaction(this.app, scope, permission, async client => {
       return (await client.query<{id:string; external_id:string; permission_version:string}>(
         `SELECT id,external_id,permission_version FROM atrium.channel_bindings
          WHERE organization_id=$1 AND property_id=$2 AND provider='vapi' AND status='active' ORDER BY id`,

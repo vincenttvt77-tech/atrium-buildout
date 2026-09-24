@@ -1,3 +1,5 @@
+import { DEFAULT_TIME_ZONE, validateTimeZone } from '../calendar/time.ts'
+
 export interface PromptContext {
   buildingName: string
   address: string
@@ -14,6 +16,8 @@ export interface PromptContext {
   /** Injected so the model never has to guess the year when converting "two months". */
   today?: Date
   dynamicDate?: boolean
+  /** Managed properties supply their validated building timezone explicitly. */
+  timeZone?: string
   /** Fictional property used for product demonstrations, never an actual rental offering. */
   demo?: boolean
 }
@@ -26,8 +30,9 @@ export interface PromptContext {
  * be the safety mechanism. Anything that would be a real problem if ignored lives in code.
  */
 export function systemPrompt(ctx: PromptContext): string {
-  const today = ctx.dynamicDate ? '{{"now" | date: "%A, %B %d, %Y, %I:%M %p", "America/New_York"}}' : (ctx.today ?? new Date()).toLocaleDateString('en-US', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/New_York',
+  const timeZone = validateTimeZone(ctx.timeZone ?? DEFAULT_TIME_ZONE)
+  const today = ctx.dynamicDate ? `{{"now" | date: "%A, %B %d, %Y, %I:%M %p", "${timeZone}"}}` : (ctx.today ?? new Date()).toLocaleDateString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone,
   })
 
   return `You answer the leasing line at ${ctx.buildingName}, ${ctx.address}. You work for ${ctx.managementCompany}.
