@@ -1,0 +1,33 @@
+{
+  "verifiedAt": "2026-09-24T21:07:08.735731+00:00",
+  "commit": "2dbd05b15c0804bc7f42d58b2504c423675dfd02",
+  "runId": 36057572927,
+  "status": "completed",
+  "conclusion": "success",
+  "url": "https://github.com/vincenttvt77-tech/atrium-buildout/actions/runs/36057572927",
+  "verifyJob": {
+    "id": 107828289292,
+    "applicationTests": 1814,
+    "databaseTests": 726,
+    "failed": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "apiHandlersBuiltAndSmokeChecked": 26
+  },
+  "browserJob": {
+    "id": 107828288977,
+    "groupsPassed": 8,
+    "widths": [
+      320,
+      390,
+      1280
+    ],
+    "realProviderCalls": 0,
+    "screenshotArtifactId": 10832898348,
+    "artifactRetentionDays": 7
+  },
+  "limits": [
+    "Synthetic source/CI verification, not hosted pilot or real phone/inbox acceptance",
+    "Local interrupted failures preserved in report; cloud pass does not prove their exclusive root cause"
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "startedAt": "2026-09-24T20:57:22.451Z",
+  "finishedAt": "2026-09-24T20:57:25.387Z",
+  "origin": "https://ghost-building.vercel.app",
+  "status": "read_only_checks_failed",
+  "scope": "Unauthenticated HTTP preflight only; not full demo, phone, security or future-uptime acceptance.",
+  "checks": [
+    {
+      "id": "website",
+      "path": "/",
+      "status": "pass",
+      "code": "html_served",
+      "detail": "Public HTML is served. Rendering and assets need browser acceptance.",
+      "httpStatus": 200,
+      "elapsedMs": 2842
+    },
+    {
+      "id": "storage",
+      "path": "/api/health",
+      "status": "pass",
+      "code": "persistent_storage_reported",
+      "detail": "Health reports a connected persistent store.",
+      "httpStatus": 200,
+      "elapsedMs": 2904
+    },
+    {
+      "id": "backend_tool_contract",
+      "path": "/api/health",
+      "status": "fail",
+      "code": "contract_unverified",
+      "detail": "Backend tool contract could not be matched to this checkout.",
+      "httpStatus": 200,
+      "elapsedMs": 2904
+    },
+    {
+      "id": "history_configuration",
+      "path": "/api/health",
+      "status": "pass",
+      "code": "key_presence_reported",
+      "detail": "Health reports a history key is configured; provider authentication was not tested.",
+      "httpStatus": 200,
+      "elapsedMs": 2904
+    },
+    {
+      "id": "sign_in_page",
+      "path": "/api/dashboard",
+      "status": "pass",
+      "code": "sign_in_required",
+      "detail": "Unauthenticated access returns the expected sign-in form. No login was attempted.",
+      "httpStatus": 401,
+      "elapsedMs": 2841
+    },
+    {
+      "id": "access_vapi",
+      "path": "/api/vapi",
+      "status": "pass",
+      "code": "unauthenticated_request_refused",
+      "detail": "The application refuses this unauthenticated request.",
+      "httpStatus": 401,
+      "elapsedMs": 2820
+    },
+    {
+      "id": "access_calendar",
+      "path": "/api/calendar",
+      "status": "pass",
+      "code": "unauthenticated_request_refused",
+      "detail": "The application refuses this unauthenticated request.",
+      "httpStatus": 401,
+      "elapsedMs": 2798
+    },
+    {
+      "id": "access_leads",
+      "path": "/api/leads",
+      "status": "pass",
+      "code": "unauthenticated_request_refused",
+      "detail": "The application refuses this unauthenticated request.",
+      "httpStatus": 401,
+      "elapsedMs": 2833
+    }
+  ],
+  "unverified": [
+    "Authenticated sign-in and property isolation",
+    "Authenticated dashboard data and browser interactions",
+    "Vapi credit, published assistant and webhook credential equality",
+    "Live tool execution, phone audio and response latency",
+    "Booking, rescheduling, notifications and other writes",
+    "Future uptime and deployment commit identity"
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "checkedAt": "2026-09-24T20:58:21.081Z",
+  "origin": "https://ghost-building.vercel.app",
+  "httpStatus": 200,
+  "ok": true,
+  "store": "kv",
+  "durable": true,
+  "callHistoryConfigured": true,
+  "deployedVoiceContract": {
+    "version": 1,
+    "toolSchemaSha256": "fea94b5f3600f6764a1b803b05fc86757e91c85e9cf7a86b98abf0ca6f606c6d"
+  },
+  "checkoutCommit": "2dbd05b15c0804bc7f42d58b2504c423675dfd02",
+  "checkoutVoiceContract": {
+    "version": 1,
+    "toolSchemaSha256": "2be3375c859707b38c6c8b8232931dae4eb33fc7e6eb58e2481ab594edad4769"
+  },
+  "limits": [
+    "Public unauthenticated health only",
+    "Does not identify the deployed commit",
+    "Does not inspect the saved Vapi assistant",
+    "Does not prove a phone call or provider authentication"
+  ]
+}

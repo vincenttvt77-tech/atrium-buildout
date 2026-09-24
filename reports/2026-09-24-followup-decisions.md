@@ -1,8 +1,9 @@
 # Reliable staff follow-up decisions — September 24, 2026
 
 AT154, Codex root. Branch `codex/at154-followup-decisions`, base
-`66e011495acfd77bf85bebee21d2dfd643ac74e6`. Source is published for cloud verification;
-final acceptance is pending. This is not a production rollout or a voice change.
+`66e011495acfd77bf85bebee21d2dfd643ac74e6`. Source and cloud verification are complete for commit
+`2dbd05b15c0804bc7f42d58b2504c423675dfd02`. Independent review and hosted acceptance
+remain separate. This is not a production rollout or a voice change.
 
 ## Changed behavior
 
@@ -23,7 +24,24 @@ No database migration or application dependency is added. See the
 [contract and rollback limits](../docs/followup-decisions.md). The previous unchecked
 status writer is not a safe rollback after staff begin using this history.
 
-## Actual local evidence and unresolved checks
+## Final cloud acceptance
+
+[Run36057572927](https://github.com/vincenttvt77-tech/atrium-buildout/actions/runs/36057572927)
+is terminal SUCCESS for exact source2dbd05b. Decoded logs verify1,814 application
+checks,726 native PostgreSQL/HTTP tests and26 API handlers built/smoke-checked, with
+zero failures, cancellations or skips. The separate Chromium job passed all8
+mobile/desktop/recovery groups, including the real15-second timeout and route
+retirement. Zero real provider requests. The previously failed local cases passed
+this uninterrupted cloud run; that does not prove every local failure had only one
+cause. Stop polling the completed run. See [the exact acceptance record](evidence/2026-09-24-pilot/cloud-acceptance.json).
+
+The original local results below remain a chronological failure record; they are
+not the final source acceptance result. GitHub publication initially failed because
+the computer token lacked workflow scope. The connected GitHub app successfully
+published the reviewed test workflow using its own authorized access; a normal
+merge preserved that commit and the application commit. No force push was used.
+
+## Earlier local evidence and failures
 
 - Seven new domain cases cover exact retries, stale decisions, new source context,
   changed actor/payload, retired/deleted records, malformed history and the retained
@@ -38,7 +56,7 @@ status writer is not a safe rollback after staff begin using this history.
   passed 1,812 of 1,814, failing two unrelated subprocess timeout checks after roughly
   513 seconds each. It is NOT counted as full final acceptance.
 - The last full native run passed 722 of 726, with three failures and one cancelled
-  timeout. Open cases: unavailable email sender reconciliation, vendor-review expiry,
+  timeout. Cases that failed locally: unavailable email sender reconciliation, vendor-review expiry,
   administration proof expiry and resident-consent expiry while waiting on a receipt.
   The earlier readback-origin expiry case passed this run. Do not dismiss remaining
   failures as environmental until they pass uninterrupted verification.
@@ -63,8 +81,8 @@ runner with pinned Playwright 1.62.1, temporary test tooling, synthetic data and
 live provider requests. Screenshots are retained seven days. Existing application,
 native database and build checks remain required. This follows the documented
 [Playwright CI installation flow](https://playwright.dev/docs/ci); it does not require
-a paid call, cloud database or GPU. Exact cloud run/results will be recorded after
-publication, including any actual defects it exposes.
+a paid call, cloud database or GPU. The exact successful cloud results are recorded above; hosted and actual-provider
+acceptance remain separate.
 
 ## Owner to-dos
 
@@ -78,8 +96,8 @@ no new voice, generated sample, GPU rental or measured latency gain is claimed.
 
 ## Next Codex/Fable to-dos and reciprocal handoff
 
-Verify the exact published commit's application/database/build and browser jobs.
-Resolve reproduced failures, independently review the decision/receipt/CSRF boundary,
+The exact published commit's application/database/build and browser jobs passed.
+Independently review the decision/receipt/CSRF boundary,
 and check mobile recovery and completed-list navigation. Keep cloud source evidence
 separate from managed Preview and actual phone/inbox acceptance. No hosted migration,
 production promotion, Vapi edit/publication or AT129 approval workaround occurred.

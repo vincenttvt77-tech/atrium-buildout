@@ -871,3 +871,24 @@ AT154 recovery/visibility scope: completed tasks with future due dates were hidd
 AT154 verification scope update September24: replacement26896 ended719/726 with7 failures:6 missing-Origin legacy native fixtures (ops-http and unit-feedback, now corrected), plus a183-second delivery-readback expiry case still requiring uninterrupted verification. Final application run43313 ended1812/1814 with two approximately513-second subprocess timeouts; browser61834 reached real15-second recovery but timed out while the Mac was sleeping. Neither is accepted as a pass. Final database45761 remains active; preserve its handle. Add .github/workflows/quality.yml isolated Chromium job using pinned test-only Playwright1.62.1 in runner temp, so browser and existing whole-suite checks can run without local sleep. No app dependency or runtime expiry changes. Publish the scoped branch for cloud verification with explicit pending status; do not call it integration-ready or promote production. Include test/database/unit-feedback.test.mjs Origin fixture correction in scope.
 
 AT154 cloud handoff 2026-09-24T20:46:33.016541+00:00: local final1812/1814 application,722/726 native (3fail1cancel); all9 new follow-up cases passed,26-handler build smoke completed. Latest Chrome6 groups reached before timeout; whole browser not accepted. Added separate CI Chromium job to escape repeated Mac sleep. Publishing verification branch with explicit pending acceptance, not production. See reports/2026-09-24-followup-decisions.md. Local handles43313/61834/45761 terminal exit1.
+
+AT154 publication 2026-09-24T20:51:36.262187+00:00: 2dbd05b15c0804bc7f42d58b2504c423675dfd02 remote verified on codex/at154-followup-decisions, clean worktree. Original15196b4 preserved with authorized GitHub-app workflow9c57d6a merge after local token lacked workflow scope. Run36057572927 in_progress is the exact acceptance target; full verification still pending, no production/voice/provider changes. Owner and reciprocal next actions in source report and outer EOD/Fable.
+
+# Cloud browser acceptance — 2026-09-24T20:55:07.910453+00:00
+
+Exact source2dbd05b cloud run36057572927: browser job107828288977 is terminal SUCCESS.
+Decoded logs verify all8 real Chromium groups:320/390/1280px, safe staff completion
+and reopen, stale Undo, lost committed reply with a newer decision, changed context,
+real15-second recovery and route retirement. Zero provider calls. Screenshot artifact
+10832898348 is retained7days. Do not poll the completed browser job again.
+
+Application step also passed; native database and final build remain in progress
+in job107828289292. Keep this same handle. Overall source acceptance is pending;
+local interrupted failures remain in the report. No production or voice change.
+
+
+### AT-155 — Pilot acceptance audit and rollout order
+
+Root coordinator claims 2026-09-24T21:00:17.447244+00:00. Previous goal turn: progress (published2dbd05b plus verified8 cloud Chromium groups); current exact verify job107828289292 remains authoritatively in_progress, not restarted. Base2dbd05b15c0804bc7f42d58b2504c423675dfd02, branch codex/at155-pilot-readiness, worktree ../atrium-pilot-readiness. Documentation/evidence scope: new reports/2026-09-24-pilot-readiness.md and redacted public preflight JSON; AT154 report cloud addendum only after exact result; canonical board/status, outer EOD/Fable. Read current source/tests and public runtime to map every numbered goal, metrics and release gate to actual evidence, open failures, owner inputs and sequenced next actions. Do not equate tests with a hosted pilot; do not add unrelated features to avoid activation prerequisites. No application/provider/credential/deployment change, paid trial or AT129 bypass. Documentation paths and assertions verified before publication. Preserve canonical uncommitted calendar work.
+
+AT154 final cloud acceptance 2026-09-24T21:07:08.735731+00:00:2dbd05b15c0804bc7f42d58b2504c423675dfd02 /run36057572927 terminal SUCCESS;1814 application,726 native DB,26-handler build and8 Chromium groups passed with zero failures/cancellations/skips. Decoded logs verified. Stop polling. Earlier local failures remain recorded. State review for independent/hosted acceptance. No live deployment/provider/voice/paid change; goal active. AT155 audit identifies the managed publisher refusal as the next source release gap.
