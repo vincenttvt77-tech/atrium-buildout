@@ -64,8 +64,8 @@ GET remains405. None of these changes relax tenant isolation or write admission.
 
 ## Remaining acceptance and limitations
 
-Source acceptance is not hosted or phone acceptance. Exact-source cloud CI and a
-review of the new provider behavior remain next. No live account normalization,
+Source acceptance is not hosted or phone acceptance. See the dated cloud result
+addendum below; independent review of the new provider behavior remains next. No live account normalization,
 credential-to-webhook match or phone routing has been proved by the synthetic
 provider. Strict saved-field comparison conservatively leaves unexpected defaults
 unconfirmed. The reviewed Vapi API exposes no demonstrated conditional version
@@ -107,3 +107,21 @@ commits/deployments, actual checks and failures, remaining limitations, owner to
 and next-agent to-dos. Preserve unrelated uncommitted calendar work in the canonical
 `atrium-buildout` checkout. This task's isolated application worktree is
 `atrium-managed-voice`; all source changes there belong to AT-156.
+
+## Source publication and cloud browser evidence — September 25, 2026
+
+Application commit `bca58bd0600d891bc38dc070b327f9704f15b756` is published on
+`codex/at156-managed-voice`, independently verified against GitHub. This report's
+following evidence-only update changes no application source. The first push
+approval review timed out before execution; its permitted retry succeeded.
+
+[Exact-source run 36138780810](https://github.com/vincenttvt77-tech/atrium-buildout/actions/runs/36138780810):
+browser job108083186005 completed successfully. Decoded logs confirm eight existing
+staff follow-up and eight new managed voice scenario groups on actual Chromium,
+including320/390/1280px, lost replies, stale reviews, unresolved history and actual
+15-second timeouts. Zero real provider calls; no voice browser errors. Screenshots
+are retained for seven days as artifact10866220784. Do not poll that terminal job.
+
+At this observation the application check passed; native database and final build
+remain pending in job108083185552. Keep that live handle and do not restart it.
+Whole goal remains active. No live deployment or assistant change is established.
