@@ -95,18 +95,27 @@ initialized schema or regenerate role passwords to solve a failed phase.
 
 ## Activation and acceptance
 
-1. Preserve the existing production Vapi webhook secret, Vapi private key, assistant
-   routing and canonical webhook URL. Publish no assistant changes for this same
-   Larkin database switch; the PostgreSQL assistant publisher is intentionally
-   unavailable. Check that no call is active at cutover.
+1. Compare the currently saved assistant and deployed backend with the reviewed
+   release's tool contract. Preserve the existing production webhook secret,
+   provider key, routing and canonical webhook URL. A database-only switch with
+   an unchanged contract does not itself require an assistant update. If the
+   source release changes the tools or prompt, plan the separate
+   [managed assistant review and publication](managed-voice-releases.md) after
+   the new backend passes readiness; verify the saved provider result and actual
+   authenticated tool calls before accepting the voice channel. The managed
+   publisher is implemented; it is not invoked by this bootstrap procedure.
+   Preserve the selected voice/model and any editor draft. Check that no call is
+   active at cutover. This runbook does not override a pending release approval.
 2. Set the generated five runtime variables in Vercel **Production** together:
    `ATRIUM_RUNTIME_MODE`, `ATRIUM_DATABASE_URL`, `ATRIUM_AUTH_DATABASE_URL`,
    `OPS_SESSION_SECRET`, and `ATRIUM_AUTH_ORIGIN`. Add the optional CA if supplied.
    Never deploy the maintenance credentials. Keep preview configuration separate.
-3. Deploy the reviewed source with these production settings. Verify `/api/health`
+3. Within the approved release, deploy the reviewed source with these production settings. Verify `/api/health`
    reports `store: "postgres"`, `ok: true`, `durable: true` and the expected voice
    contract. Its `callHistory: false` currently says nothing about Vapi-key health;
-   verify the authorized Calls view separately.
+   verify the authorized Calls view separately. If step 1 found a changed voice
+   contract, complete the separately reviewed assistant update and saved-state
+   check now. A healthy backend alone does not synchronize its tools to Vapi.
 4. Send unique, clearly synthetic Vapi-shaped webhook events directly to the
    backend, using the existing authentication secret. Check rejected credentials,
    unknown assistant IDs, contact capture, availability, tour-slot reads and

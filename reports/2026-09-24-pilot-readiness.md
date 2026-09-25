@@ -11,6 +11,27 @@ and preserved; they are excluded from this published-source audit. This is not a
 independent code review or an assertion that all defects have been found.
 The [full leasing goal](../docs/leasing-goal.md) remains unchanged and active.
 
+### September 25 source update
+
+The managed assistant publication gap described in this historical audit has since
+been implemented and verified in source. The [managed release contract](../docs/managed-voice-releases.md)
+now covers property-bound review, current authorization, single dispatch and
+saved-provider verification. Subsequent fixes address unverified inherited
+knowledge and concurrent publication recovery. Exact application commit
+`94ac317f0a8b3cbf18a5250de0caa3983d10461e` passed 1,842 application tests, 738
+PostgreSQL tests, 26 browser scenario groups and the 26-handler build in cloud
+run 36152686990. See the [accepted evidence and handoff](2026-09-25-voice-publish-race.md).
+
+This supersedes the source-level publisher-unavailable statement and its proposed
+implementation task below. Hosted account/channel acceptance, real notification
+delivery, measured voice trials and the representative pilot evaluation remain
+pending. The separate test database was still absent on September 25 at 15:21 UTC.
+The prepared Free-project form now awaits specific approval for a fresh private
+credential and project submission. Production promotion remains a separate gate.
+Next agents should perform the remaining hosted acceptance when configured, not
+reimplement the completed managed publisher. End with a reciprocal handoff and
+separate owner/agent to-dos.
+
 ## Fresh runtime evidence
 
 The read-only preflight ran against `https://ghost-building.vercel.app` at
