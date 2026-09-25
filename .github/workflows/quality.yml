@@ -41,6 +41,11 @@ jobs:
         env:
           ATRIUM_PLAYWRIGHT_MODULE: ${{ runner.temp }}/atrium-browser-tools/node_modules/playwright/index.mjs
           ATRIUM_BROWSER_ARTIFACTS: ${{ runner.temp }}/atrium-followup-browser/voice
+      - name: Verify call evidence in Chromium
+        run: node test/browser/call-evidence.mjs
+        env:
+          ATRIUM_PLAYWRIGHT_MODULE: ${{ runner.temp }}/atrium-browser-tools/node_modules/playwright/index.mjs
+          ATRIUM_BROWSER_ARTIFACTS: ${{ runner.temp }}/atrium-followup-browser/call-evidence
       - uses: actions/upload-artifact@v5
         if: ${{ !cancelled() }}
         with:
