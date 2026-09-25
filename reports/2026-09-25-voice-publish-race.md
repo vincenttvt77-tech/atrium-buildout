@@ -57,8 +57,28 @@ Vapi cannot be edited later by another administrator.
   concurrent HTTP test.
 - Final `npm run build`: passed, including import/refusal checks for **26 API
   handlers**. The dashboard assets were unchanged. No new local browser run was
-  needed for this backend-only fix; exact-commit cloud/browser checks remain pending
-  until the new branch is published and those jobs finish.
+  needed for this backend-only fix; the exact-commit cloud/browser results below
+  provide the subsequent verification.
+
+### Exact published cloud acceptance
+
+At 2026-09-25 15:23 UTC, [run 36152686990](https://github.com/vincenttvt77-tech/atrium-buildout/actions/runs/36152686990)
+completed successfully for published application commit
+`94ac317f0a8b3cbf18a5250de0caa3983d10461e` on
+`codex/at161-voice-publish-race`. Decoded job logs confirm **1,842 application
+tests**, **738 PostgreSQL tests**, and the build with **26 API handlers**, all
+passing. Application and database suites had no failures, cancellations or skips.
+
+The separate browser job passed **26 scenario groups**: eight staff follow-up,
+nine managed voice release and nine call-evidence groups, including 320, 390 and
+1,280-pixel layouts. These used synthetic responses and no real provider calls;
+they do not establish hosted authentication, phone quality or actual latency.
+Both jobs are terminal. Preserve the failed parent run as the original defect
+evidence; no further polling or rerun of either completed run is needed.
+
+At 15:21 UTC, the Atrium Demo Supabase organization still listed only the paused
+existing Larkin project; no isolated Preview project was present. That owner setup
+remains required for hosted verification. This read-only check created no resource.
 
 The deterministic tests coordinate requests with explicit gates instead of hoping
 the runner produces a particular timing. The original concurrency assertion still
@@ -77,9 +97,10 @@ Owner: finish isolated Preview project/private setup; provide a bounded funded
 voice trial, approved pilot facts and representative permissioned calls. Choose
 the Black American/Latina female voice after comparable listening samples.
 
-Codex/Fable: verify the exact new commit and cloud run, retaining the failed parent
-run as evidence. Then complete hosted account/property/booking/recovery acceptance
-when configured. Keep the AT-129 production release gate intact. Do not describe
+Codex/Fable: the exact application commit and cloud run above are accepted source
+evidence; retain the failed parent run. Next complete hosted
+account/property/booking/recovery acceptance when configured. Keep the AT-129
+production release gate intact. Do not describe
 synthetic release tests as a live Vapi publication or a successful phone call.
 
 The latest saved-library recheck still did not find Leoni; do not blindly repeat
