@@ -3,8 +3,8 @@
 The PostgreSQL dashboard adds **Status → Review phone assistant** for current
 configuration managers. Review the proposed greeting, complete leasing prompt,
 nine tool definitions, webhook destination and timing changes, then explicitly
-publish that review. The selected voice, transcriber and model configuration,
-including a custom model endpoint, are preserved. This is not voice auditioning or
+publish that review. The selected voice, transcriber, model, generation settings
+and custom model endpoint are preserved. This is not voice auditioning or
 a model-hosting migration. No real provider was changed during implementation.
 
 The configuration comes from the selected property's validated, immutable published
@@ -13,6 +13,23 @@ validated timezone; they no longer assume New York. Mutable availability, rents,
 policies and booking decisions remain behind authorized property tools. No bundled
 Larkin fallback is used. This flow updates an existing, uniquely bound assistant;
 it does not create assistants, buy numbers, change routing or discard editor drafts.
+
+Managed publication replaces earlier provider knowledge attachments with the selected
+property's approved Atrium tools. An existing `model.knowledgeBase` file or custom
+knowledge server has no verified property provenance in this release workflow, so
+it is omitted from the complete replacement model. Original provider files are not
+deleted. The review explains this change before publication, and the prompt names
+`answer_question` for property knowledge. A retained or reintroduced attachment
+makes saved-state verification fail. A pre-existing prepared review requires a fresh
+review for this policy; already dispatched releases retain their original evidence.
+The legacy publisher remains separate and preserves its existing knowledge setting.
+
+Vapi documents that a model PATCH replaces the full model object in its
+[query-tool guide](https://docs.vapi.ai/knowledge-base/using-query-tool), checked
+September 25, 2026. Synthetic provider tests exercise this contract; actual account
+readback must still establish it before hosted acceptance. This does not authorize
+knowledge held inside a separately managed custom model service; that service needs
+its own property-data and retention review before a hosting trial.
 
 ## One-time deployment prerequisites
 

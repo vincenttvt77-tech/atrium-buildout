@@ -910,3 +910,38 @@ AT156 local acceptance 2026-09-24T21:53:44.921753+00:00: review. Implemented sco
 AT156 publication 2026-09-25T13:06:37.097374+00:00: sourcebca58bd0600d891bc38dc070b327f9704f15b756 published and independently verified on codex/at156-managed-voice; task worktree clean. Exact CIrun36138780810 active (verify108083185552/browser108083186005); keep handles, do not restart. Source report/reciprocal handoff accessible on GitHub. Cloud/hosted/phone acceptance pending; whole goal active.
 
 AT156 cloud browser acceptance 2026-09-25T13:10:50.304430+00:00: exact sourcebca58bd, run36138780810/browser108083186005 terminal SUCCESS. Decoded logs confirm16 Chromium groups (8 follow-up plus8 voice), zero real provider calls and no voice browser errors. Artifact10866220784 retained7days. Stop polling browser. Verify job108083185552 remains live in native database; app passed, final build pending. Whole goal active, no new live provider/deployment evidence.
+
+AT156 evidence publication: 5cf23552fdf085b66ebd34dc6d584650bc17d6f0 is independently verified on GitHub; task worktree clean. This documentation-only commit uses [skip ci]; tested application remains bca58bd0600d891bc38dc070b327f9704f15b756. Its exact run36138780810 and verify job108083185552 remain the active acceptance target. No replacement CI run was launched.
+
+### AT-157 — Managed voice knowledge provenance
+
+Claimed 2026-09-25T13:18:00.618442+00:00 by Codex root, coordinator. Previous goal turn: progress, published
+bca58bd implementation and5cf2355 evidence. Exact AT156 run36138780810/verify108083185552
+remains authoritatively live in native tests; keep it running. Browser terminal success.
+Base5cf23552fdf085b66ebd34dc6d584650bc17d6f0, branch codex/at157-voice-knowledge in existing
+isolated ../atrium-managed-voice (clean before claim). No other owner uses this worktree.
+Scope: src/vapi/managed-release.ts,prompt.ts and focused tests; ops/src/voice-release.js
+and generated dashboard; test/helpers/voice-release-fixture.mjs,
+test/database/voice-releases.test.mjs,test/browser/voice-releases.mjs; managed voice docs,
+new dated report, canonical board/status and outer EOD/Fable handoff. No dependency,
+workflow, schema or live provider change. Revalidated Vapi publishedv23 by fresh private
+UI export; still equals September22 export. It contains one provider knowledge file,
+seven inline tools and saved credential references, but exports omit provider id/orgId.
+Raw exports remain outside Git and must not enter reports.
+
+Confirmed source behavior: assistantPatch spreads existing.model including knowledgeBase;
+managed releases inherit it without property-source provenance. A reused/bound assistant
+could retain another building's file while receiving the new property's script/tools.
+Acceptance: managed review explains replacement of provider knowledge with approved
+property tools; preserve selected model/endpoint/voice/transcriber settings; exact saved
+readback must refuse retained/reintroduced foreign knowledge; old reviews cannot silently
+apply the changed release contract; keep legacy behavior explicit. Prove pre-fix failure
+with synthetic wrong-property knowledge, then focused/native/mobile and full checks.
+Official Vapi query-tool docs state PATCH replaces the entire model object; verify
+supported field semantics before constructing a clear operation. Source acceptance does
+not prove live removal or measured call accuracy. No assistant publication/draft edits,
+paid trial, hosted migration, production promotion or AT129 bypass.
+
+AT156 exact cloud acceptance 2026-09-25T13:26:19.935624+00:00: run36138780810 terminal SUCCESS, app1828/native735/build26handlers/browser16groups. Stop polling terminal jobs108083185552 and108083186005. Subsequent confirmed provider-knowledge carryover is under AT157; full goal/hosted acceptance remain active.
+
+AT157 local acceptance 2026-09-25T13:27:53.964159+00:00: review; app1831/native736/build26/focused22/HTTP-native10/browser9groups all pass. Two pre-fix regressions reproduced provider-knowledge carryover and false verification; corrected scoped knowledge replacement and fresh-review admission. No live provider/deployment change. Publish exact source and verify cloud next.

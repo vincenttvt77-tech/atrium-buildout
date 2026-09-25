@@ -32,12 +32,16 @@ try {
   for(const width of [320,390,1280]){
     await f.reset();await page.setViewportSize({width,height:900});await open();await prepare()
     const d=dialog();assert.equal(await d.getByRole('button',{name:'Publish reviewed release',exact:true}).isDisabled(),true)
+    assert.match(await d.innerText(),/property’s approved knowledge in Atrium/)
+    assert.match(await d.innerText(),/detaches earlier provider knowledge attachments/)
+    assert.doesNotMatch(await d.innerText(),/synthetic-other-property-file/)
     await d.locator('summary').filter({hasText:'Opening message and leasing script'}).click()
     assert.match(await d.innerText(),/America\/New_York/);assert.doesNotMatch(await d.innerText(),/The Larkin/)
     assert.ok(await d.evaluate(el=>el.scrollWidth<=el.clientWidth+1));assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1))
     if(artifacts&&width!==390)await page.screenshot({path:artifacts+'/voice-review-'+width+'.png',fullPage:true})
     await d.locator('[data-reviewed]').check();await d.getByRole('button',{name:'Publish reviewed release',exact:true}).press('Enter')
     await d.getByText('Saved configuration verified',{exact:true}).first().waitFor();assert.equal(writes(),1)
+    assert.equal(Object.hasOwn(f.saved.get('synthetic-release-assistant-a').model,'knowledgeBase'),false)
     await d.locator('.dlg-secondary').click();checks.push(width+'px keyboard review, protected publish, exact saved result and no horizontal overflow')
   }
   await f.reset();await open();await prepare();await dialog().locator('[data-reviewed]').check();lose=true
@@ -54,6 +58,12 @@ try {
   await dialog().getByRole('button',{name:'Check provider result',exact:true}).waitFor()
   await dialog().getByRole('button',{name:'Check provider result',exact:true}).click();assert.equal(writes(),1)
   await dialog().locator('.dlg-secondary').click();checks.push('reopening discovers unresolved release and offers verification instead of new publication')
+  await f.reset();await open();await prepare();f.voiceFlags.wrongKnowledge=true
+  await dialog().locator('[data-reviewed]').check();await dialog().getByRole('button',{name:'Publish reviewed release',exact:true}).click()
+  await dialog().getByText('Update unconfirmed',{exact:true}).first().waitFor()
+  assert.equal(await dialog().getByText('Saved configuration verified',{exact:true}).count(),0)
+  await dialog().getByRole('button',{name:'Check provider result',exact:true}).click();assert.equal(writes(),1)
+  await dialog().locator('.dlg-secondary').click();checks.push('retained foreign property knowledge stays visibly unconfirmed without a second write')
   await f.reset();await open();await prepare()
   await dialog().locator('[data-cancel-review]').click();await dialog().getByText('Review cancelled',{exact:true}).first().waitFor();assert.equal(writes(),0)
   await dialog().locator('.dlg-secondary').click();checks.push('unsubmitted review cancellation saves history without a provider write')

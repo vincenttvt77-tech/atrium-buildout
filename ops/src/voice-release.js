@@ -17,7 +17,7 @@ function checked(value, id) {
       || !Array.isArray(value.proposal.prompt) || !Array.isArray(value.proposal.tools)
       || value.proposal.prompt.some(m=>typeof m?.content!=='string')
       || value.proposal.tools.some(t=>typeof t?.function?.name!=='string')
-      || typeof value.proposal.serverUrl !== 'string')) throw new Error('The release response could not be verified. Check its saved result.')
+      || typeof value.proposal.serverUrl !== 'string' || value.proposal.knowledgeSource !== 'approved-property-tools')) throw new Error('The release response could not be verified. Check its saved result.')
   return value
 }
 function bounded(promise) {
@@ -37,7 +37,7 @@ function open() {
         (unconfirmed?'<p class="notice" role="status">The update may have reached the phone provider. Check the saved result; do not submit another update. A different saved configuration needs administrator review.</p>':
           r.state==='verified'?'<p class="notice" role="status">The reviewed settings matched the saved assistant at the last check. Test a phone call before relying on this release in a demonstration.</p>':
             !r.current?'<p class="notice">This review belongs to earlier property or application settings. Prepare a fresh review.</p>':'')+
-        (p?`<details><summary>Opening message and leasing script</summary><p>${esc(p.firstMessage)}</p><pre>${esc(p.prompt.map(m=>m.content).join('\n\n'))}</pre></details>`+
+        (p?'<p class="notice">Building answers will use this property’s approved knowledge in Atrium. This release detaches earlier provider knowledge attachments from the assistant. The original files remain in the provider account.</p>'+`<details><summary>Opening message and leasing script</summary><p>${esc(p.firstMessage)}</p><pre>${esc(p.prompt.map(m=>m.content).join('\n\n'))}</pre></details>`+
           `<details><summary>${p.tools.length} leasing tools and connection</summary><ul>${p.tools.map(t=>`<li>${esc(t.function.name)}</li>`).join('')}</ul><p>${esc(p.serverUrl)}</p><pre>${esc(JSON.stringify({tools:p.tools,startSpeakingPlan:p.startSpeakingPlan,stopSpeakingPlan:p.stopSpeakingPlan},null,2))}</pre></details>`:'')+
         (r.state==='prepared'&&r.current?`<label class="voice-release-check"><input type="checkbox" data-reviewed>I reviewed this property’s script, tools and connection. Apply this release to its live assistant.</label><p class="small">Review expires ${esc(A.fmt.dateTime(r.expiresAt))}. Avoid editing this assistant in Vapi while applying the release.</p><button type="button" class="btn" data-cancel-review>Cancel this review</button>`:''):'')+
       '<details class="voice-release-history"><summary>Release history</summary>'+(rows.length?`<ol>${rows.map((item,i)=>`<li><button type="button" class="btn" data-release="${i}">${esc(states[item.state])} · ${esc(A.fmt.dateTime(item.preparedAt))}</button></li>`).join('')}</ol>`:'<p>No saved releases for this assistant.</p>')+'</details>'+

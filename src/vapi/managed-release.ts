@@ -108,6 +108,9 @@ function verifyIdentity(value: JsonRecord, context: VoiceReleaseContext): void {
 
 function reviewedPatch(existing: JsonRecord, config: DemoAssistantConfig): Patch {
   const patch = assistantPatch(existing, config)
+  // Vapi replaces the complete model object. Provider files/custom knowledge servers
+  // have no authorized property provenance here; approved knowledge uses Atrium tools.
+  delete patch.model.knowledgeBase
   const containsMaskedValue = (value: unknown): boolean => value === '[REDACTED]'
     || Boolean(value && typeof value === 'object' && Object.values(value).some(containsMaskedValue))
   if (containsMaskedValue(patch)) throw new VoiceReleaseError(409, 'voice_provider_masked',
@@ -134,7 +137,9 @@ export function createManagedVoiceRelease(options: {
   const context = structuredClone(options.context), config = structuredClone(options.config)
   if (!validContext(context) || !id(actorId)) throw invalid()
   const key = `voice-release:${context.assistantId}`
-  const configurationHash = hashJson({ context, config })
+  // Older prepared reviews authorized retaining provider knowledge. Require a new
+  // review for this policy; dispatched records still verify against their saved hashes.
+  const configurationHash = hashJson({ context, config, knowledgePolicy: 'property-tools-v1' })
   const now = () => {
     const date = options.clock?.() ?? new Date()
     if (!Number.isFinite(date.getTime())) throw invalid()
@@ -170,6 +175,7 @@ export function createManagedVoiceRelease(options: {
     return { release: present(r), proposal: current ? { firstMessage: config.firstMessage,
       prompt: config.model.messages, tools: config.model.tools, serverUrl: config.server.url,
       startSpeakingPlan: config.startSpeakingPlan, stopSpeakingPlan: config.stopSpeakingPlan,
+      knowledgeSource: 'approved-property-tools',
       kept: ['voice', 'transcriber', 'model and custom endpoint', 'unrelated assistant settings'] } : null }
   }
   const ready = async () => {

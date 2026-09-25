@@ -61,6 +61,43 @@ test('simultaneous publish commands produce one provider write', async () => {
   assert.ok(results.every(r => ['sending', 'verified'].includes(r.release.state)))
 })
 
+test('managed publication removes another property knowledge attachment and keeps model connectivity', async () => {
+  const f = fixture()
+  f.saved.model.knowledgeBase = { provider: 'google', fileIds: ['synthetic-other-property-file'] }
+  const modelBefore = structuredClone(f.saved.model)
+  const p = await f.service.prepare('knowledge-review')
+  assert.equal(p.proposal!.knowledgeSource, 'approved-property-tools')
+  const result = await f.service.publish(p.release.id, p.release.reviewHash)
+  assert.equal(result.release.state, 'verified')
+  assert.equal(Object.hasOwn(f.saved.model, 'knowledgeBase'), false)
+  for (const key of ['provider', 'url', 'model', 'headers', 'temperature']) assert.deepEqual(f.saved.model[key], modelBefore[key])
+  assert.doesNotMatch(JSON.stringify(p), /synthetic-other-property-file/)
+})
+
+test('a provider retaining its previous knowledge attachment cannot be reported as verified', async () => {
+  const f = fixture(), write = f.provider.patch
+  const foreignKnowledge = { provider: 'google', fileIds: ['synthetic-other-property-file'] }
+  f.saved.model.knowledgeBase = foreignKnowledge
+  f.provider.patch = async (id, patch) => { await write(id, patch); f.saved.model.knowledgeBase = foreignKnowledge }
+  const p = await f.service.prepare('knowledge-review')
+  const result = await f.service.publish(p.release.id, p.release.reviewHash)
+  assert.equal(result.release.state, 'sending'); assert.equal(result.release.check, 'differs')
+  await assert.rejects(f.service.prepare('replacement-review'), /unconfirmed/)
+  assert.equal(f.calls.filter(c => c === 'PATCH').length, 1)
+})
+
+test('prepared reviews from before the knowledge policy require a fresh review', async () => {
+  const f = fixture(); await f.service.prepare('old-review')
+  const journal = await f.store.get<any>('voice-release:assistant-a'), r = journal.releases[0]
+  r.configurationHash = hashJson({ context: f.options.context, config: f.options.config })
+  const { reviewHash, state, ...content } = r
+  r.reviewHash = hashJson(content)
+  await f.store.set('voice-release:assistant-a', journal)
+  assert.equal((await f.service.read('old-review')).proposal, null)
+  await assert.rejects(f.service.publish('old-review', r.reviewHash), /changed/)
+  assert.equal(f.calls.filter(c => c === 'PATCH').length, 0)
+})
+
 test('lost PATCH reply is recovered by GET and never resubmitted', async () => {
   const f = fixture(), write = f.provider.patch
   f.provider.patch = async (id, patch) => { await write(id, patch); throw new Error('synthetic lost reply') }

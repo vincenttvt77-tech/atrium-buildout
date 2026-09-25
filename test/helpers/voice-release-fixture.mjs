@@ -11,7 +11,7 @@ export async function createVoiceReleaseFixture() {
   let provider
   const restore=()=>{globalThis.fetch=originalFetch;for(const key of Object.keys(process.env))if(!(key in originalEnv))delete process.env[key];Object.assign(process.env,originalEnv)}
   try {
-  const requests=[], saved=new Map(), flags={dropWrite:false,unavailable:false,wrongRoute:false,backend:true,beforeRead:null}
+  const requests=[], saved=new Map(), flags={dropWrite:false,unavailable:false,wrongRoute:false,wrongKnowledge:false,backend:true,beforeRead:null}
   provider=createServer(async(req,res)=>{
     try {
       const id=decodeURIComponent(req.url.split('/').at(-1)); assert.ok(saved.has(id),'only a synthetic bound assistant is read')
@@ -22,6 +22,7 @@ export async function createVoiceReleaseFixture() {
         assert.equal(journals.length,1);assert.equal(journals[0].value.releases.filter(r=>r.state==='sending').length,1)
         saved.set(id,{...saved.get(id),...JSON.parse(body)})
         if(flags.wrongRoute)saved.get(id).model.tools[0].server.url='https://foreign.example/api/vapi'
+        if(flags.wrongKnowledge)saved.get(id).model.knowledgeBase={provider:'google',fileIds:['synthetic-other-property-file']}
         if(flags.dropWrite){req.socket.destroy();return}
       } else if(flags.beforeRead) await flags.beforeRead({id,saved,requests})
       if(flags.unavailable&&req.method==='GET'){res.statusCode=503;res.end('sensitive-synthetic-outage');return}
@@ -43,12 +44,13 @@ export async function createVoiceReleaseFixture() {
   }
   async function reset(){
     await f.reset({cancelled:false});requests.length=0;saved.clear()
-    Object.assign(flags,{dropWrite:false,unavailable:false,wrongRoute:false,backend:true,beforeRead:null})
+    Object.assign(flags,{dropWrite:false,unavailable:false,wrongRoute:false,wrongKnowledge:false,backend:true,beforeRead:null})
     await f.db.admin.query("UPDATE atrium.memberships SET role=CASE WHEN user_id LIKE 'owner-%' THEN 'owner' WHEN user_id LIKE 'viewer-%' THEN 'viewer' ELSE 'staff' END; UPDATE atrium.channel_bindings SET status='inactive'")
     for(const letter of ['a','b']){
       const id='synthetic-release-assistant-'+letter
       saved.set(id,{id,orgId:'synthetic-provider-org',name:'Synthetic '+letter,voice:{provider:'synthetic',voiceId:'chosen-'+letter},
-        transcriber:{provider:'synthetic',language:'en'},model:{provider:'custom-llm',model:'synthetic-model',url:'https://model.example/v1',temperature:0.3},
+        transcriber:{provider:'synthetic',language:'en'},model:{provider:'custom-llm',model:'synthetic-model',url:'https://model.example/v1',temperature:0.3,
+          knowledgeBase:{provider:'google',fileIds:['synthetic-other-property-file']}},
         server:{url:'https://voice-backend.example/api/vapi',credentialId:'synthetic-credential'}})
       await f.db.admin.query(`INSERT INTO atrium.channel_bindings(id,provider,external_id,organization_id,property_id,status,capabilities)
         VALUES($1,'vapi',$2,$3,$4,'active',ARRAY['read','operate']) ON CONFLICT(id) DO UPDATE SET status='active'`,

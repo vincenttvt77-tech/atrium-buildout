@@ -9,10 +9,13 @@ after(async()=>{await f?.close()})
 const patches=()=>f.voiceRequests.filter(r=>r.method==='PATCH')
 test('real HTTP/PG review and publish use the selected property and preserve its provider components',async()=>{
   const a=await f.prepare(),beforeB=structuredClone(f.saved.get('synthetic-release-assistant-b'))
+  assert.equal(a.proposal.knowledgeSource,'approved-property-tools')
+  assert.doesNotMatch(JSON.stringify(a),/synthetic-other-property-file/)
   assert.match(a.proposal.prompt[0].content,/America\/New_York/)
   assert.equal(patches().length,0)
   const result=await f.publish(a);assert.equal(result.status,200,JSON.stringify(result.body));assert.equal(result.body.release.state,'verified')
   assert.equal(patches().length,1);assert.deepEqual(f.saved.get('synthetic-release-assistant-b'),beforeB)
+  assert.equal(Object.hasOwn(f.saved.get('synthetic-release-assistant-a').model,'knowledgeBase'),false)
   const b=await f.prepare({user:'owner-b',property:'property-b1',org:'organization-b'})
   assert.match(b.proposal.prompt[0].content,/America\/Los_Angeles/);assert.doesNotMatch(b.proposal.prompt[0].content,/The Larkin/)
   const audit=(await f.db.admin.query("SELECT actor_user_id,configuration_version FROM atrium.audit_events WHERE operation='document.update' ORDER BY created_at DESC LIMIT 1")).rows[0]
@@ -34,6 +37,17 @@ test('wrong saved route remains unconfirmed and forbids another release',async()
   const result=await f.publish(p);assert.equal(result.status,200);assert.equal(result.body.release.state,'sending');assert.equal(result.body.release.check,'differs')
   const next=await f.request({body:{action:'prepare',requestId:randomUUID()}});assert.equal(next.status,409);assert.equal(patches().length,1)
   const cancelled=await f.request({body:{action:'cancel',id:p.release.id,reviewHash:p.release.reviewHash}});assert.equal(cancelled.status,409)
+})
+test('retained provider knowledge stays unconfirmed and read-only recovery cannot repeat the write',async()=>{
+  const p=await f.prepare();f.voiceFlags.wrongKnowledge=true
+  const result=await f.publish(p)
+  assert.equal(result.status,200);assert.equal(result.body.release.state,'sending');assert.equal(result.body.release.check,'differs')
+  assert.equal((await f.request({body:{action:'prepare',requestId:randomUUID()}})).status,409)
+  const recovered=await f.request({body:{action:'verify',id:p.release.id}})
+  assert.equal(recovered.body.release.state,'sending');assert.equal(patches().length,1)
+  delete f.saved.get('synthetic-release-assistant-a').model.knowledgeBase
+  assert.equal((await f.request({body:{action:'verify',id:p.release.id}})).body.release.state,'verified')
+  assert.equal(patches().length,1)
 })
 test('auth, current role, scope, JSON and exact review are required',async()=>{
   const p=await f.prepare()
