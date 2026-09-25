@@ -71,6 +71,14 @@ written field and the retained voice/transcriber before the release is verified.
 The stored verification is dated evidence, not perpetual synchronization or phone
 acceptance. Later provider changes can invalidate it.
 
+A duplicate publish may have loaded its review before another copy dispatched it.
+If its delayed preflight then reports provider drift or an outage, Atrium rechecks
+current authority and the exact review's durable journal. A dispatched or cancelled
+receipt takes precedence over that stale preflight error; it is returned without
+another provider write. If the review is still prepared, the original error remains
+a refusal. Unconfirmed receipts stay unconfirmed, and revoked access cannot use
+this recovery path. See the [concurrency correction](../reports/2026-09-25-voice-publish-race.md).
+
 If a write or reply is lost, the dashboard checks the existing journal and offers
 **Check provider result**. Recovery makes only a provider read, never another PATCH.
 A mismatched or unavailable result remains unconfirmed and blocks replacement

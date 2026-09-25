@@ -23,8 +23,27 @@ test('real HTTP/PG review and publish use the selected property and preserve its
 })
 test('simultaneous actual HTTP publication claims one durable dispatch',async()=>{
   const p=await f.prepare(),replies=await Promise.all(Array.from({length:4},()=>f.publish(p)))
-  assert.ok(replies.every(r=>r.status===200),JSON.stringify(replies));assert.equal(patches().length,1)
+  assert.ok(replies.every(r=>r.status===200),JSON.stringify(replies.map(r=>({status:r.status,code:r.body.code,state:r.body.release?.state}))));assert.equal(patches().length,1)
   const current=await f.request({query:'?id='+p.release.id});assert.equal(current.body.release.state,'verified')
+})
+for(const providerRead of ['available','unavailable']) test(`a delayed duplicate HTTP read (${providerRead}) returns the completed receipt with one PATCH`, {timeout:15000}, async()=>{
+  const p=await f.prepare()
+  let resume,entered,waiting=false
+  const gate=new Promise(resolve=>{resume=resolve}),started=new Promise(resolve=>{entered=resolve})
+  f.voiceFlags.beforeRead=async()=>{if(!waiting){waiting=true;entered();await gate}}
+  const delayed=f.publish(p)
+  try{
+    await started
+    const winner=await f.publish(p)
+    assert.equal(winner.status,200);assert.equal(winner.body.release.state,'verified')
+    if(providerRead==='unavailable')f.voiceFlags.unavailable=true
+    resume()
+    const late=await delayed
+    assert.equal(late.status,200,JSON.stringify({status:late.status,code:late.body.code}))
+    assert.deepEqual(late.body.release,winner.body.release)
+    assert.equal(patches().length,1)
+    assert.equal((await f.request({query:'?id='+p.release.id})).body.release.state,'verified')
+  }finally{resume();await delayed}
 })
 test('provider lost reply and dashboard lost reply recover without repeating PATCH',async()=>{
   const p=await f.prepare();f.voiceFlags.dropWrite=true

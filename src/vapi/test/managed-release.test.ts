@@ -61,6 +61,45 @@ test('simultaneous publish commands produce one provider write', async () => {
   assert.ok(results.every(r => ['sending', 'verified'].includes(r.release.state)))
 })
 
+for (const outcome of ['verified', 'unconfirmed', 'revoked', 'read_failure'] as const) {
+  test(`a delayed duplicate provider read returns the durable ${outcome} outcome without another write`, { timeout: 10_000 }, async () => {
+    const f = fixture(), p = await f.service.prepare('overlapping-review'), read = f.provider.read
+    let resume!: () => void, entered!: () => void, waiting = false
+    const gate = new Promise<void>(resolve => { resume = resolve })
+    const started = new Promise<void>(resolve => { entered = resolve })
+    f.provider.read = async id => {
+      if (!waiting) {
+        waiting = true; entered(); await gate
+        if (outcome === 'read_failure') throw new Error('synthetic late provider outage')
+      }
+      return read(id)
+    }
+    if (outcome === 'unconfirmed') {
+      const write = f.provider.patch
+      f.provider.patch = async (id, patch) => {
+        await write(id, patch)
+        f.saved.model.tools[0].server.url = 'https://foreign.example/api/vapi'
+      }
+    }
+    const delayed = f.service.publish(p.release.id, p.release.reviewHash)
+      .then(value => ({ value, error: null }), error => ({ value: null, error }))
+    try {
+      await started
+      const winner = await f.service.publish(p.release.id, p.release.reviewHash)
+      assert.equal(winner.release.state, outcome === 'unconfirmed' ? 'sending' : 'verified')
+      if (outcome === 'revoked') f.revoke()
+      resume()
+      const late = await delayed
+      if (outcome === 'revoked') assert.match(String(late.error), /forbidden/)
+      else {
+        assert.equal(late.error, null)
+        assert.deepEqual(late.value?.release, winner.release)
+      }
+      assert.equal(f.calls.filter(c => c === 'PATCH').length, 1)
+    } finally { resume(); await delayed }
+  })
+}
+
 test('managed publication removes another property knowledge attachment and keeps model connectivity', async () => {
   const f = fixture()
   f.saved.model.knowledgeBase = { provider: 'google', fileIds: ['synthetic-other-property-file'] }

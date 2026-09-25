@@ -248,13 +248,24 @@ export function createManagedVoiceRelease(options: {
       const release = locate(await load(), releaseId)
       if (release.reviewHash !== reviewHash) throw changed()
       if (release.state !== 'prepared') return review(release)
-      requireCurrent(release)
-      await ready()
-      const existing = await readProvider()
-      if (hashJson(existing) !== release.beforeHash) throw changed()
-      const patch = reviewedPatch(existing, config)
-      if (hashJson(writtenHashes(patch)) !== hashJson(release.writtenHashes)
-        || retainedHash(existing) !== release.retainedHash) throw changed()
+      let patch: Patch
+      try {
+        requireCurrent(release)
+        await ready()
+        const existing = await readProvider()
+        if (hashJson(existing) !== release.beforeHash) throw changed()
+        patch = reviewedPatch(existing, config)
+        if (hashJson(writtenHashes(patch)) !== hashJson(release.writtenHashes)
+          || retainedHash(existing) !== release.retainedHash) throw changed()
+      } catch (error) {
+        // Another copy may have dispatched while this preflight waited. Its saved
+        // receipt takes precedence over stale drift/outage errors, with fresh authority.
+        await options.authorize()
+        const latest = locate(await load(), releaseId)
+        if (latest.reviewHash !== reviewHash) throw changed()
+        if (latest.state !== 'prepared') return review(latest)
+        throw error
+      }
       const dispatchId = randomUUID()
       const saved = await update(j => {
         const r = locate(j, releaseId)
