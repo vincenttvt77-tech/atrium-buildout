@@ -66,11 +66,17 @@ part of this procedure. Runtime database roles must remain separate and limited.
 Review effective inherited settings before enabling the preview. Production KV
 credentials, lead webhook destinations, Vapi credentials, sender keys and other
 external provider configuration must not be available to the isolated branch.
-Do not solve this by copying the production shared passcode. In the September 23
-inspection, KV was scoped to All Environments and `LEAD_WEBHOOK_URL` to Production
-and Preview; those resource scopes require deliberate correction before preview
-activation. Preserve Production's values. Changing Preview inheritance may affect
-other preview branches and needs a reviewed configuration diff.
+Do not solve this by copying the production shared passcode. The September 25
+[scope correction](../reports/2026-09-25-preview-isolation.md) removed Preview from
+the five Upstash connection variables, `GLOBAL_CONFIG`, and `LEAD_WEBHOOK_URL`.
+Production and the pre-existing Development targets were retained. The saved
+project inventory showed no Preview variables or linked shared variables afterward.
+Recheck this inventory before activation; integrations or later edits can change it.
+Older deployments retain their original environment settings. They are not isolated
+by this scope correction and must not be reused as the accepted Preview. A new build
+needs its separate runtime/login settings first. Future legacy Preview builds now
+refuse missing durable storage instead of inheriting the live database. Changing
+Preview inheritance affects all preview branches; preserve Production's values.
 
 Rebuild the same reviewed revision in Preview after settings are saved. Record
 the exact source hash, deployment ID, branch alias and applied migration list.

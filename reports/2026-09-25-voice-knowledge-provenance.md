@@ -79,6 +79,17 @@ is terminal SUCCESS:1828 application,735 native,26-handler build and16 Chromium 
 Do not poll those completed parent jobs again. Those results do not cover this new
 source increment; its own exact-source cloud acceptance is next after publication.
 
+## Exact-source cloud acceptance — September 25
+
+Published application source `ecbe8d30dc373f38f9fcf8637412971cbaaee689`,
+[run 36141221040](https://github.com/vincenttvt77-tech/atrium-buildout/actions/runs/36141221040),
+is terminal **SUCCESS**. Decoded verify-job 108091260516 logs confirm 1,831
+application tests, 736 native PostgreSQL tests and the 26-handler build/import
+checks. Browser job 108091260860 passed 17 groups: eight follow-up and nine voice
+release groups, with no real provider calls. Stop polling these completed handles.
+This supersedes the publication-pending cloud note above without changing its
+historical local failures. Hosted and real-phone acceptance remain separate.
+
 ## Limits and next ownership
 
 The original full leasing/SaaS goal remains active. Source tests do not prove live

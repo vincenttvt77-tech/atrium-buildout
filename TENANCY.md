@@ -202,8 +202,15 @@ In PostgreSQL mode, verified incoming Vapi identity resolves a persisted, active
 `channel_bindings` record into its organization/property. The binding's capability,
 version and published configuration are checked; model arguments are not routing
 authority. Call history is restricted to that property's bindings and revalidated
-after fetching. Property assistant publishing remains disabled in the PostgreSQL
-path; the legacy bundled-property publisher is not a general property publisher.
+after fetching. PostgreSQL supports a separate [reviewed property assistant release](docs/managed-voice-releases.md)
+with current configure permission, an authenticated staff session, exactly one active
+assistant binding, a matching backend contract and a verified provider organization.
+The property-owned journal records dispatch before one provider write and verifies
+the saved result without automatically resending an uncertain update. Its model
+knowledge comes from approved property tools; unverified provider knowledge
+attachments are detached by the reviewed release. Preview publication stays disabled.
+Source and synthetic acceptance do not establish live activation. The legacy
+bundled-property publisher is not a general property publisher.
 
 ## Verification and limits
 

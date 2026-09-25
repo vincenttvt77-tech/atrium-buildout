@@ -945,3 +945,17 @@ paid trial, hosted migration, production promotion or AT129 bypass.
 AT156 exact cloud acceptance 2026-09-25T13:26:19.935624+00:00: run36138780810 terminal SUCCESS, app1828/native735/build26handlers/browser16groups. Stop polling terminal jobs108083185552 and108083186005. Subsequent confirmed provider-knowledge carryover is under AT157; full goal/hosted acceptance remain active.
 
 AT157 local acceptance 2026-09-25T13:27:53.964159+00:00: review; app1831/native736/build26/focused22/HTTP-native10/browser9groups all pass. Two pre-fix regressions reproduced provider-knowledge carryover and false verification; corrected scoped knowledge replacement and fresh-review admission. No live provider/deployment change. Publish exact source and verify cloud next.
+
+AT157 publication 2026-09-25T13:30:11.473840+00:00: ecbe8d30dc373f38f9fcf8637412971cbaaee689 on codex/at157-voice-knowledge independently GitHub-verified; worktree clean. Exact run36141221040 active: verify108091260516/browser108091260860. Keep live handles; parentAT156 terminalSUCCESS stop polling. Source report and reciprocal handoff published. No live voice/deployment changes; full goal active.
+
+
+AT157 final cloud acceptance 2026-09-25T13:40:50Z: ecbe8d3/run36141221040 terminal SUCCESS; decoded verify logs1831 application/736 native/26-handler build; browser17 groups verified. Stop polling jobs108091260516 and108091260860. Owner voice/Vast direction reaffirmed; existing audition/evaluation plans retained. No live switch, paid trial or hosted acceptance. Full goal active; owner and reciprocal agent actions recorded in AT157 status/EOD/Fable handoff.
+
+
+AT142 scoped activation follow-up 2026-09-25: root coordinator owns review and correction of Vercel ghost-building Preview inheritance. Exact proposed settings: remove Preview from the existing Upstash project connection (KV_REST_API_TOKEN, REDIS_URL, KV_REST_API_URL, KV_REST_API_READ_ONLY_TOKEN, KV_URL), preserve Production and Development and all values; remove Preview from LEAD_WEBHOOK_URL preserving Production; inspect/restrict GLOBAL_CONFIG Preview inheritance preserving other targets. No credential rotation, disconnect, resource deletion, production deployment/promotion, schema change or provider call. Capture exact saved targets/readback and report any approval rejection; do not bypass AT129. Canonical AT142 status and outer EOD/Fable record the result. Isolated Preview database remains owner-pending.
+
+
+AT142/AT157 documentation scope extension 2026-09-25: root owns docs/hosted-preview.md, new reports/2026-09-25-preview-isolation.md, reports/2026-09-25-voice-knowledge-provenance.md exact CI addendum, and TENANCY.md correction of its stale statement that PostgreSQL publishing is disabled. Existing clean codex/at157-voice-knowledge worktree at ecbe8d3 is the documentation publication base. Include only these files and relevant canonical coordination copies. No application source change; verify local paths, current source contract, exact saved environment targets and public health.
+
+
+AT142 hosting isolation saved 2026-09-25T13:52:06.605512+00:00: verified seven variable targets exclude Preview, preserving Production and existing Development. Preview project inventory empty; no linked shared variables. Existing deployments unchanged. Production publichealth200/KV durable, sign-in401 expected. Separate Preview resource/private setup remains pending; no provider/deployment/migration change. Report2026-09-25-preview-isolation.md; source docs and exact CI handoff publication next.
