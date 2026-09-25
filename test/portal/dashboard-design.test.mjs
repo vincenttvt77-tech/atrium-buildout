@@ -128,10 +128,10 @@ test('the redesigned attention queue retains anonymous review requests and emerg
 test('metric links contain no nested anchors when call history is disconnected', () => {
   const ui = dashboard(); ui.ready(); ui.A.state.callsConfigured = false
   const html = ui.render()
-  const metric = html.match(/<a class="today-metric"[^>]+data-key="tile:Calls received">[\s\S]*?<\/a>/)?.[0]
+  const metric = html.match(/<a class="today-metric"[^>]+data-key="tile:Call records">[\s\S]*?<\/a>/)?.[0]
   assert.ok(metric); assert.match(metric, /href="#\/status"/)
   assert.equal((metric.match(/<a\b/g) || []).length, 1)
-  assert.match(metric, /Call history is not connected/)
+  assert.match(metric, /Call history not connected/)
 })
 
 test('Status groups useful controls without exposing a PostgreSQL account link in legacy mode', () => {

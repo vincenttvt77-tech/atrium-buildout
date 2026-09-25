@@ -106,7 +106,7 @@ function callContextHtml(rec, story, s) {
   const review = bookingReviewFor(rec), verification = bookingReviewPresentation(review)
   const leadLink = rec.profile ? `<a class="btn btn-quiet" href="${esc(A.hashFor('leads', { phone: rec.profile.phone, ...(rec.profile.phone === 'unknown' ? { call: rec.id } : {}), tab: work.count ? 'todo' : 'all' }))}">View prospect ${ico('chevron-right')}</a>` : ''
   const queueLink = work.count ? `<a class="btn" href="${esc(A.hashFor('leads', { tab: 'todo', ...(rec.profile ? { phone: rec.profile.phone, ...(rec.profile.phone === 'unknown' ? { call: rec.id } : {}) } : {}) }))}">Review staff work ${ico('chevron-right')}</a>` : ''
-  const title = verification ? verification.title : work.requests.length ? 'Tour change awaiting staff review' : work.followUps.length ? `${text.plural(work.followUps.length, 'follow-up')} to complete` : story.emergency ? 'Safety report needs review' : story.needsPerson ? 'A staff decision is needed' : rec.profile ? 'Conversation saved to this prospect' : 'Call record available'
+  const title = verification ? verification.title : work.requests.length ? 'Tour change awaiting staff review' : work.followUps.length ? `${text.plural(work.followUps.length, 'follow-up')} to complete` : story.emergency ? 'Safety report needs review' : story.needsPerson ? 'A staff decision is needed' : rec.profile ? rec.call ? 'Conversation saved to this prospect' : 'Notes saved to this prospect' : 'Call record available'
   const detail = verification ? verification.detail : work.requests.length ? 'The request is saved. This does not confirm a changed tour or a notification to staff.' : work.followUps.length ? 'Open the work queue for the saved task, contact details, and due time.' : rec.profile ? 'Review requirements, tours, and conversation history together.' : 'A linked prospect profile is not available in the loaded records.'
   const reviewAction = verification && verification.action && A.can('operate') && typeof A.reviewBooking === 'function'
     ? `<button type="button" class="btn btn-primary" data-action="review-booking" data-call="${esc(rec.id)}" data-key="booking-review:${esc(rec.id)}:check" data-write="calendar">${esc(verification.action)}</button>` : ''
@@ -149,7 +149,7 @@ function rowHtml(rec, story, open, tab, isNew) {
     `<span class="row-body"><span class="row-title"><span class="who">${esc(rec.displayName)}</span>${phone ? `<span class="phone">· ${esc(phone)}</span>` : ''}` +
     `<span class="when when-desk num">${esc(whenDesk)}</span><span class="when when-mobile num">${esc(whenMobile)}</span></span>` +
     `<span class="row-sub">${esc(story.sentence)}</span>` +
-    `<span class="call-row-foot"><span class="row-chips">${story.chips.slice(0, 2).map((c) => A.html.chip(c.cls, c.icon, c.text)).join('')}</span><span class="call-evidence">${rec.call && rec.call.transcript ? 'Transcript' : 'Saved summary'}${hasAudio(rec) ? ' · Audio' : ''}</span></span>` +
+    `<span class="call-row-foot"><span class="row-chips">${story.chips.slice(0, 2).map((c) => A.html.chip(c.cls, c.icon, c.text)).join('')}</span><span class="call-evidence">${esc(derive.callEvidence(rec).label)}${hasAudio(rec) ? ' · Audio' : ''}</span></span>` +
     `</span></button>`
 }
 function bubbleRuns(transcript) {
@@ -203,7 +203,8 @@ function panelHtml(rec, story, s) {
   if (call && call.transcript) actions.push(`<button type="button" class="btn btn-quiet" data-action="read">Read the conversation ${ico('chevron-down')}</button>`)
   if (s.callsConfigured === false) actions.push(`<span class="faint small">Recordings aren't connected.</span>`)
   if (actions.length) out += `<div class="panel-actions">${actions.join('')}</div>`
-  if (!call) out += `<div style="margin-top:12px">${A.html.banner('info', 'This is a retained call summary. A transcript and recording are not in the loaded history.')}</div>`
+  const evidence = derive.callEvidence(rec)
+  if (evidence.detail) out += `<div style="margin-top:12px">${A.html.banner('info', evidence.detail)}</div>`
   out += callContextHtml(rec, story, s)
   out += `<section class="panel-section call-story"><span class="section-kicker">Conversation brief</span><h3>What happened</h3><p class="story prose">${esc([story.who, story.wants, story.sentence].filter(Boolean).join(' '))}</p>` +
     (story.dropped ? `<p class="muted small" style="margin-top:6px">One or more tool results were not saved. Review the transcript before deciding the outcome.</p>` : '') +
@@ -349,7 +350,7 @@ const view = {
     let banners = ''
     if (s.errors.calls && s.loaded.calls) banners += A.html.banner('warn', `We can't load calls right now.${s.lastGoodAt.calls ? ` Showing what we had at ${fmt.time(s.lastGoodAt.calls)}.` : ''}`)
     else if (s.errors.calls) banners += A.html.banner('warn', "We can't load calls right now.")
-    if (s.callsConfigured === false) banners += A.html.banner('info', '', { raw: `<strong>Call history isn't connected yet.</strong> Calls the assistant handled still show here from the leads' records. Recordings and transcripts need a connection — <a href="#/status">see Status</a>.` })
+    if (s.callsConfigured === false) banners += A.html.banner('info', '', { raw: `<strong>Call history isn't connected yet.</strong> Retained summaries and tool activity can still appear here. They do not verify phone activity. For the history connection, <a href="#/status">see Status</a>.` })
     else if (s.callsError && s.callsConfigured) banners += A.html.banner('warn', '', { raw: `<strong>Call history is temporarily unavailable — trying again.</strong>${s.lastGoodAt.calls ? ` Showing what we had at ${esc(fmt.time(s.lastGoodAt.calls))}.` : ''}` })
     if (s.bookingReviewsError) banners += A.html.banner('warn', 'Saved booking reviews are temporarily unavailable. The list may be incomplete. Trying again.')
     if (s.safetyEventsError) banners += A.html.banner('warn', 'Safety reports are temporarily unavailable. The list may be incomplete. Trying again.')
@@ -366,7 +367,7 @@ const view = {
     if (!known && !s.errors.calls && !s.errors.leads) {
       listHtml = `<div class="skeleton" aria-busy="true" style="padding:12px"><span class="vh">Loading…</span><div class="skeleton-line"></div><div class="skeleton-row"></div><div class="skeleton-row"></div><div class="skeleton-row"></div><div class="skeleton-line"></div><div class="skeleton-row"></div></div>`
     } else if (!records.length) {
-      listHtml = A.html.empty({ icon: 'phone', title: 'No calls yet.', text: 'Calls to the leasing line show up here within a minute of ending.' })
+      listHtml = A.html.empty({ icon: 'phone', title: 'No call records loaded.', text: 'This view combines connected call history and retained notes. Check Status if expected records are missing.' })
     } else if (!shown.length) {
       listHtml = A.html.empty({ icon: 'search', title: `Nothing matches "${this.q}".`, text: 'Try a name, the last four digits, or an apartment number.' })
     } else {

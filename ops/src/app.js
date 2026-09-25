@@ -1769,6 +1769,17 @@ function callRecords(s) {
   return value
 }
 
+/** Describe available evidence, never infer a real/test caller from an ID or name. */
+function callEvidence(record) {
+  if (isDemo) return { label: 'Demo record', detail: 'Sample conversation data from this demo workspace. This is not evidence of a real phone call.' }
+  if (record && record.call) return { label: record.call.transcript ? 'Transcript' : 'Call history', detail: null }
+  if (record && record.summary) return { label: 'Saved summary',
+    detail: 'This record comes from retained notes. A matching call is not in the loaded history. It may be older, unavailable or a test; these notes alone do not verify a phone call.' }
+  if (arr(record && record.events).length) return { label: 'Saved tool activity',
+    detail: 'Backend activity was saved, but a matching call is not in the loaded history. This activity alone does not establish a completed phone call. Review any saved staff work.' }
+  return { label: 'Source unverified', detail: 'The source of this record is not in the loaded history. Refresh before relying on its details.' }
+}
+
 // --- the story (§8.4) ---------------------------------------------------------------
 
 const sizeWord = (v) => {
@@ -1988,6 +1999,7 @@ function callStory(record, s) {
     let when = ''
     if (p) { const d = daysBetween(nyNow().ymd, p.ymd), t = fmt.time(r.startedAt); when = d === 0 ? `today at ${t}` : d === -1 ? `yesterday at ${t}` : d === 1 ? `tomorrow at ${t}` : `${fmt.day(p.ymd)} at ${t}` }
     const dur = r.durationSeconds != null ? fmt.duration(r.durationSeconds) : null
+    if (!call || isDemo) return `${isDemo ? 'Sample' : 'Saved'} record${r.name ? ` for ${r.name}` : ''}${when ? ` dated ${when}` : ''}.`
     return `${name} called${when ? ` ${when}` : ''}${dur && dur !== '—' ? ` for ${dur}` : ''}.`
   })()
   const wants = (() => {
@@ -2143,7 +2155,7 @@ function callStory(record, s) {
   if (checkedReview) steps.push({ icon: 'calendar', text: `${checkedReview.outcome === 'confirmed' ? 'Reservation verified' : 'No matching reservation found'} when checked ${fmt.dateTime(checkedReview.checkedAt, { inSentence: true })}. No notification was sent by this review.` })
 
   return {
-    who, wants, sentence, chips, facts, steps, findings: f,
+    who, wants, sentence: isDemo ? `Demo: ${sentence}` : !call ? `Saved notes: ${sentence}` : sentence, chips, facts, steps, findings: f,
     ended: call ? endedPhrase(call.endedReason) : '',
     needsPerson: needsPersonFlag, emergency: Boolean(f.emergency), dropped: f.dropped, booked: f.booked, restricted: f.restricted,
   }
@@ -2234,7 +2246,7 @@ const derive = {
     // without coverage metadata must not be presented as covering an entire day.
     return block && isYmd(block.target) && !block.startsAt && !block.endsAt ? [block.target] : []
   },
-  reservationId, reservationIndex, calendarBooking, calendarBookingForLead, leadForBooking, bookingReviewResolution, windowStart, personName, displayName, displayStage, needsPerson, callBackToday, dueTodayCount, toursOn, callRecords, callStory,
+  reservationId, reservationIndex, calendarBooking, calendarBookingForLead, leadForBooking, bookingReviewResolution, windowStart, personName, displayName, displayStage, needsPerson, callBackToday, dueTodayCount, toursOn, callRecords, callStory, callEvidence,
   followUpBooking, todoSentence, escalationText, lossText, summarySentence, availabilityText, moveInText, budgetText, profileByPhone, profileForCall, factValue, bedroomsText, emergencyAction,
 }
 
@@ -2515,11 +2527,16 @@ function todayModel(s) {
   const callBacks = callBackToday(s)
   const tours = toursOn(s, today), toursTomorrow = toursOn(s, tomorrow)
   const callsKnown = s.loaded.calls || s.loaded.leads
-  let callIds = 0, afterHours = 0
-  for (const r of records) { const t = toTime(r.startedAt); if (t != null && t >= wsT) { callIds++; if (isAfterHours(t)) afterHours++ } }
+  let callIds = 0, afterHours = 0, historyCount = 0
+  for (const r of records) { const t = toTime(r.startedAt); if (t != null && t >= wsT) { callIds++; if (r.call) historyCount++; if (isAfterHours(t)) afterHours++ } }
   const allTwenty = arr(s.calls).length >= 20 && arr(s.calls).every((c) => (toTime(c.startedAt) ?? 0) >= wsT)
-  const callsValue = !callsKnown ? '—' : (allTwenty ? '20+' : String(callIds))
-  const callsNote = !callsKnown ? '' : (s.callsConfigured === false && callIds === 0 ? 'notConnected' : (afterHours ? `${afterHours} after hours` : ''))
+  const callsValue = !callsKnown ? '—' : `${callIds}${allTwenty ? '+' : ''}`
+  const sourceNote = isDemo ? 'Sample conversation records'
+    : `${historyCount} from call history · ${callIds - historyCount} from saved notes`
+  const callsNote = !callsKnown ? '' : [
+    s.callsConfigured === false && !isDemo ? 'Call history not connected' : '',
+    sourceNote, afterHours ? `${afterHours} after hours` : '',
+  ].filter(Boolean).join(' · ')
   let toursBooked = null
   if (s.calendar) toursBooked = arr(s.calendar.bookings).filter((b) => b && (toTime(b.bookedAt) ?? 0) >= wsT).length
   else if (s.loaded.leads) {
@@ -2533,7 +2550,7 @@ function todayModel(s) {
   const leadsOff = Boolean(leadsStore) && leadsStore.durable === false, calOff = Boolean(calStore) && calStore.durable === false
   let briefing = ''
   if (callsKnown) {
-    if (callsValue === '0') briefing = 'Since 6 PM yesterday: no calls yet.'
+    if (callsValue === '0') briefing = 'Since 6 PM yesterday: no call records loaded.'
     else {
       const toursPart = toursBooked == null ? '' : `, ${toursBooked === 0 ? 'no tours booked' : text.plural(toursBooked, 'tour booked', 'tours booked')}`
       // Two distinct phrases with the same numbers as the tile ("Need a person") and the "Call back
@@ -2541,9 +2558,9 @@ function todayModel(s) {
       const parts = []
       if (needs.length) parts.push(needs.length === 1 ? '1 needs a person' : `${needs.length} need a person`)
       if (callBacks.length) parts.push(`${callBacks.length} to call back`)
-      const callsPart = text.plural(callsValue === '20+' ? 20 : Number(callsValue), 'call').replace(/^20 /, '20+ ')
+      const callsPart = `${callsValue} ${callIds === 1 && !allTwenty ? 'call record' : 'call records'}`
       briefing = parts.length ? `Since 6 PM yesterday: ${callsPart}${toursPart}, ${parts.join(', ')}.`
-        : `Since 6 PM yesterday: ${callsPart}${toursPart}. ${s.safetyEventsError || s.bookingReviewsError ? 'Saved reports could not be checked.' : 'Nothing needs you right now.'}`
+        : `Since 6 PM yesterday: ${callsPart}${toursPart}. ${s.safetyEventsError || s.bookingReviewsError ? 'Saved reports could not be checked.' : 'No saved items need review.'}`
     }
   }
   return {
@@ -2691,7 +2708,7 @@ function recentCallRowHtml(rec, s) {
   return `<a class="row row-click" href="${esc(hashFor('calls', { id: rec.id }))}" data-key="row:${esc(rec.id)}">` +
     `<span class="row-lead"><span class="row-lead-icon ${cls}">${ico(iconName)}</span></span>` +
     `<span class="row-body"><span class="row-title">${esc(rec.displayName)} <span class="muted" style="font-weight:400">· ${esc(fmt.dateTime(rec.startedAt, { inSentence: true }))}${dur !== '—' ? ` · ${esc(dur)}` : ''}</span></span>` +
-    `<span class="row-sub">${esc(story.sentence)}</span></span>` +
+    `<span class="row-sub">${esc(story.sentence)}</span><span class="call-evidence">${esc(callEvidence(rec).label)}</span></span>` +
     `<span class="row-actions">${story.chips.slice(0, 2).map(chipHtml).join('')}</span></a>`
 }
 function emergencyBannerHtml(item, announced) {
@@ -2742,7 +2759,7 @@ const todayView = {
       m.emergencies.map((x) => [x.callId, x.at, x.matched, x.action, x.name]), m.people.map((x) => [x.type, x.callId, x.respondBy, x.calledAt, fmt.respondPhrase(x.respondBy), x.question, x.name, x.request, html_.followUpReview(x.fu)]),
       m.callBacks.map((f) => [f.id, f.dueAt, f.status, fmt.duePhrase(f.dueAt), todoSentence(f, profileByPhone(s, f.phone), s).text, html_.followUpReview(f)]),
       m.tours.map((t) => [t.slotId, t.name, t.unitId, t.past, t.phone]), m.toursTomorrow.length,
-      m.records.slice(0, 5).map((r) => [r.id, r.displayName, fmt.dateTime(r.startedAt), callStory(r, s).sentence]), busyNow('leads')])
+      m.records.slice(0, 5).map((r) => [r.id, r.displayName, fmt.dateTime(r.startedAt), callStory(r, s).sentence, callEvidence(r).label]), busyNow('leads')])
     if (key === this.sigKey) return
     this.sigKey = key
     const focusKey = root.contains(document.activeElement) && document.activeElement.dataset ? document.activeElement.dataset.key : null
@@ -2765,10 +2782,10 @@ const todayView = {
       return
     }
     const tile = (label_, value, note, destination, warning = false) => `<a class="today-metric${warning ? ' today-metric-warn' : ''}" href="${esc(destination)}" data-key="tile:${esc(label_)}"><span class="metric-label">${esc(label_)}</span><span class="metric-value">${esc(value)}</span><span class="metric-detail">${esc(note)}</span></a>`
-    const callsNote = m.callsNote === 'notConnected' ? 'Call history is not connected' : m.callsNote || 'Recorded in this reporting window'
+    const callsNote = m.callsNote || 'Recorded in this reporting window'
     const toursVal = m.toursBooked == null ? '—' : String(m.toursBooked)
     const needVal = m.needValue == null ? '—' : String(m.needValue)
-    out += `<div class="page-metrics today-metrics">${tile('Calls received', m.callsValue, callsNote, m.callsNote === 'notConnected' ? '#/status' : '#/calls')}` +
+    out += `<div class="page-metrics today-metrics">${tile('Call records', m.callsValue, callsNote, m.callsConfigured === false ? '#/status' : '#/calls')}` +
       `${tile('Tours booked', toursVal, 'Saved during this reporting window', '#/calendar')}` +
       `${tile('Needs a person', needVal, m.needValue == null ? 'Review queue is still loading' : m.needs.length ? `Oldest waiting ${fmt.elapsed(m.now - m.oldest)}` : presentation.complete ? 'No saved items waiting for review' : 'Review status not confirmed', '#needs-a-person', m.needValue > 0)}</div>`
     if (!presentation.complete) out += `<div class="today-data-note">${ico('info')}<span>${presentation.waiting ? 'Some workspace information is still loading. Records appear as they arrive.' : 'Some information needs a refresh. Check Status before relying on an empty list.'}</span>${link('status', {}, 'Check status', 'btn-link')}</div>`
