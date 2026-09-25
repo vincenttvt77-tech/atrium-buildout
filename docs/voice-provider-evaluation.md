@@ -12,6 +12,16 @@ Vast exposes active-capacity and queue controls. Its documented setup defaults i
 
 ## Audition leads
 
+**September 25 update:** Vapi import search now resolves exact candidates: Zoe
+`M6ic45wruJGWAxLFEMNK` (Female / African American), Leoni Vergara
+`pBZVCk298iJlHAcHQwLr` (Female / Spanish), and Vega
+`pTX8uGyVgHCWLj6IkcbC` (Female / Spanish). Leoni and Vega match IDs in the
+official public ElevenLabs collection. These are catalog matches, not verified
+saved imports, commercial access or phone quality. Leoni was submitted once but
+could not be found afterward; no blind repeat. Zoe and Vega were only inspected.
+The [candidate report](../reports/2026-09-25-voice-candidates.md) supersedes the
+older ID/access unknowns below and preserves what remains unverified.
+
 The [September 23 audition kit](voice-audition-kit.md) adds identical synthetic
 clips, an owner listening scorecard and a four-configuration hosting/voice trial.
 It also flags Vast's documented default worker counts for review before spending.

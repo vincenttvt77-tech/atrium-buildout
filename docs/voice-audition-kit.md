@@ -1,6 +1,6 @@
 # Atrium voice audition kit
 
-Prepared September 23, 2026. This is a listening and trial brief, not a deployed
+Prepared September 23; candidate evidence updated September 25, 2026. This is a listening and trial brief, not a deployed
 configuration or test result. The owner wants a Black American or Latina female
 voice and is considering Vast.ai to reduce response delay. Accent strength and
 Spanish support remain undecided. Start with the existing English leasing scope;
@@ -15,17 +15,24 @@ pace. The owner chooses from listening samples. Provider or creator descriptions
 establish the advertised voice category; a name or sound does not establish a
 person's ethnicity. Keep Atrium's AI disclosure.
 
-| Audition lead | Public evidence | Still needed before use |
+| Audition lead | Public and account-search evidence | Still needed before use |
 | --- | --- | --- |
-| Zoe | ElevenLabs describes this female voice with an African American accent in its [voice migration table](https://elevenlabs.io/docs/help-center/product/voices/voice-library/how-are-voices-updated-changed). | Current exact ID, account access, commercial-use eligibility, an English phone sample and owner preference. Do not assume an old Aria ID is the desired pinned configuration. |
-| Leoni Vergara | ElevenLabs lists it in its [English Latino-accent collection](https://elevenlabs.io/text-to-speech/latino-accent), including a conversational label. The public page exposes listening controls. | Confirm female presentation from the specific provider entry, exact ID, access and commercial-use eligibility, then listen to the same script. No audition has been performed. |
-| Vega | The same [collection](https://elevenlabs.io/text-to-speech/latino-accent) lists an English female voice described as warm. | Exact entry/ID, advertised accent, rights, availability and a matched sample; collection placement alone is insufficient to select it. |
+| Zoe — Charismatic, Gritty and Engaging | Vapi import search returns `M6ic45wruJGWAxLFEMNK`, labelled Female / African American. ElevenLabs' [migration table](https://elevenlabs.io/docs/help-center/product/voices/voice-library/how-are-voices-updated-changed) separately describes a female Zoe with this accent. | Saved access, commercial-use eligibility, an English phone sample and owner preference. No import submitted; no legacy ID inferred. The table alone does not bind an ID. |
+| Leoni Vergara — Soothing and Eloquent | Public [Latino collection](https://elevenlabs.io/text-to-speech/latino-accent) selector and Vapi import search both return `pBZVCk298iJlHAcHQwLr`. Vapi labels it Female / Spanish. | One import submission closed the form, but the voice was absent from subsequent library search and one reload. Import remains unconfirmed. Verify access/rights and English delivery before use; do not blindly submit again. |
+| Vega — Warm English Female | Public collection selector and Vapi import search both return `pTX8uGyVgHCWLj6IkcbC`; Vapi labels it Female / Spanish. | Saved access, rights, preferred English accent and a matched sample. No import submitted. |
 
-These are research leads, not a promise that they are available in the connected
-Vapi account. The September 22 Vapi inspection did not find Zoe or Leoni in its
-displayed default ElevenLabs list. Current library access must be checked before
-configuration. The existing published voice is the listening control, after
-rechecking its saved version. No voice was selected, generated or changed here.
+These are exact catalog matches, not verified saved voices or successful synthesis.
+The default ElevenLabs list still showed 21 voices; import search exposes a wider
+catalog. A listing's accent label does not establish the actor's ethnicity. No
+English or bilingual quality has been established. Existing public preview controls
+were exercised, but playback was not verified and no listening scores were assigned.
+The published voice remains the control. See the [September 25 evidence and handoff](../reports/2026-09-25-voice-candidates.md).
+
+[Vapi supports its default ElevenLabs integration or a connected account](https://docs.vapi.ai/providers/voice/elevenlabs).
+Its own-account API-key form was empty on inspection; that does not by itself prove
+why the import was unconfirmed. Do not require a separate paid account without
+checking the default route. Confirm access and commercial terms for the selected
+route before generation or production use. No assistant or phone setting changed.
 
 ## Identical listening script
 
@@ -141,7 +148,6 @@ the component comparisons. Preserve the published assistant and any separate
 draft until a reviewed change is ready. Document exact settings and rollback.
 Finish each session with a reciprocal handoff and owner/agent to-dos.
 
-No GPU rental, audio generation, paid call, Vapi change or measured latency gain is
-claimed by this kit. Staff tour-contact editing and exact confirmation-review
-navigation remain separate upcoming work. The [cloud expiry regression repair](../reports/2026-09-23-expiry-regression.md)
-has local acceptance; its own published cloud result is a separate release gate.
+No GPU rental, audio generation, paid call, live assistant change or measured latency
+gain is claimed by this kit. The separate Leoni library import was attempted once
+and remains unconfirmed. Do not substitute catalog research for a completed audition.
